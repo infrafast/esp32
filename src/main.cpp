@@ -206,6 +206,7 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
     jsonAnswer->value = mixerServer.getMixerState();
     jsonAnswer->callback = MIXER_STATE_KEY;
     success = true;
+    //
   }else if (jsonDoc["command"] == MIXER_SET_KEY ){
     //{"command":"setMixer","param":{"mixerIP":"82.65.4.93","mixerPort":"10023"}}
     mixerServer.disconnect(); // this will force trying to reconnect with new parameters
