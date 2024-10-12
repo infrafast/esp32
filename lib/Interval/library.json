@@ -1,0 +1,24 @@
+{
+  "name": "Interval",
+  "version": "0.0.3",
+  "keywords": "footswitch,framework,pedalboard,OSC,Behringer,OSC,MIDI",
+  "description": "Library to program an Interval footswitch",
+  "license": "MIT",
+  "homepage": "https://footswitch.groupe-interval.fr",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/infrafast/interval.git"
+  },
+  "frameworks": "arduino",
+  "platforms":
+  [
+    "espressif"
+  ],
+  "exclude": [
+    "*.bin",
+    "*.bin.dSYM",
+    "test",
+    "vendor"
+  ]
+}

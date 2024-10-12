@@ -1,0 +1,239 @@
+packages are in C:\Users\progman\.platformio\packages
+
+C:\Users\progman\.platformio\packages\framework-arduinoespressif32\tools\sdk\esp32s3 => https://arduinojson.org/v7/how-to/use-external-ram-on-esp32/
+
+WiFi.setMinSecurity(WIFI_AUTH_WEP)
+
+
+Terminal:
+CTRL+T (call menu) then CTRL+D (start debug/console/reset)
+  
+
+
+  /*void print_wakeup_reason()
+{
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  // Get the wakeup reason
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  // Print the wakeup reason
+  switch (wakeup_reason)
+  {
+  case ESP_SLEEP_WAKEUP_EXT0:
+    DEBUG_PRINT("\nWakeup caused by an external signal using RTC_IO");
+    break;
+  case ESP_SLEEP_WAKEUP_EXT1:
+    DEBUG_PRINT("\nWakeup caused by an external signal using RTC_CNTL");
+    break;
+  case ESP_SLEEP_WAKEUP_TIMER:
+    DEBUG_PRINT("\nWakeup caused by a timer");
+    break;
+  case ESP_SLEEP_WAKEUP_TOUCHPAD:
+    DEBUG_PRINT("\nWakeup caused by a touchpad");
+    break;
+  case ESP_SLEEP_WAKEUP_ULP:
+    DEBUG_PRINT("\nWakeup caused by a ULP program");
+    break;
+  default:
+    DEBUG_PRINT("\nWakeup was not caused by deep sleep: %d\n", wakeup_reason);
+    break;
+  }
+}
+
+#include <ESP32-targz.h>          //https://github.com/tobozo/ESP32-targz  lib 0.3.2 tobozo
+void tarStatusProgressCallback( const char* name, size_t size, size_t total_unpacked ){
+  DEBUG_PRINT("\nuntar: %s",name);
+}
+
+void unpackProgressCallback( uint8_t progress ) {
+  //DEBUG_PRINT("\nProgress: %d",progress);
+  DEBUG_PRINT(".",progress);
+}
+
+
+
+  TarGzUnpacker TARGZUnpacker;
+  TARGZUnpacker.setLoggerCallback(BaseUnpacker::targzPrintLoggerCallback);
+  TARGZUnpacker.setTarStatusProgressCallback(tarStatusProgressCallback ); 
+  TARGZUnpacker.setTarProgressCallback( unpackProgressCallback ); 
+  DEBUG_PRINT("\nTARGZUnpacker");
+  //TARGZUnpacker.tarExpander(LittleFS, "/gzvalid.fsar", LittleFS, "/");
+
+
+
+
+
+
+
+
+    DEBUG_PRINT("\n\n\n\t\t\t\tPINGING...");
+//  ping("192.168.0.1");
+  //DEBUG_PRINT("\nresult: %i",ret);*/
+/*  EthernetICMPPing::setTimeout(PING_REQUEST_TIMEOUT_MS);
+
+
+////////////////////////////////PING START
+  
+  lastPingSucceeded = false;
+  EthernetICMPEchoReply echoResult;  // we'll get the status here
+  DEBUG_PRINT("\nStarting async ping.");
+
+  // asynchStart will return false if we couldn't
+  // even send a ping, though you could also check the
+  // echoResult.status with should ==
+  if (! ethping.asyncStart(pingAddr, 3, echoResult))
+  {
+    Serial.print("Couldn't even send our ping request?? Status: ");
+    Serial.println((int)echoResult.status);
+    delay(500);
+    return;
+
+  }
+
+  // ok the ping started out well...
+  DEBUG_PRINT("\nPing sent ");
+  while (! ethping.asyncComplete(echoResult))
+  {
+    // we have critical stuff we wish to handle
+    // while we wait for ping to come back
+    someCriticalStuffThatCantWait();
+  }
+
+  // async is done!  let's see how it worked out...
+  if (echoResult.status != SUCCESS)
+  {
+    // failure... but whyyyy?
+    sprintf(buffer, "Echo request failed; %d", echoResult.status);
+  } else {
+    // huzzah
+    lastPingSucceeded = true;
+    Serial.print(echoResult.data.time);
+    sprintf(buffer,
+            "Reply[%d] from: %d.%d.%d.%d: bytes=%d time=%ldms TTL=%d",
+            echoResult.data.seq,
+            echoResult.addr[0],
+            echoResult.addr[1],
+            echoResult.addr[2],
+            echoResult.addr[3],
+            REQ_DATASIZE,
+            millis() - echoResult.data.time,
+            echoResult.ttl);
+  }
+
+  Serial.println(buffer);
+*/
+
+
+
+
+
+static void test_on_ping_success(esp_ping_handle_t hdl, void *args){
+    // optionally, get callback arguments
+    // const char* str = (const char*) args;
+    // printf("%s\r\n", str); // "foo"
+    uint8_t ttl;
+    uint16_t seqno;
+    uint32_t elapsed_time, recv_len;
+    ip_addr_t target_addr;
+    esp_ping_get_profile(hdl, ESP_PING_PROF_SEQNO, &seqno, sizeof(seqno));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_TTL, &ttl, sizeof(ttl));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_SIZE, &recv_len, sizeof(recv_len));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_TIMEGAP, &elapsed_time, sizeof(elapsed_time));
+    DEBUG_PRINT("\n%d bytes from %s icmp_seq=%d ttl=%d time=%d ms\n",
+           recv_len, inet_ntoa(target_addr.u_addr.ip4), seqno, ttl, elapsed_time);
+    esp_ping_stop(hdl);
+    esp_ping_delete_session(hdl);
+}
+
+static void test_on_ping_timeout(esp_ping_handle_t hdl, void *args){
+    uint16_t seqno;
+    ip_addr_t target_addr;
+    esp_ping_get_profile(hdl, ESP_PING_PROF_SEQNO, &seqno, sizeof(seqno));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
+    DEBUG_PRINT("\nFrom %s icmp_seq=%d timeout\n", inet_ntoa(target_addr.u_addr.ip4), seqno);
+    esp_ping_stop(hdl);
+    esp_ping_delete_session(hdl);
+}
+
+static void test_on_ping_end(esp_ping_handle_t hdl, void *args){
+    uint32_t transmitted;
+    uint32_t received;
+    uint32_t total_time_ms;
+
+    esp_ping_get_profile(hdl, ESP_PING_PROF_REQUEST, &transmitted, sizeof(transmitted));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_REPLY, &received, sizeof(received));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_DURATION, &total_time_ms, sizeof(total_time_ms));
+    DEBUG_PRINT("\n%d packets transmitted, %d received, time %dms\n", transmitted, received, total_time_ms);
+    esp_ping_stop(hdl);
+    esp_ping_delete_session(hdl);
+}
+
+void wifiping(const char * host){   // see also https://github.com/espressif/esp-idf/issues/4648
+    ip_addr_t target_addr;
+    target_addr.type = IPADDR_TYPE_V4;
+
+    err_t ret = netconn_gethostbyname(host, &target_addr);
+
+//    int ret = inet_aton( host, &target_addr.u_addr.ip4 );
+
+    if( ret != 0 ) DEBUG_PRINT( "cp could not be converted to addr\n"); 
+
+    if(ret == 0){ // == 0 for gethostbyname
+        esp_ping_config_t ping_config = {
+            .count = 5,
+            .interval_ms = 1000,
+            .timeout_ms = 1000,
+            .data_size = 64,
+            .tos = 0,
+            .target_addr = target_addr,
+            .task_stack_size = 2048,
+            .task_prio = 2
+        };
+
+        /* set callback functions */
+        esp_ping_callbacks_t cbs = {
+            .cb_args = NULL,
+            .on_ping_success = test_on_ping_success,
+            .on_ping_timeout = test_on_ping_timeout,
+            .on_ping_end = test_on_ping_end
+        };
+
+        esp_ping_handle_t ping;
+        esp_ping_new_session(&ping_config, &cbs, &ping);
+        esp_ping_start(ping);
+    }
+}
+
+
+
+
+
+      screenBuffer.fillSprite(GUI::defaultBcolor);
+
+      for(int i = 0; i < screenGUIs.size(); i++){
+        
+        Widget* widget = screenGUIs.get(i);
+        //bool redraw = widget->refresh(force);
+        bool redraw = widget->refresh(true);
+        refreshed |= redraw;
+        
+        if (redraw){         
+          TFT_eSprite* sprite = widget->sprite;
+          //sprite->pushSprite(widget->getX(),widget->getY(),TFT_TRANSPARENT);
+          sprite->pushToSprite(&screenBuffer,widget->getX(),widget->getY(),TFT_TRANSPARENT);                 
+          delete sprite;
+        }
+      }  
+      screenBuffer.pushSprite(0,0);
+
+
+
+
+
+
+
+
+
+      The double buffering is in the file GraphDraw.c. There is a variable DataBuffer, the graphics routines in this file draw on the DataBuffer, see the routine DrawGraphPlotInline(). After the drawing has been done, it is sent to the LCD as one single BMP via DMA for fast rendering using LcdBmp().

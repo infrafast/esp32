@@ -1,0 +1,1 @@
+subst K: w:\demo
