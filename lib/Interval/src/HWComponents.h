@@ -5,7 +5,7 @@
 #include <EthernetUdp.h>
 #include <WiFiGeneric.cpp>   // for tipipinit
 #include <ArduinoOTA.h>           // for WIFI_MEDIA program upload 
-//#include <ESP32Ping.h>
+#include <ESP32Ping.h>
 #include <OSCMessage.h>           //https://github.com/CNMAT/OSC  lib 1.3.5
 #include <HttpClient.h> // amcewen/HttpClient@^2.2.0 as opposed to the std lib #include <HTTPClient.h> which only handle WiFIclient
 #include <WiFiClientSecure.h>
@@ -497,6 +497,61 @@ uint8_t LadderButton::bCount = 0;
   #warning "USE_HSPI_PORT ACTIVATED"
 #endif
 
+typedef std::function<void(void)> PingCallback; // Utilisation de std::function pour plus de flexibilité
+
+struct PingTaskParameters {
+  const char* ipAddress;
+  PingCallback onSuccess;
+  PingCallback onFailure;
+};
+
+// Tâche de ping non bloquante
+void pingTask(void* parameter) {
+  // Récupérer les paramètres passés à la tâche
+  PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
+  DEBUG_PRINT("pingTask=>%s",params->ipAddress);
+  if (Ping.ping(params->ipAddress)) {
+    if (params->onSuccess) {
+      params->onSuccess();  // Appel du callback en cas de succès
+    }
+  } else {
+    if (params->onFailure) {
+      params->onFailure();  // Appel du callback en cas d'échec
+    }
+  }
+
+  // Libérer la mémoire allouée pour les paramètres
+  delete params;
+
+  // Suspendre la tâche après chaque ping (exécution ponctuelle)
+  vTaskDelete(NULL);
+}
+
+typedef std::function<void()> StdFunctionCallbackVoid; 
+
+struct AsyncClient {
+    IPAddress host;
+    uint16_t port;
+    Client* client;
+    StdFunctionCallbackVoid onConnectedCallback;
+    StdFunctionCallbackVoid failConnectCallback;
+    bool isClientConnecting = false; // Indicateur pour éviter de lancer plusieurs tâches
+};
+
+// Prototype pour la tâche de connexion
+void connectClientTask(void *parameter) {
+    AsyncClient *clientObj = static_cast<AsyncClient *>(parameter);
+    // Si la connexion est établie, appeler la fonction callback
+    DEBUG_PRINT("\nconnectClientTask(%s,%i)",clientObj->host.toString().c_str(),clientObj->port);
+    if (clientObj->client->connect(clientObj->host.toString().c_str(), clientObj->port)) {
+      clientObj->onConnectedCallback();
+    }else clientObj->failConnectCallback();
+    // Fin de la tentative de connexion, réinitialiser l'indicateur
+    clientObj->isClientConnecting = false;
+    // Tâche terminée, suppression
+    vTaskDelete(NULL);
+}
+
 
 class Network : public HWComponent2State{
 
@@ -506,7 +561,9 @@ class Network : public HWComponent2State{
     uint8_t media = NO_MEDIA;
     IPAddress IP, gateway,subnet;
     HttpClient* http = NULL;    
-    Client* client = NULL;    
+    Client* client = NULL;   
+    bool internet = false; 
+    uint16_t WANlatency = 150, LANlatency = 20;
 
     bool ethEnabled = true;
     bool WiFiEnabled = true;
@@ -520,10 +577,15 @@ class Network : public HWComponent2State{
     virtual void setLink(EthernetLinkStatus linkStatus) = 0;
     virtual EthernetLinkStatus getLink() = 0;
     virtual String getConnectedDeviceIP() = 0;
+    virtual void setUserInternetCallback(StdFunctionCallbackVoidBool uic)=0;
     virtual void setSSID(String ssid, String pwd){
       SSID = ssid;
       wiFiList->addValue(SSID,pwd);         
     }
+    
+    virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback)=0;
+    // Méthode pour initier la connexion non bloquante, appelée dans la boucle
+    virtual void asyncConnect(AsyncClient *clientParam)=0;
 
     virtual void setWiFi(JsonList* list, String wiFiID){
       wiFiList = list;
@@ -591,6 +653,7 @@ class Network : public HWComponent2State{
       //esp_wifi_stop();
     }        
 
+    TaskHandle_t pingTaskHandle = NULL;
 
   private:
     bool oldAppConnected = false;
@@ -603,8 +666,9 @@ class WiFiEth : public Network{
   public:
     EthernetLinkStatus cable = Unknown, oldCable = Unknown;
     unsigned long checkEthCableTime=0;
+    StdFunctionCallbackVoidBool userInternetCallback = nullptr;
 
-    WiFiEth(uint8_t pin, uint8_t rstP, bool enableEth = true, bool debug = true):Network(pin, debug){      
+    WiFiEth(uint8_t pin, uint8_t rstP, bool enableEth = true, bool debug = true): Network(pin, debug){      
       id = "WiFiEth~"+String(pin);
       rstPin = rstP;
       ethEnabled = enableEth;
@@ -626,7 +690,7 @@ class WiFiEth : public Network{
 
     void init(){
       if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
-      tcpipInit();  // so ethernet can benefit from getting mac address and other low indicator funciton even if WiFi is not up      
+      tcpipInit();  // so ethernet can benefit from getting mac address and other low level function even if WiFi is not up      
       // if enabled is true it means wde want to use the ethernet shield, so we try to initialize if
       if (ethEnabled){
         //ESP.eraseConfig(); // https://github.com/esp8266/Arduino/issues/1624
@@ -840,12 +904,18 @@ class WiFiEth : public Network{
           if (media == WIFI_MEDIA){
             server->begin(); // <-- for some reason this begin cause the webserver not react with ethernet if it is called. But is required for WiFi
             SSID = WiFi.SSID();
+            gateway = WiFi.gatewayIP();
             lastConnectedSSID = SSID;
             DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
             unpauseWiFi();
+          }else{
+            // ETHERNET
+            gateway = Ethernet.gatewayIP();
           }
+          checkInternet();
           // doesnt change anything works without, with one or with both
         }else if (state == DISCONNECTED){
+          internet = false;
           if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
           if (client != NULL){client->stop(); delete client; client = NULL;} 
           if (server != NULL){delete server; server  = NULL;} 
@@ -856,6 +926,73 @@ class WiFiEth : public Network{
       }
 
       return refreshed;
+    }
+
+    virtual void setUserInternetCallback(StdFunctionCallbackVoidBool uic){
+      userInternetCallback = uic;    
+    }
+
+    void onInternetPing(bool online) {
+        internet = online;
+        DEBUG_PRINT("\n\n\n\t\t\t * * * * PING %s * * * *",internet?"OK":"fail");
+        if (userInternetCallback !=nullptr) userInternetCallback(internet);
+    }
+
+    // Fonction pour démarrer la tâche de ping non bloquante
+    // Fonction pour démarrer la tâche de ping non bloquante
+    virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback) {
+      // Allouer la mémoire pour stocker les paramètres de la tâche
+      PingTaskParameters* params = new PingTaskParameters;
+      params->ipAddress = ipAddress;
+      params->onSuccess = successCallback;
+      params->onFailure = failureCallback;
+
+      // Créer la tâche FreeRTOS pour le ping
+      xTaskCreate(
+        pingTask,         // Tâche à exécuter
+        "PingTask",       // Nom de la tâche
+        4096,             // Taille de la pile de la tâche
+        params,           // Paramètres de la tâche (adresse IP et callbacks)
+        1,                // Priorité
+        &pingTaskHandle   // Handle de la tâche
+      );
+    }
+
+    virtual void asyncConnect(AsyncClient *clientParam){        
+        // Si nous sommes déjà en train de tenter une connexion, on ne relance pas la tâche
+        if (!clientParam->isClientConnecting  && !client->connected()) {
+            DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
+            clientParam->isClientConnecting = true;
+            // Démarrer la tâche FreeRTOS pour la connexion
+            xTaskCreatePinnedToCore(
+                connectClientTask,     // Tâche à exécuter
+                "ConnectTask",         // Nom de la tâche
+                4096,                  // Taille de la pile (en octets)
+                clientParam,           // Paramètre passé à la tâche (ici, l'objet courant)
+                1,                     // Priorité de la tâche
+                NULL,                  // Pointeur vers l'identifiant de la tâche (inutile ici)
+                1                      // Utilisation du deuxième cœur de l'ESP32
+            );
+        }else{
+          DEBUG_PRINT("\t client connection pending, no more attempt allowed");
+        }
+    }
+
+
+
+    void checkInternet(){
+      DEBUG_PRINT("\n\n\n\t\t\tcheckInternet => ");
+      // Utiliser des lambdas pour passer les méthodes membres comme callbacks
+      asyncPing("8.8.8.8", 
+        [&]() { onInternetPing(true); }, 
+        [&]() { onInternetPing(false); }
+      );
+      // latency
+      //if (LAN) 
+        LANlatency = 20;
+      //else 
+        WANlatency = 150;
+
     }
 
     void restoreWiFiSSID(){
@@ -971,6 +1108,9 @@ class  NoNetwork: public Network{
     virtual EthernetLinkStatus getLink(){return LinkOFF;}      // access point has no physicalLink
     virtual void stop(){}    
     virtual String getConnectedDeviceIP(){return "";}
+    virtual void asyncConnect(AsyncClient *clientParam){};
+    virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback){};
+    virtual void setUserInternetCallback(StdFunctionCallbackVoidBool uic){};
 };
 
 /* debug wifi AP:
@@ -1003,6 +1143,10 @@ class AccessPoint : public Network{
         DEBUG_PRINT("\nTRACE 23");
       }
     }
+
+    virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback){};
+    virtual void asyncConnect(AsyncClient *clientParam){};
+    virtual void setUserInternetCallback(StdFunctionCallbackVoidBool uic){};
 
     void init(){
       #define VISIBLE 0

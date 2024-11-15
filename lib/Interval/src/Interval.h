@@ -15,6 +15,11 @@
 
 #define DEFAULT_STORAGE_TYPE_ESP32 STORAGE_LITTLEFS
 
+
+typedef void (*VoidCallback)();
+typedef String (*ReturnStringCallback)();
+typedef std::function<void(bool)> StdFunctionCallbackVoidBool; 
+
 //typedef void (BaseManager::*GUIScreenBuilderCallBack)(uint8_t);
 #define MAX_PACKET_SIZE 500
 #define PRI_DEBUG 15 // 8 + 7
@@ -233,7 +238,7 @@ class JsonList{
     bool updateValue(uint8_t index, String value){
       KeyValue* kv = keyValues.get(index);
       kv->value = value;
-      DEBUG_PRINT("\tupdateValue<%d>(%s,%s)",index,getName(index).c_str(),value.c_str());
+      //DEBUG_PRINT("\tupdateValue<%d>(%s,%s)",index,getName(index).c_str(),value.c_str());
       return true;
     }
 
@@ -954,6 +959,13 @@ void defaultWizardScreenBuilder(){
 void defaultWizardStepFlow(){
   DEBUG_PRINT("\ndefaultWizardStepFlow(%i)");
   if (app.getButtonState(MIDDLEB)) app.gotoWizardEnd();  
+}
+
+void defaultBootScreen(){
+  if (LittleFS.exists(CUSTOM_LOGO_FILE))
+    gui.drawJpg(0, 0, CUSTOM_LOGO_FILE);
+  else
+    gui.drawJpg(0, 0, "/logo.jpg"); 
 }
 
 void wizardScreenBuilder(uint8_t subScreen){

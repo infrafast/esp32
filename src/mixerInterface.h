@@ -31,7 +31,7 @@ class MixerInterface : public DataProvider{
       dataRepository->removeDataSet(busNames);      
       delete busNames;
 
-      DEBUG_PRINT("\n\n~MixerInterface()");
+      //DEBUG_PRINT("\n\n~MixerInterface()");
     }
 
     MixerInterface(DataRepository* dr,uint16_t port=0): dataRepository(dr){
@@ -40,7 +40,7 @@ class MixerInterface : public DataProvider{
 
       dataRepository->addDataSet(chNames);
       dataRepository->addDataSet(busNames);  
-      DEBUG_PRINT("\n\nNew MixerInterface with its data set\n\n");    
+      //DEBUG_PRINT("\n\nNew MixerInterface with its data set\n\n");    
     };
 
     void update(){
@@ -76,7 +76,7 @@ class MixerOfflineInterface: public MixerInterface {
     }
 
     virtual bool connect(){return false;}  // Connexion spécifique au mixeur
-    virtual void disconnect(){state = false;}                    // Déconnexion spécifique
+    virtual void disconnect(){state = DISCONNECTED;}                    // Déconnexion spécifique
     virtual bool sendCommand(const String &command){return false;} // Envoi de commande spécifique
     virtual String receiveResponse(){return "";}             // Réception de la réponse spécifique
 
@@ -120,7 +120,9 @@ class BehringerMixer : public MixerInterface {
     }
 
     bool connect() override {      
-      return false;
+      state = CONNECTED;
+      DEBUG_PRINT("\tConnecté du mixeur Behringer.");
+      return true;
     }
 
     virtual void update(){
@@ -130,7 +132,7 @@ class BehringerMixer : public MixerInterface {
     void disconnect() override {
       //client.stop();
       state = false;
-      DEBUG_PRINT("Déconnecté du mixeur Behringer.");
+      DEBUG_PRINT("\tDéconnecté du mixeur Behringer.");
     }
 
     bool sendCommand(const String &command) override {
@@ -198,11 +200,6 @@ class MixingStation : public MixerInterface {
     }
 
     bool connect() override {
-      /*if (client.connect(ip, port)) {
-        connected = true;
-        DEBUG_PRINT("Connexion établie avec MixingStation à " + ip.toString());
-        return true;
-      }*/
       return false;
     }
 
@@ -240,13 +237,19 @@ class MixingStation : public MixerInterface {
     }
 
     virtual uint16_t size(String addrr){
-      //DEBUG_PRINT("\nSizeof(MixingStation,%s)=%i",addrr.c_str(),0);
-      return 0;
+      uint16_t n=0;
+      if (addrr == ADDRESS_CHNAME) n=100;
+      else if (addrr == ADDRESS_BUSNAME) n=20;
+      //DEBUG_PRINT("\nSizeof(BehringerMixer,%s)=%i",addrr.c_str(),n);
+      return n;
     }
 
     virtual String getValue(String addrr, uint16_t index){
-      return "";
-    }    
+      String v="";
+      if (addrr == ADDRESS_CHNAME) v="CHMS"+String(index);
+      else if (addrr == ADDRESS_BUSNAME) v="BUSMS"+String(index);
+      return v;
+    }     
 
 };
 

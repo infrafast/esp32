@@ -3,6 +3,8 @@
 // make sure to change config.hpp of mWebsocket 
 //constexpr uint16_t kBufferMaxSize{512};
 
+//  increaseCallback (hold switch) also call selectStrip, check that
+
 #define USE_NETWORK
 //#define TFT_BGCOLOR   TFT_DARKGREY
 //#define TFT_FCOLOR    TFT_SILVER
@@ -10,11 +12,11 @@
 #include "Interval.h"
 #include "mixerServer.h"
 
-/*#if defined(DEBUG) && defined(USE_NETWORK)
+#if defined(DEBUG) && defined(USE_NETWORK)
   #include "ESP-FTP-Server-Lib.h"
   #include "FTPFilesystem.h"
   FTPServer ftp;
-#endif*/
+#endif
 
 #define STRIP_XAIR_GROUP "xair"
 
@@ -199,49 +201,130 @@ Strip* gain2chStripConstructorCallback(){
   return new ChGainStrip(stripChGainSkel,&gui,&mixerServer,true);
 }
 
+String demoIP = "";
+uint16_t demoPort=10023;
+
+String mixerDemoJsonString(){
+    JsonDocument json;
+
+    json["demoPort"] = demoPort;
+    json["demoIP"] = demoIP;
+
+    String jsonString;
+    serializeJson(json,jsonString);
+
+    return jsonString;        
+}
+
+
+String getMixersState(){
+  String jsonString;
+  JsonDocument json;
+  //{{mixerState:{"interfaceState":{"mixerName":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"mixerModel":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}},"mixerDemo":{"ip":"82.85.52.72","port":10023}}
+  json[MIXER_STATE_KEY] = mixerServer.getMixerState();
+  json[MIXER_DEMO_KEY] = mixerDemoJsonString();
+  serializeJson(json,jsonString);
+  removeJsonQuote(&jsonString);
+  return jsonString; 
+}
+
 // overload the app.parseJsonInput to process input coming from user.html
 bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
   bool success = false;
   if (jsonDoc["command"] == MIXER_STATE_KEY ){
-    jsonAnswer->value = mixerServer.getMixerState();
+    jsonAnswer->value = getMixersState();
     jsonAnswer->callback = MIXER_STATE_KEY;
     success = true;
     // ok remote
   }else if (jsonDoc["command"] == MIXER_SET_KEY ){
     //{"command":"setMixer","param":{"mixerIP":"82.65.4.93","mixerPort":"10023"}}
-    mixerServer.disconnect(); // this will force trying to reconnect with new parameters
-    app.config.setValue(SERVER_IP_KEY,jsonDoc["param"][SERVER_IP_KEY]);    
-    app.config.setValue(SERVER_PORT_KEY,jsonDoc["param"][SERVER_PORT_KEY]);    
+    mixerServer.serverIP.fromString(jsonDoc["param"][SERVER_IP_KEY].as<String>());
+    mixerServer.serverPort = jsonDoc["param"][SERVER_PORT_KEY];
+
+    app.config.setValue(SERVER_IP_KEY,mixerServer.serverIP.toString());    
+    app.config.setValue(SERVER_PORT_KEY,String(mixerServer.serverPort));
+    
     jsonAnswer->callback = RET_SAVEBUTTON;
     jsonAnswer->value = "1";       
     success = true;
+    mixerServer.disconnect(); // this will force trying to reconnect with new parameters
     // force GUI rebuild
   }
   return success;
 }
 
+String userPongCallback(){
+  String pong = "";
+  JsonDocument doc;
+  if (mixerServer.mixerInterface->state == DISCONNECTED){
+    //{"serverAttempt":"Trying 192.168.0.212 / 10026"}}>
+    String serverAttempt = *app.lang.getString("Trying")+" "+mixerServer.serverIP.toString()+"/"+mixerServer.serverPort+" "+mixerServer.mixingStationIP.toString()+"/"+mixerServer.mixingStationPort;
+    doc["serverAttempt"] = serverAttempt;
+  }
+  serializeJson(doc,pong);
+  //DEBUG_PRINT("\n\n\t\t\t userPongCallback -------------------------- %s\n\n",pong.c_str());  
+  return pong;
+}
+
+void QueryingDemoMixer(bool internet){
+  demoIP = "";
+  if (internet){
+    DEBUG_PRINT("\nQuerying demo mixer");    
+    IPAddress demoServer(82,65,4,93);
+    mixerServer.SendCmd2OSC("/xinfo",demoServer, 10023);
+    delay(hwm.network->WANlatency);      
+    if (mixerServer.OSCReadIn()) {
+      demoIP = "82.65.4.93";
+    } 
+  }
+  String jsonString;
+  JsonDocument json;
+  json[MIXER_DEMO_KEY] = mixerDemoJsonString();
+  serializeJson(json,jsonString);
+  removeJsonQuote(&jsonString);
+  app.broadCast(jsonString); // refresh application demoMixer dropdown  
+}
+
 void usertNetChangeStateCallback(bool state){
-  DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);  
+  //DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);
+  QueryingDemoMixer(hwm.network->internet);  
 }
 
 String waitingMixer = "Waiting mixerServer connection";
 
 void userWizardGUI(void){
-    DEBUG_PRINT("\t User wizard");
+    //DEBUG_PRINT("\t User wizard");
     GUI::cls();
     gui.add(new Label(&waitingMixer, Align::Center,&app.midScreenHoriz, &app.midScreenVertical,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));   
 }
 
 void userWizardStepFlow(){
-  DEBUG_PRINT("\ndefaultWizardStepFlow(%i)"); 
+  //DEBUG_PRINT("\ndefaultWizardStepFlow(%i)"); 
   if (mixerServer.state == true) app.gotoWizardEnd();
 }
 
+void userInternetCallBack(bool internet){
+  DEBUG_PRINT("\n\n\n\t\t\t * * * * USER INTERNET CALLBACK %s * * * *",internet?"OK":"fail");
+  
+  // check updates
+
+  // check remote instruction
+
+  // check mixer demo online
+  QueryingDemoMixer(internet);
+  // check demoMixer
+}
 
 String getJsonUserConfWrapper(){
   // add any other json object here before converting them to String  
   // so far only mixer state
-  return mixerServer.getMixerState();
+  return getMixersState();
+}
+
+void userBootScreen(){
+  Icon bootSprite = Icon(&app.footSwitchIcon,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,app.byeIconColor,&GUI::defaultBcolor,false);
+  bootSprite.refresh(true);
+  bootSprite.sprite->pushSprite(bootSprite.getX(),bootSprite.getY(),TFT_TRANSPARENT);      
 }
 
 
@@ -260,12 +343,13 @@ void setup() {
 
   app.userParseJsonInputCallback = userHTMLJsonInput;
   app.userJsonConfigCallback = getJsonUserConfWrapper;
-
   app.userNetworkChangeStateCallback = usertNetChangeStateCallback;
-  
-  
+  app.userJsonPongCallback = userPongCallback;    
   app.userWizardScreenBuilder = userWizardGUI;
   app.userWizardstepFlow = userWizardStepFlow;
+  app.setUserInternetCallback((StdFunctionCallbackVoidBool)userInternetCallBack);
+  //app.bootScreen = userBootScreen;
+
 
   app.init();  
   mixerServer.init(&app.config);
@@ -274,11 +358,11 @@ void setup() {
   app.serialize(&data);
   DEBUG_PRINT("\nAPPLICATION SERIALIZATION:<%s>",data.c_str());*/
 
-  /*#if defined(DEBUG) && defined(USE_NETWORK)
+  #if defined(DEBUG) && defined(USE_NETWORK)
     ftp.addUser("ftp", "ftp");  
     ftp.addFilesystem("LITTLEFS", &LittleFS);
     ftp.begin();
-  #endif*/
+  #endif
   
 
   DEBUG_PRINT("\n\n\n=====================================================================");
@@ -291,10 +375,10 @@ void loop() {
   app.refresh();
   if (mixerServer.refresh()){
     screen.focus = screen.focus - 1;    // rebuild GUI
-    app.broadCast(mixerServer.getMixerState());
+    app.broadCast(getMixersState());
   }
 
-  /*#if defined(DEBUG) && defined(USE_NETWORK)
+  #if defined(DEBUG) && defined(USE_NETWORK)
     ftp.handle();
-  #endif*/
+  #endif
 }

@@ -6,6 +6,7 @@ Import("env")
 
 env.Append(CPPDEFINES=[("USER_SETUP_LOADED", 1)])
 env.Append(CPPDEFINES=[("ILI9341_2_DRIVER", 1)])
+#env.Append(CPPDEFINES=[("ILI9341_2_DRIVER", 1)])
 env.Append(CPPDEFINES=[("SPI_FREQUENCY", 48000000)])
 env.Append(CPPDEFINES=[("SUPPORT_TRANSACTIONS", 1)])
 env.Append(CPPDEFINES=[("USE_LITTLEFS", 1)])

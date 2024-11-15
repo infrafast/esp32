@@ -114,7 +114,6 @@ class GUIManager : public GenericComponent {
 
     virtual void init() {      
       GenericComponent::init();
-      GUI::tft->setRotation(1); 
       GUI::tft->fillScreen(TFT_BGCOLOR);
       GUI::tft->setSwapBytes(true);
       TJpgDec.setCallback(tft_output);        

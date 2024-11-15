@@ -129,9 +129,6 @@ struct JsonAnswer{
 
 typedef bool (*ParseJsonInputCallback)(JsonDocument,JsonAnswer*);
 typedef void (*NetworkChangeStateCallback)(bool state);
-typedef void (*WizardScreenBuilderCallback)();
-typedef void (*WizardSstepFlowCallback)();
-typedef String (*JsonConfigCallback)();
 
 bool defaultParseJsonInputCallback(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
   String jsonInputString;
@@ -140,11 +137,16 @@ bool defaultParseJsonInputCallback(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
   return false;
 }
 
+String defaultPongCallback(){
+  return "";
+}
+
 String defaultUserJsonConfigCallback(){
   return "";
 }
 
 void defaultWizardScreenBuilder();
+void defaultBootScreen();
 
 void defaultNetworkChangeStateCallback(bool state){
   DEBUG_PRINT("\ndefaultNetworkChangeStateCallback(%i)",state);  
@@ -190,7 +192,7 @@ class DataSet{
     DataProvider* dataProvider;    
 
     ~DataSet(){
-      DEBUG_PRINT("\n\t~DataSet(%s)",address.c_str());
+      //DEBUG_PRINT("\n\t~DataSet(%s)",address.c_str());
     }
 
     virtual uint16_t size(){
@@ -239,15 +241,15 @@ class DataRepository{
     }
 
     void removeDataSet(DataSet* ds){
-      DEBUG_PRINT("\nremoveDataSet data set ",ds->address);
+      //DEBUG_PRINT("\nremoveDataSet data set ",ds->address);
       for (uint16_t i=0;i<dataSets.size();i++){
-        DEBUG_PRINT("...%s",ds->address.c_str());
+        //DEBUG_PRINT("...%s",ds->address.c_str());
         if (dataSets.get(i)->address == ds->address){            
           dataSets.remove(i);
-          DEBUG_PRINT("removed");
+          //DEBUG_PRINT("removed");
           break;
         }else{
-          DEBUG_PRINT("keep");                  
+          //DEBUG_PRINT("keep");                  
         }
       }      
     }
@@ -256,7 +258,7 @@ class DataRepository{
     void serialize(JsonArray* jsonDataSets){
       //DEBUG_PRINT("\n<<<<<<<<<<<<< SERIALIZATION OF DATASETS FROM DataRepository, qty: %i >>>>>>>>>>>>>>>>>>>",dataSets.size() );
       for (uint8_t i=0;i<dataSets.size();i++){        
-        DEBUG_PRINT("\ngetting next data set: ");
+        //DEBUG_PRINT("\ngetting next data set: ");
         DataSet* ds = dataSets.get(i);
         //DEBUG_PRINT("name: %s size:%i address:%s",ds->dataProvider->name.c_str(),ds->size(),ds->address.c_str());
         jsonDataSets->add(ds->serialize());
@@ -1191,10 +1193,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     Application* webServer = nullptr;
     ///////////////////// USER CALLBACKS ////////////////////////////////////////////////////
     ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;
-    JsonConfigCallback userJsonConfigCallback = defaultUserJsonConfigCallback;
+    ReturnStringCallback userJsonConfigCallback = defaultUserJsonConfigCallback;
+    ReturnStringCallback userJsonPongCallback = defaultPongCallback;
     NetworkChangeStateCallback userNetworkChangeStateCallback = defaultNetworkChangeStateCallback;
-    WizardScreenBuilderCallback userWizardScreenBuilder = defaultWizardScreenBuilder;
-    WizardSstepFlowCallback userWizardstepFlow = defaultWizardStepFlow;
+    VoidCallback userWizardScreenBuilder = defaultWizardScreenBuilder;
+    VoidCallback userWizardstepFlow = defaultWizardStepFlow;
+    VoidCallback bootScreen = defaultBootScreen;
     ///////////////////// STRIPS & BANKS CONTAINERS AND DEFINITION ////////////////////////
     LinkedList<Bank*> banks = LinkedList<Bank*>(); 
     StripFactory stripFactory;
@@ -1213,6 +1217,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     String iconReset = ICON_RESET;
     String iconForbid = ICON_FORBID;
     String powerIcon = ICON_POWER; 
+    String footSwitchIcon = ICON_FOOTSWITCH;
 
     AlteredColor networkIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor apIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
@@ -1310,6 +1315,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       return hwm->buttons[B]->refreshed;
     }
 
+    void setUserInternetCallback(StdFunctionCallbackVoidBool userInternetCallback){
+      hwm->setUserInternetCallback(userInternetCallback);
+    }
+
     void setBatIcon(){
       batIconColor = TFT_GREEN;
       switch(hwm->battery.batteryState){
@@ -1363,7 +1372,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           networkIconGlowingRedColor.value = &networkIconColor;
           //DEBUG_PRINT("\n setNetworkIcon ********************************");
           if (hwm->network->ethEnabled && hwm->network->WiFiEnabled && hwm->network->getLink() == LinkOFF) networkIcon = ICON_MIXETHWIFI; // both WiFi and ETh are up but there is no cable on, we don't know who will connect first
-          else if ((hwm->network->ethEnabled && !hwm->network->WiFiEnabled) || (hwm->network->getLink() == LinkON)) networkIcon = ICON_ETH;  //case when we wait for a DHCP lease or have no WiFi enabled
+          else if ((hwm->network->ethEnabled && !hwm->network->WiFiEnabled) || (hwm->network->getLink() == LinkON)) networkIcon = ICON_ETH;  //case when we bootSprite for a DHCP lease or have no WiFi enabled
           else if (!hwm->network->ethEnabled && hwm->network->WiFiEnabled) networkIcon = ICON_WIFI_STRENGTH_3; 
           else networkIcon = emptyString;  // when it is only wifi and ap is launched.
         }
@@ -1449,6 +1458,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       LittleFS.remove(SYSTEM_FILE_NAME);
       persistants.clear();      
     }
+
+    #define CUSTOM_LOGO_FILE "/custom.jpg"
 
     void init(){
       GenericComponent::init();
@@ -1555,6 +1566,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         case NORMAL_STARTUP:
           // perform all application initialization
           DEBUG_PRINT("\n\n\n********");
+
+          bootScreen();
+
           if (deserializeBanks(config.getString(C_BANKS)) == nullptr){
             topLabelItem = *lang.getString("Bank creation");
             bottomLabelTitle = emptyString;
@@ -1904,7 +1918,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         case SCREEN_BYE:
           switch(screen.state){ 
             case STATE_BYE_GOSLEEP_MESSAGE:
-              if (millis()-goSleepCountdownStart>BAT_REFRESH_RATE*BAT_NUM_READINGS*2) goDeepSleep(); // we wait two full cycle of battery voltage acquisition before shuting down
+              if (millis()-goSleepCountdownStart>BAT_REFRESH_RATE*BAT_NUM_READINGS*2) goDeepSleep(); // we bootSprite two full cycle of battery voltage acquisition before shuting down
             break;
             case STATE_BYE_MODAL_MESSAGE: 
               // we do not shutdown, we leave it on so we can go to the men for instance to perform some action like update or ftp ...            
@@ -2442,14 +2456,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       jsonAnswer.callback = "undefinedCallBack";
       jsonAnswer.value = jsonInput.as<String>();
 
-      //DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
+      DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
       
       String command = jsonInput["command"];
 
       if (command == "ping"){        
         // socket heartbeat            
         jsonAnswer.callback="pong";
-        jsonAnswer.value="";
+        jsonAnswer.value=userJsonPongCallback();
       }else if (command == "retrieve"){
 
         String param = jsonInput["param"];
@@ -2471,7 +2485,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           doc["banks"] = banksString;
 
           serializeJson(doc,jsonAnswer.value);
-          removeJsonQuote(&jsonAnswer.value);
+          removeJsonQuote(&jsonAnswer.value); // done later on just before sending
 
         }else jsonAnswer.callback = RET_UNDEFINEDCALLBACK;
 
@@ -2668,12 +2682,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       }else if (command == "save"){     
         String fullConfig;
         serialize(&fullConfig);
-
         bool ret = config.save();
         ret &=  system.save();       
-        jsonAnswer.callback = RET_SAVEBUTTON;
-        jsonAnswer.value = "0";  
-      
+        if (ret){
+          jsonAnswer.callback = RET_SAVEBUTTON;
+          jsonAnswer.value = "0";  
+        }else{
+          jsonAnswer.callback=RET_COMMANDERROR;
+          jsonAnswer.value = *lang.getString("Save error");
+        }      
       }else{
         DEBUG_PRINT("\n\t\t\t\t\tCalling userParseJsonInputCallback...");
         if (!userParseJsonInputCallback(jsonInput,&jsonAnswer)){
@@ -2745,7 +2762,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       "\""+String(S_LAST_USED_SSID)+"\":\"intervalmix1\","
       "\""+String(S_LANG)+"\":\"francais\","
       "\""+String(S_FADERSPEED)+"\":\"157\","
-      "\""+String(S_SSID)+"\":{\"intervalmix1\":\"intervalpop74\",\"VACANCES\":\"FREJUSPLAGE\",\"IphoneTch\":\"jt2p9ug1\"},"
+      "\""+String(S_SSID)+"\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"IphoneTch\":\"jt2p9ug1\"},"
       "\""+String(S_BUTTON_ASSIGN)+"\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]}"
     "}";
 

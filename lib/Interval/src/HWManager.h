@@ -91,6 +91,8 @@ public:
 
     String configIP;
 
+    StdFunctionCallbackVoidBool userInternetCallback;
+
     unsigned long bootTime = 0;     // how long it took to boot (means when powerRail is on)
 
     HardwareManager(bool debug=true):GenericComponent(debug){
@@ -127,6 +129,10 @@ public:
       hwComponents.add(&battery);    
     }
     
+    void setUserInternetCallback(StdFunctionCallbackVoidBool uic){
+      network->setUserInternetCallback(uic);
+    }
+
     /*
     virtual ~HardwareManager(){
         delete button
@@ -191,19 +197,18 @@ public:
       wakeUp(500); // you have to press button for more than 500ms to wake up, otherwise we do not start.    
       setPowerRail(ON);        
 
-     //init all other devices      
-      //analogButtonIn.init();  // used by the button input => this init avoid having incoherent read at the first hw refresh loop
+      //init all other devices      
 
       for(int i = 0; i < hwComponents.size(); i++) hwComponents.get(i)->init();
 
       tft.init(1);  //tft.invertDisplay(1);            
       tft.fillScreen(TFT_BLACK);
 
-      // the below code is equivalent to setting TFT_RST to D6, which also works for W5500
-/*      pinMode(D5, OUTPUT);
-      digitalWrite(D5,LOW);
+      // the below code is equivalent to setting RST , which also works for W5500
+      /*pinMode(D7, OUTPUT);
+      digitalWrite(D7,LOW);
       delay(100);
-      digitalWrite(D5,HIGH);
+      digitalWrite(D7,HIGH);
       delay(100);*/
    
       xTaskCreatePinnedToCore(xTaskBackground, "secondCPU", 4096, NULL, 1, NULL, 0);
