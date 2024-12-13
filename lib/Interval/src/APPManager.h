@@ -32,6 +32,7 @@ void socketConnectionCallback(IWebSocket &ws);
 #define S_SSID              "ssid"
 #define S_LAST_USED_SSID    "lastSSID"
 #define S_BUTTON_ASSIGN     "buttonsAssignements"
+#define S_SHORTCUTS         "shortcuts"
 
 ///////////////////// CONFIG PARAMETERS ////////////////////////
 
@@ -41,11 +42,12 @@ void socketConnectionCallback(IWebSocket &ws);
   #define C_STRIPS          "strips"
     #define C_PROPERTIES    "properties"
     #define C_STRIPTYPE     "type"
-    #define C_SELECTOR      "selector"
+    #define C_INDEX         "id"
     #define C_X             "x"
     #define C_Y             "y"
     #define C_WIN           "win"
     #define C_SIZE          "size"
+    #define C_POSITIONS     "positions"
 #define C_ICON              "icon"
 #define C_COLOR             "color"
 
@@ -86,8 +88,9 @@ enum{
   STATE_PROMPT_SEQUENCE_Z,
   STATE_WIZARD_LANG_STEP1,
   STATE_WIZARD_CONNECT_CONFIG_STEP2,
-  STATE_WIZARD_USER_STEP3,
-  STATE_WIZARD_END_STEP4,
+  STATE_WIZARD_CONNECT_NETWORK_STEP3,
+  STATE_WIZARD_USER_STEP4,
+  STATE_WIZARD_END_STEP5,
   STATE_UTILS_SEARCHING_CONNECTION,
   STATE_UTILS_INFO,
   STATE_UTILS_CONNECTCONFIGMEDIA,
@@ -137,20 +140,13 @@ bool defaultParseJsonInputCallback(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
   return false;
 }
 
-String defaultPongCallback(){
-  return "";
-}
-
-String defaultUserJsonConfigCallback(){
-  return "";
-}
-
+String defaultStringReturn(){return "";};
+void defaultVoidReturn(){};
+void defaultVoidInt(int i){};
+void defaultVoidBool(bool state){}
 void defaultWizardScreenBuilder();
+void defaultWizardStepFlow();
 void defaultBootScreen();
-
-void defaultNetworkChangeStateCallback(bool state){
-  DEBUG_PRINT("\ndefaultNetworkChangeStateCallback(%i)",state);  
-}
 
 ///////////////////// BUTTONS CALLBACKS ////////////////////////
 void simpleClicCallBack(uint8_t buttonID, unsigned long time);
@@ -209,9 +205,18 @@ class DataSet{
 
       JsonDocument doc;
 
-      JsonArray jsonValues = doc[address].to<JsonArray>();
+      // a dataset either return an array of value from a data provider (size>0)
+      // or a unique value (size=0) which is the name of a javascript function callback
+
       uint16_t n = size();
-      for (uint8_t i=0; i< n; i++) jsonValues.add(getValue(i));
+
+      if (n>0){
+        JsonArray jsonValues = doc[address].to<JsonArray>();
+        for (uint8_t i=0; i< n; i++) jsonValues.add(getValue(i));
+      }else{
+        doc[address] = dataProvider->getValue(address,0);
+      }
+
       String data;
       serializeJson(doc,data);
       //DEBUG_PRINT("\n\n\tdataset->serialize: %s\n\n", data.c_str());
@@ -284,8 +289,7 @@ class Strip : public GenericComponent{
   #define  JSON_STRIP_TEMPLATE_SIZE 300
   public:
     TFT_eSprite* sprite = nullptr;
-    uint8_t selector;
-    uint8_t x, y, win;
+    uint8_t x, y, win, index;
     String size;
     unsigned char icon = 0x21;
     uint8_t colorID=0; 
@@ -299,7 +303,7 @@ class Strip : public GenericComponent{
       //id = skeleton->stripID;
     }    
 
-    ~Strip(){
+    virtual ~Strip(){
       DEBUG_PRINT("\n~Strip(): %s",id.c_str());
     }
 
@@ -311,9 +315,9 @@ class Strip : public GenericComponent{
 
     bool deserialize(String values){
       bool ret = false;
-      DEBUG_PRINT("\n\t deserialize STRIP(%s)",values.c_str());
+      //DEBUG_PRINT("\n\t deserialize STRIP(%s)",values.c_str());
       uint8_t n = getNumberOfProperties();
-      DEBUG_PRINT("\t getNumberOfProperties():%i",n);      
+      //DEBUG_PRINT("\t getNumberOfProperties():%i",n);      
       //DynamicJsonDocument jsonStrip(350+JSON_STRIP_PROPERTY_SIZE*n);          
       JsonDocument jsonStrip;
       DeserializationError error = deserializeJson(jsonStrip, values);
@@ -321,16 +325,16 @@ class Strip : public GenericComponent{
         DEBUG_PRINT("\n\tStrip <%s> deserialization error:%s",id.c_str(),error.f_str());
       }else{      
         id = jsonStrip[C_STRIPTYPE].as<String>();
-        DEBUG_PRINT("\t<%s> properties:",id.c_str());   /////////////////// CONTINUE DEBUG
+        //DEBUG_PRINT("\t<%s> properties:",id.c_str());   /////////////////// CONTINUE DEBUG
         // set index; 
-        selector = jsonStrip[C_SELECTOR].as<int>();//.as<int>();
         x = jsonStrip["position"][C_X].as<int>();
         y = jsonStrip["position"][C_Y].as<int>();
         win = jsonStrip["position"][C_WIN].as<int>();
+        index = jsonStrip["position"][C_INDEX].as<int>();
         size = jsonStrip[C_SIZE].as<String>();
         colorID = jsonStrip[C_COLOR];//.as<int>();
         icon = jsonStrip[C_ICON];//.as<unsigned char>();
-        DEBUG_PRINT("\tselector=%i, colorID=%i, icon=%c",selector,colorID,icon);
+        //DEBUG_PRINT("\tselector=%i, colorID=%i, icon=%c",selector,colorID,icon);
         properties = jsonStrip[C_PROPERTIES];
         for (uint8_t i = 0; i< properties.size(); i++){
           deserializeProperty(properties[i].as<String>());
@@ -347,12 +351,13 @@ class Strip : public GenericComponent{
       
       JsonDocument doc;
       doc[C_STRIPTYPE] = id;  // this is a text
-      doc[C_SELECTOR] = selector;
       doc[C_COLOR] = colorID;
       doc[C_ICON] = icon;
+      doc[C_SIZE] = size;
+
       doc["position"][C_X] = x;
       doc["position"][C_Y] = y;
-      doc[C_SIZE] = size;
+      doc["position"][C_INDEX] = index;
       doc["position"][C_WIN] = win;
       
       properties = doc[C_PROPERTIES].to<JsonArray>();
@@ -388,7 +393,8 @@ class Strip : public GenericComponent{
       }
     }*/
 
-    virtual bool progressiveDelay(unsigned long time){
+    virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
+      
       uint16_t TIME_MAX_PROGRESSIVITY = 3000;
       if (valueMax-valueMin<=20) TIME_MAX_PROGRESSIVITY = 5000;
       else if (valueMax-valueMin>500) TIME_MAX_PROGRESSIVITY = 1000;
@@ -401,7 +407,11 @@ class Strip : public GenericComponent{
       }
       if (time>=TIME_MAX_PROGRESSIVITY) time = TIME_MAX_PROGRESSIVITY;
 
-      unsigned long waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
+      unsigned long waitBetween2update; 
+      
+      if (trigger == HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
+      else waitBetween2update = 50 ; // 50ms 
+
       unsigned long delaySoFar = millis() - lastCall;
 
       //DEBUG_PRINT("\nprogressiveDelay(%d) - %u/%u -",time, delaySoFar, waitBetween2update);          
@@ -412,53 +422,65 @@ class Strip : public GenericComponent{
       return true;    
     }
 
-    /*virtual bool increaseCallBack(unsigned long time) = 0;
-    virtual bool decreaseCallback(unsigned long time) = 0;
+    /*virtual float increaseCallBack(unsigned long time) = 0;
+    virtual float decreaseCallback(unsigned long time) = 0;
     virtual float getIncrement(unsigned long time)=0;*/
 
-    virtual float getIncrement(unsigned long time){
+    virtual float getIncrement(unsigned long time,uint8_t trigger){
       float increment;
-      //value = roundHalf(value);
-      if (time<2000){
-        increment = 0.1;
-      }else{
-        float diff = valueMax - value;
-        float percentageToTarget = map(diff,0,valueMax-valueMin,100,1)/2000.0;  // 3000 seems to be a good compromise between delay and precision, 2000 react quicker but skip some decimal
-        increment = diff*percentageToTarget;          
-        //DEBUG_PRINT("\t => diff: %.3f, percentageToTarget: %.3f",diff, percentageToTarget);        
-      }
-      //DEBUG_PRINT("\t value: %.3f, increment: %.4f, ",value,increment);
+
+      if (trigger == HOLD){
+        //value = roundHalf(value);
+        if (time<2000){
+          increment = 0.1;
+        }else{
+          float diff = valueMax - value;
+          float percentageToTarget = map(diff,0,valueMax-valueMin,100,1)/2000.0;  // 3000 seems to be a good compromise between delay and precision, 2000 react quicker but skip some decimal
+          increment = diff*percentageToTarget;          
+          //DEBUG_PRINT("\t => diff: %.3f, percentageToTarget: %.3f",diff, percentageToTarget);        
+        }
+        //DEBUG_PRINT("\t value: %.3f, increment: %.4f, ",value,increment);
+      } else increment = 0.1;
+
       return increment;
     }    
 
-    virtual bool increaseCallBack(unsigned long time){            
-      if (!Strip::progressiveDelay(time)) return true;
-      value += getIncrement(time);
+    virtual float increaseCallBack(unsigned long time,uint8_t trigger){  
+      // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC          
+      
+      if (!Strip::progressiveDelay(time,trigger)) return 0.0;
+      
+      float delta = getIncrement(time,trigger);
+
+      value += delta;
 
       if (value > valueMax) value = valueMax;
       //value = truncateToOneDecimal(value);
       
       DEBUG_PRINT("\nincreaseCallBack: %s, time:%s",String(value).c_str(),String(time).c_str());
 
-      return true;      
+      return delta;      
     }
 
-    virtual bool decreaseCallback(unsigned long time){
-      if (!Strip::progressiveDelay(time)) return true;      
-      value -= getIncrement(time);
-      
+    virtual float decreaseCallback(unsigned long time,uint8_t trigger){
+      // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
+      if (!Strip::progressiveDelay(time,trigger)) return 0.0;
 
+      float delta = getIncrement(time,trigger); 
+
+      value -= delta;
+      
       if (value < valueMin) value = valueMin;
 
       //value = truncateToOneDecimal(value);
 
       DEBUG_PRINT("\ndecreaseCallback: %.2f",value);
 
-      return true;      
+      return delta;      
     }
 
     virtual uint8_t getNumberOfProperties()=0;
-    virtual bool actionCallback()=0;
+    virtual bool actionCallback(uint8_t trigger)=0;
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;    
     virtual void buildWidgets(uint8_t layout)=0;
@@ -531,7 +553,7 @@ class StripSkeleton{
       }
       String data;
       serializeJson(jsonDocStripSkeleton, data);
-      DEBUG_PRINT("\nskeleton->serialize: %s",data.c_str());
+     // DEBUG_PRINT("\nskeleton->serialize: %s",data.c_str());
       return data;
     }
 
@@ -550,12 +572,10 @@ class TextStrip : public Strip{
         
     TextStrip(StripSkeleton* s,GUIManager* g,bool debug=false):Strip(s,g,debug){
       //icon = ICON_TEXT_STRIP;
+      textPropertyAddress = s->dataSetAddresses.get(0);
     }
 
-    ~TextStrip(){
-    }
-
-    virtual bool actionCallback(){return true;}
+    virtual bool actionCallback(uint8_t trigger){return true;}
 
     virtual void buildWidgets(uint8_t layout){
       switch(layout){
@@ -565,26 +585,36 @@ class TextStrip : public Strip{
         break;
         case LAYOUT_DETAILS: 
         default:
-          if (debug) DEBUG_PRINT("\n%s:buildWidgets Label(%s)",id.c_str(),value.c_str());
-          Label* label = new Label(&value, Align::Center,&x,&y,100,&frontColor,&backColor,false);
+          if (debug) DEBUG_PRINT("\n%s:buildWidgets Label(%s)",id.c_str(),text.c_str());
+
+          uint8_t fontSize = TFT_WIDTH / text.length() *3;
+
+          Label* label = new Label(&text, Align::Center,&x,&y,fontSize,&frontColor,&backColor,false);
           //widgetHandles.add(label);          
           gui->add(label);
         break;
       }
     }
 
-    virtual void deserializeProperty(String property)  {      
-      value = property;
-      //if (debug){DEBUG_PRINT("\tvalue=%s",value.c_str());}
-      /*
-      if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
-        //DEBUG_PRINT("\t%s=%i",select2PropertyAddress.c_str(), select2ID);      
-      } */ 
-
+    virtual void deserializeProperty(String property)  {  
+      // property = /text/toto   
+      // textProperty = /text/%s
+      // value = toto
+      char buffer[50];
+      DEBUG_PRINT("\n deserializeProperty %%%%%%%%%%%%%% %s %s", property.c_str(), textPropertyAddress.c_str());
+      if (sscanf(property.c_str(), textPropertyAddress.c_str(), buffer) == 1){
+        text = String(buffer);
+        DEBUG_PRINT("\t MATCH %s",text.c_str());
+      }           
     }
 
-    void serializeProperties(){
-      properties.add(value);    
+    virtual void serializeProperties(){
+      DEBUG_PRINT("\n serializeProperties %%%%%%%%%%%%%% %s %s", text.c_str(), textPropertyAddress.c_str());
+      char* buf = (char*)malloc(textPropertyAddress.length()*sizeof(char*));
+      sprintf(buf,textPropertyAddress.c_str(),text.c_str());
+      properties.add(String(buf));
+      delete buf;
+
     }
 
     virtual bool refresh(bool force=false){
@@ -597,13 +627,14 @@ class TextStrip : public Strip{
       return skeleton->numberOfProperties;      
     }
 
-    virtual bool increaseCallBack(unsigned long time){return true;}
-    virtual bool decreaseCallback(unsigned long time){return true;}
+    virtual float increaseCallBack(unsigned long time,uint8_t trigger){return true;}
+    virtual float decreaseCallback(unsigned long time,uint8_t trigger){return true;}
     virtual float getIncrement(unsigned long time){return 0.0;}
 
-    private:
-      String value="";
+    protected:
+      String text="undef!";
       int16_t x=GUI::width()/2, y=GUI::height()/2;       
+      String textPropertyAddress;
 };
 
 class TwoSelectStrip : public Strip{
@@ -691,7 +722,7 @@ class StripFactory{
       Strip* strip = nullptr;
       StripSkeleton* skel = getStripSkeleton(stripID);
       if (skel != nullptr) strip = skel->constructor(/*values*/);
-      DEBUG_PRINT("\nbuild(%s)",stripID.c_str());     
+      //DEBUG_PRINT("\nbuild(%s)",stripID.c_str());     
       return strip;
     }
 
@@ -770,21 +801,21 @@ class Bank{
       }      
     }
 
+    void resetStripNav(){
+      nav.selector = 254;
+      nav.window = 0;      
+      if (strips.size() > 0){   //bank is not empty
+        // find the strip which has the lower index;
+        for (uint8_t i=0;i<strips.size();i++) nav.selector = min(nav.selector,strips[i]->index);  
+        nav.window = strips[nav.selector]->win;
+      }else nav.selector = 1;
+    }
+
     void init(){
-      DEBUG_PRINT("\t%s->init()",name.c_str());
+      //DEBUG_PRINT("\t%s->init()",name.c_str());
       //set stripIndex to the first available strip
-      nav.selector = 0; nav.window = 0;
-      uint8_t i=0;
-      while(i<strips.size()){
-        DEBUG_PRINT("\t<*>");
-        if (strips[i] != nullptr){
-          nav.selector = strips[i]->selector;
-          nav.window = strips[i]->win;
-          break;
-        }
-        i++;
-      }
-      DEBUG_PRINT("\n¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨-------___________ %s selector:%i, window: %i",name.c_str(),nav.selector,nav.window);
+      resetStripNav();
+      //DEBUG_PRINT("\n¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨-------___________ %s selector:%i, window: %i",name.c_str(),nav.selector,nav.window);
     }
 
     /*uint8_t getMaxWindow(){
@@ -815,7 +846,7 @@ class Bank{
         currentLayout = bank[C_CURRENTLAYOUT];
         icon = bank[C_ICON].as<unsigned char>();
         
-        DEBUG_PRINT("\npossible layout:%i, currentLayout:%i, icon:%c",possibleLayout,currentLayout,icon);
+        //DEBUG_PRINT("\npossible layout:%i, currentLayout:%i, icon:%c",possibleLayout,currentLayout,icon);
         JsonArray stripArray = bank[C_STRIPS];
         for (int i=0; i<stripArray.size() && i<BANK_MAX_STRIPS; i++){        
           JsonObject jsonStrip = stripArray[i];        
@@ -843,7 +874,7 @@ class Bank{
         String jsonStripString;
         serializeJson(jsonStrip, jsonStripString);                 
         if (strip->deserialize(jsonStripString)){
-          DEBUG_PRINT("\n\t\taddStrip=============>%s",jsonStripString.c_str());
+          //DEBUG_PRINT("\n\t\taddStrip=============>%s",jsonStripString.c_str());
           strips.add(strip);
         }  
       }
@@ -857,32 +888,15 @@ class Bank{
       }
     }*/
 
-    Strip* selectStrip(uint8_t selector, uint8_t window){
-      DEBUG_PRINT("\n    selectStrip(%i,%i)",selector,window);
-      Strip* strip = nullptr;
-      // retrieve strips at given position
-      uint8_t i = 0;
-      while (i<strips.size()){
-        DEBUG_PRINT("\n\t\tStrip[%i]->selector=%i ->win=%i",i,strips[i]->selector,strips[i]->win);
-        if (strips[i]->selector == selector && strips[i]->win == window){
-          DEBUG_PRINT(" MATCH");
-          strip = strips[i];
-          break;
-        }
-        i++;
-      }
-      return strip;
-    }
-
     Strip* getStrip(uint8_t x, uint8_t y, uint8_t window){
-      DEBUG_PRINT("\n  getStrip(%i,%i,%i)",x,y,window);
+      //DEBUG_PRINT("\n  getStrip(%i,%i,%i)",x,y,window);
       Strip* strip = nullptr;
       // retrieve strip at given position
       uint8_t i = 0;
       while (i<strips.size()){
-        DEBUG_PRINT("\n\t\tStrip[%i]->x=%i ->y:%i ->win=%i",i,strips[i]->x,strips[i]->y,strips[i]->win);
+        //DEBUG_PRINT("\n\t\tStrip[%i]->x=%i ->y:%i ->win=%i",i,strips[i]->x,strips[i]->y,strips[i]->win);
         if (strips[i]->x == x && strips[i]->y == y && strips[i]->win == window){
-          DEBUG_PRINT(" MATCH");
+          //DEBUG_PRINT(" MATCH");
           strip = strips[i];
           break;
         }
@@ -891,7 +905,25 @@ class Bank{
       return strip;
     }
 
+    Strip* getStrip(uint8_t id){
 
+      if (id>strips.size()) return nullptr;
+
+      //DEBUG_PRINT("\n  getStrip(%i)",id);
+      Strip* strip = nullptr;
+      // retrieve strip at given position
+      
+      for (uint8_t i=0;i<strips.size();i++){
+        //DEBUG_PRINT("\n\t\tStrip[%i]->index=%i versus %i",i,strips[i]->index, id);
+        if (strips[i]->index == id){
+          //DEBUG_PRINT(" MATCH");
+          strip = strips[i];
+          break;
+        }
+      }
+
+      return strip;
+    }
 
     bool trash(Strip* strip){
       bool success = false;
@@ -985,16 +1017,24 @@ class BankNavigator: public Widget{
         /*for (uint8_t i = 0; i<BANK_MAXWINDOW; i++){
           canva->sprite->drawRect(i*SPACE_BETWEEN_WIN+WIN_WIDTH*i,0,WIN_WIDTH,NAV_HEIGHT,GUI::gold);
         }*/
+
+        uint8_t focusedID = 0;
        
         for (uint8_t i = 0; i<bank->strips.size(); i++){
           uint16_t stripCol = GUI::luminance(GUI::gold,100);
           Strip* strip = bank->strips[i];
           if (strip !=nullptr){
             
-            uint8_t lumi = 100;
+            uint8_t lumi = 100;            
 
-            if (strip->selector == bank->nav.selector && strip->win == bank->nav.window) lumi = 255;            
-            stripCol = GUI::luminance(colorMap[strip->colorID].bColor,lumi);
+            if (strip->index == bank->nav.selector){
+              lumi = 255;            
+              focusedID = strip->index; // rememebr which strip index has the focus
+
+              //uniqueID->sprite->pushToSprite(canva->sprite,cellX+cellWidth/2,cellY+cellHeight/2);                  
+            }
+            
+            stripCol = GUI::luminance(colorMap[strip->colorID].bColor,lumi);            
             uint16_t stripFrame = GUI::luminance(colorMap[strip->colorID].fColor,lumi);
 
             uint8_t cellX = strip->x*CELL_WIDTH + (strip->win*WIN_WIDTH)+(SPACE_BETWEEN_WIN*strip->win);
@@ -1020,6 +1060,14 @@ class BankNavigator: public Widget{
 
         
         width = canva->width+CANVA_VS_BANKNAME_SPACE;        
+
+        //display strip unique ID
+        String id = String(focusedID);
+        Label* uniqueID = new Label(&id,Align::Center,&GUI::zero,&GUI::zero,NAV_HEIGHT,&GUI::white,&GUI::transparentColor);
+        uniqueID->refresh(true);
+        uniqueID->sprite->pushToSprite(canva->sprite,canva->width/2-NAV_HEIGHT/2,height/2);    
+        delete uniqueID;      
+
 
         //bank name
         Label* label = new Label(&bank->name,Align::Right,&GUI::zero,&GUI::zero,OVERLAY_ICON_SIZE*2,&fC,&bC,debug);
@@ -1135,13 +1183,13 @@ class Config : public JsonListFile{
     Config():JsonListFile(){}  
 
     const int getInt(String name) {
-      return getString(name)->toInt();
+      return getString(name,"0")->toInt();
     };
     const float getFloat(String name) {
-      return getString(name)->toFloat();
+      return getString(name,"0")->toFloat();
     };
     const boolean getBool(String name) {
-      return (*getString(name) != "0");
+      return (*getString(name,"0") != "0");
     };
 
 };
@@ -1177,35 +1225,58 @@ enum{
   NUMBER_OF_WIDGETS
 };
 
-    #define ADDRESS_SIMPLETEXT "/text/%s"
+#define ADDRESS_SIMPLETEXT "/text/%s"
+#define ADDRESS_STRIPIDS  "/strip/id/%s"
 
-class StaticText: public DataProvider{
+
+class StaticProvider: public DataProvider{
   public :
-    virtual uint16_t size(String addrr){return 1;}
+    
+    virtual uint16_t size(String addrr){
+      if (addrr == ADDRESS_SIMPLETEXT) return 1;
+      else if (addrr == ADDRESS_STRIPIDS) return 0;
+      else return 0;
+    }
+    
     virtual String getValue(String addrr, uint16_t index){
       if (addrr == ADDRESS_SIMPLETEXT) return "hello"+String(index);
+      else if (addrr = ADDRESS_STRIPIDS) return "getStripID";         //javascript local function callback
       else return "voidStatic";
     }
 };
+
+class Shortcuts{
+  public:
+    void serialize(String* buffer){
+
+      *buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":\"dropdown\"}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":\"dropdown\"},{\"/macro/name/%s\":\"dropdown\"}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":\"freetext\"}]}]";
+
+      removeJsonQuote(buffer);
+      //DEBUG_PRINT("\n\nSERIALIZE JsonList AFTER\t\t%s",buffer->c_str());
+    }    
+};
+
 
 class ApplicationManager : public GenericComponent,MenuComponentRenderer{
   public:    
     Application* webServer = nullptr;
     ///////////////////// USER CALLBACKS ////////////////////////////////////////////////////
     ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;
-    ReturnStringCallback userJsonConfigCallback = defaultUserJsonConfigCallback;
-    ReturnStringCallback userJsonPongCallback = defaultPongCallback;
-    NetworkChangeStateCallback userNetworkChangeStateCallback = defaultNetworkChangeStateCallback;
+    //ReturnStringCallback userJsonConfigCallback = defaultStringReturn;
+    ReturnStringCallback userJsonPongCallback = defaultStringReturn;
+    NetworkChangeStateCallback userNetworkChangeStateCallback = defaultVoidBool;
     VoidCallback userWizardScreenBuilder = defaultWizardScreenBuilder;
     VoidCallback userWizardstepFlow = defaultWizardStepFlow;
     VoidCallback bootScreen = defaultBootScreen;
+    VoidIntCallback userBankScreenBuilder = defaultVoidInt;
     ///////////////////// STRIPS & BANKS CONTAINERS AND DEFINITION ////////////////////////
     LinkedList<Bank*> banks = LinkedList<Bank*>(); 
     StripFactory stripFactory;
     DataRepository dataRepository;
     
-    StaticText textProvider;
-    DataSet simpleText= DataSet(ADDRESS_SIMPLETEXT,INPUTTEXT,&textProvider);
+    StaticProvider staticProvider;
+    DataSet simpleText = DataSet(ADDRESS_SIMPLETEXT,INPUTTEXT,&staticProvider);
+    DataSet stripIDs = DataSet(ADDRESS_STRIPIDS,INPUTSELECT,&staticProvider);
     
     ///////////////////// OVERLAY ICONS ////////////////////////
     String networkIcon, apIcon;
@@ -1213,7 +1284,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
 
     String batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3};
     String batIcon = ICON_WAIT; // by default we display a timeelapser while battery level is undetermined
-    String* byeIcon; const uint16_t* byeIconColor = &GUI::defaultFcolor; 
+    String* byeIcon = &iconForbid; const uint16_t* byeIconColor = &GUI::defaultFcolor; 
     String iconReset = ICON_RESET;
     String iconForbid = ICON_FORBID;
     String powerIcon = ICON_POWER; 
@@ -1222,7 +1293,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     AlteredColor networkIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor apIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor configIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
-
     
     int16_t overlayIconY = TFT_HEIGHT-OVERLAY_ICON_SIZE, apIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE*2;
     int16_t batIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE;
@@ -1248,6 +1318,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     int16_t third3xPos = TFT_THIRD*2+TFT_QUARTER/2;
 
     String utils1Icon1,utils1Icon2;
+
+    bool disabledBankRendering = false;   // this is to stop rendering the bank
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
     #define MENU_ICON_SIZE TFT_WIDTH/3
@@ -1293,7 +1365,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     I18n lang = I18n();
     Config config = Config();
     Config system = Config();
+    Config* userConfig = nullptr;
     Preferences persistants;
+    Shortcuts shortcuts;
 
     unsigned long goSleepCountdownStart;
 
@@ -1301,13 +1375,22 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
 
     String configClientIP; // ip of the client connect to the AP during configuration    
 
+    ///////////////////////////////////////////////////////////////
+    //////////////////                        /////////////////////
+    //////////////////    MAIN CLASS START   //////////////////////
+    //////////////////                       //////////////////////    
+    ///////////////////////////////////////////////////////////////
+
     ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true):GenericComponent(debug){
       hwm = h;
       gui = g;
       id = "ApplicationManager";
 
       stripTextSkel = new StripSkeleton(STRIP_TEXT,STRIP_DEFAULT_GROUP,textStripConstructorCallback,'*');
+      
       dataRepository.addDataSet(&simpleText);
+      dataRepository.addDataSet(&stripIDs);
+      
       stripTextSkel->registerDataSetAddress(ADDRESS_SIMPLETEXT);
     }
 
@@ -1384,7 +1467,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     }
 
     void gotoWizardEnd(){
-      screen.id = SCREEN_WIZARD; screen.state = STATE_WIZARD_END_STEP4;
+      screen.id = SCREEN_WIZARD; screen.state = STATE_WIZARD_END_STEP5;
       persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
     }
 
@@ -1406,9 +1489,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     Bank* deserializeBanks(const String* bankJsonString){
       Bank* bank = nullptr;     
        
-      //int memAlloc = JSON_BANK_SIZE * numberOfBanks;
-      DEBUG_PRINT("\nCreating banks from: <%s>",bankJsonString->c_str());
-      //DynamicJsonDocument jsonBanks(memAlloc);          
       JsonDocument jsonBanks;
       
       DeserializationError error = deserializeJson(jsonBanks, *bankJsonString);
@@ -1417,7 +1497,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       }else{              
         JsonObject root = jsonBanks.as<JsonObject>();      
         for (JsonPair kv : root) {
-          DEBUG_PRINT("\n%s = %s",kv.key().c_str(),kv.value().as<String>().c_str());          
+          //DEBUG_PRINT("\n%s = %s",kv.key().c_str(),kv.value().as<String>().c_str());          
           bank = new Bank(kv.key().c_str(),kv.value().as<String>(),&stripFactory);
           /*if (bank->strips.size()>0) banks.add(bank);
           else delete bank; // bank has no strips and is threfore invalid*/
@@ -1435,14 +1515,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       // this function applies all settings from the system conf file
       wiFiList.deserialize(*system.getString(S_SSID));
       hwm->setWiFi(&wiFiList,*system.getString(S_LAST_USED_SSID));
-      DEBUG_PRINT("\n*system.getString(S_LAST_USED_SSID): %s",system.getString(S_LAST_USED_SSID)->c_str());
+      //DEBUG_PRINT("\n*system.getString(S_LAST_USED_SSID): %s",system.getString(S_LAST_USED_SSID)->c_str());
       hwm->setButtonReactivity(system.getInt(S_PUSHDELAY),system.getInt(S_DCLICREACTIVITY));     
-      DEBUG_PRINT("\nS_PUSHDELAY: %s",String(system.getInt(S_PUSHDELAY)).c_str());
-      String langFile = "/"+*system.getString(S_LANG,"ENGLISH")+".lang";
-      lang.load(langFile); 
+      //DEBUG_PRINT("\nS_PUSHDELAY: %s",String(system.getInt(S_PUSHDELAY)).c_str());
+      String langFile = "/"+*system.getString(S_LANG,"ENGLISH");
+      langFile.toUpperCase();
+      lang.load(langFile+".lang"); 
     }
 
-    #define DEFAULT_CONFIG_FILE_NAME "default.conf"
+    #define DEFAULT_CONFIG_FILE_NAME "/default.conf"
 
     void applyConfigSettings(){
       // this function applies all settings from the user conf file
@@ -1452,24 +1533,30 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
 
     #define SYSTEM_FILE_NAME "/settings.sys"
     void clearConfig(){
+      // add a callback usere function userClearConfig()
       // delete all config files here, add the code to iterate FS on *.conf
+      if (userConfig != nullptr) LittleFS.remove(userConfig->filename);
       LittleFS.remove(DEFAULT_CONFIG_FILE_NAME);
       // delete system settings
       LittleFS.remove(SYSTEM_FILE_NAME);
-      persistants.clear();      
+      persistants.clear();
+      persistants.putUChar(PERSISTANT_TFT_ROTATION,0);      
     }
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
 
+    void init(Config* userCf){
+      userConfig = userCf;
+      init();
+    }
+
     void init(){
       GenericComponent::init();
 
+      LittleFS.begin();
+
       persistants.begin("interval", false);
       DEBUG_PRINT("\npersistants.begin()");
-
-      if (!LittleFS.begin()){
-        DEBUG_PRINT("\nFS BEGIN ISSUE");
-      }
 
       system.load(SYSTEM_FILE_NAME,defaultSysConf);  
 
@@ -1481,7 +1568,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,1)); 
 
       if (debug){
-        String s;
+        /*String s;
         system.serialize(&s);
         DEBUG_PRINT("\n\n serialization of system:\n%s",s.c_str());
         s="";
@@ -1490,7 +1577,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         s="";
         lang.serialize(&s);
         DEBUG_PRINT("\n\n serialization of langfile:\n%s",s.c_str());        
-        //DEBUG_PRINT("\nexample of langfile token: Connect:%s",lang.getString("Connect")->c_str());        
+        //DEBUG_PRINT("\nexample of langfile token: Connect:%s",lang.getString("Connect")->c_str());        */
       }
 
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
@@ -1560,6 +1647,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           goSleepCountdownStart = hwm->bootTime;
           goToBigBatteryIconScreenAndSleep();         
         break;
+        case NO_FS_STARTUP:
+          topLabelItem = *lang.getString("File System");;
+          bottomLabelTitle = emptyString;
+          // as the FS is not ready, there is no icon to display and no fonts as well so it will be display by default font
+          screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
+        break;
         case WIZARD_STARTUP:
           enableWizard();
           // no break, we continue normal startup
@@ -1612,6 +1705,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         Bank* bank = banks.get(i);
         String stringBank = bank->serialize();
         DeserializationError error = deserializeJson(jsonBank, stringBank);
+        jsonBank.shrinkToFit();
         if (error){
           DEBUG_PRINT("\nBank <%s> deserialization error:%s",bank->name.c_str(),error.f_str());
           return "{}";
@@ -1622,34 +1716,74 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       return bankDoc.as<String>();
     }
 
+
+/*
+// Fonction pour remplir la section "toto"
+void addTotoToDocument(JsonDocument& doc) {
+    JsonObject toto = doc.createNestedObject("toto");
+    toto["key1"] = "value1"; // Clé-valeur dans "toto"
+    toto["key2"] = 1234;    // Une autre clé-valeur dans "toto"
+}
+
+// Fonction pour remplir la section "tutu"
+void addTutuToDocument(JsonDocument& doc) {
+    JsonObject tutu = doc.createNestedObject("tutu");
+    tutu["keyA"] = "valueA"; // Clé-valeur dans "tutu"
+    tutu["keyB"] = true;     // Une autre clé-valeur dans "tutu"
+}
+
+void setup() {
+    Serial.begin(115200);
+
+    // Création d'un document JSON
+    JsonDocument jsonDoc;
+
+    // Ajout de la section "toto"
+    addTotoToDocument(jsonDoc);
+
+    // Ajout de la section "tutu"
+    addTutuToDocument(jsonDoc);
+
+    // Sérialisation et affichage du document JSON
+    serializeJson(jsonDoc, Serial);
+    Serial.println();
+}
+
+*/
+
+    void getCommonConfig(JsonDocument& doc) {
+      String tempJsonString;
+      system.serialize(&tempJsonString);  
+      doc["system"]=tempJsonString;
+      doc["volatile"]["langs"][0] = "francais"; doc["volatile"]["langs"][1] = "english";       
+      //doc["userConfig"] = userJsonConfigCallback();  TOTO
+    }
+
     void serialize(String* returnedJsonStringData){
       // this build the full serialization of the application
       //DEBUG_PRINT("\nserialize full config");
-      JsonDocument doc;
-      
+      JsonDocument doc;      
       String tempJsonString;
 
-      system.serialize(&tempJsonString);  
-      doc["system"]=tempJsonString;
+      getCommonConfig(doc);
 
-      doc["volatile"]["langs"][0] = "francais"; doc["volatile"]["langs"][1] = "english"; 
-     
       JsonArray skel = doc["skeletons"].to<JsonArray>();
       stripFactory.serialize(&skel);
+
+      tempJsonString="";
+      shortcuts.serialize(&tempJsonString);
+      doc["shortcutsDef"] = tempJsonString;
 
       JsonArray ds = doc["datasets"].to<JsonArray>();  
       dataRepository.serialize(&ds);         
 
-      tempJsonString = serializeBanks();
-      
+      tempJsonString = serializeBanks();      
       config.setValue(C_BANKS,tempJsonString);
 
       tempJsonString = "";
       config.serialize(&tempJsonString);
       doc["config"]=tempJsonString;
           
-      doc["userConfig"] = userJsonConfigCallback();
-
       serializeJson(doc, *returnedJsonStringData);  
       removeJsonQuote(returnedJsonStringData);
     }
@@ -1757,7 +1891,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       //------------------  
 
       if (hwm->configMedia->state == CONNECTED){    
-        if(webAppOn){          
+        if(webServer != nullptr){          
 
           if (hwm->configMedia->refreshed) setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
           
@@ -1776,28 +1910,23 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
               NULL                          // Pas besoin de handle de tâche ici
             );*/                       
             if (newEthClient.connected()) {
-              DEBUG_PRINT("\nWebapp connected eth");
               webServer->process(&newEthClient);
               newEthClient.stop();
             }             
-            
-           
           }else{
             WiFiClient newWiFiClient = ((WiFiServer *)hwm->configMedia->server)->available();
             if (newWiFiClient.connected()) {
-              //if (debug) DEBUG_PRINT("\nWebapp connected wifi");
               webServer->process(&newWiFiClient);
               newWiFiClient.stop();
             }   
           }
         }
       }else{
-        //if (hwm->configMedia->refreshed) 
-        webAppConnected = false;
+        if (hwm->configMedia->refreshed) webAppConnected = false;
       }
       
       // BATTERY LEVEL CHECK
-      if (hwm->battery.refreshed){        
+      if (0/*hwm->battery.refreshed*/){        
         setBatIcon();
         if (hwm->battery.vBat<VBAT_CRIT && hwm->battery.batteryState != BAT_CHARGING){
           topLabelItem = *lang.getString("Low Battery");
@@ -1876,13 +2005,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
             case STATE_WIZARD_CONNECT_CONFIG_STEP2:
               handleConfigConnection();
               persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);    
-              persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_USER_STEP3); 
+              persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_NETWORK_STEP3); 
             break;
-            case STATE_WIZARD_USER_STEP3:
+            case STATE_WIZARD_CONNECT_NETWORK_STEP3:
               if (!webAppConnected) screen.state = STATE_WIZARD_CONNECT_CONFIG_STEP2;
+              if (hwm->network->state == CONNECTED) screen.state = STATE_WIZARD_USER_STEP4;
+            break;  
+            case STATE_WIZARD_USER_STEP4:
+              if (!webAppConnected) screen.state = STATE_WIZARD_CONNECT_CONFIG_STEP2;
+              if (hwm->network->state == DISCONNECTED) screen.state = STATE_WIZARD_CONNECT_NETWORK_STEP3;
               userWizardstepFlow();
             break;
-            case STATE_WIZARD_END_STEP4:
+            case STATE_WIZARD_END_STEP5:
               resetToBankScreen();
             break;  
           }
@@ -1921,7 +2055,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
               if (millis()-goSleepCountdownStart>BAT_REFRESH_RATE*BAT_NUM_READINGS*2) goDeepSleep(); // we bootSprite two full cycle of battery voltage acquisition before shuting down
             break;
             case STATE_BYE_MODAL_MESSAGE: 
-              // we do not shutdown, we leave it on so we can go to the men for instance to perform some action like update or ftp ...            
+              // we do not shutdown, we leave it on so we can go to the menu for instance to perform some action like update or ftp ...            
             break;
           }
         break;
@@ -1967,31 +2101,31 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     }
 
     bool startWebApp(){
-      webAppOn = false;
       if (hwm->configMedia != nullptr){
-        if (!webAppOn && hwm->configMedia->state == CONNECTED){          
+        if (webServer == nullptr && hwm->configMedia->state == CONNECTED){          
           //start webserver
           if (webServer != nullptr) delete webServer;
           webServer = new Application();
+          //webServer->setTimeout(1000);
           // inventory zipped file
           populateFileList("gz","/webapp",&webGZFiles,"/",false);    
-          for (uint8_t i=0;i<webGZFiles.size();i++){          
+          /*for (uint8_t i=0;i<webGZFiles.size();i++){          
             webServer->get(webGZFiles.get(i)->c_str(), &gzFileServer);
-            //DEBUG_PRINT("\n ...... REGISTERING WEB GZ FILE: %s",webGZFiles.get(i)->c_str());
-          }
+            DEBUG_PRINT("\n ...... REGISTERING WEB GZ FILE: %s",webGZFiles.get(i)->c_str());
+          }*/
           // any other file
           webServer->use(commonFileServerWrapper);
           setWSServer();
-          webAppOn = true;
           hwm->configIP = "http://"+hwm->configMedia->IP.toString();
           /* Initialize mDNS => doesnt work for ethernet so we give up and keep IP address
           if (debug) DEBUG_PRINT("\nstarting mdns: %s",config.getString(S_AP_NAME)->c_str());
           if (!MDNS.begin(*config.getString(S_AP_NAME))) {   // Set the hostname to "esp32.local"
             if (debug) DEBUG_PRINT("Error setting up MDNS responder!");
           } */           
+         return true;
         }
       }
-      return webAppOn;
+      return false;
     }
     
     #define MIME_TYPES_MAX 15
@@ -2035,38 +2169,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       file.close();
     }*/
 
-    void commonFileServer(Request &req, Response &res){
-      
-      //if (req.method() != Request::GET) return;
-      const char * path = req.path();
-
-      if(strcmp(path, "/post/") == 0){ 
-        httpPost(req,res);
-      }else{
-        if(strcmp(path, "/") == 0){
-          path = "/index.html.gz"; //path = "/index.html";      INDEX is the only exception were we process the gz here because we remap / to index
-          #ifdef USE_NETWORK
-            if (persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD) path = "/wizard.html.gz"; //path = "/wizard.html";
-          #endif
-        } 
-        String filenameRealExtension = path;
-        
-        if (filenameRealExtension.endsWith(".gz")){
-          filenameRealExtension.replace(".gz","");
-          res.set("Content-Encoding", "gzip");
-        }
-
-        String fullPath = "/webapp"+String(path);   
-        if (!LittleFS.exists(fullPath)){
-          res.sendStatus(404);   //send(404, "text/plain", "Not found");    
-          res.set("Content-Type", "text/html");
-          res.print(fullPath.c_str());
-          res.end();          
-          return;
-        }
-        File file = LittleFS.open(fullPath);
-        if (file.isDirectory()) return;
-        
         String mimeTypes[MIME_TYPES_MAX][2] ={
           {"html",  "text/html"},
           {"js",    "application/javascript"},
@@ -2084,40 +2186,92 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           {"ttf",   "font/ttf"},
           {"svg",   "image/svg+xml"}
         };
+
+
+    void commonFileServer(Request &req, Response &res){
+      
+      //if (req.method() != Request::GET) return;
+      String path = req.path();
+
+      if(path=="/post/"){ 
+        httpPost(req,res);
+      }else{
+        if(path == "/"){
+          path = "/index.html.gz"; //path = "/index.html";      INDEX is the only exception were we process the gz here because we remap / to index
+          #ifdef USE_NETWORK
+            if (persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD) path = "/wizard.html.gz"; //path = "/wizard.html";
+          #endif
+        }               
+
+        if (LittleFS.exists("/webapp"+String(path)+".gz")){
+          path = path+".gz";
+        }
+        
+        String filenameRealExtension = path;
+
+        if (filenameRealExtension.endsWith(".gz")){
+          filenameRealExtension.replace(".gz","");
+          res.set("Content-Encoding", "gzip");
+        }
+
+        String fullPath = "/webapp"+String(path);   
+        if (!LittleFS.exists(fullPath)){
+          res.sendStatus(404);   //send(404, "text/plain", "Not found");    
+          res.set("Content-Type", "text/html");
+          res.print(fullPath.c_str());
+          res.end();          
+          return;
+        }
+        File file = LittleFS.open(fullPath);
+        if (file.isDirectory()) return;
+        
         String mimeType = mimeTypes[0][1];
         for (uint8_t i=0;i<MIME_TYPES_MAX;i++){
           if (filenameRealExtension.endsWith(mimeTypes[i][0])) mimeType = mimeTypes[i][1];
         }
 
+        uint32_t free = ESP.getFreeHeap();
+
         //if (debug) DEBUG_PRINT("\t\t\t\t REAL EXTENSION: \t\t\tt%s \t\t\tMIME:%s",filenameRealExtension.c_str(),mimeType.c_str());
-        DEBUG_PRINT(" serving <%s> --------------------->%s",mimeType.c_str(), fullPath.c_str() );        
+        DEBUG_PRINT("\nserving <%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        
         res.set("Content-Type", mimeType.c_str());
-        iconPending[0] = ICON_ROLLING1;
-        iconPending[1] = ICON_ROLLING2;
+
+        /*byte buffer[33] = "Access-Control-Allow-Origin: *\r\n";
+        res.beginHeaders();        
+          res.write(buffer,33);         // does not work
+        res.endHeaders();*/
         
+        res.set("Access-Control-Allow-Origin","*");
+
         //while (file.available()) res.write(file.read());
         sendFileInChunks(&file,&res);
         res.end();
       }
     }
 
-    #define BUFFER_SIZE 128  // Taille du buffer en octets
-
-    void sendFileInChunks(File* file, Response* res) {
-
-      // set the buffer sidze according to netWorkConfig, for AP = 128 is good, for Eth, probably 1024 is best and for STA, let's do a test with 512
-      // because having 128 with STA created some ERR_CONNECTION_TIMED_OUT
-
-      byte buffer[BUFFER_SIZE];  // Tampon pour stocker les données lues
-      int bytesRead;
-
-      // Lire et envoyer des paquets de 256 octets jusqu'à ce que tout le fichier soit envoyé
-      while ((bytesRead = file->read(buffer, BUFFER_SIZE)) > 0) {
-        res->write(buffer, bytesRead);  // Écrire le tampon complet dans le client
+    void sendFileInChunks(File* file, Response* res) {      
+      size_t dataSize = 64; // with Ethernet we have to keep it low otherwise it doesnt work
+            
+      if (hwm->network->media == WIFI_MEDIA){
+        dataSize = file->size();  // to try to send it once
+        if (dataSize>TCP_SND_BUF) dataSize = TCP_SND_BUF;   // size  of the TCP buffer as a maximum
       }
+      
+      byte *buffer = nullptr; // Pointeur pour la mémoire allouée dynamiquement
+      // Allouer dynamiquement de la mémoire pour stocker les données
+      buffer = new (std::nothrow) byte[dataSize]; // +1 pour le caractère null
+
+      int bytesRead;
+      // Lire et envoyer des paquets de 256 octets jusqu'à ce que tout le fichier soit envoyé
+      while ((bytesRead = file->read(buffer, dataSize)) > 0) {
+        res->write(buffer, bytesRead);  // Écrire le tampon complet dans le client
+        DEBUG_PRINT( "%d,",bytesRead);        
+      }
+
+      free(buffer);
+
       file->close();
     }    
-
 
     void render(Menu const& menu) const {}
     void render_menu_item(MenuItem const& menu_item) const {}
@@ -2278,18 +2432,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       hwm->network->http->stop();  
     }
 
-    void selectNextWindow(Bank* bank){
-      if (bank->nav.window++ == BANK_MAXWINDOW-1) bank->nav.window = 0;      
-      bank->nav.selector = 0;
-    }
-
-    void selectPreviousWindow(Bank* bank){      
-      if (bank->nav.window > 0) bank->nav.window--;      
-      else bank->nav.window = BANK_MAXWINDOW-1;
-      bank->nav.selector = STRIP_PER_WINDOW-1;      
-    }
-
-
     ///////////////////////////////////////////////////////////////////////
 
     //  APPLICATION & WORKFLOW MANAGEMENT METHODS
@@ -2302,23 +2444,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         }
 
         if (direction == hwm->buttons[RIGHTB]->getID()) {
-          if (bank->nav.selector++ >= STRIP_PER_WINDOW-1) selectNextWindow(bank);
+          if (bank->nav.selector == bank->strips.size()) bank->nav.selector = 1;
+          else bank->nav.selector++;
         } else if (direction == hwm->buttons[LEFTB]->getID()){
-          if (bank->nav.selector == 0) selectPreviousWindow(bank);
+          if (bank->nav.selector == 1) bank->nav.selector = bank->strips.size();
           else bank->nav.selector--;
         }
 
+        jumpToStrip(bank->nav.selector,bank->name);
+
         DEBUG_PRINT("\t scroll(%i/%i):",bank->nav.selector,bank->nav.window);
-
-        Strip* strip = bank->selectStrip(bank->nav.selector,bank->nav.window);
-
-        if (strip != nullptr){
-          DEBUG_PRINT("FOUND");
-          jumpToStrip(bank->nav.selector,bank->nav.window,bank->name);
-          return true;
-        } 
-        else return stripScroll(direction,bank);
-      
+        
+        return true;     
     }
 
 
@@ -2365,31 +2502,46 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
 
       DEBUG_PRINT("\nbank->stripIndex:%i changedwindow:%i",bank->stripIndex, changedWindow);*/
 
-    bool stripAction() {    
+    bool stripAction(uint8_t trigger) {    
       Bank* bank = banks.get(screen.state);
-      if (bank != nullptr) return false;
-      else return bank->selectStrip(bank->nav.selector,bank->nav.window)->actionCallback();      
+      if (bank == nullptr) return false;
+      else return bank->getStrip(bank->nav.selector)->actionCallback(trigger);      
     }
 
-    bool stripChangeValue(uint8_t direction, unsigned long time){
-      bool success;
+    void stripChangeValue(uint8_t direction, unsigned long time, uint8_t trigger){
       
       Bank* bank = banks.get(screen.state);    
-      if (bank == nullptr) return false;
+      if (bank == nullptr) return;
 
-      if (direction == hwm->buttons[RIGHTB]->getID()){ success = bank->selectStrip(bank->nav.selector,bank->nav.window)->increaseCallBack(time);}      
-      else if (direction == hwm->buttons[LEFTB]->getID()){ success = bank->selectStrip(bank->nav.selector,bank->nav.window)->decreaseCallback(time);}      
+      if (direction == hwm->buttons[RIGHTB]->getID()){ bank->getStrip(bank->nav.selector)->increaseCallBack(time, trigger);}      
+      else if (direction == hwm->buttons[LEFTB]->getID()){ bank->getStrip(bank->nav.selector)->decreaseCallback(time, trigger);}      
 
-      return success;
     }
 
-    void jumpToStrip(uint8_t selector, uint8_t window, String bankName){
-      DEBUG_PRINT("\n ^^^^^^^^^jumpToStrip %s(%i,%i)",bankName.c_str(),selector,window);
-      Bank* bank = jumpToBank(bankName);      
-      bank->nav.selector = selector;
-      bank->nav.window = window;
-      //screen.focus = bank->nav.selector+(bank->nav.window*STRIP_PER_WINDOW);  // this trigger GUI rebuild
-      screen.focus = screen.focus - 1;
+    bool jumpToStrip(uint8_t id, String bankName){
+      
+      bool success = false;
+
+      uint8_t bankIndex=0;
+      Bank* bank = getBank(bankName,&bankIndex);
+
+      if (bank != nullptr){
+
+        Strip* strip = bank->getStrip(id);
+        if (strip != nullptr){
+          DEBUG_PRINT("\n ^^^^^^^^^jumpToStrip (%i,%s)",id,bankName.c_str());
+          Bank* bank = jumpToBank(bankName);              
+          bank->nav.selector = strip->index;
+          bank->nav.window = strip->win;
+          //screen.focus = bank->nav.selector+(bank->nav.window*STRIP_PER_WINDOW);  // this trigger GUI rebuild
+          screen.focus = screen.focus - 1;
+          success = true;
+        }
+
+      }    
+  
+      return success;
+
     }
 
     Bank* jumpToBank(String bankName){
@@ -2401,26 +2553,27 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       return bank;        
     }
 
-    bool updateSelectors(Bank* bank, uint8_t win, JsonArray positions){
+    bool updatePositions(Bank* bank, JsonArray positions){
       bool success = false;
-      //"selectors":[{"x":0,"y":0,"s":0},{"x":0,"y":1,"s":1},{"x":0,"y":2,"s":2}]}}        
+      //"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":1,"id":1},{"x":0,"y":2,"id":2}]}}        
       //uint8_t window = jsonInput["param"]["win"].as<int>();         
       // extract "positions"
       // Parcourir chaque objet dans le tableau
       DEBUG_PRINT("\n Now updating selectors");
       for (JsonObject position : positions) {
-        int x = position["x"]; // extraire la valeur de x
-        int y = position["y"]; // extraire la valeur de y
+        int x = position[C_X]; // extraire la valeur de x
+        int y = position[C_Y]; // extraire la valeur de y
+        int win = position[C_WIN]; // extraire la valeur de y
         Strip* strip = bank->getStrip(x,y,win);
         if (strip != nullptr){
-          DEBUG_PRINT("\t updateStripPosition from %i",strip->selector);
-          strip->selector = position["s"]; // extraire la valeur de selector
-          DEBUG_PRINT(" to %i",strip->selector);
+          DEBUG_PRINT("\n\t updateStrip index #%i",strip->index);
+          strip->index = position[C_INDEX]; // extraire la valeur de selector
+          DEBUG_PRINT(" to #%i",strip->index);
           success = true; 
         }
       }   
       // in case of reschuffle, GUI may try to render a strip which is not existing anymore or that has changed      
-      if (bank->selectStrip(bank->nav.selector,bank->nav.window) == nullptr) findFirstValidStrip(bank);      
+      if (bank->getStrip(bank->nav.selector) == nullptr) bank->resetStripNav();      
       return success;
     }
 
@@ -2433,19 +2586,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     #define RET_UNDEFINEDCALLBACK   "undefinedCallBack"
     #define RET_SAVEBUTTON          "setSaveButton"
     #define RET_COMMANDERROR        "commandError"
+    #define RET_MODALMESSAGE        "modalMessage"
 
     String getConnectivityState(){
       return hwm->network->serialize();
-    }
-
-    void findFirstValidStrip(Bank* bank){
-      // if that's the case, we first scroll to the next available one.          
-      DEBUG_PRINT("\nfindFirstValidStrip...");
-      // if scrolling do not worked , means there is only one strip, we take the first available strip;
-      if (!stripScroll(hwm->buttons[RIGHTB]->getID(),bank)){
-        bank->init();   // reset the nav bar
-        jumpToStrip(bank->nav.selector,bank->nav.window,bank->name); 
-      }      
     }
 
     String parseJsonInput(String input){
@@ -2472,7 +2616,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         if(param == "fullConfig"){
           serialize(&jsonAnswer.value);
         }else if (param == "wizardConfig"){
-          jsonAnswer.value = "{\"volatile\":{\"langs\":[\"english\",\"francais\"]},\"system\":{\"configNames\":[\"anto\",\"thomas\",\"laurent\"],\"pushDelay\":\"550\",\"dClicReactivity\":\"0\",\"faderSpeed\":\"150\",\"profile\":\"default.conf\",\"apName\":\"footswitch\",\"lastSSID\":\"intervalmix\",\"lang\":\"francais\",\"ssid\":{\"intervalmix\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"ssid3\":\"pass3\"}}}";
+          //jsonAnswer.value = "{\"volatile\":{\"langs\":[\"english\",\"francais\"]},\"system\":{\"configNames\":[\"anto\",\"thomas\",\"laurent\"],\"pushDelay\":\"550\",\"dClicReactivity\":\"0\",\"faderSpeed\":\"150\",\"profile\":\"default.conf\",\"apName\":\"footswitch\",\"lastSSID\":\"intervalmix\",\"lang\":\"francais\",\"ssid\":{\"intervalmix\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"ssid3\":\"pass3\"}}}";
+          JsonDocument doc;
+          getCommonConfig(doc);
+          serializeJson(doc, jsonAnswer.value);  
+          removeJsonQuote(&jsonAnswer.value);
         }else if (param == "connectivityConfig"){
           jsonAnswer.value = getConnectivityState();
         }else if (param == "configBanks"){
@@ -2485,7 +2633,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           doc["banks"] = banksString;
 
           serializeJson(doc,jsonAnswer.value);
-          removeJsonQuote(&jsonAnswer.value); // done later on just before sending
+          removeJsonQuote(&jsonAnswer.value); 
 
         }else jsonAnswer.callback = RET_UNDEFINEDCALLBACK;
 
@@ -2538,12 +2686,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         }
         // if media is ethernet, we just feedback save button
         else{
-          jsonAnswer.callback = RET_SAVEBUTTON;
-          jsonAnswer.value ="1";
+          jsonAnswer.callback = RET_MODALMESSAGE;
+          jsonAnswer.value ="wifiSaved";
         }
 
       }else if (command == "setStrip"){          
-        //{"command":"setStrip","param":{"bank":"Test","strip":{"type":"chGain","size":"4x1","color":4,"icon":"6","properties":["/ch/3/config/name"],"position":{"win":0,"x":"0","y":"0"}},"selectors":[{"x":0,"y":0,"s":0},{"x":0,"y":1,"s":1},{"x":0,"y":2,"s":2}]}}
+        //{"command":"setStrip","param":{"bank":"Test","strip":{"type":"chGain","size":"4x1","color":4,"icon":"6","properties":["/ch/3/config/name"],"position":{"win":0,"x":"0","y":"0"}},"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":1,"id":1},{"x":0,"y":2,"id":2}]}}
         //get the bank that need to be modified
         jsonAnswer.callback=RET_COMMANDERROR;
         DEBUG_PRINT("\nsetStrip bankName:%s, strip:%s",jsonInput["param"]["bank"].as<String>().c_str(),jsonInput["param"].as<String>().c_str());        
@@ -2566,10 +2714,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         
           }else strip = nullptr;
           if (strip != nullptr){
-            updateSelectors(bank,window,jsonInput["param"]["selectors"]);
+            updatePositions(bank,jsonInput["param"][C_POSITIONS]);
             // put the focus on the strip
-            uint8_t selector = strip->selector;
-            jumpToStrip(selector,window,bank->name);    //jsonAnswer should be : {"restoreStrip":{"bank":"BANK j3","strip":{"type":"text","selector":"7","x":"3","y":"0","size":"1x4","color":3,"icon":"Z","properties":["/text/"]}}}         
+            uint8_t selector = strip->index;
+            jumpToStrip(selector,bank->name);    //jsonAnswer should be : {"restoreStrip":{"bank":"BANK j3","strip":{"type":"text","selector":"7","x":"3","y":"0","size":"1x4","color":3,"icon":"Z","properties":["/text/"]}}}         
             jsonAnswer.callback = RET_SAVEBUTTON;
             jsonAnswer.value = "1";  
           }else{
@@ -2579,7 +2727,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
             jsonAnswer.value=*lang.getString(BAD_BANK_MSG);
         }                
       }else if (command == "trashStrip"){        
-        //{"command":"trashStrip","param":{"bank":"Test","position":{"win":0,"x":"0","y":"1"},"selectors":[{"x":0,"y":0,"s":0},{"x":0,"y":2,"s":1}]}}
+        //{"command":"trashStrip","param":{"bank":"Test","position":{"win":0,"x":"0","y":"1"},"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":2,"id":1}]}}
         uint8_t bankIndex;
         Bank* bank = getBank(jsonInput["param"]["bank"],&bankIndex);
         jsonAnswer.callback = RET_COMMANDERROR;
@@ -2587,44 +2735,56 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           uint8_t window = jsonInput["param"]["position"]["win"];           
           uint8_t x = jsonInput["param"]["position"]["x"];     
           uint8_t y = jsonInput["param"]["position"]["y"];     
-          Strip* strip = bank->getStrip(x,y,window);
-          if (strip != nullptr){          
-              // we check if we delete the strip which is currently focused
-              // if that's the case, we first scroll to the next available one.
-              jsonAnswer.callback = RET_SAVEBUTTON;
-              jsonAnswer.value = "1";                                         
-              if (strip->selector == bank->nav.selector && strip->win == bank->nav.window){
-                if (bank->trash(strip)){                                  
-                  DEBUG_PRINT("\nDELETING FOCUSED STRIP, SCROLING...");
-                  findFirstValidStrip(bank);                 
-                }else jsonAnswer.value=*lang.getString(ERRDEL_STRIP_MSG);  
+          Strip* stripToDelete = bank->getStrip(x,y,window);
+          uint8_t indexToDelete = stripToDelete->index;
+          Strip* currentStrip = bank->getStrip(bank->nav.selector);
+          if (stripToDelete != nullptr){          
+              if (bank->trash(stripToDelete)){   
+                  updatePositions(bank,jsonInput["param"][C_POSITIONS]);              
+                  jsonAnswer.callback = RET_SAVEBUTTON;
+                  jsonAnswer.value = "1";   
+                  // we check if we delete the strip which is currently focused
+                  if (indexToDelete == currentStrip->index){                   
+                    DEBUG_PRINT("\nDELETED FOCUSED STRIP");
+                    bank->resetStripNav();
+                  }else{
+                    // since updatePositions has shifted the index, the selector points to a strip that is not the one which was preivously displayed, we restore it
+                    bank->nav.selector = currentStrip->index;                 
+                    bank->nav.window = currentStrip->win;
+                  }
+                  screen.focus = screen.focus - 1; // force refresh 
               }else{
-                if (!bank->trash(strip)) jsonAnswer.value=*lang.getString(ERRDEL_STRIP_MSG);  
+                   jsonAnswer.value=*lang.getString(ERRDEL_STRIP_MSG); 
               }
-              updateSelectors(bank,window,jsonInput["param"]["selectors"]);              
           }else{
             jsonAnswer.value=*lang.getString(BAD_STRIP_MSG);
           }
         }else{
           jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
         }  
-        DEBUG_PRINT("\n<...>");
+        DEBUG_PRINT("\n<TrashStrip end>");
       }else if (command =="moveStrip"){
-        //{"command":"moveStrip","param":{"bank":"Test2","x1":0,"y1":1,"x2":0,"y2":2,"win":0,"selectors":[{"x":0,"y":0,"s":0},{"x":0,"y":2,"s":1}]}}
+        //{"command":"moveStrip","param":{"bank":"Test2","x1":0,"y1":1,"x2":0,"y2":2,"win":0,"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":2,"id":1}]}}
         // use position here instead of x1, y1 
         uint8_t bankIndex;
         Bank* bank = getBank(jsonInput["param"]["bank"],&bankIndex);
         jsonAnswer.callback = RET_COMMANDERROR;
         if (bank != nullptr){                     
-          uint8_t x = jsonInput["param"]["x1"];
+          
+          
+          /*uint8_t x = jsonInput["param"]["x1"];
           uint8_t y = jsonInput["param"]["y1"]; 
-          uint8_t window = jsonInput["param"]["win"];
-          Strip* strip = bank->getStrip(x,y,window);
+          uint8_t window = jsonInput["param"][C_WIN];
+          Strip* strip = bank->getStrip(x,y,window);*/
+
+          uint8_t id = jsonInput["param"][C_INDEX];
+          Strip* strip = bank->getStrip(id);
+
           if (strip != nullptr){      
             ///WARNING THIS IS THE DESTINATION POSITION!!!!!! 
             strip->x = jsonInput["param"]["x2"];      
             strip->y = jsonInput["param"]["y2"];  
-            updateSelectors(bank,window,jsonInput["param"]["selectors"]);  
+            updatePositions(bank,jsonInput["param"][C_POSITIONS]);  
             jsonAnswer.callback = RET_SAVEBUTTON;
             jsonAnswer.value = "1";              
             screen.focus = screen.focus - 1; // force refresh            
@@ -2639,20 +2799,28 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         String bankName = jsonInput["param"]["name"];
         DEBUG_PRINT("\ntrashBank %s",bankName);
         uint8_t bankIndex;
-        Bank* bank = getBank(bankName,&bankIndex);  // get the bank and its index
-        if (bank != nullptr){
-          banks.remove(bankIndex);
-          delete bank;
+        Bank* bankToDelete = getBank(bankName,&bankIndex);  // get the bank and its index
+        Bank* currentBank = banks.get(screen.state);
+
+        if (bankToDelete != nullptr){
+          banks.remove(bankIndex);  // this will shift bank index but we have saved the one currently displayed
+          delete bankToDelete;
           if (bankIndex == screen.state || screen.id == SCREEN_BANK_SWITCH){
+
+            DEBUG_PRINT("\nDELETE CURRENT BANK");
+
             if (banks.size()>0) jumpToBank(banks.get(0)->name);  // go to first bank in case we delete the current displayed or we are showing menu switch
             else{
               DEBUG_PRINT("\nLAST BANK WAS TRASHED");
-              screen.focus = screen.focus - 1; // force refresh 
+              
             }
+          }else{
+            getBank(currentBank->name,&screen.state); // restore the bank
           }
           hookBankToMenu();   // rebuild the bank switch menu
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value = "1";            
+          screen.focus = screen.focus - 1; // force refresh           
         }else{
           jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
         }
@@ -2677,13 +2845,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         if (bank != nullptr){
           bank->name = newName;
           jsonAnswer.callback = RET_SAVEBUTTON;
-          jsonAnswer.value = "1";    
+          jsonAnswer.value = "1";
+           screen.focus = screen.focus - 1; // force refresh the bank screen or the bank switch
         }else jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
       }else if (command == "save"){     
         String fullConfig;
         serialize(&fullConfig);
         bool ret = config.save();
-        ret &=  system.save();       
+        ret &=  system.save();   
+        if (userConfig != nullptr) ret &= userConfig->save();   
         if (ret){
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value = "0";  
@@ -2762,15 +2932,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       "\""+String(S_LAST_USED_SSID)+"\":\"intervalmix1\","
       "\""+String(S_LANG)+"\":\"francais\","
       "\""+String(S_FADERSPEED)+"\":\"157\","
-      "\""+String(S_SSID)+"\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"IphoneTch\":\"jt2p9ug1\"},"
-      "\""+String(S_BUTTON_ASSIGN)+"\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]}"
+      "\""+String(S_SSID)+"\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"IpTch\":\"jt2p9ug1\"},"
+      "\""+String(S_BUTTON_ASSIGN)+"\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]},"
+      "\""+String(S_SHORTCUTS)+"\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
     "}";
-
-
 
     String defaultUserConf = "{"      
       "\""+String(C_BANKS)+"\":{"
-        "\"Test\":{\"possibleLayout\":4,\"currentLayout\":1,\"icon\":\"=\",\"strips\":[{\"type\":\"ch2bus\",\"size\":\"4x1\",\"position\":{\"win\":0,\"x\":0,\"y\":0},\"selector\":0,\"color\":3,\"icon\":\"-\",\"properties\":[\"/ch/02/config/name\",\"/bus/02/config/name\"]},{\"type\":\"chGain\",\"selector\":1,\"size\":\"4x1\",\"position\":{\"win\":0,\"x\":0,\"y\":1},\"color\":4,\"icon\":\"6\",\"properties\":[\"/ch/03/config/name\"]},{\"type\":\"ch2bus\",\"selector\":0,\"size\":\"4x1\",\"position\":{\"win\":1,\"x\":0,\"y\":2},\"color\":1,\"icon\":\"2\",\"properties\":[\"/ch/04/config/name\",\"/bus/02/config/name\"]},{\"type\":\"ch2bus\",\"selector\":1,\"size\":\"4x1\",\"position\":{\"win\":1,\"x\":0,\"y\":3},\"color\":1,\"icon\":\"2\",\"properties\":[\"/ch/05/config/name\",\"/bus/02/config/name\"]}]}"
+        "\"Test\":{\"possibleLayout\":4,\"currentLayout\":1,\"icon\":\"=\",\"strips\":[{\"type\":\"ch2bus\",\"size\":\"4x1\",\"position\":{\"win\":0,\"x\":0,\"y\":0,\"id\":0},\"color\":3,\"icon\":\"-\",\"properties\":[\"/ch/02/config/name\",\"/bus/02/config/name\"]},{\"type\":\"chGain\",\"size\":\"4x1\",\"position\":{\"win\":0,\"x\":0,\"y\":1,\"id\":1},\"color\":4,\"icon\":\"6\",\"properties\":[\"/ch/03/config/name\"]},{\"type\":\"ch2bus\",\"size\":\"4x1\",\"position\":{\"win\":1,\"x\":0,\"y\":2,,\"id\":2},\"color\":1,\"icon\":\"2\",\"properties\":[\"/ch/04/config/name\",\"/bus/02/config/name\"]},{\"type\":\"ch2bus\",\"selector\":1,\"size\":\"4x1\",\"position\":{\"win\":1,\"x\":0,\"y\":3,\"id\":3},\"color\":1,\"icon\":\"2\",\"properties\":[\"/ch/05/config/name\",\"/bus/02/config/name\"]}]}"
       "}"
     "}";
 
@@ -2779,7 +2948,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     LinkedList<String*> countryList = LinkedList<String*>();   
     LinkedList<String*> webGZFiles = LinkedList<String*>();   
 
-    bool webAppOn = false;
     IWebSocketServer *wss{ nullptr };        
 
     uint32_t minHeapSize,maxHeapSize;
@@ -2788,24 +2956,42 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     ///////////////////////////////////////////////////////////////////////
 
     void httpPost(Request &req, Response &res){
-      #define COMMAND_SIZE 500
+      
+      constexpr size_t MAX_COMMAND_SIZE = 2048; // Limite maximale pour éviter un abus de mémoire
+      char *name = nullptr; // Pointeur pour la mémoire allouée dynamiquement
+
       #define OPTION_SIZE 64
-      char name[COMMAND_SIZE];
       char options[OPTION_SIZE];    //options is not used (the fetch from client puts everything in the name as a json)
+
+
+      // Allouer dynamiquement de la mémoire pour stocker les données
+      name = new (std::nothrow) char[MAX_COMMAND_SIZE]; // +1 pour le caractère null
+      if (!name) {
+          DEBUG_PRINT("\n\n\t httpPost: Memory allocation failed.\n\n");
+          res.sendStatus(500); // Internal Server Error
+          res.print("{\"error\":\"Memory allocation failed\"}");
+          res.end();
+          return;
+      }
+
+
       res.set("Content-Type", "application/json");
+  
       while (req.left()) {        
-        req.form(name, COMMAND_SIZE, options, OPTION_SIZE);                
+        req.form(name, MAX_COMMAND_SIZE, options, OPTION_SIZE);                
         if (debug){
-          //DEBUG_PRINT("\n\n\t httpPost <%s>:<%s>\n\n",name,options);
+          DEBUG_PRINT("\n\n\t httpPost <%s>:<%s>\n\n",name,options);
         } 
         String jsonAnswer = parseJsonInput(name);
         if (debug){
           //DEBUG_PRINT("\n\t httpres:<%s>",jsonAnswer.c_str());
         }
         res.print(jsonAnswer);
-        res.end();
       }  
-    }  
+      res.end();
+      delete[] name;
+    } 
+
 
     void populateFileList(String extension, String folder, LinkedList<String*> *list, String prefix="", bool withExtension=true) {
       //we first clean all items from the list

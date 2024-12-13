@@ -122,22 +122,34 @@ class GUIManager : public GenericComponent {
         if (debug) DEBUG_PRINT("\nLabel Initialise error"); 
       }
 
-
+      /*
       // Open the font file
       File fontFile = LittleFS.open("/webapp/interval.ttf", "r");
       if (!fontFile) {
         DEBUG_PRINT("Failed to open icon file");
       }
       // Read font file contents into a buffer
-      size_t fileSize = fontFile.size();
-      uint8_t* fontBuffer = (uint8_t*)malloc(fileSize);
-      fontFile.read(fontBuffer, fileSize);
-      fontFile.close();
-      //DEBUG_PRINT("\nfilesize: %i, sizeof(buffer):%i sizeof(TTF_ICON):%i",fileSize,sizeof(fontBuffer),sizeof(TTF_ICON));
-      if (iconOfr.loadFont(fontBuffer, fileSize)) { // this consumes 20992 bytes and take ~2ms      
-      //if (iconOfr.loadFont(TTF_ICON, sizeof(TTF_ICON))) {
-        if (debug) DEBUG_PRINT("\nIcon Initialise error"); 
+      size_t dataSize = fontFile.size();
+      uint8_t* fontBuffer = (uint8_t*)malloc(dataSize);
+      fontFile.read(fontBuffer, dataSize);
+      fontFile.close();*/
+
+      size_t dataSize = 0;
+      uint8_t* fontBuffer = readGzFileToBuffer("/webapp/interval.ttf.gz",&dataSize);
+
+      if (dataSize > 0){ // uncompress succeed
+        //DEBUG_PRINT("\ndataSize: %i, sizeof(buffer):%i sizeof(TTF_ICON):%i",dataSize,sizeof(fontBuffer),sizeof(TTF_ICON));
+        if (iconOfr.loadFont(fontBuffer, dataSize)) { // this consumes 20992 bytes and take ~2ms      
+        //if (iconOfr.loadFont(TTF_ICON, sizeof(TTF_ICON))) {
+          if (debug) DEBUG_PRINT("\nIcon Initialise error with compressed font"); 
+        }
+      }else{
+        if (iconOfr.loadFont(TTF_FONT, sizeof(TTF_FONT))) { //  use the default font as icon
+        //if (iconOfr.loadFont(TTF_ICON, sizeof(TTF_ICON))) {
+          if (debug) DEBUG_PRINT("\nIcon Initialise error with default font"); 
+        }
       }
+
 
       //free(fontBuffer);
 

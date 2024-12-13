@@ -6,7 +6,6 @@
 #include <WiFiGeneric.cpp>   // for tipipinit
 #include <ArduinoOTA.h>           // for WIFI_MEDIA program upload 
 #include <ESP32Ping.h>
-#include <OSCMessage.h>           //https://github.com/CNMAT/OSC  lib 1.3.5
 #include <HttpClient.h> // amcewen/HttpClient@^2.2.0 as opposed to the std lib #include <HTTPClient.h> which only handle WiFIclient
 #include <WiFiClientSecure.h>
 #include "BluetoothSerial.h"   //required for OSC
@@ -386,6 +385,7 @@ class Button : public HWComponent2State{
     }
 
     virtual int getID() = 0;    
+    virtual void setID(uint8_t id) = 0;    
 
   private:
     int edge; 
@@ -402,8 +402,8 @@ enum{
 };
 
 enum{
-  DISCONNECTED,
-  CONNECTED
+  DISCONNECTED = false,
+  CONNECTED = true
 };
 
 class DigitalButton: public Button{
@@ -418,6 +418,10 @@ class DigitalButton: public Button{
       //DEBUG_PRINT("\ndigitalgetID(): %d",CSPin);
       return CSPin;
     }    
+
+    void setID(uint8_t id){
+      CSPin = id;
+    }
 
   private:
 
@@ -449,6 +453,10 @@ class LadderButton: public Button{
       //DEBUG_PRINT("\nladdergetID(): %d",virtualID);
       return virtualID;
     }    
+
+    void setID(uint8_t id){
+      virtualID = id;
+    }
 
   private:        
     AnalogIn* input;
@@ -959,26 +967,24 @@ class WiFiEth : public Network{
     }
 
     virtual void asyncConnect(AsyncClient *clientParam){        
-        // Si nous sommes déjà en train de tenter une connexion, on ne relance pas la tâche
-        if (!clientParam->isClientConnecting  && !client->connected()) {
-            DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
-            clientParam->isClientConnecting = true;
-            // Démarrer la tâche FreeRTOS pour la connexion
-            xTaskCreatePinnedToCore(
-                connectClientTask,     // Tâche à exécuter
-                "ConnectTask",         // Nom de la tâche
-                4096,                  // Taille de la pile (en octets)
-                clientParam,           // Paramètre passé à la tâche (ici, l'objet courant)
-                1,                     // Priorité de la tâche
-                NULL,                  // Pointeur vers l'identifiant de la tâche (inutile ici)
-                1                      // Utilisation du deuxième cœur de l'ESP32
-            );
-        }else{
-          DEBUG_PRINT("\t client connection pending, no more attempt allowed");
-        }
+      // Si nous sommes déjà en train de tenter une connexion, on ne relance pas la tâche
+      if (clientParam->isClientConnecting ) {
+        DEBUG_PRINT("\n\t client connection pending, no more attempt allowed");
+      }else{
+        DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
+        clientParam->isClientConnecting = true;
+        // Démarrer la tâche FreeRTOS pour la connexion
+        xTaskCreatePinnedToCore(
+            connectClientTask,     // Tâche à exécuter
+            "ConnectTask",         // Nom de la tâche
+            4096,                  // Taille de la pile (en octets)
+            clientParam,           // Paramètre passé à la tâche (ici, l'objet courant)
+            1,                     // Priorité de la tâche
+            NULL,                  // Pointeur vers l'identifiant de la tâche (inutile ici)
+            1                      // Utilisation du deuxième cœur de l'ESP32
+        );
+      }
     }
-
-
 
     void checkInternet(){
       DEBUG_PRINT("\n\n\n\t\t\tcheckInternet => ");

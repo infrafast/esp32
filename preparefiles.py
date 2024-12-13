@@ -131,7 +131,8 @@ def prep_data_folder():
     print(scriptOutput)
 
     #add filetypes (extensions only) to be gzipped before uploading. Everything else will be copied directly
-    filetypes_to_gzip = ['js', 'html','css','json']
+    filetypes_to_gzip = ['ttf','js', 'html','css','json']
+    minified_files = ['js', 'html','css','json']
     filetypes_to_ignore = ['php','db','mac','log','conf','csv']
     
     print('[COPY/GZIP DATA FILES]')
@@ -142,15 +143,10 @@ def prep_data_folder():
     data_src_dir = 'K:'
 
     all_files = glob.glob(os.path.join(data_src_dir, '*.*'))
-	
-    files_minified = []
-    for extension in filetypes_to_gzip:
-        files_minified.extend(glob.glob(os.path.join(data_src_dir, '*.' + extension)))	
 
-    files_to_gzip = []
-    for extension in filetypes_to_gzip:
-        files_to_gzip.extend(glob.glob(os.path.join(data_dir, '*.' + extension)))  
-    print('  files to gzip: ' + str(files_to_gzip))
+    files_minified = []
+    for extension in minified_files:
+        files_minified.extend(glob.glob(os.path.join(data_src_dir, '*.' + extension)))	
 
     files_to_ignore = []
     for extension in filetypes_to_ignore:
@@ -162,6 +158,11 @@ def prep_data_folder():
     for file in files_to_copy:
         print('  Copying file: ' + file + ' to data dir: '+data_dir)
         shutil.copy(file, data_dir)
+
+    files_to_gzip = []
+    for extension in filetypes_to_gzip:
+        files_to_gzip.extend(glob.glob(os.path.join(data_dir, '*.' + extension)))  
+    print('  files to gzip: ' + str(files_to_gzip))
 
     for file in files_to_gzip:
         print('  Gziping file: ' + file + ' to data dir: '+data_dir)		

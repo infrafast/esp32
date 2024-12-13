@@ -1,0 +1,395 @@
+<html>
+    <head>
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <link rel="stylesheet" href="style.css">
+        <link rel="stylesheet" href="banks.css">
+        <script src="gettext.iife.js" ></script>
+        <script src="customsteps-1.0.0.js" ></script>        
+        <script src='interval.js' defer></script>
+        <script src='user.js' ></script>
+        <script src='banks.js'></script>
+    </head>
+    <body onload="initIndex()">
+        <!--<div id="i18nloading" class="k-progress-line"></div>-->
+       
+<div id="waitingDiv" class="loader">  
+    <div id="waitingMsg" class="waitingDivText">Starting up...</div>
+    <!--<div id="indicators">
+        <div class="rectangle" id="load1"></div>
+        <div class="rectangle" id="load2"></div>
+        <div class="rectangle" id="load3"></div>
+        <div class="rectangle" id="load4"></div>
+        <div class="rectangle" id="load5"></div>
+    </div>-->    
+</div>    
+        
+        
+        <div class="nodeTemplates" style="display:none;">
+            <select id="assignementTPL" onchange="assignementChange(this.id)" onfocus='this.prevOption = this.options[ this.selectedIndex ];' style="display:none;"></select>
+            <select id="dropdownTPL" dataSet="dropdown"></select>
+            <input id="freetextTPL" placeholder="change-me" dataSet="freetext" maxlength="30">
+            <div class="stripMask" id="stripMaskTPL" >
+                <p>Widget setting</p>
+                <select class="stripProperty color" onChange="refreshWidget(this.closest('.stripMask'),true)">
+                    <option class="color0" value="0">BLACK</option>
+                    <option class="color1" value="1">RED</option>
+                    <option class="color2" value="2">GREEN</option>
+                    <option class="color3" value="3">YELLOW</option>
+                    <option class="color4" value="4">BLUE</option>
+                    <option class="color5" value="5">FUCHSIA</option>
+                    <option class="color6" value="6">CYAN</option>
+                    <option class="color7" value="7">WHITE</option>
+                    <option class="color8" value="8">GREY</option>
+                    <option class="color9" value="9">red</option>
+                    <option class="color10" value="10">green</option>
+                    <option class="color11" value="11">yellow</option>
+                    <option class="color12" value="12">blue</option>
+                    <option class="color13" value="13">fuchsia</option>
+                    <option class="color14" value="14">cyan</option>
+                    <option class="color15" value="15">white</option>
+                    <option class="color99" value="99" selected>🌈 auto</option>
+                </select>
+
+                <select class="skelName" onchange="renderStrip(this.parentElement); isModified(this.parentElement)"></select>
+                <div class="properties" ></div>
+                <label class="charPopupButton property" callback="modifyClosest">5</label>        
+                <button class="closeStripButton" onclick="closeStripConfig(this.parentElement)">OK</button>
+            </div>
+            <div id="widgetMaskTPL" class="widgetMask" >
+                <div class="stripID">strip<div class="uniqueID">4</div></div>
+                <div class="widgetTopLabel"></div>
+                <div class="widgetArrowLabel">⬆</div>
+                <div class="widgetBottomLabel"></div>
+                <label class="adaptativeIcon" style="font-size: 150%">=</label>
+            </div>
+        </div>
+
+        <div id="loadingDiv" style="display:none">
+            <div class="warpper " style="width:100%;z-index:1000;" id="navbar" >
+                <div class="panels" style="width:100%;">
+                    <div class="board" style="background: darkGrey;" id="configBar">
+                        <label style="font-size:25px;  margin-left: 10px;">
+                            👥
+                            <i18n id="Profile"></i18n>
+                        </label>
+                        <div class="dropdown" style="display: inline;">
+                            <input style="width: 80%; background: Gainsboro; height:50px; color:black; border: 0px" ID="currentConfig" type="text" value="ProfilName" maxlength="10" onchange="newCurrentConfig();" />
+                            <select style="width:170px; height:50px" ID="configDropdown" onclick="this.previousElementSibling.value=this.value; this.previousElementSibling.focus();configDropDownChange();"></select>
+                        </div>
+                        <button title="Export" id="exportBt" style="width:6%;background: Gainsboro;" onclick="">📃</button>
+                        <button title="Load" id="loadBt" disabled onclick="loadConfig();" style="width:6%;background: Gainsboro;">📂</button>
+                        <button title="Delete" id="deleteBt" disabled onclick="deleteConfig();" style="width:6%; color:red;background: Gainsboro;"><b>🗑</b>
+                        </button>
+                        <button title="Save" id="saveBt" disabled onclick="transmit('save',currentConfig.value);" style="width:6%; background: Gainsboro;">💾</button>
+                        <div style="float: right;  margin-right: 20px; font-size:30px;">
+                            <i18n id="tour" style="margin-right: 10px;"></i18n>
+                            <label class="switch" style="margin-bottom: 10px">
+                                <input style="position: absolute; " type="checkbox" checked id="tourButton" onchange="setTour()" />
+                                <div style="position: absolute;" class="slider"></div>
+                            </label>
+                            <div style="font-size:36px;display: inline;" id="tourNav">
+                                <label onclick="tourNav('prev');" style="cursor: pointer;">⏮</label>
+                                <label style="cursor: pointer" onclick="tourNav('next');">⏭</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="warpper" id="mainFrame">
+                <input class="radio" id="one" name="group" type="radio" onclick="resumeTour();">
+                <input class="radio" id="two" name="group" type="radio" checked onclick="resumeTour();">
+                <input class="radio" id="three" name="group" type="radio" onclick="resumeTour();">
+                <div class="tabs">
+                    <label class="tab" id="one-tab" for="one">
+                        🔧
+                        <i18n id="SYSTEM"></i18n>
+                        &nbsp;&nbsp;
+                    </label>
+                    <label class="tab" id="two-tab" for="two">
+                        📟
+                        <i18n id="BANKS"></i18n>
+                        &nbsp;&nbsp;
+                    </label>
+                    <label class="tab" id="three-tab" for="three">
+                        ⭐
+                        <i18n id="USERTAB"></i18n>
+                        &nbsp;&nbsp;
+                    </label>
+                </div>
+                <div class="panels">
+                    <div class="panel" id="one-panel">
+                        <h2>
+                            <div class="board">
+                                <div class="fsl-accordion-wrapper">
+                                    <div class="fsl-accordion multiple">
+                                        <div class="fsl-accordion-container">
+                                            <p class="fsl-accordion-btn">
+                                                🎈
+                                                <i18n id="Basic"></i18n>
+                                                <span></span>
+                                            </p>
+                                            <div class="fsl-accordion-panel" id="basic">
+                                                <div>
+                                                    💬 <select id="translationDropDown" onChange='setLang(this.value,resumeTour);transmit("set",{section:"system",id:"lang",value:this.value}); ' style="width:30%;"></select><span class="help" message="Lang choice"></span>
+<p><icon char="ICON_FOOTSWITCH"></icon> <input type="text" style="width:30%;" id="apName" value="Footswitch name" maxlength="10" onchange='transmit("set",{section:"system",id:this.id,value:this.value});this.blur()' onkeypress="return /[a-z\d\-_\s]+$/i.test(event.key)"><span class="help" message="apName"></span>                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="fsl-accordion-container">
+                                            <p class="fsl-accordion-btn">
+                                                💻
+                                                <i18n id="Connectivity"></i18n>
+                                                <span></span>
+                                            </p>
+                                            <div class="fsl-accordion-panel" id="connectivity">
+                                                <div w3-include-html="connectivity.html" onloadCallBack="initConnectivity"></div>
+                                            </div>
+                                        </div>
+                                        <div class="fsl-accordion-container">
+                                            <p class="fsl-accordion-btn">
+                                                🔘
+                                                <i18n id="Sensitivity"></i18n>
+                                                <span></span>
+                                            </p>
+                                            <div class="fsl-accordion-panel" id="sensitivity">
+                                                <p>
+                                                    <i18n id="Reactivity" class="help" message="duration"></i18n>
+                                                </p>
+                                                🐇<input type="range" class="custom-slider" id="pushDelay" min="400" max="1200" value="800" onChange="transmit('set',{section:'system',id:this.id,value:this.value});">🐢
+                                                <p>
+                                                    <i18n id="Fader speed" class="help" message="faderSpeed"></i18n>
+                                                </p>
+                                                🐇<input type="range" class="custom-slider" id="faderSpeed" min="1" max="300" value="150" onChange="transmit('set',{section:'system',id:this.id,value:this.value});">🐢
+                                                <p>
+                                                    <i18n id="Double clic response" class="help" message="doubleClic"></i18n>
+                                                </p>
+                                                🚫<input type="range" class="custom-slider" id="dClicReactivity" min="0" step="250" max="500" value="250" onChange="dclicChange(this.id,this.value);"/>🐢 
+                                            </div>
+                                        </div>
+                                        <div class="fsl-accordion-container" id="shortcutContainer">
+                                            <p class="fsl-accordion-btn">
+                                                ⚡
+                                                <i18n id="Shortcut"> </i18n>
+                                                <span></span>
+                                            </p>
+                                            <div class="fsl-accordion-panel" id="shortcuts">
+                                                <table class="verticalLines forceColumn">
+                                                    <tbody>
+                                                        <tr>
+                                                            <td style="width: 33%;">1</td>
+                                                            <td style="width: 33%;">2</td>
+                                                            <td style="width: 33%;">3</td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td><select id="shortcut1"  onChange="updateShortcutProps(this.id);transmitShortcut();"></select></td>
+                                                            <td><select id="shortcut2"  onChange="updateShortcutProps(this.id);transmitShortcut();"></select></td>
+                                                            <td><select id="shortcut3"  onChange="updateShortcutProps(this.id);transmitShortcut();"></select></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td id="shortcut1Props" ></td>
+                                                            <td id="shortcut2Props" ></td>
+                                                            <td id="shortcut3Props" ></td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                        <div class="fsl-accordion-container" id="affectation">
+                                            <p class="fsl-accordion-btn">
+                                                👟
+                                                <i18n id="Assignement"></i18n>
+                                                <span></span>
+                                            </p>
+                                            <div class="fsl-accordion-panel">
+                                                <center>
+                                                    <table id="buttonAssignementPanel" class="verticalLines forceRow">
+                                                        <tbody>
+                                                            <tr>
+                                                                <td style="width: 25%;"><br></td>
+                                                                <td style="width: 25%;">
+                                                                    <i18n id="LEFT"></i18n>
+                                                                </td>
+                                                                <td style="width: 25%;">
+                                                                    <i18n id="TAP"></i18n>
+                                                                </td>
+                                                                <td style="width: 25%;">
+                                                                    <i18n id="RIGHT"></i18n>
+                                                                </td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>
+                                                                    <img src="short.gif"><br>
+                                                                    <i18n id="Short"></i18n>
+                                                                </td>
+                                                                <td id="short-left"></td>
+                                                                <td id="short-tap"></td>
+                                                                <td id="short-right"></td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>
+                                                                    <img src="medium.gif"><br>
+                                                                    <i18n id="Medium"></i18n>
+                                                                </td>
+                                                                <td id="medium-left"></td>
+                                                                <td id="medium-tap"></td>
+                                                                <td id="medium-right"></td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td>
+                                                                    <img src="hold.gif"><br>
+                                                                    <i18n id="Hold"></i18n>
+                                                                </td>
+                                                                <td id="hold-left"></td>
+                                                                <td id="hold-tap"></td>
+                                                                <td id="hold-right"></td>
+                                                            </tr>
+                                                            <tr id="dClicRow">
+                                                                <td>
+                                                                    <img src="double.gif"><br>
+                                                                    <i18n id="Double clic"></i18n>
+                                                                </td>
+                                                                <td id="double-left"></td>
+                                                                <td id="double-tap"></td>
+                                                                <td id="double-right"></td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </center>
+                                            </div>
+                                        </div>
+                                        <div class="fsl-accordion-container">
+                                            <p class="fsl-accordion-btn">
+                                                📡
+                                                <i18n id="Update"></i18n>
+                                                <span></span>
+                                            </p>
+                                            <div class="fsl-accordion-panel" style="color: #3498db; font-size:12px;">
+                                                <!--<p></p><img id="currentLogo" src="custom.jpg" onerror="this.onerror=null; this.src='logo.jpg'" alt="Logo" width="160" height="50"></p>-->
+                                                <label>Firmware: v</label><span id="footswitchversion" >x.xx</span>
+                                                <div><a href='http://82.65.4.93/footswitch.php' target='_blank'>💾 </a><br></div>
+                                                <span id="versionMsg">...</span>
+                                                <form id="upload_form" enctype="multipart/form-data" method="post">
+                                                    <input type="file" name="file1" id="file1" accept=".fsar" onchange="fetchFromFile()" style="width:50%"><br>
+                                                </form>
+                                                <progress id="uploadBar" value="0" max="100" style="width:90%;"></progress>
+                                                <h3 id="status"></h3>
+                                                <p id="loaded_n_total"></p>
+                                            </div>
+                                        </div>
+                                        <div class="fsl-accordion-container">
+                                            <p class="fsl-accordion-btn">
+                                                🏋
+                                                <i18n id="Advanced"></i18n>
+                                                <span></span>
+                                            </p>
+                                            <div class="fsl-accordion-panel">
+                                                <Div>
+                                                    Log 
+                                                    <select onChange="transmit('push',this.id,this.value)" id="log" style="width:50%;">
+                                                        <option value= "NONE" selected>-</option>
+                                                        <option value= "INFO">INFO</option>
+                                                        <option value= "ERROR">ERROR</option>
+                                                        <option value= "WARNING">WARNING</option>
+                                                        <option value= "DEBUG">DEBUG</option>
+                                                    </select>
+                                                    <span style='cursor: pointer;' onclick="window.open('http://'+document.getElementById('myIP').innerHTML+'/push.php?export=syslog.csv');">📃</span>
+                                                </div>
+                                                <i18n id="Connect web"></i18n>
+                                                <span id="webConnection"></span>
+                                                <br><label style="font-size:12px">S/N:</label> <span id="mac" style="font-size:12px">00:00:00:00</span>
+                                                <br>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </h2>
+                    </div>
+                    <div class="panel" id="two-panel">
+                        <div class="boards">
+                            <div class="board" style="width:100%;">
+                                <div class="menuPopup container__menu">
+                                    <ul id="menu" class="container__menu container__menu--hidden">
+                                        <li class="container__title">Choose widget shape to drop</li>
+                                        <li class="container__divider"></li>
+                                        <li class="container__close">Close</li>
+                                    </ul>
+                                </div>
+                                <center>
+                                    <div id="bankNavigator">
+                                    </div>
+                                    <div id="stripGroup" class="fsl-accordion-wrapper" style="display:none">
+                                        <div class="fsl-accordion multiple">
+                                            <div class="fsl-accordion-container">
+                                                <p class="fsl-accordion-btn" style="font-size:2em; text-align: right; padding-right: 5vw">
+                                                    <i18n id="Widgets library"></i18n>
+                                                    <span></span>
+                                                </p>
+                                                <div class="fsl-accordion-panel">
+                                                    <div class="widgets-container" id="widgets-repo">
+                                                        <div class="widget-container">
+                                                            <div class="widget draggable widget-2x2" draggable="true"></div>
+                                                        </div>
+                                                        <div class="widget-container">
+                                                            <div class="widget draggable widget-1x4" draggable="true"></div>
+                                                        </div>
+                                                        <div class="widget-container">
+                                                            <div class="widget draggable widget-4x1" draggable="true"></div>
+                                                        </div>
+                                                        <div class="widget-container">
+                                                            <div class="widget draggable widget-4x4" draggable="true"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <canvas id="connectionCanvas" class="fadeOut"></canvas>                                    
+                                    <div id="flexibleGridZone">
+                                        <!-- POPULATE BY BUILDMODULES  -->
+                                    </div>
+                             
+                                   <p id="zoomDiv" style="color: black; font-size: 3vw;display: flex; align-items: center;justify-content: center;">▦<input onchange="zoomGrid(this.value)" type="range" class="zoom" id="zoom" min="32" max="100" value="100" style="width:80%;" />▣
+
+                              <span id="path" style="font-size: 3vh; border-radius:50% " class="toggleB lightOff" onclick="toggleCanvas(this)">.⤳.</span>
+                                   
+                                   </p>
+
+                                </center>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="panel" id="three-panel">
+                        <div class="board">
+                            <h2>
+                                <center>
+                                    <div class="fsl-accordion-wrapper">
+                                        <div class="fsl-accordion multiple">
+                                            <div w3-include-html="user.html" onloadCallBack="initUser"></div>
+                                        </div>
+                                    </div>
+                                </center>
+                            </h2>
+                        </div>
+                    </div>
+                </div>
+            <p>
+                <label style="font-size:12px; color:grey; float: right; padding-right:100px"><span id="host">demo</span> / v0.10a / <span id="intervalJSversion">vx.x</span>
+                </label>
+            </p>                
+            </div>
+            <div id="charPopup" class="charPopup-content">
+                <div class="charPopup-body">
+                    <span class="closePopup">&times;</span>
+                    <div id="buttonContainer" style="color:black">
+                        <!-- buttons will be added here -->
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </body>
+</html>

@@ -6,6 +6,10 @@
 #include <LinkedList.h>
 #include <ArduinoJson.h>
 #include <vector>
+#include <FS.h>
+#include <LittleFS.h>
+#define DEST_FS_USES_LITTLEFS // filesystem object will be available as "tarGzFS"
+#include <ESP32-targz.h>
 
 #ifdef DEBUG  
   #define DEBUG_PRINT(...)   Serial.printf(__VA_ARGS__); Serial.flush() //ets_printf(__VA_ARGS__) //
@@ -15,8 +19,8 @@
 
 #define DEFAULT_STORAGE_TYPE_ESP32 STORAGE_LITTLEFS
 
-
 typedef void (*VoidCallback)();
+typedef void (*VoidIntCallback)(int);
 typedef String (*ReturnStringCallback)();
 typedef std::function<void(bool)> StdFunctionCallbackVoidBool; 
 
@@ -69,6 +73,83 @@ class GenericComponent{
 
 };
 
+
+// Structure pour stocker les données décompressées dans un buffer
+struct ByteBuffer {
+  uint8_t* buffer = nullptr; // Pointeur vers le buffer
+  size_t size = 0;           // Taille actuelle des données dans le buffer
+  size_t capacity = 0;       // Capacité maximale allouée au buffer
+
+  // Méthode pour écrire des données dans le buffer
+  void write(const uint8_t* data, size_t len) {
+    if (size + len > capacity) {
+      // Reallocation de mémoire si le buffer est plein
+      capacity = (size + len) * 2;
+      buffer = (uint8_t*)realloc(buffer, capacity);
+    }
+    memcpy(buffer + size, data, len); // Copier les données
+    size += len;
+  }
+
+  // Libérer la mémoire allouée
+  ~ByteBuffer() {
+    if (buffer) {
+      free(buffer);
+    }
+  }
+};
+
+// Préparer le buffer pour stocker les données décompressées
+ByteBuffer byteBuffer;
+
+// Fonction de callback pour écrire les données
+bool streamWriterCallback(unsigned char* buff, size_t buffsize) {
+  byteBuffer.write(buff, buffsize);
+  return true; // Retourner true pour indiquer que l'écriture est réussie
+}
+
+// Fonction pour lire un fichier gz et remplir le buffer de bytes décompressés
+uint8_t* readGzFileToBuffer(String filename, size_t* decompressedSize) {
+  // Ouvrir le fichier compressé
+  File gzFile = LittleFS.open(filename, "r");
+  if (!gzFile) {
+    DEBUG_PRINT("\nErreur : Fichier non trouvé: %s", filename.c_str());
+    return nullptr;
+  }
+
+  // Créer un décompresseur
+  GzUnpacker gzUnpacker;
+  /*
+  //GZUnpacker->haltOnError( true ); // stop on fail (manual restart/reset required)
+  gzUnpacker.setupFSCallbacks( targzTotalBytesFn, targzFreeBytesFn ); // prevent the partition from exploding, recommended
+  gzUnpacker.setGzProgressCallback( BaseUnpacker::defaultProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
+  gzUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );    // gz log verbosity
+
+  if( !gzUnpacker.gzExpander(tarGzFS, filename.c_str(), tarGzFS, "/tmp.unzip") ) {
+    DEBUG_PRINT("\ngzExpander failed with return code #%d", GZUnpacker->tarGzGetError() );
+  }*/
+
+
+  // Définir une méthode de callback pour écrire les données décompressées
+  gzUnpacker.setStreamWriter(streamWriterCallback);
+
+  // Décompresser le fichier
+  if( !gzUnpacker.gzStreamExpander(&gzFile, gzFile.size())){
+  //if (!gzExpander.expand(&gzUnpacker, gzFile)) {
+    DEBUG_PRINT("\nErreur : Décompression échouée");
+    gzFile.close();
+    return nullptr;
+  }
+
+  gzFile.close();
+
+  // Passer la taille décompressée au client
+  *decompressedSize = byteBuffer.size;
+
+  // Retourner un pointeur vers le buffer contenant les données
+  return byteBuffer.buffer;
+}
+
 int mapFloatToInt(float x, float in_min, float in_max, int out_min, int out_max) {
   if (x>in_max) x = in_max;
   else if (x<in_min) x = in_min;
@@ -111,6 +192,9 @@ void removeJsonQuote(String* buffer){
   buffer->replace("}\"}","}}");      
   buffer->replace("}\"","}");   
   buffer->replace("\\","");
+  buffer->replace(":\"[",":[");       
+  buffer->replace("]\",","],");
+  buffer->replace("]\"}","]}");           
 }
 
 int32_t getMaxAlloc(){
@@ -187,8 +271,7 @@ class JsonList{
       return ret;
     };
 
-    bool addValue(String name, String value) {
-        //DEBUG_PRINT("\naddValue(<%s>,<%s>)",name.c_str(),value.c_str());
+    bool addValue(String name, String value) {        
         bool ret = false;
         int8_t index = getIndex(name);
         if (index == -1){  // if not existing
@@ -196,6 +279,7 @@ class JsonList{
           kv->key = name;
           kv->value = value;
           if (keyValues.add(kv)){
+            //DEBUG_PRINT("\n\taddValue(<%s>,<%s>)",name.c_str(),value.c_str());
             ret = true;
           }
         }else{  // value exists, we update it
@@ -238,7 +322,7 @@ class JsonList{
     bool updateValue(uint8_t index, String value){
       KeyValue* kv = keyValues.get(index);
       kv->value = value;
-      //DEBUG_PRINT("\tupdateValue<%d>(%s,%s)",index,getName(index).c_str(),value.c_str());
+      //DEBUG_PRINT("\n\tupdateValue<%d>(%s,%s)",index,getName(index).c_str(),value.c_str());
       return true;
     }
 
@@ -373,7 +457,10 @@ void gzFileServer(Request &req, Response &res) {
     const char * path = req.path();
     res.set("Content-Encoding", "gzip");
     String fullPath = "/webapp"+String(path)+".gz";  
-    DEBUG_PRINT(" serving <gz> --------------------->%s",fullPath.c_str());
+
+    uint32_t free = ESP.getFreeHeap();
+
+    //DEBUG_PRINT("\nserving <gz> [%d] ->%s",free, fullPath.c_str());
     if (LittleFS.exists(fullPath)){
       File file = LittleFS.open(fullPath);
       //while (file.available()) res.write(file.read());
@@ -491,7 +578,7 @@ void handleSwitchScreen(uint8_t buttonID){
     app.bankMenu->select();    
     app.setBankMenuItems();
   }else{
-    if (buttonID == hwm.buttons[LEFTB]->getID()) app.bankMenu->next(true);
+    if (buttonID == hwm.buttons[RIGHTB]->getID()) app.bankMenu->next(true);
     else app.bankMenu->prev(true);
     app.menuSwitchBankFullRefresh();
   }   
@@ -512,7 +599,7 @@ void moduleSimpleClic(uint8_t buttonID){
   // perform the behaviour defined in the config file
   // at the moment, this is hard coded
   if (buttonID == hwm.buttons[MIDDLEB]->getID()){
-    if (!app.stripAction()){
+    if (!app.stripAction(SIMPLE_CLIC)){
       DEBUG_PRINT("\nAction failed!!!");
       // code if execution fails: example: popup a message with the error
     }
@@ -527,10 +614,7 @@ void moduleSimpleClic(uint8_t buttonID){
 void moduleHoldClic(uint8_t buttonID, unsigned long time){
   // perform the behaviour defined in the config file
   // at the moment, this is hard coded
-  if (!app.stripChangeValue(buttonID, time)){
-    DEBUG_PRINT("\nAction failed!!!");
-    // code if execution fails: example: popup a message with the error
-  }    
+  app.stripChangeValue(buttonID, time, HOLD);
 }
 
 void moduleLongClic(uint8_t buttonID){
@@ -745,8 +829,18 @@ void save_profile_item_selected(MenuComponent* p_menu_component) {
 void tft_rotation_item_selected(MenuComponent* p_menu_component) {
   if (app.persistants.getUChar(PERSISTANT_TFT_ROTATION,1) == 1){
     app.persistants.putUChar(PERSISTANT_TFT_ROTATION,3);
+
+    uint8_t oldLeftID = hwm.buttons[LEFTB]->getID();
+    hwm.buttons[LEFTB]->setID(hwm.buttons[RIGHTB]->getID());
+    hwm.buttons[RIGHTB]->setID(oldLeftID);
+
   }else{
     app.persistants.putUChar(PERSISTANT_TFT_ROTATION,1);
+
+    uint8_t oldRightID = hwm.buttons[RIGHTB]->getID();
+    hwm.buttons[RIGHTB]->setID(hwm.buttons[LEFTB]->getID());
+    hwm.buttons[LEFTB]->setID(oldRightID);
+
   }  
   GUI::tft->setRotation(app.persistants.getUChar(PERSISTANT_TFT_ROTATION,1));  
   back_menu_item_selected(p_menu_component);
@@ -866,7 +960,7 @@ void bankOverlayBuilder(uint8_t BankIndex){
 
   Bank* bank = app.banks.get(BankIndex);
   if (bank != nullptr){
-    DEBUG_PRINT("\n\n\n---------------------------------\n\n bankOverlayBuilder %s\n\n ---------------------------------",bank->name.c_str());
+    //DEBUG_PRINT("\n\n\n---------------------------------\n\n bankOverlayBuilder %s\n\n ---------------------------------",bank->name.c_str());
     BankNavigator* navBar = new BankNavigator(bank,false);   
     gui.add(navBar);
   }else{
@@ -879,6 +973,10 @@ void bankOverlayBuilder(uint8_t BankIndex){
 //////////////////////////////////////////////////////////////
 
 void bankScreenBuilder(uint8_t subScreen){
+
+  app.userBankScreenBuilder(subScreen);
+  if (app.disabledBankRendering == true) return;
+
   app.persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
   app.persistants.putUChar(PERSISTANT_SCREEN_STATE,subScreen);
 
@@ -892,10 +990,10 @@ void bankScreenBuilder(uint8_t subScreen){
 
     uint8_t layout = bank->currentLayout;
 
-    Strip* strip = bank->selectStrip(bank->nav.selector,bank->nav.window);
+    Strip* strip = bank->getStrip(bank->nav.selector);
     
     if (strip != nullptr){
-      DEBUG_PRINT("\n\n\n---------------------------------\n\n bankScreenBuilder %s\n\n ---------------------------------",bank->name.c_str());
+      //DEBUG_PRINT("\n\n\n---------------------------------\n\n bankScreenBuilder %s\n\n ---------------------------------",bank->name.c_str());
       strip->buildWidgets(layout);
       strip->refresh(true);
     }else{
@@ -907,7 +1005,6 @@ void bankScreenBuilder(uint8_t subScreen){
   }else{
       DEBUG_PRINT("\nNO BANK");
       gui.add(new TextArea(app.lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.belowTop,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
-
   }
 
 }
@@ -976,13 +1073,17 @@ void wizardScreenBuilder(uint8_t subScreen){
         DEBUG_PRINT("\tVOID GUI",subScreen);
     break;
     case STATE_WIZARD_CONNECT_CONFIG_STEP2:
-        // nothing specific => connect config
+        // nothing specific => connect config is done by utility screen set within handleConfigConnection() 
         DEBUG_PRINT("\tVOID GUI",subScreen);
-    break;          
-    case STATE_WIZARD_USER_STEP3:
+    break;      
+    case STATE_WIZARD_CONNECT_NETWORK_STEP3:
+      GUI::cls();
+      gui.add(new Label(app.lang.getString("Waiting network"), Align::Center,&app.midScreenHoriz, &app.midScreenVertical,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));   
+    break;    
+    case STATE_WIZARD_USER_STEP4:
       app.userWizardScreenBuilder();
     break;
-    case STATE_WIZARD_END_STEP4:
+    case STATE_WIZARD_END_STEP5:
       
     break;
   }
@@ -1126,11 +1227,14 @@ void socketConnectionCallback(IWebSocket &ws) {
   DEBUG_PRINT("\nNew websocket client IP: %s",app.configClientIP.c_str());
 
   // any message to be send straigth after connexion was established would be put here.
-  app.broadCast(app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivityConfig\"}"));  // inform webclient               could be done via ws.send as well
+  //app.broadCast(app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivityConfig\"}"));  // inform webclient               could be done via ws.send as well  
   // it should only be short message as the socketbuffer out is quite small, hence the fullCOnfig is requested by Post instead
 
   /*String fullConfig = app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"fullConfig\"}"); 
   ws.send(WebSocketDataType::TEXT, fullConfig.c_str(), fullConfig.length());*/
+
+  String connectivityConfig = app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivityConfig\"}");
+  ws.send(WebSocketDataType::TEXT, connectivityConfig.c_str(), connectivityConfig.length());
 
 }
 

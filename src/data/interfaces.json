@@ -1,0 +1,33 @@
+{
+	"interfaces": [
+		{
+			"model":"XR12",
+			"chSize": 12,
+			"busSize": 4,
+			"auxSize": 1
+		},
+		{
+			"model":"XR16",
+			"chSize": 16,
+			"busSize": 4,
+			"auxSize": 1
+		},{
+			"model":"XR18",
+			"chSize": 18,
+			"busSize": 8,
+			"auxSize": 1
+		},
+		{
+			"model":"X32",
+			"chSize": 32,
+			"busSize": 8,
+			"auxSize": 8
+		},
+		{
+			"model":"MixingStation",
+			"chSize": 7,
+			"busSize": 5,
+			"auxSize": 3
+		}					
+	]
+}

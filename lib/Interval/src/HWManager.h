@@ -66,7 +66,8 @@ enum{
   BATTERY_STARTUP,
   NORMAL_STARTUP,
   WIZARD_STARTUP,  
-  RESET_STARTUP,    
+  RESET_STARTUP,  
+  NO_FS_STARTUP,  
 };
 
 #define SHUTDOWN_PUSH_DELAY 1500    // how long to press the button to switchoff
@@ -228,6 +229,11 @@ public:
       }, RISING);             
 
       //debugTFTSetup();      
+
+      if (!LittleFS.begin()){
+        startupState = NO_FS_STARTUP;
+      }
+    
     }
 
     void startAP(const String* apName){

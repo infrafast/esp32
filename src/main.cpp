@@ -3,8 +3,6 @@
 // make sure to change config.hpp of mWebsocket 
 //constexpr uint16_t kBufferMaxSize{512};
 
-//  increaseCallback (hold switch) also call selectStrip, check that
-
 #define USE_NETWORK
 //#define TFT_BGCOLOR   TFT_DARKGREY
 //#define TFT_FCOLOR    TFT_SILVER
@@ -19,6 +17,23 @@
 #endif
 
 #define STRIP_XAIR_GROUP "xair"
+#define STRIP_UTILS_GROUP "utils"
+
+#define ADDRESS_MACRONAME "/macro/name/%s"
+#define ADDRESS_ACTION    "/action/%s"
+#define ADDRESS_IP  "/ip/%s"
+#define ADDRESS_PORT "/port/%s"
+#define ADDRESS_MESSAGE "/message/%s"
+
+String iconMixer = "=";
+uint16_t iconMixerColor = GUI::red;
+AlteredColor mixerGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &iconMixerColor};
+
+MixerServer mixerServer(&app.dataRepository,hwm.network);
+Config userConfig = Config();
+
+StripSkeleton* stripSendSkel;
+StripSkeleton* stripOSCSkel;
 
 class StripMixer{
   public:
@@ -26,6 +41,90 @@ class StripMixer{
 
   protected:
     MixerServer* mixerServer;
+};
+
+
+
+class OSCTestStrip : public TextStrip, public StripMixer{
+  #define STRIP_OSCTEST "oscTest"
+  public:
+
+    OSCTestStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):TextStrip(s,g, debug),StripMixer(ms){
+      portPropertyAddress = s->dataSetAddresses.get(1);
+      msgPropertyAddress =  s->dataSetAddresses.get(2);
+      message = *app.lang.getString("undefined");
+      port = 0;
+    }
+
+    virtual void deserializeProperty(String property)  {  
+      TextStrip::deserializeProperty(property);
+      // text contains the property 0 which is the IP address
+      ip.fromString(text);
+
+      // property = /port/3000
+      // portProperty = /port/%s
+      // portString = 3000
+      char buffer[50];            
+      
+      if (sscanf(property.c_str(), portPropertyAddress.c_str(), buffer) == 1){
+        portString = String(buffer);
+        port = portString.toInt();
+      }else if (sscanf(property.c_str(), msgPropertyAddress.c_str(), buffer) == 1){
+        message = String(buffer);
+      }     
+    }
+
+    virtual void serializeProperties(){
+      TextStrip::serializeProperties();
+      
+      char* buf = (char*)malloc(portPropertyAddress.length()*sizeof(char*));
+      sprintf(buf,portPropertyAddress.c_str(),String(port).c_str());
+      properties.add(String(buf));
+      delete buf;
+
+      buf = (char*)malloc(msgPropertyAddress.length()*sizeof(char*));
+      sprintf(buf,msgPropertyAddress.c_str(),message.c_str());
+      properties.add(String(buf));
+      delete buf;            
+    }
+    
+    virtual bool actionCallback(uint8_t trigger){
+      JsonDocument command;
+      command["msg"] = message;
+      command["ip"] = text;
+      command["port"] = port;
+      return mixerServer->mixerInterface->sendCommand("testMixingOSC",command);      
+      return true;
+    }
+
+    virtual void buildWidgets(uint8_t layout){
+      TextStrip::buildWidgets(layout);
+      switch(layout){
+        case LAYOUT_QUATUOR:
+        break;
+        case LAYOUT_ICON:
+        break;
+        case LAYOUT_DETAILS: 
+        default:
+          topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor );          
+          gui->add(topLabels);
+        break;
+      }
+    }
+
+
+  private:
+    bool on = false;
+
+    String portPropertyAddress;
+    String msgPropertyAddress;
+
+    Top2Toggles* topLabels;
+    
+    int port; String portString;
+    IPAddress ip;
+    String message;
+
 };
 
 class SendStrip : public ThreeSelectStrip, public StripMixer{
@@ -70,6 +169,15 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
     Top2Toggles* topLabels;
 };
 
+
+bool setChBusMute(bool mute,uint8_t chID, uint8_t busID){
+      JsonDocument command;
+      command["ch"] = chID;
+      command["bus"] = busID;
+      command["on"] = !mute;
+      return mixerServer.mixerInterface->sendCommand("setChBusMute",command);
+}
+
 class Ch2BusStrip : public SendStrip{
   #define STRIP_CH2BUS "ch2bus"
 
@@ -80,11 +188,13 @@ class Ch2BusStrip : public SendStrip{
       select3PropertyAddress = s->dataSetAddresses.get(1);
     }
 
-    virtual bool actionCallback(){
+    virtual bool actionCallback(uint8_t trigger){
+      // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
       DEBUG_PRINT("\nCh2BusStrip actionCallback");
       sendMute = !sendMute;
-      return true;
+      return setChBusMute(sendMute,select2ID,select3ID);     
+
     }
 
 
@@ -117,10 +227,30 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
 
     ~ChGainStrip(){};
 
-    virtual bool actionCallback(){
-      char addr[100];
+    virtual float increaseCallBack(unsigned long time,uint8_t trigger){
+      float delta = Strip::increaseCallBack(time,trigger);
+      if (delta != 0.0) setChGain();
+      return delta;
+    }
 
-      uint8_t chID = 2;
+    virtual float decreaseCallback(unsigned long time,uint8_t trigger){
+      float delta = Strip::decreaseCallback(time,trigger);
+      if (delta != 0.0) setChGain();
+      return delta;
+    }
+
+    bool setChGain(){
+      JsonDocument command;
+      command["ch"] = select2ID;
+      command["value"] = value;
+      return mixerServer->mixerInterface->sendCommand("setChGain",command);      
+    }
+
+    virtual bool actionCallback(uint8_t trigger){
+      // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
+      /*char addr[100];
+
+      //select2ID = chID
 
       //sprintf(addr,mixerServer->chNames.address.c_str(),chID);
       String val = "name"+String(random(1000));
@@ -128,10 +258,10 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
     
       //chNames.values.set(chID-1, val);
       //mixerServer->chNames.setValue(chID-1,val);
-      app.broadCast("{\"updateDataSets\":[{\""+String(addr)+"\":\""+val+"\"}]}");
-      refresh();
+      //app.broadCast("{\"updateDataSets\":[{\""+String(addr)+"\":\""+val+"\"}]}");
 
-      return false;
+      refresh();*/
+      return true;
     }
        
     virtual bool refresh(bool force=false){
@@ -186,10 +316,44 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
     int16_t y = TFT_HEIGHT-WIDGET_BIG_WIDTH-OVERLAY_ICON_SIZE*2;
 };
 
+class LocalDataProvider: public DataProvider{ // temp while shortcut factory is not implemented
+  public :
+    
+    #define ADDRESS_ACTION_SIZE 5
 
-MixerServer mixerServer(&app.dataRepository,hwm.network);
+    virtual uint16_t size(String addrr){
+      if (addrr == ADDRESS_MACRONAME) return 0;
+      else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
+      else return 1;
+    }
+    
+    virtual String getValue(String addrr, uint16_t index){
+      if (addrr == ADDRESS_MACRONAME) return "getMacroName";
+      else if (addrr = ADDRESS_ACTION) return actionNames[index];         //javascript local function callback
+      else return "voidStatic";
+    }
 
-StripSkeleton* stripSendSkel;
+  private:
+    String actionNames[ADDRESS_ACTION_SIZE] = {
+      "play",
+      "pause",
+      "stop",
+      "FF",
+      "RW"      
+    };
+} localProvider; // temp while shortcut factory is not implemented;
+
+DataSet macroNames = DataSet(ADDRESS_MACRONAME,INPUTSELECT,&localProvider); // temp while shortcut factory is not implemented
+DataSet actionPlay = DataSet(ADDRESS_ACTION,INPUTSELECT,&localProvider); // temp while shortcut factory is not implemented
+
+DataSet ipDS = DataSet(ADDRESS_IP,INPUTTEXT,&localProvider); 
+DataSet portDS = DataSet(ADDRESS_PORT,INPUTTEXT,&localProvider); 
+DataSet msgDS = DataSet(ADDRESS_MESSAGE,INPUTTEXT,&localProvider); 
+
+Strip* testOSCStripConstructorCallback(){
+  return new OSCTestStrip(stripOSCSkel,&gui,&mixerServer,true);
+}
+
 Strip* sendStripConstructorCallback(){
   //DEBUG_PRINT("\n\tch2busStripConstructorCallback()");
   return new Ch2BusStrip(stripSendSkel,&gui,&mixerServer,true);
@@ -229,6 +393,8 @@ String getMixersState(){
 }
 
 // overload the app.parseJsonInput to process input coming from user.html
+#define USER_CONFIG_REQ "userConfig"
+#define RET_RELOAD_BANKS "reloadBanks"
 bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
   bool success = false;
   if (jsonDoc["command"] == MIXER_STATE_KEY ){
@@ -241,14 +407,25 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
     mixerServer.serverIP.fromString(jsonDoc["param"][SERVER_IP_KEY].as<String>());
     mixerServer.serverPort = jsonDoc["param"][SERVER_PORT_KEY];
 
-    app.config.setValue(SERVER_IP_KEY,mixerServer.serverIP.toString());    
-    app.config.setValue(SERVER_PORT_KEY,String(mixerServer.serverPort));
+    userConfig.setValue(SERVER_IP_KEY,mixerServer.serverIP.toString());    
+    userConfig.setValue(SERVER_PORT_KEY,String(mixerServer.serverPort));
+    userConfig.setValue(MIXER_MODEL_KEY,jsonDoc["param"][MIXER_MODEL_KEY]);
     
-    jsonAnswer->callback = RET_SAVEBUTTON;
-    jsonAnswer->value = "1";       
+    jsonAnswer->callback = RET_RELOAD_BANKS;
+    jsonAnswer->value = "";       
     success = true;
     mixerServer.disconnect(); // this will force trying to reconnect with new parameters
     // force GUI rebuild
+  }else if (jsonDoc["command"] == USER_CONFIG_REQ){
+    jsonAnswer->callback = USER_CONFIG_REQ;
+    JsonDocument doc;
+    doc["mixers"] =  getMixersState();
+    doc["interfaces"] = mixerServer.getInterfaces();
+    String jsonString;
+    serializeJson(doc,jsonString);
+    removeJsonQuote(&jsonString);    
+    jsonAnswer->value = jsonString;// TO BE ADAPATED
+    success = true;
   }
   return success;
 }
@@ -256,7 +433,8 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
 String userPongCallback(){
   String pong = "";
   JsonDocument doc;
-  if (mixerServer.mixerInterface->state == DISCONNECTED){
+  // we send server connection attempts status only if network is connected, otherwise we polute the webapp with useless information
+  if (mixerServer.mixerInterface->state() == DISCONNECTED && hwm.network->state == CONNECTED){
     //{"serverAttempt":"Trying 192.168.0.212 / 10026"}}>
     String serverAttempt = *app.lang.getString("Trying")+" "+mixerServer.serverIP.toString()+"/"+mixerServer.serverPort+" "+mixerServer.mixingStationIP.toString()+"/"+mixerServer.mixingStationPort;
     doc["serverAttempt"] = serverAttempt;
@@ -271,10 +449,12 @@ void QueryingDemoMixer(bool internet){
   if (internet){
     DEBUG_PRINT("\nQuerying demo mixer");    
     IPAddress demoServer(82,65,4,93);
-    mixerServer.SendCmd2OSC("/xinfo",demoServer, 10023);
+    OSCInterface osc;
+    osc.settings(demoServer,10023,hwm.network->udp);
+    osc.SendCmd2OSC("/xinfo");
     delay(hwm.network->WANlatency);      
-    if (mixerServer.OSCReadIn()) {
-      demoIP = "82.65.4.93";
+    if (osc.OSCReadIn()) {
+      demoIP = "82.65.4.93";                // should be retrieved by an http request
     } 
   }
   String jsonString;
@@ -290,12 +470,10 @@ void usertNetChangeStateCallback(bool state){
   QueryingDemoMixer(hwm.network->internet);  
 }
 
-String waitingMixer = "Waiting mixerServer connection";
-
 void userWizardGUI(void){
     //DEBUG_PRINT("\t User wizard");
     GUI::cls();
-    gui.add(new Label(&waitingMixer, Align::Center,&app.midScreenHoriz, &app.midScreenVertical,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));   
+    gui.add(new Label(app.lang.getString("Waiting mixer"), Align::Center,&app.midScreenHoriz, &app.midScreenVertical,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));   
 }
 
 void userWizardStepFlow(){
@@ -315,11 +493,11 @@ void userInternetCallBack(bool internet){
   // check demoMixer
 }
 
-String getJsonUserConfWrapper(){
+/*String getJsonUserConfWrapper(){
   // add any other json object here before converting them to String  
   // so far only mixer state
   return getMixersState();
-}
+}*/
 
 void userBootScreen(){
   Icon bootSprite = Icon(&app.footSwitchIcon,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,app.byeIconColor,&GUI::defaultBcolor,false);
@@ -327,6 +505,22 @@ void userBootScreen(){
   bootSprite.sprite->pushSprite(bootSprite.getX(),bootSprite.getY(),TFT_TRANSPARENT);      
 }
 
+void userBankScreenBuilder(int subScreen){
+  if (mixerServer.mixerInterface->state() == DISCONNECTED){
+    app.disabledBankRendering = true;
+
+    GUI::defaultBcolor = TFT_BGCOLOR;
+    GUI::defaultFcolor = TFT_FCOLOR;
+    GUI::cls();
+
+    gui.add(new Icon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::transparentColor,false));
+  }else{
+    app.disabledBankRendering = false;
+    // normal  display in case mixer is connected
+  }
+}
+
+#define DEFAULT_USER_CONFIG "{\"serverIP\":\"0.0.0.0\",\"serverPort\":\"10023\",\"mixerModel\":\"X32\"}"
 
 void setup() {
 
@@ -337,22 +531,38 @@ void setup() {
   stripChGainSkel = new StripSkeleton(STRIP_CHGAIN,STRIP_XAIR_GROUP,gain2chStripConstructorCallback,'y'); 
   stripChGainSkel->registerDataSetAddress(ADDRESS_CHNAME);
 
+  stripOSCSkel = new StripSkeleton(STRIP_OSCTEST,STRIP_UTILS_GROUP,testOSCStripConstructorCallback,'a');
+  stripOSCSkel->registerDataSetAddress(ADDRESS_IP);
+  stripOSCSkel->registerDataSetAddress(ADDRESS_PORT);
+  stripOSCSkel->registerDataSetAddress(ADDRESS_MESSAGE);
+
   app.stripFactory.add(stripTextSkel);
   app.stripFactory.add(stripSendSkel);
   app.stripFactory.add(stripChGainSkel);
+  app.stripFactory.add(stripOSCSkel);
+
+  app.dataRepository.addDataSet(&macroNames);   // temp while shortcut factory is not implemented
+  app.dataRepository.addDataSet(&actionPlay);  // temp while shortcut factory is not implemented
+  app.dataRepository.addDataSet(&ipDS);  
+  app.dataRepository.addDataSet(&portDS);  
+  app.dataRepository.addDataSet(&msgDS);  
 
   app.userParseJsonInputCallback = userHTMLJsonInput;
-  app.userJsonConfigCallback = getJsonUserConfWrapper;
+  //app.userJsonConfigCallback = getJsonUserConfWrapper;
   app.userNetworkChangeStateCallback = usertNetChangeStateCallback;
   app.userJsonPongCallback = userPongCallback;    
   app.userWizardScreenBuilder = userWizardGUI;
   app.userWizardstepFlow = userWizardStepFlow;
   app.setUserInternetCallback((StdFunctionCallbackVoidBool)userInternetCallBack);
   //app.bootScreen = userBootScreen;
+  app.userBankScreenBuilder = userBankScreenBuilder;
+
+  app.init(&userConfig);
+  userConfig.load("/userConf.conf",DEFAULT_USER_CONFIG);  
+  mixerServer.init(&userConfig);
 
 
-  app.init();  
-  mixerServer.init(&app.config);
+  gui.alphaColors.add(&mixerGlowingRedColor);
 
   /*String data;
   app.serialize(&data);
@@ -364,17 +574,25 @@ void setup() {
     ftp.begin();
   #endif
   
+  String configIP = *userConfig.getString(SERVER_IP_KEY); 
+  DEBUG_PRINT("\n * * SERVER_IP_KEY = %s",configIP.c_str());
+
 
   DEBUG_PRINT("\n\n\n=====================================================================");
   DEBUG_PRINT("\n============================ SETUP END ==============================");
   DEBUG_PRINT("\n=====================================================================\n\n");  
+  if (psramFound()) {
+      DEBUG_PRINT("\nPSRAM activée !\n");
+  } else {
+      DEBUG_PRINT("\nPSRAM non trouvée !\n");
+  }
 }
 
 void loop() {
 
   app.refresh();
   if (mixerServer.refresh()){
-    screen.focus = screen.focus - 1;    // rebuild GUI
+    if (screen.id == SCREEN_BANK) screen.focus = screen.focus - 1;    // rebuild GUI, will call userBuildScreen 
     app.broadCast(getMixersState());
   }
 
