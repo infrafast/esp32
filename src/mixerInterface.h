@@ -511,8 +511,8 @@ class MixingStation : public OSCMixerInterface {
       };
       
       msHttpClientParam.failConnectCallback = [&]() { 
-        // if we didn't have any answer from the HTTP rest, it means the server is also disconnected
-        *serverConnection = DISCONNECTED;
+        // if we didn't have any answer from the HTTP rest, it means the server is also disconnected => no because we also have OSC ping
+        //*serverConnection = DISCONNECTED;
         mixerOnline = false;
         DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! no reply to ping !!!----");
         interfaceState = BAD_REST_PORT;        
