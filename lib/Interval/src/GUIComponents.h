@@ -115,6 +115,7 @@ public:
     static const uint16_t silver;
     static const uint16_t red;
     static const uint16_t white;
+    static const uint16_t purple;
     static const uint16_t yellow;
     static const uint16_t gold;
     static const uint16_t blue;
@@ -1287,6 +1288,7 @@ const uint16_t GUI::green = TFT_GREEN;
 const uint16_t GUI::silver = TFT_SILVER;
 const uint16_t GUI::red = TFT_RED;
 const uint16_t GUI::white = TFT_WHITE;
+const uint16_t GUI::purple = TFT_PURPLE;
 const uint16_t GUI::yellow = TFT_YELLOW;
 const uint16_t GUI::blue = TFT_BLUE;
 const uint16_t GUI::nearlyBlack = TFT_NEARLYBLACK;

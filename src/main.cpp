@@ -439,7 +439,7 @@ String userPongCallback(){
   // we send server connection attempts status only if network is connected, otherwise we polute the webapp with useless information
   if (mixerServer.mixerInterface->state() == DISCONNECTED && hwm.network->state == CONNECTED){
     //{"serverAttempt":"Trying 192.168.0.212 / 10026"}}>
-    String serverAttempt = *app.lang.getString("Trying")+" "+mixerServer.serverIP.toString()+"/"+mixerServer.serverUDPPort+" "+mixerServer.msAPI.ip.toString()+"/"+String(mixerServer.msAPI.port);
+    String serverAttempt = *app.lang.getString("Trying")+" "+mixerServer.serverIP.toString()+" "+mixerServer.serverUDPPort+"/"+String(mixerServer.msUDPPort)+"/"+String(mixerServer.msAPIPort);
     doc["serverAttempt"] = serverAttempt;
   }
   serializeJson(doc,pong);
@@ -625,10 +625,11 @@ void loop() {
     }else{
       //glowing color
       mixerGlowingColor.value = &iconMixerColor;
-      
+            
       // interfaceState
       if (interfaceState == CONNECTING || interfaceState == IDLE)  mixerGlowingColor.baseColor = GUI::blue;
-      else if (interfaceState == PENDING_OSC)  mixerGlowingColor.baseColor = GUI::yellow;
+      else if (interfaceState == BAD_OSC_PORT)  mixerGlowingColor.baseColor = GUI::yellow;
+      else if (interfaceState == BAD_REST_PORT)  mixerGlowingColor.baseColor = GUI::purple;
       else{
         // mixer state
         if (mixerServer.state == CONNECTED) mixerGlowingColor.baseColor = GUI::blue;

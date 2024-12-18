@@ -26,7 +26,8 @@ enum{
   IDLE = CONNECTED+1,
   CONNECTING,
   SYNCING,
-  PENDING_OSC,
+  BAD_OSC_PORT,
+  BAD_REST_PORT,
   UNDEF_STATE
 };
 
@@ -197,7 +198,7 @@ class OSCMixerInterface: public MixerInterface {
         if (mixerOnline){          
           if ((state() == DISCONNECTED) && *serverConnection == CONNECTED) connect();
           /*else{
-            if (state() == PENDING_OSC) osc->ping(echoCommand);
+            if (state() == BAD_OSC_PORT) osc->ping(echoCommand);
           }*/
           else pingInterface();            // next pulse          
         }else{
@@ -499,11 +500,12 @@ class MixingStation : public OSCMixerInterface {
         if (interfaceState == SYNCING) lastPingTime = 0; // speed up the call to ping with no delay in between 
 
         if (interfaceState == CONNECTED && !osc->live){
-          interfaceState = PENDING_OSC;
+          interfaceState = BAD_OSC_PORT;
           osc->ping(echoCommand);          
         }
+        
         /*if (interfaceState == CONNECTED){ 
-          if (!OSCCheckOnce()) interfaceState = PENDING_OSC; // read comment in OSCCheckOnce to understand why we put this call here
+          if (!OSCCheckOnce()) interfaceState = BAD_OSC_PORT; // read comment in OSCCheckOnce to understand why we put this call here
         }*/
         DEBUG_PRINT("\nInterfaceState: %d",interfaceState);
       };
@@ -513,6 +515,7 @@ class MixingStation : public OSCMixerInterface {
         *serverConnection = DISCONNECTED;
         mixerOnline = false;
         DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! no reply to ping !!!----");
+        interfaceState = BAD_REST_PORT;        
       };           
       
       if (!network->asyncConnect(&msHttpClientParam)) lastPingTime = 0; // there is a pending request so we try the next one straight with no delay

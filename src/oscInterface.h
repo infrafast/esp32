@@ -23,6 +23,7 @@ class OSCInterface{
         int port;
         uint16_t latency;
         bool live = false;
+        UDP *udp = NULL;
 
         OSCInterface(){}
    
@@ -171,8 +172,6 @@ class OSCInterface{
         uint16_t bSize = 20, oldbSize = bSize ;
         
         char   PacketBuffer[UDP_TX_PACKET_MAX_SIZE];       
-
-        UDP *udp = NULL;
 };
 
 #endif
