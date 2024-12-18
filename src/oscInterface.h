@@ -18,22 +18,30 @@ class OSCInterface{
         float   fValue          = -0.1;
         char    sValue[OSCLEN+10]; char sValue2[OSCLEN]; char sValue1[OSCLEN];
         char   TypeStr;
-        String CommandStr;
-
+        String addressStr;
+        IPAddress ip;
+        int port;
+        uint16_t latency;
+        bool live = false;
 
         OSCInterface(){}
    
-        void settings(IPAddress defaultIP, int defaultPort,UDP *_udp){
+        void setClient(IPAddress defaultIP, int defaultPort){
             ip = defaultIP;
             port = defaultPort;
+            DEBUG_PRINT("\nOSC.setClient(%s,%d)",ip.toString().c_str(),port);
+        }
+
+        void setNetwork(UDP* _udp, uint16_t _latency){
+            DEBUG_PRINT("\nOSC.setUDP()");
             udp = _udp;
+            latency = _latency;
         }
 
         bool sendOSCMessage(OSCMessage *msg, IPAddress _ip, int _port){           
             DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString(),_port);
-            ExpectedStr = msg->getAddress();
             if (udp == NULL){
-                DEBUG_PRINT(":null UDP",ExpectedStr.c_str());
+                DEBUG_PRINT(":null UDP",msg->getAddress());
                 return false;
             }             
             udp->beginPacket(_ip, _port);
@@ -110,10 +118,10 @@ class OSCInterface{
             }
             // Parse return OSC command
             msg.getAddress(PacketBuffer, 0);                // get message path
-            CommandStr = String(PacketBuffer);              // assign to CommandStr
+            addressStr = String(PacketBuffer);              // assign to addressStr
             TypeStr = msg.getType(0);                       // get data type
 
-            DEBUG_PRINT("\n<<%s,%c,",CommandStr.c_str(),TypeStr);
+            DEBUG_PRINT("\n<<%s,%c,",addressStr.c_str(),TypeStr);
 
             if (msg.isInt(0)){
                 iValue = msg.getInt(0);    // integer
@@ -145,17 +153,24 @@ class OSCInterface{
             return true;
         }    
 
+        bool ping(String command){
+            live = false;
+            //test if mixer is still reachable      
+            SendCmd2OSC(command.c_str());
+            //monitoringSuccessful = false;
+            delay(latency); 
+            if (OSCReadIn()){
+                if (addressStr == command)  live = true;;
+            }
+            return live;
+        }
+
     
     private:
         //OSC AND MESSAGING MANAGEMENT
         uint16_t bSize = 20, oldbSize = bSize ;
         
         char   PacketBuffer[UDP_TX_PACKET_MAX_SIZE];       
-        String ExpectedStr;        
-
-
-        IPAddress ip;
-        int port;
 
         UDP *udp = NULL;
 };

@@ -10,7 +10,9 @@
 #include "Interval.h"
 #include "mixerServer.h"
 
-#if defined(DEBUG) && defined(USE_NETWORK)
+//#define USE_FTP
+
+#if defined(USE_FTP) && defined(USE_NETWORK)
   #include "ESP-FTP-Server-Lib.h"
   #include "FTPFilesystem.h"
   FTPServer ftp;
@@ -27,7 +29,7 @@
 
 String iconMixer = "=";
 uint16_t iconMixerColor = GUI::red;
-AlteredColor mixerGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &iconMixerColor};
+AlteredColor mixerGlowingColor = AlteredColor{.baseColor = GUI::red, .value =  &iconMixerColor};
 
 MixerServer mixerServer(&app.dataRepository,hwm.network);
 Config userConfig = Config();
@@ -405,10 +407,11 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
   }else if (jsonDoc["command"] == MIXER_SET_KEY ){
     //{"command":"setMixer","param":{"mixerIP":"82.65.4.93","mixerPort":"10023"}}
     mixerServer.serverIP.fromString(jsonDoc["param"][SERVER_IP_KEY].as<String>());
-    mixerServer.serverPort = jsonDoc["param"][SERVER_PORT_KEY];
-
+    mixerServer.serverUDPPort = jsonDoc["param"][SERVER_PORT_KEY];
+    
+    userConfig.setValue(MIXER_PORT_KEY,jsonDoc["param"][MIXER_PORT_KEY]);    
     userConfig.setValue(SERVER_IP_KEY,mixerServer.serverIP.toString());    
-    userConfig.setValue(SERVER_PORT_KEY,String(mixerServer.serverPort));
+    userConfig.setValue(SERVER_PORT_KEY,String(mixerServer.serverUDPPort));
     userConfig.setValue(MIXER_MODEL_KEY,jsonDoc["param"][MIXER_MODEL_KEY]);
     
     jsonAnswer->callback = RET_RELOAD_BANKS;
@@ -436,7 +439,7 @@ String userPongCallback(){
   // we send server connection attempts status only if network is connected, otherwise we polute the webapp with useless information
   if (mixerServer.mixerInterface->state() == DISCONNECTED && hwm.network->state == CONNECTED){
     //{"serverAttempt":"Trying 192.168.0.212 / 10026"}}>
-    String serverAttempt = *app.lang.getString("Trying")+" "+mixerServer.serverIP.toString()+"/"+mixerServer.serverPort+" "+mixerServer.mixingStationIP.toString()+"/"+mixerServer.mixingStationPort;
+    String serverAttempt = *app.lang.getString("Trying")+" "+mixerServer.serverIP.toString()+"/"+mixerServer.serverUDPPort+" "+mixerServer.msAPI.ip.toString()+"/"+String(mixerServer.msAPI.port);
     doc["serverAttempt"] = serverAttempt;
   }
   serializeJson(doc,pong);
@@ -450,12 +453,18 @@ void QueryingDemoMixer(bool internet){
     DEBUG_PRINT("\nQuerying demo mixer");    
     IPAddress demoServer(82,65,4,93);
     OSCInterface osc;
-    osc.settings(demoServer,10023,hwm.network->udp);
-    osc.SendCmd2OSC("/xinfo");
+    osc.setNetwork(hwm.network->udp,hwm.network->WANlatency);
+    String testAddrr = "/xinfo";
+    osc.SendCmd2OSC(testAddrr.c_str(),demoServer,10023);
     delay(hwm.network->WANlatency);      
     if (osc.OSCReadIn()) {
-      demoIP = "82.65.4.93";                // should be retrieved by an http request
-    } 
+      if (osc.addressStr == testAddrr){
+        demoIP = "82.65.4.93";                // should be retrieved by an http request
+        DEBUG_PRINT("\tDemo Mixer responded");    
+      }
+    }else{
+      DEBUG_PRINT("\tDemo Mixer didn't respond");    
+    }
   }
   String jsonString;
   JsonDocument json;
@@ -505,8 +514,16 @@ void userBootScreen(){
   bootSprite.sprite->pushSprite(bootSprite.getX(),bootSprite.getY(),TFT_TRANSPARENT);      
 }
 
+float tV = 95.0;
+int16_t monY = TFT_HEIGHT - 120;
+
 void userBankScreenBuilder(int subScreen){
-  if (mixerServer.mixerInterface->state() == DISCONNECTED){
+  
+  uint8_t interfaceState = mixerServer.mixerInterface->state();
+
+  if (interfaceState == CONNECTED){
+    app.disabledBankRendering = false; // normal strips and bank display
+  }else{
     app.disabledBankRendering = true;
 
     GUI::defaultBcolor = TFT_BGCOLOR;
@@ -514,9 +531,9 @@ void userBankScreenBuilder(int subScreen){
     GUI::cls();
 
     gui.add(new Icon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::transparentColor,false));
-  }else{
-    app.disabledBankRendering = false;
-    // normal  display in case mixer is connected
+   
+    if (interfaceState == SYNCING) gui.add(new Arc(&mixerServer.mixerInterface->progress, 0.0, 100.0, &app.midScreenHoriz, &monY, 100, &GUI::green, &GUI::transparentColor,0,true));
+
   }
 }
 
@@ -562,13 +579,13 @@ void setup() {
   mixerServer.init(&userConfig);
 
 
-  gui.alphaColors.add(&mixerGlowingRedColor);
+  gui.alphaColors.add(&mixerGlowingColor);
 
   /*String data;
   app.serialize(&data);
   DEBUG_PRINT("\nAPPLICATION SERIALIZATION:<%s>",data.c_str());*/
 
-  #if defined(DEBUG) && defined(USE_NETWORK)
+  #if defined(USE_FTP) && defined(USE_NETWORK)
     ftp.addUser("ftp", "ftp");  
     ftp.addFilesystem("LITTLEFS", &LittleFS);
     ftp.begin();
@@ -589,14 +606,42 @@ void setup() {
 }
 
 void loop() {
+  static uint8_t previousInterfaceState = DISCONNECTED;
 
   app.refresh();
-  if (mixerServer.refresh()){
-    if (screen.id == SCREEN_BANK) screen.focus = screen.focus - 1;    // rebuild GUI, will call userBuildScreen 
+  mixerServer.refresh();
+
+  uint8_t interfaceState = mixerServer.mixerInterface->state();
+
+  if (interfaceState != previousInterfaceState || mixerServer.refreshed){   
+    if (!mixerServer.refreshed) DEBUG_PRINT(" ************    *******   **** ** * INTERFACE CHANGED STATE FROM %D TO:%d",previousInterfaceState,interfaceState);
+
+    previousInterfaceState = interfaceState;
+
+    if (interfaceState == SYNCING){
+      //fixed color
+      mixerGlowingColor.value = &GUI::unUsedColor;
+      iconMixerColor = GUI::green;
+    }else{
+      //glowing color
+      mixerGlowingColor.value = &iconMixerColor;
+      
+      // interfaceState
+      if (interfaceState == CONNECTING || interfaceState == IDLE)  mixerGlowingColor.baseColor = GUI::blue;
+      else if (interfaceState == PENDING_OSC)  mixerGlowingColor.baseColor = GUI::yellow;
+      else{
+        // mixer state
+        if (mixerServer.state == CONNECTED) mixerGlowingColor.baseColor = GUI::blue;
+        else mixerGlowingColor.baseColor = GUI::red;
+      }
+    }
+
     app.broadCast(getMixersState());
+
+    if (screen.id == SCREEN_BANK) screen.focus = screen.focus - 1;    // rebuild GUI, will call userBuildScreen 
   }
 
-  #if defined(DEBUG) && defined(USE_NETWORK)
+  #if defined(USE_FTP) && defined(USE_NETWORK)
     ftp.handle();
   #endif
 }

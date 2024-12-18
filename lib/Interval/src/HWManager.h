@@ -212,7 +212,7 @@ public:
       digitalWrite(D7,HIGH);
       delay(100);*/
    
-      xTaskCreatePinnedToCore(xTaskBackground, "secondCPU", 4096, NULL, 1, NULL, 0);
+      xTaskCreatePinnedToCore(xTaskBackground, "secondCPU", 4096, NULL, 3, NULL, 0);
       
       debounceTimer = millis();
       lastInterrupt = millis();

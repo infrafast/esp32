@@ -55,10 +55,10 @@ void socketConnectionCallback(IWebSocket &ws);
 #define V_USE_NETWORK       "myNetworkIP"
 
 // C to C++ class function wrapper
-
 void commonFileServerWrapper(Request &req, Response &res);  
 void gzFileServer(Request &req, Response &res);
-void scanNetworksTaskWrapper(void * parameter);
+void scanNetworksTaskWrapper(void * parameter);         // parrallel task
+void webServerTaskWrapper(void * parameter);            // parrallel task
 void defaultWizardStepFlow();
 
 // Prototypage de la fonction de gestion de la connexion
@@ -1375,6 +1375,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
 
     String configClientIP; // ip of the client connect to the AP during configuration    
 
+    bool swapButton = false;
+
     ///////////////////////////////////////////////////////////////
     //////////////////                        /////////////////////
     //////////////////    MAIN CLASS START   //////////////////////
@@ -1540,7 +1542,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       // delete system settings
       LittleFS.remove(SYSTEM_FILE_NAME);
       persistants.clear();
-      persistants.putUChar(PERSISTANT_TFT_ROTATION,0);      
+      persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);      
     }
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
@@ -1565,7 +1567,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
 
       hwm->init();
       gui->init();         
-      GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,1)); 
+      
+      setScreenAndButtonRotation();
+      //GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,1)); 
 
       if (debug){
         /*String s;
@@ -1673,6 +1677,24 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           }
         break;
       }
+    }
+
+    void setScreenAndButtonRotation(){
+      if (persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES){
+        //swap button
+        uint8_t oldLeftID = hwm->buttons[LEFTB]->getID();
+        hwm->buttons[LEFTB]->setID(hwm->buttons[RIGHTB]->getID());
+        hwm->buttons[RIGHTB]->setID(oldLeftID);
+      }else{
+        // by default we keep the button as they were initialized by the HWM
+        // however, in case user has rotated from the menu, we have to swap button
+        if (swapButton){
+          uint8_t oldRightID = hwm->buttons[RIGHTB]->getID();
+          hwm->buttons[RIGHTB]->setID(hwm->buttons[LEFTB]->getID());
+          hwm->buttons[LEFTB]->setID(oldRightID);
+        }
+      }  
+      GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO));        
     }
 
     void resetToBankScreen(){
@@ -1827,6 +1849,58 @@ void setup() {
       ms.get_root_menu().add_menu(langMenu);              
     }
     
+    void handleWeb(void * parameter){
+      //------------------
+      //
+      // MANAGE WEB APPLICATION
+      //
+      //------------------  
+      Network* configMedia = hwm->configMedia;
+      
+      if (configMedia->refreshed){
+        if (configMedia->state == CONNECTED){
+          setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
+        }else{
+          webAppConnected = false;            
+        }
+      }
+
+
+      if (configMedia->state == CONNECTED){    
+        if(webServer != nullptr){                       
+          
+          wss->listen();  //sockets      
+          
+          // then webserver
+          if (configMedia->media == CABLE_MEDIA){
+            EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                          
+            // Création de la tâche "handleWebConnection" avec le client en paramètre
+            /*xTaskCreate(
+              handleWebConnection,          // Nom de la fonction de tâche
+              "handleWebConnection",        // Nom de la tâche
+              8192*2,                         // Taille de la pile (4 Ko)
+              (void*)&newEthClient,               // Paramètre (pointeur vers EthernetClient)
+              1,                            // Priorité de la tâche
+              NULL                          // Pas besoin de handle de tâche ici
+            );*/                       
+            if (newEthClient.connected()) {
+              ets_printf("\n\tEth ---> ");
+              webServer->process(&newEthClient);
+              newEthClient.stop();
+              ets_printf(" STOP");
+            }             
+          }else{
+            WiFiClient newWiFiClient = ((WiFiServer *)configMedia->server)->available();
+            if (newWiFiClient.connected()) {
+              ets_printf("\n\tWiFi ---> ");
+              webServer->process(&newWiFiClient);
+              newWiFiClient.stop();
+              ets_printf(" STOP");
+            }   
+          }
+        }
+      }
+    }
 
     bool refresh(bool force=false){
       yield();
@@ -1840,7 +1914,7 @@ void setup() {
       //------------------     
       hwm->refresh();      
 
-      if (hwm->network->refreshed){ // network changed its status
+      if (hwm->network->refreshed){ // network changed its statusset
         
         setNetworkIcon();
 
@@ -1883,48 +1957,7 @@ void setup() {
 
       // real time signal strength display
       if (hwm->network->state == CONNECTED && hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();
-
-      //------------------
-      //
-      // MANAGE WEB APPLICATION
-      //
-      //------------------  
-
-      if (hwm->configMedia->state == CONNECTED){    
-        if(webServer != nullptr){          
-
-          if (hwm->configMedia->refreshed) setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
-          
-          wss->listen();  //sockets      
-          
-          // then webserver
-          if (hwm->configMedia->media == CABLE_MEDIA){
-            EthernetClient newEthClient = ((EthernetServer*)hwm->configMedia->server)->available();                          
-            // Création de la tâche "handleWebConnection" avec le client en paramètre
-            /*xTaskCreate(
-              handleWebConnection,          // Nom de la fonction de tâche
-              "handleWebConnection",        // Nom de la tâche
-              8192*2,                         // Taille de la pile (4 Ko)
-              (void*)&newEthClient,               // Paramètre (pointeur vers EthernetClient)
-              1,                            // Priorité de la tâche
-              NULL                          // Pas besoin de handle de tâche ici
-            );*/                       
-            if (newEthClient.connected()) {
-              webServer->process(&newEthClient);
-              newEthClient.stop();
-            }             
-          }else{
-            WiFiClient newWiFiClient = ((WiFiServer *)hwm->configMedia->server)->available();
-            if (newWiFiClient.connected()) {
-              webServer->process(&newWiFiClient);
-              newWiFiClient.stop();
-            }   
-          }
-        }
-      }else{
-        if (hwm->configMedia->refreshed) webAppConnected = false;
-      }
-      
+    
       // BATTERY LEVEL CHECK
       if (0/*hwm->battery.refreshed*/){        
         setBatIcon();
@@ -1936,6 +1969,8 @@ void setup() {
         }          
       }
    
+      handleWeb(nullptr);
+
 
       //------------------
       //
@@ -2117,6 +2152,17 @@ void setup() {
           webServer->use(commonFileServerWrapper);
           setWSServer();
           hwm->configIP = "http://"+hwm->configMedia->IP.toString();
+
+
+          /*xTaskCreate(
+            webServerTaskWrapper,          // Fonction de la tâche
+            "webServerHandle",         // Nom de la tâche
+            8096*2,            // Taille de la pile en mots
+            NULL,            // Paramètres passés à la tâche
+            2,               // Priorité de la tâche
+            NULL      // Handle de la tâche
+          );*/
+
           /* Initialize mDNS => doesnt work for ethernet so we give up and keep IP address
           if (debug) DEBUG_PRINT("\nstarting mdns: %s",config.getString(S_AP_NAME)->c_str());
           if (!MDNS.begin(*config.getString(S_AP_NAME))) {   // Set the hostname to "esp32.local"
@@ -2233,7 +2279,7 @@ void setup() {
         uint32_t free = ESP.getFreeHeap();
 
         //if (debug) DEBUG_PRINT("\t\t\t\t REAL EXTENSION: \t\t\tt%s \t\t\tMIME:%s",filenameRealExtension.c_str(),mimeType.c_str());
-        DEBUG_PRINT("\nserving <%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        
+        DEBUG_PRINT("\n\t\t<%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        
         res.set("Content-Type", mimeType.c_str());
 
         /*byte buffer[33] = "Access-Control-Allow-Origin: *\r\n";
@@ -2250,7 +2296,7 @@ void setup() {
     }
 
     void sendFileInChunks(File* file, Response* res) {      
-      size_t dataSize = 64; // with Ethernet we have to keep it low otherwise it doesnt work
+      size_t dataSize = 256; // with Ethernet we have to keep it low otherwise it doesnt work
             
       if (hwm->network->media == WIFI_MEDIA){
         dataSize = file->size();  // to try to send it once
@@ -2898,8 +2944,6 @@ void setup() {
       String data;
       serializeJson(doc,data);
       broadCast(data);
-      // Delete the task itself
-      vTaskDelete(NULL);
     }
 
 
@@ -2951,7 +2995,7 @@ void setup() {
     IWebSocketServer *wss{ nullptr };        
 
     uint32_t minHeapSize,maxHeapSize;
-    String heapSize;
+    String heapSize;    
 
     ///////////////////////////////////////////////////////////////////////
 

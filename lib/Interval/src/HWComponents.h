@@ -403,7 +403,7 @@ enum{
 
 enum{
   DISCONNECTED = false,
-  CONNECTED = true
+  CONNECTED = true,
 };
 
 class DigitalButton: public Button{
@@ -536,29 +536,87 @@ void pingTask(void* parameter) {
 }
 
 typedef std::function<void()> StdFunctionCallbackVoid; 
+typedef std::function<void(String)> StdFunctionCallbackString;
 
 struct AsyncClient {
     IPAddress host;
     uint16_t port;
     Client* client;
-    StdFunctionCallbackVoid onConnectedCallback;
+    StdFunctionCallbackString onConnectedCallback;
     StdFunctionCallbackVoid failConnectCallback;
     bool isClientConnecting = false; // Indicateur pour éviter de lancer plusieurs tâches
+    uint32_t timeOut = 5000;
 };
 
+struct AsyncHttpClient : public AsyncClient {
+    String URL;
+};
+
+
+
 // Prototype pour la tâche de connexion
-void connectClientTask(void *parameter) {
+/*void connectClientTask(void *parameter) {
     AsyncClient *clientObj = static_cast<AsyncClient *>(parameter);
     // Si la connexion est établie, appeler la fonction callback
     DEBUG_PRINT("\nconnectClientTask(%s,%i)",clientObj->host.toString().c_str(),clientObj->port);
     if (clientObj->client->connect(clientObj->host.toString().c_str(), clientObj->port)) {
-      clientObj->onConnectedCallback();
+      clientObj->onConnectedCallback("");
     }else clientObj->failConnectCallback();
     // Fin de la tentative de connexion, réinitialiser l'indicateur
     clientObj->isClientConnecting = false;
     // Tâche terminée, suppression
     vTaskDelete(NULL);
+}*/
+
+// Prototype pour la tâche de connexion
+void connectHTTPTask(void *parameter) {
+    bool success = false;
+    
+    AsyncHttpClient *clientObj = static_cast<AsyncHttpClient *>(parameter);
+    // Si la connexion est établie, appeler la fonction callback    
+
+    HttpClient* httpClient = (HttpClient*)(clientObj->client);
+    String url = clientObj->URL;
+    IPAddress serverIP = clientObj->host;
+    uint16_t port = clientObj->port;
+    uint32_t timeOut = clientObj->timeOut;
+    if (timeOut<1000) timeOut = 1000;
+
+    DEBUG_PRINT("\nconnectHTTPTask(%s,%s,%i)",serverIP.toString().c_str(),url.c_str(),port);
+
+    //int httpResponseCode = httpClient->get(serverIP.toString().c_str(),url.c_str());
+    httpClient->setHttpResponseTimeout(timeOut);
+    int httpResponseCode = httpClient->startRequest(serverIP.toString().c_str(),port,url.c_str(),HTTP_METHOD_GET,"ESP32HttpClient/1.0");   
+
+    
+
+    String payload="";
+
+    if (httpResponseCode == 0) {
+      DEBUG_PRINT("\nRequête GET lancée");
+      int httpStatusCode = httpClient->responseStatusCode();
+      DEBUG_PRINT("\nStatut HTTP : %d\n", httpStatusCode);
+
+      if (httpStatusCode == 200) {
+        httpClient->skipResponseHeaders();    // we want to read the body only
+        payload = httpClient->readString();
+        DEBUG_PRINT("\nRéponse GET reçue :%s",payload.c_str());
+        clientObj->onConnectedCallback(payload);
+      } else {        
+        clientObj->failConnectCallback();
+      }
+    } else {
+      DEBUG_PRINT("\nMauvaise requete GET : %d", httpResponseCode);
+      // ça veut dire pas de serveur a cette adresse
+      clientObj->failConnectCallback();
+    }
+    httpClient->stop();    
+    // Fin de la tentative de connexion, réinitialiser l'indicateur
+    clientObj->isClientConnecting = false;
+    // Tâche terminée, suppression
+    vTaskDelete(NULL);
 }
+
 
 
 class Network : public HWComponent2State{
@@ -571,7 +629,7 @@ class Network : public HWComponent2State{
     HttpClient* http = NULL;    
     Client* client = NULL;   
     bool internet = false; 
-    uint16_t WANlatency = 150, LANlatency = 20;
+    uint16_t WANlatency = 250, LANlatency = 20;
 
     bool ethEnabled = true;
     bool WiFiEnabled = true;
@@ -593,7 +651,7 @@ class Network : public HWComponent2State{
     
     virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback)=0;
     // Méthode pour initier la connexion non bloquante, appelée dans la boucle
-    virtual void asyncConnect(AsyncClient *clientParam)=0;
+    virtual bool asyncConnect(AsyncClient *clientParam)=0;
 
     virtual void setWiFi(JsonList* list, String wiFiID){
       wiFiList = list;
@@ -966,23 +1024,30 @@ class WiFiEth : public Network{
       );
     }
 
-    virtual void asyncConnect(AsyncClient *clientParam){        
+    TaskHandle_t httpTaskHandle = NULL;
+
+    virtual bool asyncConnect(AsyncClient *clientParam){        
       // Si nous sommes déjà en train de tenter une connexion, on ne relance pas la tâche
       if (clientParam->isClientConnecting ) {
         DEBUG_PRINT("\n\t client connection pending, no more attempt allowed");
+        return false;
+        /*clientParam->client->stop();
+        vTaskDelete(httpTaskHandle);*/
+
       }else{
         DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
         clientParam->isClientConnecting = true;
         // Démarrer la tâche FreeRTOS pour la connexion
         xTaskCreatePinnedToCore(
-            connectClientTask,     // Tâche à exécuter
+            connectHTTPTask,     // Tâche à exécuter
             "ConnectTask",         // Nom de la tâche
             4096,                  // Taille de la pile (en octets)
             clientParam,           // Paramètre passé à la tâche (ici, l'objet courant)
             1,                     // Priorité de la tâche
-            NULL,                  // Pointeur vers l'identifiant de la tâche (inutile ici)
-            1                      // Utilisation du deuxième cœur de l'ESP32
+            &httpTaskHandle,       // Pointeur vers l'identifiant de la tâche (inutile ici)
+            0                      // Utilisation du 1er cœur de l'ESP32, qui est different de la boucle principale afin de ne pas perturber l'affichage
         );
+        return true;
       }
     }
 
@@ -1114,7 +1179,7 @@ class  NoNetwork: public Network{
     virtual EthernetLinkStatus getLink(){return LinkOFF;}      // access point has no physicalLink
     virtual void stop(){}    
     virtual String getConnectedDeviceIP(){return "";}
-    virtual void asyncConnect(AsyncClient *clientParam){};
+    virtual bool asyncConnect(AsyncClient *clientParam){return false;}
     virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback){};
     virtual void setUserInternetCallback(StdFunctionCallbackVoidBool uic){};
 };
@@ -1151,7 +1216,7 @@ class AccessPoint : public Network{
     }
 
     virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback){};
-    virtual void asyncConnect(AsyncClient *clientParam){};
+    virtual bool asyncConnect(AsyncClient *clientParam){ return false;}
     virtual void setUserInternetCallback(StdFunctionCallbackVoidBool uic){};
 
     void init(){

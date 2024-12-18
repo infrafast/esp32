@@ -26,7 +26,8 @@ union ScreenUnion{
   };
 }screen;
 
-
+#define INVERTED_SCREEN_NO 1
+#define INVERTED_SCREEN_YES 3
 
 
 //#define USE_DMA

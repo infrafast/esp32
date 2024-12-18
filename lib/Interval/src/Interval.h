@@ -396,7 +396,7 @@ void xTaskBackground(void *pvParameters){
   //static unsigned long checkEthCableTime = 0;
   while (true){
   
-    vTaskDelay(1);  //added for S3 to avoid trigerring the wathcdog
+    vTaskDelay(2);  //added for S3 to avoid trigerring the wathcdog
 
 
     // network monitoring
@@ -476,6 +476,15 @@ void gzFileServer(Request &req, Response &res) {
 
 void scanNetworksTaskWrapper(void * parameter){
   app.scanNetworksTask(parameter);
+  // Delete the task itself
+  vTaskDelete(NULL);
+}
+
+void webServerTaskWrapper(void * parameter){
+  while(true){
+    vTaskDelay(1);
+    app.handleWeb(parameter);
+  }
 }
 
 // Fonction de gestion de la connexion client
@@ -827,22 +836,10 @@ void save_profile_item_selected(MenuComponent* p_menu_component) {
 }
 
 void tft_rotation_item_selected(MenuComponent* p_menu_component) {
-  if (app.persistants.getUChar(PERSISTANT_TFT_ROTATION,1) == 1){
-    app.persistants.putUChar(PERSISTANT_TFT_ROTATION,3);
-
-    uint8_t oldLeftID = hwm.buttons[LEFTB]->getID();
-    hwm.buttons[LEFTB]->setID(hwm.buttons[RIGHTB]->getID());
-    hwm.buttons[RIGHTB]->setID(oldLeftID);
-
-  }else{
-    app.persistants.putUChar(PERSISTANT_TFT_ROTATION,1);
-
-    uint8_t oldRightID = hwm.buttons[RIGHTB]->getID();
-    hwm.buttons[RIGHTB]->setID(hwm.buttons[LEFTB]->getID());
-    hwm.buttons[LEFTB]->setID(oldRightID);
-
-  }  
-  GUI::tft->setRotation(app.persistants.getUChar(PERSISTANT_TFT_ROTATION,1));  
+  app.swapButton = true;
+  if (app.persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES) app.persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);
+  else app.persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_YES);
+  app.setScreenAndButtonRotation();
   back_menu_item_selected(p_menu_component);
 }
 
