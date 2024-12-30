@@ -7,5 +7,13 @@
 "Open browser":"Ouvrez un navigateur web a l'adresse ci dessous. Utilisez http:// et pas https://",
 "Connected":"Connecté",
 "Press button":"Appuyez sur un bouton pour sortir",
-"Press >1s to startup":"Appuyer >1s pour démarrer"
+"Press >1s to startup":"Appuyer >1s pour démarrer",
+"disconnected":"déconnecté",
+"connected":"connecté",
+"idle":"attente connexion",
+"connecting":"connexion",
+"mixer unreachable":"console injoignable",
+"mixing s. unreachable":"mixing s. injoignable",
+"searching":"recherche",
+"connect failed":"échec connexion"
 }

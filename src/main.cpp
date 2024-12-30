@@ -31,7 +31,7 @@ String iconMixer = "=";
 uint16_t iconMixerColor = GUI::red;
 AlteredColor mixerGlowingColor = AlteredColor{.baseColor = GUI::red, .value =  &iconMixerColor};
 
-MixerServer mixerServer(&app.dataRepository,hwm.network);
+MixerServer mixerServer(&app.dataRepository);
 Config userConfig = Config();
 
 StripSkeleton* stripSendSkel;
@@ -408,11 +408,14 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
     //{"command":"setMixer","param":{"mixerIP":"82.65.4.93","mixerPort":"10023"}}
     mixerServer.serverIP.fromString(jsonDoc["param"][SERVER_IP_KEY].as<String>());
     mixerServer.serverUDPPort = jsonDoc["param"][SERVER_PORT_KEY];
-    
-    userConfig.setValue(MIXER_PORT_KEY,jsonDoc["param"][MIXER_PORT_KEY]);    
+
     userConfig.setValue(SERVER_IP_KEY,mixerServer.serverIP.toString());    
     userConfig.setValue(SERVER_PORT_KEY,String(mixerServer.serverUDPPort));
-    userConfig.setValue(MIXER_MODEL_KEY,jsonDoc["param"][MIXER_MODEL_KEY]);
+    userConfig.setValue(SERVER_MODEL_KEY,jsonDoc["param"][SERVER_MODEL_KEY]);
+
+    userConfig.setValue(MIXER_PORT_KEY,jsonDoc["param"][MIXER_PORT_KEY]);    
+    userConfig.setValue(MIXER_AUTOMODEL_KEY,jsonDoc["param"][MIXER_AUTOMODEL_KEY]);
+    userConfig.setValue(MIXER_AUTOIP_KEY,jsonDoc["param"][MIXER_AUTOIP_KEY]);
     
     jsonAnswer->callback = RET_RELOAD_BANKS;
     jsonAnswer->value = "";       
@@ -423,7 +426,7 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
     jsonAnswer->callback = USER_CONFIG_REQ;
     JsonDocument doc;
     doc["mixers"] =  getMixersState();
-    doc["interfaces"] = mixerServer.getInterfaces();
+    //doc["interfaces"] = mixerServer.getInterfaces();
     String jsonString;
     serializeJson(doc,jsonString);
     removeJsonQuote(&jsonString);    
@@ -437,7 +440,7 @@ String userPongCallback(){
   String pong = "";
   JsonDocument doc;
   // we send server connection attempts status only if network is connected, otherwise we polute the webapp with useless information
-  if (mixerServer.mixerInterface->state() == DISCONNECTED && hwm.network->state == CONNECTED){
+  if (mixerServer.mixerInterface->interfaceState == DISCONNECTED && mixerServer.state == CONNECTED){
     //{"serverAttempt":"Trying 192.168.0.212 / 10026"}}>
     String serverAttempt = *app.lang.getString("Trying")+" "+mixerServer.serverIP.toString()+" "+mixerServer.serverUDPPort+"/"+String(mixerServer.msUDPPort)+"/"+String(mixerServer.msAPIPort);
     doc["serverAttempt"] = serverAttempt;
@@ -453,15 +456,15 @@ void QueryingDemoMixer(bool internet){
     DEBUG_PRINT("\nQuerying demo mixer");    
     IPAddress demoServer(82,65,4,93);
     OSCInterface osc;
+
     osc.setNetwork(hwm.network->udp,hwm.network->WANlatency);
-    String testAddrr = "/xinfo";
-    osc.SendCmd2OSC(testAddrr.c_str(),demoServer,10023);
-    delay(hwm.network->WANlatency);      
-    if (osc.OSCReadIn()) {
-      if (osc.addressStr == testAddrr){
+    osc.setClient(demoServer,10023);
+
+    String testAddr = "/xinfo";
+
+    if(osc.ping(testAddr,hwm.network->WANlatency)){
         demoIP = "82.65.4.93";                // should be retrieved by an http request
         DEBUG_PRINT("\tDemo Mixer responded");    
-      }
     }else{
       DEBUG_PRINT("\tDemo Mixer didn't respond");    
     }
@@ -516,10 +519,11 @@ void userBootScreen(){
 
 float tV = 95.0;
 int16_t monY = TFT_HEIGHT - 120;
+String interfaceStateMessage = "";
 
 void userBankScreenBuilder(int subScreen){
   
-  uint8_t interfaceState = mixerServer.mixerInterface->state();
+  uint8_t interfaceState = mixerServer.mixerInterface->interfaceState;
 
   if (interfaceState == CONNECTED){
     app.disabledBankRendering = false; // normal strips and bank display
@@ -530,14 +534,32 @@ void userBankScreenBuilder(int subScreen){
     GUI::defaultFcolor = TFT_FCOLOR;
     GUI::cls();
 
-    gui.add(new Icon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::transparentColor,false));
-   
+    interfaceStateMessage = *app.lang.getString(stateNames[interfaceState]);
+    /*if (interfaceState == MIXER_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.serverUDPPort);
+    else if (interfaceState == MS_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.msAPIPort);*/
+
+    gui.add(new Icon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor,false));
+
     if (interfaceState == SYNCING) gui.add(new Arc(&mixerServer.mixerInterface->progress, 0.0, 100.0, &app.midScreenHoriz, &monY, 100, &GUI::green, &GUI::transparentColor,0,true));
+    else gui.add(new Label(&interfaceStateMessage, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
 
   }
 }
 
-#define DEFAULT_USER_CONFIG "{\"serverIP\":\"0.0.0.0\",\"serverPort\":\"10023\",\"mixerModel\":\"X32\"}"
+//#define DEFAULT_USER_CONFIG "{\"interface\":\"Offline\",\"serverIP\":\"0.0.0.0\",\"serverPort\":3000,\"serverName\":\"auto\",\"mixerPort\":8080,\"mixerModel\":\"MixingStation\",\"autoConnectModel\":-1,\"autoConnectIP\":\"192.168.0.1\"}"
+
+#define DEFAULT_USER_CONFIG "{\
+  \"" INTERFACE_STATE_KEY "\":\"Offline\",\
+  \"" SERVER_IP_KEY "\":\"0.0.0.0\",\
+  \"" SERVER_PORT_KEY "\":3000,\
+  \"" SERVER_NAME_KEY "\":\"auto\",\
+  \"" MIXER_PORT_KEY "\":8080,\
+  \"" SERVER_MODEL_KEY "\":\"MixingStation\",\
+  \"" MIXER_AUTOMODEL_KEY "\":-1,\
+  \"" MIXER_AUTOIP_KEY "\":\"192.168.0.1\"\
+}"
+
+
 
 void setup() {
 
@@ -576,7 +598,7 @@ void setup() {
 
   app.init(&userConfig);
   userConfig.load("/userConf.conf",DEFAULT_USER_CONFIG);  
-  mixerServer.init(&userConfig);
+  mixerServer.init(&userConfig,hwm.network);
 
 
   gui.alphaColors.add(&mixerGlowingColor);
@@ -598,26 +620,29 @@ void setup() {
   DEBUG_PRINT("\n\n\n=====================================================================");
   DEBUG_PRINT("\n============================ SETUP END ==============================");
   DEBUG_PRINT("\n=====================================================================\n\n");  
-  if (psramFound()) {
+  /*if (psramFound()) {
       DEBUG_PRINT("\nPSRAM activée !\n");
   } else {
       DEBUG_PRINT("\nPSRAM non trouvée !\n");
-  }
+  }*/
 }
 
 void loop() {
+  app.refresh();
+  mixerServer.refresh();
+
   static uint8_t previousInterfaceState = DISCONNECTED;
 
   app.refresh();
   mixerServer.refresh();
 
-  uint8_t interfaceState = mixerServer.mixerInterface->state();
+  uint8_t interfaceState = mixerServer.mixerInterface->interfaceState;
 
   if (interfaceState != previousInterfaceState || mixerServer.refreshed){   
-    if (!mixerServer.refreshed) DEBUG_PRINT(" ************    *******   **** ** * INTERFACE CHANGED STATE FROM %D TO:%d",previousInterfaceState,interfaceState);
+    if (!mixerServer.refreshed) DEBUG_PRINT("\n*********************** INTERFACE CHANGED STATE FROM:%s TO: %s",stateNames[previousInterfaceState].c_str(),stateNames[interfaceState].c_str());
 
     previousInterfaceState = interfaceState;
-
+    
     if (interfaceState == SYNCING){
       //fixed color
       mixerGlowingColor.value = &GUI::unUsedColor;
@@ -628,8 +653,8 @@ void loop() {
             
       // interfaceState
       if (interfaceState == CONNECTING || interfaceState == IDLE)  mixerGlowingColor.baseColor = GUI::blue;
-      else if (interfaceState == BAD_OSC_PORT)  mixerGlowingColor.baseColor = GUI::yellow;
-      else if (interfaceState == BAD_REST_PORT)  mixerGlowingColor.baseColor = GUI::purple;
+      else if (interfaceState == MIXER_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::blue;
+      else if (interfaceState == MS_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::blue;
       else{
         // mixer state
         if (mixerServer.state == CONNECTED) mixerGlowingColor.baseColor = GUI::blue;

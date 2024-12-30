@@ -136,11 +136,11 @@ class GUIManager : public GenericComponent {
       fontFile.close();*/
 
       size_t dataSize = 0;
-      uint8_t* fontBuffer = readGzFileToBuffer("/webapp/interval.ttf.gz",&dataSize);
+      dataSize = readGzFileToBuffer("/webapp/interval.ttf.gz",&fontBuffer);
 
       if (dataSize > 0){ // uncompress succeed
         //DEBUG_PRINT("\ndataSize: %i, sizeof(buffer):%i sizeof(TTF_ICON):%i",dataSize,sizeof(fontBuffer),sizeof(TTF_ICON));
-        if (iconOfr.loadFont(fontBuffer, dataSize)) { // this consumes 20992 bytes and take ~2ms      
+        if (iconOfr.loadFont(fontBuffer.buffer, dataSize)) { // this consumes 20992 bytes and take ~2ms      
         //if (iconOfr.loadFont(TTF_ICON, sizeof(TTF_ICON))) {
           if (debug) DEBUG_PRINT("\nIcon Initialise error with compressed font"); 
         }
@@ -291,6 +291,7 @@ class GUIManager : public GenericComponent {
     }
 
   private:   
+    ByteBuffer fontBuffer;
 
     int sinI = 0; 
     uint8_t increment = 0;

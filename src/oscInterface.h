@@ -22,7 +22,6 @@ class OSCInterface{
         IPAddress ip;
         int port;
         uint16_t latency;
-        bool live = false;
         UDP *udp = NULL;
 
         OSCInterface(){}
@@ -150,20 +149,23 @@ class OSCInterface{
                 if (msg.getBlob(0, bValue) != bSize) return false;
                 //DEBUG_OSCMSG("\nbValue=(%s)", bValue);
             }
-            msg.empty();     
+            msg.empty();    
             return true;
         }    
 
-        bool ping(String command){
-            live = false;
+        bool ping(String command, uint32_t timeOut = 0){
+            bool success = false;
+            if (timeOut == 0) timeOut = latency;
             //test if mixer is still reachable      
             SendCmd2OSC(command.c_str());
-            //monitoringSuccessful = false;
-            delay(latency); 
-            if (OSCReadIn()){
-                if (addressStr == command)  live = true;;
+            unsigned long t0 = millis();
+            while (millis()-t0 < timeOut && success == false){
+                yield();
+                if (OSCReadIn()){
+                    if (addressStr == command) success = true;
+                }
             }
-            return live;
+            return success;
         }
 
     

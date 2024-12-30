@@ -206,7 +206,7 @@ class DataSet{
       JsonDocument doc;
 
       // a dataset either return an array of value from a data provider (size>0)
-      // or a unique value (size=0) which is the name of a javascript function callback
+      // or a no value (size=0) which is the name of a javascript function callback
 
       uint16_t n = size();
 
@@ -1288,6 +1288,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     String iconReset = ICON_RESET;
     String iconForbid = ICON_FORBID;
     String powerIcon = ICON_POWER; 
+    String iconX = "X"; 
     String footSwitchIcon = ICON_FOOTSWITCH;
 
     AlteredColor networkIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
@@ -1339,7 +1340,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     uint16_t menuActiveIconColor;
 
     int16_t menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2, leftMenuIconXpos = midScreenHoriz-MENU_ICON_SIZE*1.4,rightMenuIconXpos = midScreenHoriz+MENU_ICON_SIZE*1.4;
-    int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.2, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE;
+    int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE;
 
     #define ICON_DOT_MAX 4
     String iconDot[ICON_DOT_MAX]={
@@ -1652,8 +1653,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           goToBigBatteryIconScreenAndSleep();         
         break;
         case NO_FS_STARTUP:
-          topLabelItem = *lang.getString("File System");;
+          topLabelItem = *lang.getString("File System");
           bottomLabelTitle = emptyString;
+          byeIcon = &iconX;
           // as the FS is not ready, there is no icon to display and no fonts as well so it will be display by default font
           screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
         break;
@@ -2296,12 +2298,12 @@ void setup() {
     }
 
     void sendFileInChunks(File* file, Response* res) {      
-      size_t dataSize = 256; // with Ethernet we have to keep it low otherwise it doesnt work
+      size_t dataSize = 64; // with Ethernet we have to keep it low otherwise it doesnt work
             
-      if (hwm->network->media == WIFI_MEDIA){
+      /*if (hwm->network->media == WIFI_MEDIA){
         dataSize = file->size();  // to try to send it once
         if (dataSize>TCP_SND_BUF) dataSize = TCP_SND_BUF;   // size  of the TCP buffer as a maximum
-      }
+      }*/
       
       byte *buffer = nullptr; // Pointeur pour la mémoire allouée dynamiquement
       // Allouer dynamiquement de la mémoire pour stocker les données
@@ -2311,7 +2313,8 @@ void setup() {
       // Lire et envoyer des paquets de 256 octets jusqu'à ce que tout le fichier soit envoyé
       while ((bytesRead = file->read(buffer, dataSize)) > 0) {
         res->write(buffer, bytesRead);  // Écrire le tampon complet dans le client
-        DEBUG_PRINT( "%d,",bytesRead);        
+        DEBUG_PRINT( "%d,",bytesRead);  
+        yield();      
       }
 
       free(buffer);
@@ -2434,7 +2437,7 @@ void setup() {
       //else banks are empty, we do nothing
     }
 
-    void testHttpRequest(){
+    /*void testHttpRequest(){
 
       String srv = "82.65.4.93"; String path="/footswitch.php?check=1.2";
       DEBUG_PRINT("\nhttp.get(%s,%s)",srv.c_str(),path.c_str());
@@ -2476,7 +2479,7 @@ void setup() {
         DEBUG_PRINT("Connect failed: %i",err);
       }
       hwm->network->http->stop();  
-    }
+    }*/
 
     ///////////////////////////////////////////////////////////////////////
 
@@ -2981,11 +2984,7 @@ void setup() {
       "\""+String(S_SHORTCUTS)+"\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
     "}";
 
-    String defaultUserConf = "{"      
-      "\""+String(C_BANKS)+"\":{"
-        "\"Test\":{\"possibleLayout\":4,\"currentLayout\":1,\"icon\":\"=\",\"strips\":[{\"type\":\"ch2bus\",\"size\":\"4x1\",\"position\":{\"win\":0,\"x\":0,\"y\":0,\"id\":0},\"color\":3,\"icon\":\"-\",\"properties\":[\"/ch/02/config/name\",\"/bus/02/config/name\"]},{\"type\":\"chGain\",\"size\":\"4x1\",\"position\":{\"win\":0,\"x\":0,\"y\":1,\"id\":1},\"color\":4,\"icon\":\"6\",\"properties\":[\"/ch/03/config/name\"]},{\"type\":\"ch2bus\",\"size\":\"4x1\",\"position\":{\"win\":1,\"x\":0,\"y\":2,,\"id\":2},\"color\":1,\"icon\":\"2\",\"properties\":[\"/ch/04/config/name\",\"/bus/02/config/name\"]},{\"type\":\"ch2bus\",\"selector\":1,\"size\":\"4x1\",\"position\":{\"win\":1,\"x\":0,\"y\":3,\"id\":3},\"color\":1,\"icon\":\"2\",\"properties\":[\"/ch/05/config/name\",\"/bus/02/config/name\"]}]}"
-      "}"
-    "}";
+    String defaultUserConf = "{\"banks\":{\"bank1\":{\"possibleLayout\":0,\"currentLayout\":0,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":1,\"icon\":5,\"size\":\"2x2\",\"position\":{\"x\":1,\"y\":1,\"id\":3,\"win\":2},\"properties\":[\"/text/change-me\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"2x2\",\"position\":{\"x\":1,\"y\":1,\"id\":2,\"win\":1},\"properties\":[\"/text/hello\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"2x2\",\"position\":{\"x\":1,\"y\":1,\"id\":1,\"win\":0},\"properties\":[\"/text/world\"]}]}}}";
 
     ScreenUnion oldScreen;    
 
@@ -3020,17 +3019,47 @@ void setup() {
 
 
       res.set("Content-Type", "application/json");
-  
-      while (req.left()) {        
+
+      unsigned long t0 = millis();
+      #define POST_TIME_OUT 5000
+
+      while (req.left() && millis()-t0<POST_TIME_OUT) {        
         req.form(name, MAX_COMMAND_SIZE, options, OPTION_SIZE);                
+        
+        // Vérification de débordement et de validité
+        if (strlen(name) >= MAX_COMMAND_SIZE || strlen(options) >= OPTION_SIZE) {
+            DEBUG_PRINT("Erreur : Paramètres trop longs !");
+            res.sendStatus(500); // Internal Server Error
+            res.print("{\"error\": \"Parameters too long\"}");
+            continue; // Ignorer cette itération
+        }        
+        
         if (debug){
           DEBUG_PRINT("\n\n\t httpPost <%s>:<%s>\n\n",name,options);
         } 
+
+        // Analyser et traiter l'entrée
         String jsonAnswer = parseJsonInput(name);
+        if (jsonAnswer.length() == 0) {
+            jsonAnswer = "{\"error\": \"Parsing failed\"}";
+        }
+
         if (debug){
           //DEBUG_PRINT("\n\t httpres:<%s>",jsonAnswer.c_str());
         }
-        res.print(jsonAnswer);
+
+        // Envoi du contenu par paquets de 64 octets
+        size_t chunkSize = 64;
+        size_t totalSize = jsonAnswer.length();
+        size_t sentSize = 0;
+        while (sentSize < totalSize) {
+            size_t remainingSize = totalSize - sentSize;
+            size_t currentChunkSize = (remainingSize > chunkSize) ? chunkSize : remainingSize;
+            res.write((uint8_t*)(jsonAnswer.c_str() + sentSize), currentChunkSize);
+            sentSize += currentChunkSize;
+            yield();
+        }
+
       }  
       res.end();
       delete[] name;
@@ -3061,6 +3090,7 @@ void setup() {
           }
         }
         file = root.openNextFile();
+        yield();
       }
     }
 

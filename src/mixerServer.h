@@ -7,22 +7,19 @@
 #include "mixerInterface.h"
 
 #define MIXER_SET_KEY "setMixer"
-#define MIXER_STATE_KEY "mixerState"
-#define SERVER_STATE_KEY "serverState"
-#define INTERFACE_STATE_KEY "interfaceState"
+#define MIXER_STATE_KEY "mixerState"    // overall key name containing INTERFACE_STATE_KEY and SERVER_STATE_KEY subkeys
+
 #define MIXER_DEMO_KEY "demoMixer"
 
-  #define MIXER_PORT_KEY "mixerPort"
-  #define MIXER_MODEL_KEY "mixerModel"
-  #define MIXER_CONNECTED_KEY "mixerConnected"
-
+#define SERVER_STATE_KEY "serverState"
   #define SERVER_INTERFACE_KEY "interface"
   #define SERVER_IP_KEY "serverIP"
   #define SERVER_PORT_KEY "serverPort"
+  #define SERVER_MODEL_KEY "serverModel"
   #define SERVER_CONNECTED_KEY "serverConnected"
   #define SERVER_NAME_KEY "serverName"
 
-#define MIXER_DETECTION_PERIOD 5000
+#define MIXER_DETECTION_PERIOD 3000
 
 class MixerServer: public HWComponent2State{
   public:
@@ -30,7 +27,6 @@ class MixerServer: public HWComponent2State{
     uint16_t serverUDPPort, behringerUDPPort, msUDPPort, msAPIPort;
 
     bool msAPIOnline = false;
-
 
     String configIP="";
     String name;
@@ -40,46 +36,48 @@ class MixerServer: public HWComponent2State{
     Network* network;
     OSCInterface osc;
 
-    MixerServer(DataRepository* dataRepo,Network* net) : HWComponent2State(0), dataRepository(dataRepo), network(net){}
+    MixerServer(DataRepository* dataRepo) : HWComponent2State(0), dataRepository(dataRepo){}
 
     ~MixerServer(){}
 
-    void init(Config* conf){
+    void init(Config* conf, Network* net){
       DEBUG_PRINT("\n Init MixerServer");
       config = conf;
       disconnect(); // this sets default mixer as offline and force trying to reconnect at next refresh
+      network = net;
     }
 
     bool refresh(bool force=false){    
       HWComponent2State::refresh(force);
 
-      if (refreshed){
-        if (state == CONNECTED){
-          DEBUG_PRINT("\n[------- server state > CONNECTED -----]");
-        }else{
-          disconnect();
-        }
+      if (network->refreshed){
+        // network has changed state
+        //if (network->state == DISCONNECTED && state == CONNECTED) disconnect();
+        osc.setNetwork(network->udp,network->LANlatency);
+
+        //maybe put here mixerInterface->disconnect() and esnure that it contains the code to stop httpclient
       }
 
-      if (network->refreshed){
-        // network as changed state
-        if (network->state == DISCONNECTED && state == CONNECTED) disconnect();
-        osc.setNetwork(network->udp,network->LANlatency);
+      if (!mixerInterface->update()){
+        // we may do this after 2 attempts
+        if (mixerInterface->interfaceState == DISCONNECTED) disconnect();
       }
-  
+
       if (network->state == CONNECTED){                
-        if (state == DISCONNECTED){
+               
           if (millis()-lastDetectionAttemptTime > MIXER_DETECTION_PERIOD){
             lastDetectionAttemptTime = millis();
-            connect();
+            if (state == DISCONNECTED) connect();            
           }
-        }
-        mixerInterface->update();        
+          if (state == CONNECTED){
+            if (mixerInterface->interfaceState == IDLE){
+              mixerInterface->connect(config);            
+            }
+          }          
       }
      
       return refreshed;
     }
-
 
     String getMixerState(){   
         //{"interfaceState":{"mixerName":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"mixerModel":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}}
@@ -87,14 +85,16 @@ class MixerServer: public HWComponent2State{
         JsonDocument json;
         json[SERVER_STATE_KEY][SERVER_INTERFACE_KEY] = mixerInterface->name;
         json[SERVER_STATE_KEY][SERVER_IP_KEY] = serverIP.toString();
-        json[SERVER_STATE_KEY][SERVER_PORT_KEY] = serverUDPPort;
+        json[SERVER_STATE_KEY][SERVER_MODEL_KEY] = mixerInterface->model;
+        json[SERVER_STATE_KEY][SERVER_PORT_KEY] = config->getInt(SERVER_PORT_KEY);
         json[SERVER_STATE_KEY][SERVER_CONNECTED_KEY] = state;
         json[SERVER_STATE_KEY][SERVER_NAME_KEY] = name;
 
         
-        json[INTERFACE_STATE_KEY][MIXER_PORT_KEY] = msUDPPort;
-        json[INTERFACE_STATE_KEY][MIXER_MODEL_KEY] = mixerInterface->model;
-        json[INTERFACE_STATE_KEY][MIXER_CONNECTED_KEY] = mixerInterface->state() == CONNECTED?true:false;
+        json[INTERFACE_STATE_KEY][MIXER_PORT_KEY] = config->getInt(MIXER_PORT_KEY);        
+        json[INTERFACE_STATE_KEY][MIXER_CONNECTED_KEY] = stateNames[mixerInterface->interfaceState] ;
+        json[INTERFACE_STATE_KEY][MIXER_AUTOMODEL_KEY] = config->getInt(MIXER_AUTOMODEL_KEY);        
+        json[INTERFACE_STATE_KEY][MIXER_AUTOIP_KEY] = *config->getString(MIXER_AUTOIP_KEY);        
 
         String jsonString;
         serializeJson(json,jsonString);
@@ -131,7 +131,7 @@ class MixerServer: public HWComponent2State{
       }      
       state = DISCONNECTED;
       msAPIOnline = false;
-      mixerInterface = new MixerOfflineInterface(dataRepository,*config->getString(MIXER_MODEL_KEY));
+      mixerInterface = new MixerOfflineInterface(dataRepository,*config->getString(SERVER_MODEL_KEY));
       name = "auto";
     }
 
@@ -201,10 +201,9 @@ class MixerServer: public HWComponent2State{
     void testMS_REST_API(){
       msHttpClientParam.host = serverIP;
       msHttpClientParam.port = msAPIPort; 
-      msHttpClientParam.timeOut = MIXER_DETECTION_PERIOD-1000; // maximum duration of the request is the period of check minus one second
-      //msHttpClientParam.client = network->client;      
-      msHttpClientParam.client = network->http;
-      msHttpClientParam.URL = "/app/state";
+      msHttpClientParam.timeOut = MIXER_DETECTION_PERIOD-1000; // maximum duration of the request is the period of check minus one second    
+      //msHttpClientParam.client = network->client;
+      msHttpClientParam.URL = MS_API_STATE;
       msHttpClientParam.onConnectedCallback = [&](String param) { msREST_API_on(param); };
       msHttpClientParam.failConnectCallback = [&]() { msREST_API_off(); };      
       network->asyncConnect(&msHttpClientParam);
@@ -214,9 +213,9 @@ class MixerServer: public HWComponent2State{
       // TEST MIXING STATION
       // for mixing station:  REST API is over HTTP (so uses TCP), hence we cannot broadact. We have to test all IP address from the subnet range and see if we can connect the client provided by network hardware layer
       // which is not realistic, hence we test the dfault TCP port 8080       IN ASYNC HTTP REQUEST  
-      if (msAPIOnline == true){  //async answer
+      if (msAPIOnline){  //async answer
         DEBUG_PRINT("\n =========> msAPIOnline");
-        setMixingStationMixer(msUDPPort);    // CONNECTED, SYNCING, DISCONNECTED...
+        setMixingStationMixer(serverIP);    // CONNECTED, SYNCING, DISCONNECTED...
         return;
       }
 
@@ -228,7 +227,7 @@ class MixerServer: public HWComponent2State{
       }
 
       // second method, 
-      testMS_REST_API();           
+      testMS_REST_API();                 
     }
 
     bool testBehringer(){      
@@ -245,9 +244,10 @@ class MixerServer: public HWComponent2State{
     void setMixingStationMixer(IPAddress _ip){
       //DEBUG_PRINT("\nsetMixingStationMixer(%d,%s)",interfaceState,_ip.toString().c_str());
       DEBUG_PRINT("\nsetMixingStationMixer(%s)",_ip.toString().c_str());
+      LogUDP::sendLog("setMixingStationMixer",hwm.network->udp);
       state = CONNECTED;            // we connected mixing station
 
-      config->setValue(MIXER_MODEL_KEY,MIXING_STATION_MODEL);
+      config->setValue(SERVER_MODEL_KEY,MIXING_STATION_MODEL);
       //config->setValue(SERVER_IP_KEY,serverIP.toString()); we never do that as it would override the default user setting 0.0.0.0 auto for instance
       config->setValue(MIXER_PORT_KEY,String(msAPIPort));
       config->setValue(SERVER_PORT_KEY,String(msUDPPort));
@@ -259,9 +259,8 @@ class MixerServer: public HWComponent2State{
 
       osc.setClient(serverIP,serverUDPPort); 
 
-
       if (mixerInterface != nullptr) delete mixerInterface;
-      mixerInterface = new MixingStation(dataRepository,MIXING_STATION_MODEL,&osc, network, msAPIPort,&state);  
+      mixerInterface = new MixingStation(dataRepository,MIXING_STATION_MODEL,&osc, network, msAPIPort);  
 
       name = serverIP.toString();
 
@@ -283,7 +282,7 @@ class MixerServer: public HWComponent2State{
         }
         serverUDPPort = network->udp->remotePort();
         //<</xinfo,s,172.17.0.2, X32OnlineIntervalDemo, X32
-        config->setValue(MIXER_MODEL_KEY,osc.sValue2);
+        config->setValue(SERVER_MODEL_KEY,osc.sValue2);
         //config->setValue(SERVER_IP_KEY,serverIP.toString()); we never do that as it would override the default user setting 0.0.0.0 auto for instance
         config->setValue(SERVER_PORT_KEY,String(serverUDPPort));
 
@@ -294,22 +293,19 @@ class MixerServer: public HWComponent2State{
         if (mixerInterface != nullptr) delete mixerInterface;
 
         osc.setClient(serverIP,serverUDPPort);
-        /*mixerInterface = new BehringerMixer(dataRepository,*config->getString(MIXER_MODEL_KEY),&osc, &state);  // Utilisation du HAL pour MixingStation
-        ((BehringerMixer*)mixerInterface)->mixerOnline = true;*/
+        mixerInterface = new BehringerMixer(dataRepository,*config->getString(SERVER_MODEL_KEY),&osc);  // Utilisation du HAL pour MixingStation
       }
     }
 
     void msREST_API_off(){
       DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API not responding ----");
       msAPIOnline = false;
-      state = DISCONNECTED;
     }
 
     void msREST_API_on(String s){
       DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API is ON ----");
       msAPIOnline = true;  // do not set state = CONNECTED as this will be done by setmixer otherwise connect() will not trigger creation of mixing station
-      float progress;
-      lastDetectionAttemptTime = 0; // speed up to the next iteration
+      lastDetectionAttemptTime = 0; // we detected the mixer so we shorten the delay to treat the information
     }
 
 };

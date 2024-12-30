@@ -99,22 +99,24 @@ struct ByteBuffer {
   }
 };
 
-// Préparer le buffer pour stocker les données décompressées
-ByteBuffer byteBuffer;
+// buffer pour stocker les données décompressées
+ByteBuffer* uncompressedByteBuffer;
 
 // Fonction de callback pour écrire les données
 bool streamWriterCallback(unsigned char* buff, size_t buffsize) {
-  byteBuffer.write(buff, buffsize);
+  uncompressedByteBuffer->write(buff, buffsize);
   return true; // Retourner true pour indiquer que l'écriture est réussie
 }
 
 // Fonction pour lire un fichier gz et remplir le buffer de bytes décompressés
-uint8_t* readGzFileToBuffer(String filename, size_t* decompressedSize) {
+size_t readGzFileToBuffer(String filename, ByteBuffer* _buffer) {
   // Ouvrir le fichier compressé
+  uncompressedByteBuffer = _buffer;
+
   File gzFile = LittleFS.open(filename, "r");
   if (!gzFile) {
     DEBUG_PRINT("\nErreur : Fichier non trouvé: %s", filename.c_str());
-    return nullptr;
+    return 0;
   }
 
   // Créer un décompresseur
@@ -138,16 +140,13 @@ uint8_t* readGzFileToBuffer(String filename, size_t* decompressedSize) {
   //if (!gzExpander.expand(&gzUnpacker, gzFile)) {
     DEBUG_PRINT("\nErreur : Décompression échouée");
     gzFile.close();
-    return nullptr;
+    return 0;
   }
 
   gzFile.close();
 
-  // Passer la taille décompressée au client
-  *decompressedSize = byteBuffer.size;
-
   // Retourner un pointeur vers le buffer contenant les données
-  return byteBuffer.buffer;
+  return uncompressedByteBuffer->size;
 }
 
 int mapFloatToInt(float x, float in_min, float in_max, int out_min, int out_max) {
@@ -629,12 +628,12 @@ void moduleHoldClic(uint8_t buttonID, unsigned long time){
 void moduleLongClic(uint8_t buttonID){
   if (buttonID == hwm.buttons[MIDDLEB]->getID()){
     app.switchBank();
-    LogUDP::sendLog("moduleLongClic",hwm.network->udp);
+    //LogUDP::sendLog("moduleLongClic",hwm.network->udp);
   }else if(buttonID == hwm.buttons[LEFTB]->getID()){    
-    LogUDP::sendLog("testOSC",hwm.network->udp);
+    //LogUDP::sendLog("testOSC",hwm.network->udp);
   }else{
-    app.testHttpRequest();
-    LogUDP::sendLog("testHTTP",hwm.network->udp);
+    //app.testHttpRequest();
+    //LogUDP::sendLog("testHTTP",hwm.network->udp);
   }
 }
 
@@ -1032,7 +1031,7 @@ void menuScreenBuilder(uint8_t subScreen){
   DEBUG_PRINT("\nmenuScreenBuilder()");  
   setMenuColors();
   addMenuIcons();
-  LogUDP::sendLog("menuScreenBuilder",hwm.network->udp);
+  //LogUDP::sendLog("menuScreenBuilder",hwm.network->udp);
 }
 
 void bankSwitchScreenBuilder(uint8_t id){

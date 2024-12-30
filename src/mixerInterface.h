@@ -9,26 +9,51 @@
     #define DEBUG_PRINT(...) 
 #endif
 
-#define MS_PING_DELAY         6000     
-#define BEHRINGER_PING_DELAY  3000     
-
-#define MS_RESTART_PERIOD           3000     
 #define BEHRINGER_RESTART_PERIOD    9000     
+#define BEHRINGER_PING_DELAY        3000     
+
+#define MS_RESTART_PERIOD     3000     
+#define MS_PING_DELAY         3000     
+
 
 #define ADDRESS_CHNAME "/ch/config/%d/name"
 #define ADDRESS_BUSNAME "/bus/config/%d/name"
 
-#define INTERFACES_FILENAME "/interfaces.json"
+#define INTERFACES_FILENAME "/webapp/interfaces.json.gz"
 
 #define MIXING_STATION_MODEL "MixingStation"
+
+#define INTERFACE_STATE_KEY "interfaceState"
+  #define MIXER_PORT_KEY "mixerPort"
+  #define MIXER_CONNECTED_KEY "mixerConnected"
+  #define MIXER_AUTOMODEL_KEY "autoConnectModel"
+  #define MIXER_AUTOIP_KEY "autoConnectIP"
 
 enum{
   IDLE = CONNECTED+1,
   CONNECTING,
   SYNCING,
-  BAD_OSC_PORT,
-  BAD_REST_PORT,
-  UNDEF_STATE
+  MIXER_UNREACHABLE,
+  MS_UNREACHABLE,
+  SEARCHING,
+  CONNECTFAILED,
+  EOF_STATE
+};
+
+#define UNDEF "undef"
+
+#define MS_API_STATE "/app/state"
+
+String stateNames[EOF_STATE]={
+  "disconnected",
+  "connected",
+  "idle",
+  "connecting",
+  "syncing",
+  "mixer unreachable",
+  "mixing s. unreachable",
+  "searching",
+  "connect failed"
 };
 
 // Classe abstraite pour implémenter les commandes et la gestion de connexion spécifique à chaque table de mixage
@@ -37,11 +62,11 @@ class MixerInterface : public DataProvider{
     String model;
     DataRepository* dataRepository = nullptr;
     String name="abstract";
+    uint8_t interfaceState = DISCONNECTED;
 
     float progress = 0.0;  // connection progression indicator in %
 
-    virtual uint8_t state()=0;
-    virtual void pingInterface()=0;
+    virtual void queryState()=0;
 
     DataSet* chNames;
     DataSet* busNames;
@@ -53,36 +78,46 @@ class MixerInterface : public DataProvider{
       DEBUG_PRINT("\nnew MixerInterface(%s)",model.c_str());
 
       dataRepository = dr;
-      
-    
-      // Ouvrir le fichier JSON
-      File file = LittleFS.open(INTERFACES_FILENAME, "r");
-      if (!file) {
-          DEBUG_PRINT("\nFailed to open JSON interface file");
-          return;
-      }
-
-
-      JsonDocument interfaceDoc;
-      // Désérialiser les données JSON directement à partir du flux de fichier
-      auto error = deserializeJson(interfaceDoc, file);
-      if (error) {
-          DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());
-          return;
-      }
-
-      file.close(); // Fermer le fichier
-
-      // size of the data sets
-      chSize = getValueByName("chSize",interfaceDoc,"6").toInt();      
-      busSize = getValueByName("busSize",interfaceDoc,"2").toInt();
-      // command strings
 
       chNames = new DataSet(ADDRESS_CHNAME,INPUTSELECT,this);
       busNames = new DataSet(ADDRESS_BUSNAME,INPUTSELECT,this);
 
       dataRepository->addDataSet(chNames);
-      dataRepository->addDataSet(busNames);
+      dataRepository->addDataSet(busNames);      
+      
+    
+      // Ouvrir le fichier JSON
+      /*File file = LittleFS.open(INTERFACES_FILENAME, "r");
+      if (!file) {
+          DEBUG_PRINT("\nFailed to open JSON interface file");
+          return;
+      }*/
+
+      ByteBuffer decompressedJson;
+      size_t dataSize = 0;
+      dataSize = readGzFileToBuffer(INTERFACES_FILENAME,&decompressedJson);
+      if (dataSize == 0){ // uncompress failed
+        DEBUG_PRINT("\nFailed to decompress JSON interface file");
+        return;
+      }
+
+      JsonDocument interfaceDoc;
+      // Désérialiser les données JSON directement à partir du flux de fichier
+      auto error = deserializeJson(interfaceDoc, decompressedJson.buffer);
+      if (error) {
+          DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());
+          return;
+      }
+
+      //file.close(); // Fermer le fichier
+
+      // size of the data sets
+      chSize = getValueByName("chSize",interfaceDoc,"6").toInt();      
+      busSize = getValueByName("busSize",interfaceDoc,"2").toInt();
+
+      // move code below on top to still be able to work in case the JSON file can not be opened
+
+
 
 
     };
@@ -170,12 +205,12 @@ class MixerInterface : public DataProvider{
     }
 */
 
-    virtual void disconnect() = 0;                    // Déconnexion spécifique
-    virtual void connect()=0;
+    virtual void connect(Config* conf)=0;
     virtual bool sendCommand(String command, JsonDocument param) = 0;
+    virtual void disconnect()=0;
 
   protected:
-    uint16_t chSize,busSize;    
+    uint16_t chSize=1,busSize=1;    
 
 };
 
@@ -184,45 +219,47 @@ class OSCMixerInterface: public MixerInterface {
 
   public: 
     static String echoCommand;    
-    bool mixerOnline = false;  
+    bool OSClive = true;
 
-    OSCMixerInterface(DataRepository* dr,String m, OSCInterface* _osc, bool* _serverConnection): serverConnection(_serverConnection),osc(_osc), MixerInterface(dr,m){
+    OSCMixerInterface(DataRepository* dr,String m, OSCInterface* _osc): osc(_osc), MixerInterface(dr,m){
       DEBUG_PRINT("\nnew OSCMixerInterface(%s %s,%d)",model.c_str(),osc->ip.toString().c_str(),osc->port);
     }
 
     virtual bool monitor(){
 
-      if (millis()-lastPingTime > pingDelay){
-        lastPingTime = millis();
-        
-        if (mixerOnline){          
-          if ((state() == DISCONNECTED) && *serverConnection == CONNECTED) connect();
-          /*else{
-            if (state() == BAD_OSC_PORT) osc->ping(echoCommand);
-          }*/
-          else pingInterface();            // next pulse          
-        }else{
-          if (state() == DISCONNECTED) pingInterface();     // we were disconnected so we try to reconnect
-          else disconnect();                                // we were connected so we disconnect
-          return false;
-        }
-      }
-
-      if (state()==CONNECTED){
-
+      // restart monitoring value
+      if (interfaceState == CONNECTED){
         if (millis()-lastRestartMonitorTime > restartMonitorDelay){
           osc->SendCmd2OSC(restartMonitorCommand.c_str());          // otherwise we ask mixer to send message for the next 10 sec (see behringer protocol)
           lastRestartMonitorTime = millis();
         }
-      
-        // processing OSC queue
-        if (osc->OSCReadIn()){
-          lastPingTime = millis();
-          /*if (osc->addressStr == echoCommand)
-            monitoringSuccessful = true;*/
-          return true;  // we manage to read an OSC command so we return true to be used by the update() method of the mixer interface
-        }
       }
+
+      // processing OSC queue
+      if (osc->OSCReadIn()){
+        lastOSCCheck = millis();
+        lastQueryTime = millis();   // REMOVE THIS ONE IF YOU STILL WANT TO CHECK REST API WHEN OSC IS RESPONDING (CONSUMME MORE TIME)        
+        OSClive = true;
+        DEBUG_PRINT("\t* * * OSCLIVE true * * *\t");
+        return true;
+      }
+
+      if (millis()-lastOSCCheck > queryDelay*2){
+        lastOSCCheck = millis();
+        OSClive = false;
+        DEBUG_PRINT("\t!!! OSCLIVE false !!!\t");
+        LogUDP::sendLog("OSCLIVE false",hwm.network->udp);        
+      } 
+            
+      /////// MANAGE CONNECTION ////////////////////////////////////////////////////   
+
+      if (millis()-lastQueryTime > queryDelay){
+        lastQueryTime = millis();
+        queryState();
+          //DEBUG_PRINT("\t--- ----\t");
+          //OSClive = true;     // we reset the flag and assume that OSC is reachable
+          osc->SendCmd2OSC(echoCommand.c_str());        
+      }     
 
       return false;
     }
@@ -246,15 +283,12 @@ class OSCMixerInterface: public MixerInterface {
     }    
 
   protected:
-    uint16_t restartMonitorDelay=0, pingDelay=0;
+    uint16_t restartMonitorDelay=0, queryDelay=0;
 
     String restartMonitorCommand ="";
     OSCInterface* osc;
-    unsigned long lastPingTime = 0;
-    //static bool monitoringSuccessful; 
-    //static uint8_t connectAttempt;    
-    unsigned long lastRestartMonitorTime = 0;   
-    bool* serverConnection; 
+
+    unsigned long lastQueryTime = 0, lastRestartMonitorTime = 0, lastOSCCheck = 0;   
 };
 
 String OSCMixerInterface::echoCommand = "";
@@ -268,30 +302,24 @@ class MixerOfflineInterface: public MixerInterface {
     MixerOfflineInterface(DataRepository* dr,String m): MixerInterface(dr,m){
       DEBUG_PRINT("\n\nNew MixerOfflineInterface(<%s>)\n\n",model.c_str());
       name="Offline";
+      interfaceState = DISCONNECTED;
     }
 
     virtual ~MixerOfflineInterface(){
       DEBUG_PRINT("\n~MixerOfflineInterface()");   
-      disconnect();   
     }
 
     virtual bool update(){
       return true;
     } 
 
-    virtual void connect(){
+    virtual void connect(Config* conf){
       // do nothing
     }
 
-    virtual uint8_t state(){
-      return DISCONNECTED;
-    }
+    virtual void disconnect(){}
 
-    virtual void pingInterface(){}
-
-    void disconnect() override{
-      DEBUG_PRINT("\nMixerOfflineInterface disconnected");
-    }                   
+    virtual void queryState(){}               
 
     virtual bool sendCommand(String command, JsonDocument param){return false;} // Envoi de commande spécifique
 
@@ -310,48 +338,36 @@ class BehringerMixer : public OSCMixerInterface {
   
   public:
 
-    BehringerMixer(DataRepository* dr,String model,OSCInterface* _osc,bool* s): OSCMixerInterface(dr,model,_osc, s){
+    BehringerMixer(DataRepository* dr,String model,OSCInterface* _osc): OSCMixerInterface(dr,model,_osc){
       DEBUG_PRINT("\n\nNew BehringerMixer(<%s>)\n\n",model.c_str());
       name="MusicTribe";
       echoCommand = "/info";
       restartMonitorCommand = "/xremote";
       restartMonitorDelay = BEHRINGER_RESTART_PERIOD;
-      pingDelay = BEHRINGER_PING_DELAY;
+      queryDelay = BEHRINGER_PING_DELAY;
+      interfaceState = CONNECTED;
     }
 
     virtual ~BehringerMixer(){
       DEBUG_PRINT("\n~BehringerMixer()");   
-      disconnect();   
     }
 
-    virtual void pingInterface(){
-      *serverConnection = osc->ping(echoCommand);
-      mixerOnline = true;
+    virtual void queryState(){
+      //if (!osc->ping(echoCommand)) interfaceState = DISCONNECTED;
+      if (!OSClive) interfaceState = DISCONNECTED;
     }
 
-    virtual uint8_t state(){
-      // here the state is only based on the server but we may imagine to process other state like syncing
-      return *serverConnection?CONNECTED:DISCONNECTED;
-    }
-
-    virtual void connect(){
-      *serverConnection = CONNECTED;
+    virtual void connect(Config* conf){
       DEBUG_PRINT("\nConnected to %s",name.c_str());
     }
 
-    void disconnect() override {
-      //client.stop();
-      *serverConnection = DISCONNECTED;
-      DEBUG_PRINT("\nBehringerMixer disconnected");
-    }
+    virtual void disconnect(){}
 
     bool sendCommand(String command, JsonDocument param) override {
       bool success;
-      if (state() == DISCONNECTED) {
-        DEBUG_PRINT("\nNon connecté au mixeur Behringer.");
-        return false;
-      }else success = OSCMixerInterface::sendCommand(command, param);
-      if (success) return true; // command has been consummed
+      success = OSCMixerInterface::sendCommand(command, param);
+      if (success) return true; // generic command has been consummed 
+      
       success = true;
 
       // Traduction et envoi des commandes spécifiques à Behringer
@@ -422,7 +438,7 @@ class BehringerMixer : public OSCMixerInterface {
 };
 
 // Implémentation spécifique pour MixingStation
-#define MIXING_STATION_CHECK "/con/v/mixer.rta.src"
+#define MIXING_STATION_CHECK "/con/v/ch.0.solo"
 class MixingStation : public OSCMixerInterface {
 /* get http://192.168.0.180:8080/console/data/definitions/ch.0.preamp.trim'   => 
 
@@ -439,116 +455,186 @@ class MixingStation : public OSCMixerInterface {
     }
   }
 }
-
 */
   private:
     //WiFiClient client;    
-    AsyncHttpClient msHttpClientParam;
+    AsyncHttpClient msRESTAPIClient;
+    
     uint16_t REST_API_port;
     Network* network;
+    String RESTState=UNDEF;
 
   public:
-    uint8_t interfaceState = DISCONNECTED;
 
-    MixingStation(DataRepository* dr, String _model, OSCInterface* osc,Network* net,uint16_t _port, bool* serverConnection): network(net), REST_API_port(_port), OSCMixerInterface(dr,_model, osc, serverConnection){
+    MixingStation(DataRepository* dr, String _model, OSCInterface* osc,Network* net,uint16_t _port): network(net), REST_API_port(_port), OSCMixerInterface(dr,_model, osc){      
+      
       DEBUG_PRINT("\n\nNew MixingStation()\n\n");   
       name=MIXING_STATION_MODEL; 
       echoCommand = MIXING_STATION_CHECK;
       restartMonitorCommand = "/hi/n";
       restartMonitorDelay = MS_RESTART_PERIOD;
-      pingDelay = MS_PING_DELAY;      
+      queryDelay = MS_PING_DELAY;      
+
+      msRESTAPIClient.host = osc->ip;
+      msRESTAPIClient.port = REST_API_port; 
+      msRESTAPIClient.timeOut = queryDelay-1000; // maximum duration of the request is the period of check minus one second
+      msRESTAPIClient.client = network->client;
+
+      interfaceState = SEARCHING;
+      progress = 0.0;
 
     }
 
     virtual ~MixingStation(){
       DEBUG_PRINT("\n~MixingStation()");   
-      disconnect();   
     }
 
     virtual uint8_t state(){
       return interfaceState;
     }
 
-    /*bool OSCCheckOnce(){
-      // this method is to cross check (only once) if OSC ping reply
-      //as we may have the case that pingInterface() reply state: connect
-      //while the OSC port is not answering and we need both
-      //in case we do not need both we would just return true or treat the OSC state as a separate state of the mixer
-            
-      if (!osc->live){
-        return osc->ping(echoCommand);
-        DEBUG_PRINT("\n <<< OSCCheckOnce() >>> called because OSC is pending check");
-      } 
-      else return true;
-
-    }*/
-
-    virtual void pingInterface(){
-      msHttpClientParam.host = osc->ip;
-      msHttpClientParam.port = REST_API_port; 
-      msHttpClientParam.timeOut = pingDelay-1000; // maximum duration of the request is the period of check minus one second
-      msHttpClientParam.client = network->http;
-      msHttpClientParam.URL = "/app/state";
-
-      msHttpClientParam.onConnectedCallback = [&](String param) { 
-        
-        interfaceState = getJsonState(param, &progress); 
-        mixerOnline = true;
-        DEBUG_PRINT("\n\t\t\t\t\t\t ---- mixerOnline %d %d%----",interfaceState,(int)progress);
-        progress = progress *1.1; // we fill the  gap due to the latency of http checks
-        if (progress>100) progress = 100; 
-        if (interfaceState == SYNCING) lastPingTime = 0; // speed up the call to ping with no delay in between 
-
-        if (interfaceState == CONNECTED && !osc->live){
-          interfaceState = BAD_OSC_PORT;
-          osc->ping(echoCommand);          
+    // call back for REST API state check
+    void RESTAPIState(String param) {
+        if (param == "fail"){
+          // if we didn't have any answer from the HTTP rest, it means the server is also disconnected
+          RESTState = "offline";
+          DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! REST API Offline !!!----");          
+        }else{
+          RESTState = getJsonState(param, &progress);         
+          DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API STATE %s %d% ----", RESTState.c_str(), (int)progress);
+          progress = progress * 1.1; // we fill the gap due to the latency of http checks
+          if (progress > 100) progress = 100; 
+          if (interfaceState == SYNCING) lastQueryTime = 0; // speed up the call to ping with no delay in between
         }
+    }
+
+    // call back for REST API command send
+    void RESTAPICommand(String param) {
+      if (param == "failed"){
+        // if we didn't have any answer from the HTTP rest, it means the server is also disconnected
+        interfaceState = CONNECTFAILED;
+        DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! AUTO CONNECT FAILED !!!----");          
+      }else{
+        DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API COMMAND %s ----", param.c_str());
+        RESTState = "connecting";
+        progress = 0.0;
+      }
+    }
+
+
+    virtual void queryState(){       
+
+      if (!msRESTAPIClient.isClientConnecting){
+        msRESTAPIClient.method = HTTP_METHOD_GET;
+        msRESTAPIClient.URL = MS_API_STATE;
+        msRESTAPIClient.post = "";
+        msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPIState(param);};    
+        msRESTAPIClient.failConnectCallback = [&]() {RESTAPIState("fail");};   
+        network->asyncConnect(&msRESTAPIClient);
+      }
+      //if (RESTState == UNDEF) return; // we wait completion of the first REST API query to continue detrmining the full status
+
+      queryDelay = MS_PING_DELAY;
+
+      //////////////////////////////////// REST API HAS RESPONDED
+
+      if (RESTState == "syncing"){
+        interfaceState = SYNCING;
+        //lastQueryTime = 0; // try the next one straight with no delay
+      }
+      else if (RESTState == "connecting"){
+        interfaceState = CONNECTING;
+      }
+      else if (RESTState == "idle"){
+        interfaceState = IDLE;
+      }else{
+
+        /////////////////////////////////////  REST API HAS !NOT RESPONDED! OR !IS CONNECTED!
         
-        /*if (interfaceState == CONNECTED){ 
-          if (!OSCCheckOnce()) interfaceState = BAD_OSC_PORT; // read comment in OSCCheckOnce to understand why we put this call here
-        }*/
-        DEBUG_PRINT("\nInterfaceState: %d",interfaceState);
-      };
-      
-      msHttpClientParam.failConnectCallback = [&]() { 
-        // if we didn't have any answer from the HTTP rest, it means the server is also disconnected => no because we also have OSC ping
-        //*serverConnection = DISCONNECTED;
-        mixerOnline = false;
-        DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! no reply to ping !!!----");
-        interfaceState = BAD_REST_PORT;        
-      };           
-      
-      if (!network->asyncConnect(&msHttpClientParam)) lastPingTime = 0; // there is a pending request so we try the next one straight with no delay
+        if (OSClive) {
+
+          if (RESTState == "connected" || RESTState == "backgroundSync"){        
+            interfaceState = CONNECTED;   // all good
+            queryDelay = MS_PING_DELAY * 2; // we slow down the check as we are connected
+
+          }    
+          else if (RESTState == "offline"){
+            interfaceState = MS_UNREACHABLE;  // inconsistent
+          }      
+
+        }else{
+
+          if (RESTState == "connected"){
+            interfaceState = MIXER_UNREACHABLE;        // inconsistent
+            LogUDP::sendLog("MIXER_UNREACHABLE",hwm.network->udp);        
+          } 
+          else if (RESTState == "offline"){
+            interfaceState = DISCONNECTED;     // no REST API and no OSC
+            if (msRESTAPIClient.taskHandle != nullptr){
+              DEBUG_PRINT("\ndeleting task");
+              vTaskDelete(msRESTAPIClient.taskHandle);
+              DEBUG_PRINT("\ntask deleted");
+              if (msRESTAPIClient.client != NULL) msRESTAPIClient.client->stop();
+              DEBUG_PRINT("\nclient stoppped");
+              msRESTAPIClient.taskHandle  = nullptr;
+            }   
+          }
+          //else interfaceState == SEARCHING;
+        }           
+
+      }
+
+      DEBUG_PRINT("\n\n\t\tqueryState()=> %d\n\n",interfaceState);
 
     }
 
-    static uint8_t getJsonState(String jsonString, float* prog){
+    virtual void disconnect(){
+     
+    }
+
+    static String getJsonState(String jsonString, float* prog){
       // Utiliser ArduinoJson pour parser le JSON
       JsonDocument doc;
       DeserializationError error = deserializeJson(doc, jsonString);     
-
       if (!error) {
         //doc["msg"];       // unused
         *prog = doc["progress"]; 
-        String state = doc["state"];
-        if (state == "connected") return CONNECTED;
-        else if (state == "idle") return IDLE;
-        else if (state == "connecting") return CONNECTING;
-        else if (state =="syncing") return SYNCING;
-      } else {
-        DEBUG_PRINT("\nparseJsonState error");        
+        return doc["state"];
       }
-      return UNDEF_STATE;
+      DEBUG_PRINT("\nparseJsonState error");        
+      return "error";            
     }
 
-    virtual void connect(){
-      interfaceState = CONNECTED;                
-      if (osc->live){
-       // launch the  REST API command to connect in case user config say so.
-       // do it independantly from the OSC live or not
-       DEBUG_PRINT("\n\nREST API CONNECT YES/NO !\n");
-      }
+    virtual void connect(Config* config){       
+      // launch the  REST API command to connect in case user config say so.
+      if (config->getInt(MIXER_AUTOMODEL_KEY) == -1){
+        // do nothing, just wait
+      }else{       
+        
+        if (msRESTAPIClient.isClientConnecting) return;
+        if (RESTState != "idle") return;
+        if (interfaceState != IDLE) return;
 
+        msRESTAPIClient.method = HTTP_METHOD_POST;
+        msRESTAPIClient.URL = "/app/mixers/connect";
+        JsonDocument postParam;
+        postParam["consoleId"] = config->getInt(MIXER_AUTOMODEL_KEY);
+        //postParam["mixTarget"] = -1; // no restrictions   // not used anymore
+        postParam["ip"] = *config->getString(MIXER_AUTOIP_KEY);
+        serializeJson(postParam, msRESTAPIClient.post);
+
+        msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPICommand(param);};    
+        msRESTAPIClient.failConnectCallback = [&]() {RESTAPICommand("failed");};
+
+        if (network->asyncConnect(&msRESTAPIClient)){
+          progress = 0.0; 
+          RESTState = "connecting";
+          DEBUG_PRINT("\nCONNECT MS TO %s\n", config->getString(MIXER_AUTOIP_KEY)->c_str());      
+          LogUDP::sendLog("AUTO CONNECT MS",hwm.network->udp);
+          lastQueryTime = 0; // try the next one straight with no delay
+        }
+
+      }
     }
 
     virtual bool update(){      
@@ -562,14 +648,6 @@ class MixingStation : public OSCMixerInterface {
         return true;
       }
       return false;
-    }
-
-    void disconnect() override {
-      //client.stop();
-      interfaceState = DISCONNECTED;
-      osc->live = false;
-      progress = 0;
-      DEBUG_PRINT("\nMixingStation disconnected");
     }
 
     virtual String getValue(String addrr, uint16_t index){
