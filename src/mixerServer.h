@@ -84,14 +84,13 @@ class MixerServer: public HWComponent2State{
 
         JsonDocument json;
         json[SERVER_STATE_KEY][SERVER_INTERFACE_KEY] = mixerInterface->name;
-        json[SERVER_STATE_KEY][SERVER_IP_KEY] = serverIP.toString();
         json[SERVER_STATE_KEY][SERVER_MODEL_KEY] = mixerInterface->model;
-        json[SERVER_STATE_KEY][SERVER_PORT_KEY] = config->getInt(SERVER_PORT_KEY);
+        json[SERVER_STATE_KEY][SERVER_IP_KEY] = serverIP.toString();
+        json[SERVER_STATE_KEY][SERVER_PORT_KEY] = serverUDPPort;
         json[SERVER_STATE_KEY][SERVER_CONNECTED_KEY] = state;
         json[SERVER_STATE_KEY][SERVER_NAME_KEY] = name;
-
         
-        json[INTERFACE_STATE_KEY][MIXER_PORT_KEY] = config->getInt(MIXER_PORT_KEY);        
+        json[INTERFACE_STATE_KEY][MIXER_PORT_KEY] = msAPIPort;        
         json[INTERFACE_STATE_KEY][MIXER_CONNECTED_KEY] = stateNames[mixerInterface->interfaceState] ;
         json[INTERFACE_STATE_KEY][MIXER_AUTOMODEL_KEY] = config->getInt(MIXER_AUTOMODEL_KEY);        
         json[INTERFACE_STATE_KEY][MIXER_AUTOIP_KEY] = *config->getString(MIXER_AUTOIP_KEY);        
@@ -181,21 +180,20 @@ class MixerServer: public HWComponent2State{
 
         mixerPortCounter = (mixerPortCounter+1) % MAXMIXERPORT;
      
+        //in auto mode we test both
+        if (!testBehringer()) testMixingStation();
+
       }else{
         DEBUG_PRINT(" - U S E R   D E F I N E D - ");
         // *************** manual :  **********************        
         behringerUDPPort = config->getInt(SERVER_PORT_KEY); 
         msUDPPort = config->getInt(SERVER_PORT_KEY); 
         msAPIPort = config->getInt(MIXER_PORT_KEY);
-      }
-    
-      DEBUG_PRINT("IP:%s UDP:%i/%i TCP:%i ",serverIP.toString().c_str(),behringerUDPPort,msUDPPort,msAPIPort);
 
-      //if (!testBehringer()) testMixingStation();
-      //if (!testMixingStation()) testBehringer();
-     
-      testMixingStation();
-
+        if (*config->getString(SERVER_MODEL_KEY) == MIXING_STATION_MODEL) testMixingStation();
+        else testBehringer();
+  
+      }   
     }
 
     void testMS_REST_API(){
@@ -213,28 +211,31 @@ class MixerServer: public HWComponent2State{
       // TEST MIXING STATION
       // for mixing station:  REST API is over HTTP (so uses TCP), hence we cannot broadact. We have to test all IP address from the subnet range and see if we can connect the client provided by network hardware layer
       // which is not realistic, hence we test the dfault TCP port 8080       IN ASYNC HTTP REQUEST  
-      if (msAPIOnline){  //async answer
+      if (msAPIOnline){  //gather async answer
         DEBUG_PRINT("\n =========> msAPIOnline");
-        setMixingStationMixer(serverIP);    // CONNECTED, SYNCING, DISCONNECTED...
+        setMixingStationMixer(serverIP);    
         return;
       }
 
       osc.setClient(serverIP,msUDPPort);
-      if (osc.ping(MIXING_STATION_CHECK)){
+      DEBUG_PRINT("\tTesting msUDP IP:%s/%i",serverIP.toString().c_str(),msUDPPort);      
+      if (osc.ping(MIXING_STATION_PING)){
         DEBUG_PRINT("\n =========> mixerServerPing MS OSC");
-        setMixingStationMixer(osc.udp->remoteIP()); // speed up the next iteration        
+        setMixingStationMixer(osc.udp->remoteIP()); 
         return;
       }
 
       // second method, 
-      testMS_REST_API();                 
+      DEBUG_PRINT("\tTesting msREST IP:%s/%i TCP:%i ",serverIP.toString().c_str(),msAPIPort);      
+      testMS_REST_API();  //trigger async answer               
     }
 
     bool testBehringer(){      
       bool behringerIsLive = false;
       
       osc.setClient(serverIP,behringerUDPPort);
-      behringerIsLive = osc.ping(BehringerMixer::echoCommand);
+      DEBUG_PRINT("\tTesting BehringerUDP IP:%s/%i",serverIP.toString().c_str(),msUDPPort);            
+      behringerIsLive = osc.ping(BEHRINGER_QUERY);
       
       if (behringerIsLive) setBehringerMixer();
 
@@ -247,54 +248,58 @@ class MixerServer: public HWComponent2State{
       LogUDP::sendLog("setMixingStationMixer",hwm.network->udp);
       state = CONNECTED;            // we connected mixing station
 
-      config->setValue(SERVER_MODEL_KEY,MIXING_STATION_MODEL);
+      //config->setValue(SERVER_MODEL_KEY,MIXING_STATION_MODEL);
       //config->setValue(SERVER_IP_KEY,serverIP.toString()); we never do that as it would override the default user setting 0.0.0.0 auto for instance
-      config->setValue(MIXER_PORT_KEY,String(msAPIPort));
-      config->setValue(SERVER_PORT_KEY,String(msUDPPort));
-
-      config->save();
+      //config->setValue(MIXER_PORT_KEY,String(msAPIPort));
+      //config->setValue(SERVER_PORT_KEY,String(msUDPPort));
+      //config->save();
 
       serverIP = _ip;
       serverUDPPort = msUDPPort;
-
-      osc.setClient(serverIP,serverUDPPort); 
-
       if (mixerInterface != nullptr) delete mixerInterface;
-      mixerInterface = new MixingStation(dataRepository,MIXING_STATION_MODEL,&osc, network, msAPIPort);  
+      osc.setClient(serverIP,serverUDPPort); 
+      mixerInterface = new MixingStation(dataRepository,&osc, network, msAPIPort);  
 
       name = serverIP.toString();
 
-/*      ((MixingStation*)mixerInterface)->interfaceState = interfaceState; // that's the one we got from hte async http request OR from OSC test (which means CONNECTED)
-      ((MixingStation*)mixerInterface)->mixerOnline = (interfaceState == CONNECTED?true:false);*/
     } 
 
     void setBehringerMixer(){
+
+      DEBUG_PRINT("\nsetBehringerMixer()");
+      LogUDP::sendLog("setBehringerMixer",hwm.network->udp);
+
       state = CONNECTED;      
-      //sValue frame from OSC contains mixer IP
-      if (serverIP.fromString(osc.sValue)) {
-        IPAddress UDPIP = network->udp->remoteIP();
-        if (UDPIP[0] != serverIP[0]){
-          // the IP returned from the mixer differs from the on in the UDP packet,
-          // this happens for instance when the mixer is on a different network (emulator on DSM for example)
-          // therefore, we force the IP to be fixed and the one from UDP packet
-          serverIP = UDPIP;
-          DEBUG_PRINT("\nMixer IP differs from UDP packet, switching to UDP IP instead.");
-        }
-        serverUDPPort = network->udp->remotePort();
-        //<</xinfo,s,172.17.0.2, X32OnlineIntervalDemo, X32
-        config->setValue(SERVER_MODEL_KEY,osc.sValue2);
-        //config->setValue(SERVER_IP_KEY,serverIP.toString()); we never do that as it would override the default user setting 0.0.0.0 auto for instance
-        config->setValue(SERVER_PORT_KEY,String(serverUDPPort));
 
-        name = osc.sValue1;
-
-        config->save();
-
-        if (mixerInterface != nullptr) delete mixerInterface;
-
-        osc.setClient(serverIP,serverUDPPort);
-        mixerInterface = new BehringerMixer(dataRepository,*config->getString(SERVER_MODEL_KEY),&osc);  // Utilisation du HAL pour MixingStation
+      //<</xinfo,s,172.17.0.2, X32OnlineIntervalDemo, 
+      //sValue: 172.17.0.2
+      //sValue1: X32OnlineIntervalDemo
+      //sValue2: X32
+      IPAddress UDPIP = network->udp->remoteIP();
+      if (UDPIP[0] != serverIP[0]){
+        // the IP returned from the mixer differs from the on in the UDP packet,
+        // this happens for instance when the mixer is on a different network (emulator on DSM for example)
+        // therefore, we force the IP to be fixed and the one from UDP packet
+        DEBUG_PRINT("\nServerIP (%s) differs from UDPIP (%s)",serverIP.toString().c_str(),UDPIP.toString().c_str());
+        //serverIP = UDPIP;
       }
+      IPAddress remoteMixerIP = remoteMixerIP.fromString(osc.sValue);
+      if (serverIP[0] != remoteMixerIP[0]){
+        DEBUG_PRINT("\nRemoteMixer IP (%s) differs from ServerIP (%s)",remoteMixerIP.toString().c_str(),serverIP.toString().c_str());
+        //serverIP = remoteMixerIP;          
+      }
+
+      serverUDPPort = behringerUDPPort; //network->udp->remotePort();
+      //config->setValue(SERVER_MODEL_KEY,osc.sValue2);
+      //config->setValue(SERVER_IP_KEY,serverIP.toString()); we never do that as it would override the default user setting 0.0.0.0 auto for instance
+      //config->setValue(SERVER_PORT_KEY,String(serverUDPPort));
+      //config->save();
+
+      name = osc.sValue1;
+      if (mixerInterface != nullptr) delete mixerInterface;
+      osc.setClient(serverIP,serverUDPPort);
+      mixerInterface = new BehringerMixer(dataRepository,osc.sValue2,&osc); 
+
     }
 
     void msREST_API_off(){

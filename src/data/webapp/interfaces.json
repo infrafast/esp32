@@ -1,0 +1,107 @@
+{
+	"interfaces": [
+		{
+			"model":"XR12",
+			"chSize": 12,
+			"busSize": 4,
+			"auxSize": 1
+		},
+		{
+			"model":"XR16",
+			"chSize": 16,
+			"busSize": 4,
+			"auxSize": 1
+		},{
+			"model":"XR18",
+			"chSize": 18,
+			"busSize": 8,
+			"auxSize": 1
+		},
+		{
+			"model":"X32",
+			"chSize": 32,
+			"busSize": 8,
+			"auxSize": 8
+		},
+		{
+			"model":"MixingStation",
+			"chSize": 7,
+			"busSize": 5,
+			"auxSize": 3
+		}					
+	],
+    "consoles": [
+        {
+          "consoleId": 0,
+          "name": "X32/M32"
+        },
+        {
+          "consoleId": 2,
+          "name": "X/M AIR"
+        },
+        {
+          "consoleId": 6,
+          "name": "Wing"
+        },
+        {
+          "consoleId": 13,
+          "name": "HD96-24"
+        },
+        {
+          "consoleId": 10,
+          "name": "Avantis"
+        },
+        {
+          "consoleId": 11,
+          "name": "dLive"
+        },
+        {
+          "consoleId": 4,
+          "name": "GLD"
+        },
+        {
+          "consoleId": 17,
+          "name": "iLive"
+        },
+        {
+          "consoleId": 5,
+          "name": "SQ"
+        },
+        {
+          "consoleId": 1,
+          "name": "Qu"
+        },
+        {
+          "consoleId": 16,
+          "name": "CQ"
+        },
+        {
+          "consoleId": 8,
+          "name": "Vi"
+        },
+        {
+          "consoleId": 3,
+          "name": "Si"
+        },
+        {
+          "consoleId": 12,
+          "name": "Ui"
+        },
+        {
+          "consoleId": 9,
+          "name": "DL"
+        },
+        {
+          "consoleId": 14,
+          "name": "DM"
+        },
+        {
+          "consoleId": 15,
+          "name": "TF"
+        },
+        {
+          "consoleId": 18,
+          "name": "StudioLive III"
+        }
+      ]
+}

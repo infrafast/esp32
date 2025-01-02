@@ -18,11 +18,12 @@ class OSCInterface{
         float   fValue          = -0.1;
         char    sValue[OSCLEN+10]; char sValue2[OSCLEN]; char sValue1[OSCLEN];
         char   TypeStr;
-        String addressStr;
+        String addressStr, expectedStr="";
         IPAddress ip;
         int port;
         uint16_t latency;
         UDP *udp = NULL;
+        unsigned long RXtimerStart = 0;
 
         OSCInterface(){}
    
@@ -38,7 +39,7 @@ class OSCInterface{
             latency = _latency;
         }
 
-        bool sendOSCMessage(OSCMessage *msg, IPAddress _ip, int _port){           
+        bool sendOSCMessage(OSCMessage *msg, IPAddress _ip, int _port, bool countRXtime = true){           
             DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString(),_port);
             if (udp == NULL){
                 DEBUG_PRINT(":null UDP",msg->getAddress());
@@ -47,30 +48,35 @@ class OSCInterface{
             udp->beginPacket(_ip, _port);
             msg->send(*udp);
             udp->endPacket();
-            //yield();
+
+            if (countRXtime){
+                expectedStr = msg->getAddress();       // instruction is flagged to measure the latency
+                RXtimerStart = millis();               // hence we start counting
+            }
+
             msg->empty(); 
             return true;          
         }
 
-        void SendCmd2OSC(const char* address){
-            SendCmd2OSC(address,ip,port);
+        void SendCmd2OSC(const char* address, bool countRXtime = true){
+            SendCmd2OSC(address,ip,port, countRXtime);
         }
 
-        void SendCmd2OSC(const char* address, IPAddress _ip, int _port){                        
+        void SendCmd2OSC(const char* address, IPAddress _ip, int _port,  bool countRXtime = true){                        
             OSCMessage msg(address);
-            sendOSCMessage(&msg,_ip,_port);
+            sendOSCMessage(&msg,_ip,_port, countRXtime);
         }
 
-        void SendInt2OSC(const char* address, int val){            
-            OSCMessage msg(address);
-            msg.add(val);
-            if (sendOSCMessage(&msg,ip,port)) DEBUG_PRINT("%d",address, val);;          
-        }
-
-        void SendFloat2OSC(const char* address, float val){    
+        void SendInt2OSC(const char* address, int val,  bool countRXtime = true){            
             OSCMessage msg(address);
             msg.add(val);
-            if (sendOSCMessage(&msg,ip,port)) DEBUG_PRINT("%.2f",address, val);         
+            if (sendOSCMessage(&msg,ip,port, countRXtime)) DEBUG_PRINT("%d",address, val);          
+        }
+
+        void SendFloat2OSC(const char* address, float val, bool countRXtime = true){    
+            OSCMessage msg(address);
+            msg.add(val);
+            if (sendOSCMessage(&msg,ip,port,countRXtime)) DEBUG_PRINT("%.2f",address, val);         
         }        
 
         boolean OSCReadIn() {
@@ -110,7 +116,10 @@ class OSCInterface{
             /*size = OscUDP->available();   
             OscUDP->read(udpRxBuffer, size); // Mise en tampon du paquet  
             msg.fill(udpRxBuffer,size);*/
-            while (size--) msg.fill(udp->read());
+            while (size--){
+                msg.fill(udp->read());
+                yield();
+            }
             // Check for errors
             if (msg.hasError()) {
                 //DEBUG_OSCMSG("error: %s\n", msg.getError());
@@ -122,6 +131,12 @@ class OSCInterface{
             TypeStr = msg.getType(0);                       // get data type
 
             DEBUG_PRINT("\n<<%s,%c,",addressStr.c_str(),TypeStr);
+
+            if (expectedStr != "" && expectedStr == addressStr){
+                unsigned long t = millis()-RXtimerStart;
+                latency = (latency + t) / 2;            //avg with old value
+                DEBUG_PRINT("[%dms], ",latency);
+            }          
 
             if (msg.isInt(0)){
                 iValue = msg.getInt(0);    // integer
@@ -150,6 +165,9 @@ class OSCInterface{
                 //DEBUG_OSCMSG("\nbValue=(%s)", bValue);
             }
             msg.empty();    
+
+            expectedStr = ""; // next receive we by default don't  count time
+
             return true;
         }    
 

@@ -1290,6 +1290,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     String powerIcon = ICON_POWER; 
     String iconX = "X"; 
     String footSwitchIcon = ICON_FOOTSWITCH;
+    String intervalIcon = ICON_INTERVAL;
 
     AlteredColor networkIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor apIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};

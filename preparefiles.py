@@ -132,6 +132,7 @@ def prep_data_folder():
 
     #add filetypes (extensions only) to be gzipped before uploading. Everything else will be copied directly
     filetypes_to_gzip = ['ttf','js', 'html','css','json']
+    gzip_exceptions = ['interfaces.json']
     minified_files = ['js', 'html','css','json']
     filetypes_to_ignore = ['php','db','mac','log','conf','csv']
     
@@ -155,13 +156,23 @@ def prep_data_folder():
     files_to_copy = list(set(all_files) - set(files_to_ignore) - set(files_minified))
     print('  files to copy: ' + str(files_to_copy))
 
+    for filename in gzip_exceptions:
+        fName = os.path.join(data_src_dir, filename)
+        print('    Add exception =>'+fName)    
+        files_to_copy.append(fName)  		
+
     for file in files_to_copy:
         print('  Copying file: ' + file + ' to data dir: '+data_dir)
         shutil.copy(file, data_dir)
 
     files_to_gzip = []
-    for extension in filetypes_to_gzip:
-        files_to_gzip.extend(glob.glob(os.path.join(data_dir, '*.' + extension)))  
+    for extension in filetypes_to_gzip:		
+        files = glob.glob(os.path.join(data_dir, '*.' + extension))
+        # Filtrer les exceptions
+        files = [f for f in files if os.path.basename(f) not in gzip_exceptions]
+        # Ajouter à la liste finale
+        files_to_gzip.extend(files)
+
     print('  files to gzip: ' + str(files_to_gzip))
 
     for file in files_to_gzip:
@@ -171,7 +182,6 @@ def prep_data_folder():
                 shutil.copyfileobj(f_in, f_out)
         os.remove(file)
 
-    print('[/COPY/GZIP DATA FILES]')
 
 def purgefolder():
 	print('******** PURGING FOLDER *********')

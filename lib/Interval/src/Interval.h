@@ -11,6 +11,9 @@
 #define DEST_FS_USES_LITTLEFS // filesystem object will be available as "tarGzFS"
 #include <ESP32-targz.h>
 
+//#include <miniz.h>    ==> works partially. produce gzip file but inflate seems not to be gzip format
+//#include <zlib.h> ==> incompatible with arm
+
 #ifdef DEBUG  
   #define DEBUG_PRINT(...)   Serial.printf(__VA_ARGS__); Serial.flush() //ets_printf(__VA_ARGS__) //
 #else
@@ -107,6 +110,75 @@ bool streamWriterCallback(unsigned char* buff, size_t buffsize) {
   uncompressedByteBuffer->write(buff, buffsize);
   return true; // Retourner true pour indiquer que l'écriture est réussie
 }
+
+/*
+size_t writeBufferToGzFile(String filename, String* buf){
+  // using miniz (does not work)
+  const char* data = buf->c_str();
+  size_t dataLength = strlen(data);
+
+  // Buffer pour les données compressées
+  size_t bufferSize = compressBound(dataLength) + 18; // Ajout de la taille pour l'en-tête et le footer GZIP
+  uint8_t* compressedData = (uint8_t*)malloc(bufferSize);
+  if (!compressedData) {
+      Serial.println("Erreur d'allocation mémoire !");
+      return 0;
+  }
+
+  // Création de l'en-tête GZIP
+  uint8_t gzipHeader[10] = {
+      0x1f, 0x8b, // Signature GZIP
+      0x08,       // Compression DEFLATE
+      0x00,       // Flags
+      0x00, 0x00, 0x00, 0x00, // Timestamp
+      0x00,       // Extra flags
+      0x03        // OS (Unix)
+  };
+
+  // Ajout de l'en-tête au tampon
+  memcpy(compressedData, gzipHeader, sizeof(gzipHeader));
+  size_t offset = sizeof(gzipHeader);
+
+  // Compression avec zlib
+  uLongf compressedSize = bufferSize - offset - 8; // Enlever la taille de l'en-tête et du footer
+  int result = compress2(&compressedData[offset], &compressedSize, (const uint8_t*)data, dataLength, Z_BEST_COMPRESSION);
+
+  if (result != Z_OK) {
+      Serial.printf("Erreur de compression : %d\n", result);
+      free(compressedData);
+      return 0;
+  }
+
+  // Mise à jour de l'offset
+  offset += compressedSize;
+
+  // Ajout du footer GZIP (CRC32 + taille non compressée)
+  uint32_t crc = crc32(0L, Z_NULL, 0); // Initialisation du CRC32
+  crc = crc32(crc, (const uint8_t*)data, dataLength); // Calcul du CRC32
+  memcpy(&compressedData[offset], &crc, 4); // CRC32
+  offset += 4;
+  memcpy(&compressedData[offset], &dataLength, 4); // Taille originale
+  offset += 4;
+
+  // Écriture des données compressées dans LittleFS
+  File file = LittleFS.open("/data.gz", "w");
+  if (!file) {
+      Serial.println("Impossible d'ouvrir le fichier !");
+      free(compressedData);
+      return 0;
+  }
+
+  file.write(compressedData, offset);
+  file.close();
+
+  Serial.printf("Données compressées et sauvegardées au format GZIP (%d octets) !\n", offset);
+
+  // Nettoyage
+  free(compressedData);
+
+  return 1;
+}
+*/
 
 // Fonction pour lire un fichier gz et remplir le buffer de bytes décompressés
 size_t readGzFileToBuffer(String filename, ByteBuffer* _buffer) {
@@ -1058,7 +1130,7 @@ void defaultBootScreen(){
   if (LittleFS.exists(CUSTOM_LOGO_FILE))
     gui.drawJpg(0, 0, CUSTOM_LOGO_FILE);
   else
-    gui.drawJpg(0, 0, "/logo.jpg"); 
+    gui.drawJpg(0, 0, "/logo.jpg");
 }
 
 void wizardScreenBuilder(uint8_t subScreen){

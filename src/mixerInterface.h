@@ -97,28 +97,31 @@ class MixerInterface : public DataProvider{
       size_t dataSize = 0;
       dataSize = readGzFileToBuffer(INTERFACES_FILENAME,&decompressedJson);
       if (dataSize == 0){ // uncompress failed
-        DEBUG_PRINT("\nFailed to decompress JSON interface file");
+        DEBUG_PRINT("\nFailed to decompress JSON interface file %s",INTERFACES_FILENAME);
         return;
       }
 
       JsonDocument interfaceDoc;
-      // Désérialiser les données JSON directement à partir du flux de fichier
+      // Désérialiser les données JSON
       auto error = deserializeJson(interfaceDoc, decompressedJson.buffer);
       if (error) {
           DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());
           return;
       }
-
+      
       //file.close(); // Fermer le fichier
 
       // size of the data sets
       chSize = getValueByName("chSize",interfaceDoc,"6").toInt();      
       busSize = getValueByName("busSize",interfaceDoc,"2").toInt();
 
-      // move code below on top to still be able to work in case the JSON file can not be opened
+      // test code : recompresser le jsondoc
 
-
-
+      //interfaceDoc["COUCOU"] = "compression worked";
+      String dataToCompress;
+      serializeJson(interfaceDoc,dataToCompress);      
+      DEBUG_PRINT("\ndataToCompress->%s",dataToCompress.c_str());
+      //dataSize = writeBufferToGzFile("/webapp/regzinterfaces.json.gz",&dataToCompress);
 
     };
 
@@ -230,7 +233,7 @@ class OSCMixerInterface: public MixerInterface {
       // restart monitoring value
       if (interfaceState == CONNECTED){
         if (millis()-lastRestartMonitorTime > restartMonitorDelay){
-          osc->SendCmd2OSC(restartMonitorCommand.c_str());          // otherwise we ask mixer to send message for the next 10 sec (see behringer protocol)
+          osc->SendCmd2OSC(restartMonitorCommand.c_str(), false);          // otherwise we ask mixer to send message for the next 10 sec (see behringer protocol)
           lastRestartMonitorTime = millis();
         }
       }
@@ -334,6 +337,8 @@ class MixerOfflineInterface: public MixerInterface {
 
 
 // Implémentation spécifique pour Behringer
+#define BEHRINGER_PING "/info"
+#define BEHRINGER_QUERY "/xinfo"
 class BehringerMixer : public OSCMixerInterface {
   
   public:
@@ -341,7 +346,7 @@ class BehringerMixer : public OSCMixerInterface {
     BehringerMixer(DataRepository* dr,String model,OSCInterface* _osc): OSCMixerInterface(dr,model,_osc){
       DEBUG_PRINT("\n\nNew BehringerMixer(<%s>)\n\n",model.c_str());
       name="MusicTribe";
-      echoCommand = "/info";
+      echoCommand = BEHRINGER_PING;
       restartMonitorCommand = "/xremote";
       restartMonitorDelay = BEHRINGER_RESTART_PERIOD;
       queryDelay = BEHRINGER_PING_DELAY;
@@ -353,8 +358,12 @@ class BehringerMixer : public OSCMixerInterface {
     }
 
     virtual void queryState(){
-      //if (!osc->ping(echoCommand)) interfaceState = DISCONNECTED;
-      if (!OSClive) interfaceState = DISCONNECTED;
+      if (!OSClive){
+        DEBUG_PRINT("\t second chance");
+        if (!osc->ping(echoCommand)) interfaceState = DISCONNECTED;     // second chance;
+        else OSClive = true;
+        lastQueryTime = millis();
+      } 
     }
 
     virtual void connect(Config* conf){
@@ -438,7 +447,7 @@ class BehringerMixer : public OSCMixerInterface {
 };
 
 // Implémentation spécifique pour MixingStation
-#define MIXING_STATION_CHECK "/con/v/ch.0.solo"
+#define MIXING_STATION_PING "/con/v/ch.0.solo"
 class MixingStation : public OSCMixerInterface {
 /* get http://192.168.0.180:8080/console/data/definitions/ch.0.preamp.trim'   => 
 
@@ -466,11 +475,11 @@ class MixingStation : public OSCMixerInterface {
 
   public:
 
-    MixingStation(DataRepository* dr, String _model, OSCInterface* osc,Network* net,uint16_t _port): network(net), REST_API_port(_port), OSCMixerInterface(dr,_model, osc){      
+    MixingStation(DataRepository* dr, OSCInterface* osc,Network* net,uint16_t _port): network(net), REST_API_port(_port), OSCMixerInterface(dr,MIXING_STATION_MODEL, osc){      
       
       DEBUG_PRINT("\n\nNew MixingStation()\n\n");   
-      name=MIXING_STATION_MODEL; 
-      echoCommand = MIXING_STATION_CHECK;
+      name=MIXING_STATION_MODEL;                    // to be replaced by the outcome of a REST query 
+      echoCommand = MIXING_STATION_PING;
       restartMonitorCommand = "/hi/n";
       restartMonitorDelay = MS_RESTART_PERIOD;
       queryDelay = MS_PING_DELAY;      

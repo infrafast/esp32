@@ -10,13 +10,17 @@
 #include "Interval.h"
 #include "mixerServer.h"
 
-//#define USE_FTP
+#define USE_FTP
 
 #if defined(USE_FTP) && defined(USE_NETWORK)
   #include "ESP-FTP-Server-Lib.h"
   #include "FTPFilesystem.h"
   FTPServer ftp;
 #endif
+
+#define ICON_SENDRETURN_STRIP "="
+#define ICON_CHGAIN_STRIP     "5"
+
 
 #define STRIP_XAIR_GROUP "xair"
 #define STRIP_UTILS_GROUP "utils"
@@ -27,7 +31,7 @@
 #define ADDRESS_PORT "/port/%s"
 #define ADDRESS_MESSAGE "/message/%s"
 
-String iconMixer = "=";
+String iconMixer = "!";
 uint16_t iconMixerColor = GUI::red;
 AlteredColor mixerGlowingColor = AlteredColor{.baseColor = GUI::red, .value =  &iconMixerColor};
 
@@ -36,6 +40,25 @@ Config userConfig = Config();
 
 StripSkeleton* stripSendSkel;
 StripSkeleton* stripOSCSkel;
+
+ByteBuffer userFontBuffer;
+
+OpenFontRender myOfr = OpenFontRender();
+
+class MyIcon : public Font{
+  public:
+    static OpenFontRender* ofr; 
+    
+    MyIcon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):Font(v, a, posX, posY, s, fC , bC , d){
+      id = "Icon"+String(*posX)+"x"+String(*posY)+"~"+*v;   
+      //if (debug) DEBUG_PRINT("\n new %s",id);
+    };
+    
+  protected:
+    virtual OpenFontRender* getOfr(){return ofr;}
+};
+
+OpenFontRender* MyIcon::ofr = &myOfr;
 
 class StripMixer{
   public:
@@ -405,7 +428,7 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
     success = true;
     // ok remote
   }else if (jsonDoc["command"] == MIXER_SET_KEY ){
-    //{"command":"setMixer","param":{"mixerIP":"82.65.4.93","mixerPort":"10023"}}
+    //"setMixer","param":{"serverIP":"192.168.0.200","serverPort":"10024","mixerPort":"8080","serverModel":"XR16","autoConnectModel":"-1","autoConnectIP":"192.168.0.1"}
     mixerServer.serverIP.fromString(jsonDoc["param"][SERVER_IP_KEY].as<String>());
     mixerServer.serverUDPPort = jsonDoc["param"][SERVER_PORT_KEY];
 
@@ -512,7 +535,7 @@ void userInternetCallBack(bool internet){
 }*/
 
 void userBootScreen(){
-  Icon bootSprite = Icon(&app.footSwitchIcon,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,app.byeIconColor,&GUI::defaultBcolor,false);
+  Icon bootSprite = Icon(&app.intervalIcon,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,app.byeIconColor,&GUI::defaultBcolor,false);
   bootSprite.refresh(true);
   bootSprite.sprite->pushSprite(bootSprite.getX(),bootSprite.getY(),TFT_TRANSPARENT);      
 }
@@ -538,7 +561,7 @@ void userBankScreenBuilder(int subScreen){
     /*if (interfaceState == MIXER_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.serverUDPPort);
     else if (interfaceState == MS_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.msAPIPort);*/
 
-    gui.add(new Icon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor,false));
+    gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor,false));
 
     if (interfaceState == SYNCING) gui.add(new Arc(&mixerServer.mixerInterface->progress, 0.0, 100.0, &app.midScreenHoriz, &monY, 100, &GUI::green, &GUI::transparentColor,0,true));
     else gui.add(new Label(&interfaceStateMessage, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
@@ -558,6 +581,10 @@ void userBankScreenBuilder(int subScreen){
   \"" MIXER_AUTOMODEL_KEY "\":-1,\
   \"" MIXER_AUTOIP_KEY "\":\"192.168.0.1\"\
 }"
+
+
+
+
 
 
 
@@ -593,13 +620,12 @@ void setup() {
   app.userWizardScreenBuilder = userWizardGUI;
   app.userWizardstepFlow = userWizardStepFlow;
   app.setUserInternetCallback((StdFunctionCallbackVoidBool)userInternetCallBack);
-  //app.bootScreen = userBootScreen;
+  app.bootScreen = userBootScreen;
   app.userBankScreenBuilder = userBankScreenBuilder;
 
   app.init(&userConfig);
   userConfig.load("/userConf.conf",DEFAULT_USER_CONFIG);  
   mixerServer.init(&userConfig,hwm.network);
-
 
   gui.alphaColors.add(&mixerGlowingColor);
 
@@ -625,6 +651,22 @@ void setup() {
   } else {
       DEBUG_PRINT("\nPSRAM non trouvée !\n");
   }*/
+
+  size_t dataSize = 0;
+  dataSize = readGzFileToBuffer("/webapp/user.ttf.gz",&userFontBuffer);
+  if (dataSize > 0){ // uncompress succeed
+    if (myOfr.loadFont(userFontBuffer.buffer, dataSize)) { // this consumes 20992 bytes and take ~2ms      
+      DEBUG_PRINT("\nUser Initialise error with compressed font"); 
+    }
+  }
+
+  ByteBuffer decompressedJson;
+  dataSize = 0;
+  dataSize = readGzFileToBuffer("/data.gz",&decompressedJson);
+  if (dataSize == 0){ // uncompress failed
+    DEBUG_PRINT("\nFailed to decompress /data.gz");
+    return;
+  } 
 }
 
 void loop() {
