@@ -76,7 +76,6 @@ class GenericComponent{
 
 };
 
-
 // Structure pour stocker les données décompressées dans un buffer
 struct ByteBuffer {
   uint8_t* buffer = nullptr; // Pointeur vers le buffer
@@ -109,6 +108,28 @@ ByteBuffer* uncompressedByteBuffer;
 bool streamWriterCallback(unsigned char* buff, size_t buffsize) {
   uncompressedByteBuffer->write(buff, buffsize);
   return true; // Retourner true pour indiquer que l'écriture est réussie
+}
+
+
+size_t writeBufferToGzFile(String filename, String* buf){
+  // using miniz (does not work)
+  const char* data = buf->c_str();
+
+  // open the fz file for writing
+  File fout = LittleFS.open(filename, "w");
+  if(!fout)
+  {
+    Serial.println("Unable to create output file, halting");
+    return 0;
+  }
+
+  size_t len = strlen(data);
+  // deflate!
+  size_t outputSize = LZPacker::compress( (uint8_t*)data, len, &fout );
+  //size_t fileSize = fout.position();
+  Serial.printf("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
+  fout.close();
+  return outputSize;
 }
 
 /*
@@ -524,6 +545,7 @@ void commonFileServerWrapper(Request &req, Response &res) {
   app.commonFileServer(req,res);
 }
 
+/*
 void gzFileServer(Request &req, Response &res) {
     const char * path = req.path();
     res.set("Content-Encoding", "gzip");
@@ -543,7 +565,7 @@ void gzFileServer(Request &req, Response &res) {
       res.print(fullPath.c_str());
       res.end();          
     }      
-}
+}*/
 
 void scanNetworksTaskWrapper(void * parameter){
   app.scanNetworksTask(parameter);
@@ -1010,7 +1032,7 @@ void voidOverlay(uint8_t id){DEBUG_PRINT("\nvoidOverlay()");}
 void baseOverLayBuilder(uint8_t id){
   /*GUI::tft->fillRect(0,app.overlayIconY,TFT_WIDTH,OVERLAY_ICON_SIZE,GUI::overlayIconBackgroundColor);
   GUI::tft->drawFastHLine(0,app.overlayIconY-1,TFT_WIDTH,TFT_SILVER);*/
-  gui.add(new Icon(&app.networkIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.networkIconColor,&GUI::defaultBcolor,false));                
+  gui.add(new Icon(&app.networkIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.networkIconColorIdle,&GUI::defaultBcolor,false));                
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor,false));                  
   gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor,false));                   
 }
@@ -1173,18 +1195,18 @@ void startupScreenBuilder(uint8_t id){
 void promptScreenBuiler(uint8_t id){}
 
 
-void addUtility1(){
-    //DEBUG_PRINT("addUtility1()");
+void addLeftRightIcons(){
+    //DEBUG_PRINT("addLeftRightIcons()");
     GUI::tft->fillScreen(GUI::menuBackGroundColor);    
-    gui.add(new Icon(&app.utils1Icon1, Align::Right,&app.quarter2xPos,&app.menuIconYpos,MENU_ICON_SIZE,&app.utils1Icon1Color,&GUI::menuBackGroundColor,false));
-    gui.add(new Icon(&app.utils1Icon2, Align::Left,&app.quarter3xPos,&app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor,false));
+    gui.add(new Icon(&app.leftIcon, Align::Right,&app.quarter2xPos,&app.menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::menuBackGroundColor,false));
+    gui.add(new Icon(&app.rightIcon, Align::Left,&app.quarter3xPos,&app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor,false));
     addTopandBottomTextLabel();    
 }
 
 void addConnectAP(){
   //app.widgets[CONFIG_TEXTAREA_MESSAGE]->setText(app.lang.getString("Connect")); // // doesnt work
   app.topLabelItem = *app.lang.getString("Connect WiFi Access Point");
-  app.utils1Icon1 = ICON_AP;
+  app.leftIcon = ICON_AP;
 }
 
 void utilsScreenBuilder(uint8_t state){
@@ -1204,8 +1226,8 @@ void utilsScreenBuilder(uint8_t state){
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_CONNECTCONFIGMEDIA:
       setMenuColors();  // in case it's called directly from the wizard@startup
-      app.configIconGlowingRedColor.value = &app.utils1Icon1Color;
-      addUtility1();
+      app.configIconGlowingRedColor.value = &app.leftIconColor;
+      addLeftRightIcons();
       app.iconPending[0] = ICON_ROLLING1;
       app.iconPending[1] = ICON_ROLLING2;
       //gui.add(new AnimatedIcon(app.iconPending,2,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));              
@@ -1216,38 +1238,40 @@ void utilsScreenBuilder(uint8_t state){
         }else{
           //app.widgets[CONFIG_TEXTAREA_MESSAGE]->setText(app.lang.getString("Connect")); // doesnt work          
           app.topLabelItem = *app.lang.getString("Connect");                    
-          app.utils1Icon1 = ICON_MIXETHWIFI;
+          app.leftIcon = ICON_MIXETHWIFI;
         }
       #else
         addConnectAP();
       #endif
       app.widgets[MENU_LABEL_TITLE]->setText(&hwm.configMedia->SSID);
       //app.bottomLabelTitle = hwm.configMedia->SSID;
-      app.utils1Icon2 = ICON_LAPTOP;
+      app.rightIcon = ICON_LAPTOP;
       DEBUG_PRINT("\nSTATE_UTILS_CONNECTCONFIGMEDIA: %s",app.topLabelItem.c_str());
     break;
     case STATE_UTILS_CONNECTWEBAPP:
       app.configIconGlowingRedColor.value = &GUI::unUsedColor;
-      app.utils1Icon1Color = GUI::menuActiveIconColor;
-      addUtility1();  
-      app.iconPending[0] = ICON_LINK;
+      app.leftIconColor = GUI::menuActiveIconColor;
+      addLeftRightIcons();  
+      app.iconPending[0] = ICON_TIMER;
       app.iconPending[1] = " ";
-      //gui.add(new AnimatedIcon(app.iconPending,2,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));                    
+      gui.add(new AnimatedIcon(app.iconPending,ICONPENDINGCOUNT,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));                    
       app.widgets[CONFIG_TEXTAREA_MESSAGE]->setText(app.lang.getString("Open browser"));
       app.widgets[MENU_LABEL_TITLE]->setText(&hwm.configIP);
-      app.utils1Icon1 = ICON_LAPTOP;
-      app.utils1Icon2 = ICON_FOOTSWITCH;
+      app.leftIcon = ICON_LAPTOP;
+      app.rightIcon = ICON_FOOTSWITCH;
       DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP: %s",app.topLabelItem.c_str());
     break;
     case STATE_UTILS_WEBAPPCONNECTED:   
-      addUtility1();
+      addLeftRightIcons();
       //gui.add(new Label(&app.configClientIP, Align::Left,&app.quarter1xPos, &app.belowMenuIcon,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor,false));
       //gui.add(new Label(&hwm.configIP, Align::Right,&app.quarter4xPos, &app.belowMenuIcon,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor,false));      
-      //gui.add(new AnimatedIcon(app.iconDot,ICON_DOT_MAX,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));                    
+      app.iconPending[0] = ICON_LEFTDOT;
+      app.iconPending[1] = ICON_RIGHTDOT;      
+      gui.add(new AnimatedIcon(app.iconPending,ICONPENDINGCOUNT,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));                    
       app.widgets[CONFIG_TEXTAREA_MESSAGE]->setText(app.lang.getString("Press button"));
       app.widgets[MENU_LABEL_TITLE]->setText(app.lang.getString("Connected"));
-      app.utils1Icon1 = ICON_LAPTOP;
-      app.utils1Icon2 = ICON_FOOTSWITCH;
+      app.leftIcon = ICON_LAPTOP;
+      app.rightIcon = ICON_FOOTSWITCH;
       DEBUG_PRINT("\nSTATE_UTILS_WEBAPPCONNECTED: %s",app.topLabelItem.c_str());      
     break;
     ////////////////////////////////////////////////////////////////////////////////

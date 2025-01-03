@@ -36,7 +36,7 @@
 #define ICON_TEXT_STRIP       "$"
 #define ICON_CHECKED          ","
 #define ICON_EMPTY            " "
-#define ICON_QUIT             "p"
+#define ICON_QUIT             "P"
 #define ICON_INFO             "M"
 #define ICON_CONFIG           "S"
 #define ICON_PROFILES         "D"
@@ -45,6 +45,7 @@
 #define ICON_LEFTDOT          "<"
 #define ICON_RIGHTDOT         "="
 #define ICON_FULLDOT          "A"
+#define ICON_TIMER            "B"
 
 #ifndef TFT_BGCOLOR
   #define TFT_BGCOLOR TFT_BLACK
@@ -351,6 +352,7 @@ class Font : public Widget{
     Font(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):Widget(posX, posY, fC, bC, d){
       value = v; size = s; align = a;
       id = "Font"+String(*posX)+"x"+String(*posY); 
+      //if (d) DEBUG_PRINT("\nnew %s(<%s>)",id.c_str(),value->c_str());    => cause problem as value may not be initialized when call from AnimatedIcon
     }
 
     virtual int16_t getX(){
@@ -435,11 +437,11 @@ class Font : public Widget{
       return refreshed;
     }  
   private:    
-    const String *value;
     String oldValue = "?";
     //OpenFontRender ofr;    
     Align align;
   protected:
+      const String *value;
       uint8_t size = 0;
       virtual OpenFontRender* getOfr()=0;
 };
@@ -720,7 +722,7 @@ class Icon : public Font{
     
     Icon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):Font(v, a, posX, posY, s, fC , bC , d){
       id = "Icon"+String(*posX)+"x"+String(*posY)+"~"+*v;   
-      //if (debug) DEBUG_PRINT("\n new %s",id);
+      //if (debug) DEBUG_PRINT("\n new %s[%s]",id.c_str(),v->c_str()); // => cause problem as value may not be initialized when call from AnimatedIcon
     };
     
   protected:
@@ -736,12 +738,14 @@ enum{
 class AnimatedIcon : public Icon{
 
   public:
-    AnimatedIcon(const String* stringArray, uint8_t nb, Align a, const int16_t* posX, const int16_t* posY, uint8_t size, uint8_t at=ANIMATE_REPEAT, uint16_t ad=500, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):Icon(&iconArray[0], a, posX, posY, size, fC , bC , d){
-      iconArray = stringArray;      
-      animateType = at; animateDelay = ad;
-      numberOfFrames = nb;
+    AnimatedIcon(const String* stringArray, uint8_t nb, Align a, const int16_t* posX, const int16_t* posY, uint8_t size, uint8_t at=ANIMATE_REPEAT, uint16_t ad=500, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):Icon(&currentIcon, a, posX, posY, size, fC , bC , d){
       id = "AnimatedIcon"+String(*posX)+"x"+String(*posY);
-      //DEBUG_PRINT("\n%s contains %i frames",id.c_str(),numberOfFrames);
+      DEBUG_PRINT("\n%s contains %i frames",id.c_str(),numberOfFrames);
+      iconArray = stringArray;      
+      animateType = at; 
+      animateDelay = ad;
+      numberOfFrames = nb;
+      currentIcon = stringArray[0];
     };
 
     virtual void setText(const String* text){
@@ -761,7 +765,8 @@ class AnimatedIcon : public Icon{
 
       if (wait() && !refreshed) return false;
 
-      Icon::setText(&iconArray[frame]);
+      //Icon::setText(&iconArray[frame]);
+      currentIcon = iconArray[frame];
       Icon::refresh(refreshed);    
       if (refreshed){if (debug) DEBUG_PRINT("%s frame:%i",id.c_str(),frame);}    
 
@@ -804,6 +809,7 @@ class AnimatedIcon : public Icon{
     const String* iconArray;
     const String* oldIconArray;
     unsigned long lastTick=0;
+    String currentIcon = "";
 };
 
 class FromToWidget : public Widget{

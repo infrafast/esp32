@@ -440,8 +440,12 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
     userConfig.setValue(MIXER_AUTOMODEL_KEY,jsonDoc["param"][MIXER_AUTOMODEL_KEY]);
     userConfig.setValue(MIXER_AUTOIP_KEY,jsonDoc["param"][MIXER_AUTOIP_KEY]);
     
-    jsonAnswer->callback = RET_RELOAD_BANKS;
-    jsonAnswer->value = "";       
+    
+    /*jsonAnswer->callback = RET_RELOAD_BANKS;
+    jsonAnswer->value = "";       */
+    jsonAnswer->callback = RET_SAVEBUTTON;
+    jsonAnswer->value ="1";
+
     success = true;
     mixerServer.disconnect(); // this will force trying to reconnect with new parameters
     // force GUI rebuild
@@ -535,7 +539,7 @@ void userInternetCallBack(bool internet){
 }*/
 
 void userBootScreen(){
-  Icon bootSprite = Icon(&app.intervalIcon,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,app.byeIconColor,&GUI::defaultBcolor,false);
+  Icon bootSprite = Icon(&app.intervalIcon,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*1.2,app.byeIconColor,&GUI::defaultBcolor,false);
   bootSprite.refresh(true);
   bootSprite.sprite->pushSprite(bootSprite.getX(),bootSprite.getY(),TFT_TRANSPARENT);      
 }
@@ -585,10 +589,8 @@ void userBankScreenBuilder(int subScreen){
 
 
 
-
-
-
 void setup() {
+
 
   stripSendSkel = new StripSkeleton(STRIP_CH2BUS,STRIP_XAIR_GROUP,sendStripConstructorCallback,'!');  
   stripSendSkel->registerDataSetAddress(ADDRESS_CHNAME);
@@ -660,13 +662,24 @@ void setup() {
     }
   }
 
+/*  JsonDocument interfaceDoc;
+  interfaceDoc["hello"]="world";
+  interfaceDoc["titi"]="toto";
+  String dataToCompress;
+  serializeJson(interfaceDoc,dataToCompress);      
+  DEBUG_PRINT("\ndataToCompress->%s",dataToCompress.c_str());
+  dataSize = writeBufferToGzFile("/data.gz",&dataToCompress);
+
+
   ByteBuffer decompressedJson;
   dataSize = 0;
   dataSize = readGzFileToBuffer("/data.gz",&decompressedJson);
   if (dataSize == 0){ // uncompress failed
     DEBUG_PRINT("\nFailed to decompress /data.gz");
     return;
-  } 
+  }else{
+    DEBUG_PRINT("\ndecompressed data ->  %s  <-\n",decompressedJson.buffer);
+  }*/
 }
 
 void loop() {

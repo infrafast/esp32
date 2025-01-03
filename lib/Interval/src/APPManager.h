@@ -56,7 +56,7 @@ void socketConnectionCallback(IWebSocket &ws);
 
 // C to C++ class function wrapper
 void commonFileServerWrapper(Request &req, Response &res);  
-void gzFileServer(Request &req, Response &res);
+//void gzFileServer(Request &req, Response &res);
 void scanNetworksTaskWrapper(void * parameter);         // parrallel task
 void webServerTaskWrapper(void * parameter);            // parrallel task
 void defaultWizardStepFlow();
@@ -1260,6 +1260,7 @@ class Shortcuts{
 class ApplicationManager : public GenericComponent,MenuComponentRenderer{
   public:    
     Application* webServer = nullptr;
+    bool  httpServing = false;  //flag to indicate if http file are currently streamed
     ///////////////////// USER CALLBACKS ////////////////////////////////////////////////////
     ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;
     //ReturnStringCallback userJsonConfigCallback = defaultStringReturn;
@@ -1280,7 +1281,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     
     ///////////////////// OVERLAY ICONS ////////////////////////
     String networkIcon, apIcon;
-    uint16_t networkIconColor = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, utils1Icon1Color = GUI::menuActiveIconColor;   
+    uint16_t networkIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor;   
 
     String batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3};
     String batIcon = ICON_WAIT; // by default we display a timeelapser while battery level is undetermined
@@ -1319,7 +1320,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     #define TFT_THIRD TFT_WIDTH/3
     int16_t third3xPos = TFT_THIRD*2+TFT_QUARTER/2;
 
-    String utils1Icon1,utils1Icon2;
+    String leftIcon,rightIcon;
 
     bool disabledBankRendering = false;   // this is to stop rendering the bank
 
@@ -1343,14 +1344,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     int16_t menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2, leftMenuIconXpos = midScreenHoriz-MENU_ICON_SIZE*1.4,rightMenuIconXpos = midScreenHoriz+MENU_ICON_SIZE*1.4;
     int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE;
 
-    #define ICON_DOT_MAX 4
-    String iconDot[ICON_DOT_MAX]={
-      ICON_LEFTDOT+String(ICON_NODOT),
-      ICON_RIGHTDOT+String(ICON_NODOT),
-      ICON_NODOT+String(ICON_LEFTDOT),
-      ICON_NODOT+String(ICON_RIGHTDOT),
-    };
-    String iconPending[2];
+    #define ICONPENDINGCOUNT 2
+    String iconPending[ICONPENDINGCOUNT];
 
     const char* quitMenuString ={ICON_QUIT":QUIT"};
     const char* infoMenuString ={ICON_INFO":INFO"};
@@ -1454,9 +1449,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           if (hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();
           else networkIcon = ICON_ETH;
           networkIconGlowingRedColor.value = &GUI::unUsedColor;
-          networkIconColor = GUI::green;
+          networkIconColorIdle = GUI::green;
         }else{
-          networkIconGlowingRedColor.value = &networkIconColor;
+          networkIconGlowingRedColor.value = &networkIconColorIdle;
           //DEBUG_PRINT("\n setNetworkIcon ********************************");
           if (hwm->network->ethEnabled && hwm->network->WiFiEnabled && hwm->network->getLink() == LinkOFF) networkIcon = ICON_MIXETHWIFI; // both WiFi and ETh are up but there is no cable on, we don't know who will connect first
           else if ((hwm->network->ethEnabled && !hwm->network->WiFiEnabled) || (hwm->network->getLink() == LinkON)) networkIcon = ICON_ETH;  //case when we bootSprite for a DHCP lease or have no WiFi enabled
@@ -2077,7 +2072,7 @@ void setup() {
             case STATE_UTILS_WEBAPPCONNECTED:
               if (hwm->configMedia->refreshed){
                 handleConfigConnection();
-              }              
+              }
             break;
           }
         break;
@@ -2173,6 +2168,7 @@ void setup() {
           } */           
          return true;
         }
+        return true;
       }
       return false;
     }
@@ -2238,7 +2234,7 @@ void setup() {
 
 
     void commonFileServer(Request &req, Response &res){
-      
+      httpServing = true;
       //if (req.method() != Request::GET) return;
       String path = req.path();
 
@@ -2295,6 +2291,7 @@ void setup() {
         //while (file.available()) res.write(file.read());
         sendFileInChunks(&file,&res);
         res.end();
+        httpServing = false;
       }
     }
 

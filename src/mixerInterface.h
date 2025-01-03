@@ -19,7 +19,7 @@
 #define ADDRESS_CHNAME "/ch/config/%d/name"
 #define ADDRESS_BUSNAME "/bus/config/%d/name"
 
-#define INTERFACES_FILENAME "/webapp/interfaces.json.gz"
+#define INTERFACES_FILENAME "/webapp/interfaces.json"
 
 #define MIXING_STATION_MODEL "MixingStation"
 
@@ -37,6 +37,8 @@ enum{
   MS_UNREACHABLE,
   SEARCHING,
   CONNECTFAILED,
+  CONSOLE_INFO,
+  MIX_TARGETS,
   EOF_STATE
 };
 
@@ -50,11 +52,22 @@ String stateNames[EOF_STATE]={
   "idle",
   "connecting",
   "syncing",
-  "mixer unreachable",
+  "console unreachable",
   "mixing s. unreachable",
   "searching",
-  "connect failed"
+  "connect failed",
+  "console info",
+  "mix targets"
 };
+
+// interfaces.json
+#define INTERFACE_KEY     "interfaces"
+#define MODEL_KEY         "model"
+  #define CH_SIZE_KEY     "chSize"
+  #define BUS_SIZE_KEY    "busSize"
+#define CONSOLE_KEY       "consoles"
+  #define CONSOLEID_KEY   "consoleId"
+  #define CONSOLENAME_KEY "name"
 
 // Classe abstraite pour implémenter les commandes et la gestion de connexion spécifique à chaque table de mixage
 class MixerInterface : public DataProvider{
@@ -85,45 +98,48 @@ class MixerInterface : public DataProvider{
       dataRepository->addDataSet(chNames);
       dataRepository->addDataSet(busNames);      
       
-    
-      // Ouvrir le fichier JSON
-      /*File file = LittleFS.open(INTERFACES_FILENAME, "r");
-      if (!file) {
-          DEBUG_PRINT("\nFailed to open JSON interface file");
-          return;
-      }*/
-
-      ByteBuffer decompressedJson;
-      size_t dataSize = 0;
-      dataSize = readGzFileToBuffer(INTERFACES_FILENAME,&decompressedJson);
-      if (dataSize == 0){ // uncompress failed
-        DEBUG_PRINT("\nFailed to decompress JSON interface file %s",INTERFACES_FILENAME);
-        return;
-      }
-
       JsonDocument interfaceDoc;
-      // Désérialiser les données JSON
-      auto error = deserializeJson(interfaceDoc, decompressedJson.buffer);
-      if (error) {
-          DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());
-          return;
-      }
-      
-      //file.close(); // Fermer le fichier
-
+      deserialize(&interfaceDoc);
       // size of the data sets
-      chSize = getValueByName("chSize",interfaceDoc,"6").toInt();      
-      busSize = getValueByName("busSize",interfaceDoc,"2").toInt();
-
-      // test code : recompresser le jsondoc
-
-      //interfaceDoc["COUCOU"] = "compression worked";
-      String dataToCompress;
-      serializeJson(interfaceDoc,dataToCompress);      
-      DEBUG_PRINT("\ndataToCompress->%s",dataToCompress.c_str());
-      //dataSize = writeBufferToGzFile("/webapp/regzinterfaces.json.gz",&dataToCompress);
+      chSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,CH_SIZE_KEY,"6").toInt();      
+      busSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,BUS_SIZE_KEY,"2").toInt();
 
     };
+
+
+    void deserialize(JsonDocument* interfaceDoc){
+      
+      ByteBuffer decompressedJson;
+      size_t dataSize = 0;
+
+      String interfaceFileNameGz = INTERFACES_FILENAME+String(".gz");      
+      dataSize = readGzFileToBuffer(interfaceFileNameGz.c_str(),&decompressedJson);
+      if (dataSize == 0){ // uncompress failed
+        DEBUG_PRINT("\nFailed to decompress JSON interface file %s, using non compressed file",INTERFACES_FILENAME);
+        File file = LittleFS.open(INTERFACES_FILENAME,"r");
+        if (!file) {
+            DEBUG_PRINT("\nFailed to open JSON interface file");
+            file.close(); // Fermer le fichier
+            return;
+        }else{
+          auto error = deserializeJson(*interfaceDoc, file);
+          if (error) {
+              DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());             
+              file.close(); // Fermer le fichier
+              return;
+          }
+          file.close(); // Fermer le fichier          
+        }       
+      }else{
+        // Désérialiser les données JSON
+        auto error = deserializeJson(*interfaceDoc, decompressedJson.buffer);
+        if (error) {
+            DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());
+            return;
+        }        
+      }      
+    }
+
 
     virtual ~MixerInterface(){
 
@@ -146,32 +162,57 @@ class MixerInterface : public DataProvider{
 
     virtual bool update()=0;
     
-    String getValueByName(String key, JsonDocument interfaceDoc, String defaultValue="") {
+    String getAdjacentValueByKeyFromRootArray(JsonDocument doc, String root, String key, String keyValue, String adjacent, String defaultValue="") {  // key = "model" , adjacent = "size"
         // Vérifier si le document contient une clé "consoles"
-        if (!interfaceDoc["interfaces"].is<JsonArray>()) {
-            DEBUG_PRINT("\nKey 'interfaces' not found or not an array in JSON");
+        if (!doc[root].is<JsonArray>()) {
+            DEBUG_PRINT("\nRoot '%s' not found or not an array in JSON",root.c_str());
             return defaultValue;
         }
 
-        // Parcourir le tableau "interfaces"
-        JsonArray interfaces = interfaceDoc["interfaces"];
-        for (JsonObject interface : interfaces) {
+        // Parcourir le tableau "root"
+        JsonArray array = doc[root];
+        for (JsonObject elem : array) {
             // Vérifier si la clé "name" correspond
-            if (interface["model"] == model) {
+            if (elem[key] == keyValue) {
                 // Retourner la valeur de la clé spécifiée si elle existe
-                if (interface.containsKey(key.c_str())) {
-                    String s = interface[key.c_str()];
-                    DEBUG_PRINT("\nKey :%s = %s",key.c_str(),s.c_str());
+                if (elem.containsKey(adjacent.c_str())) {
+                    String s = elem[adjacent.c_str()];
+                    DEBUG_PRINT("\n%s:%s = %s",keyValue.c_str(),adjacent.c_str(),s.c_str());
                     return s;
                 } else {
-                    DEBUG_PRINT("\nKey :%s   not found.",key.c_str());
+                    DEBUG_PRINT("\nadjacent :%s   not found.",adjacent.c_str());
                     return defaultValue;
                 }
             }
         }
 
-        DEBUG_PRINT("\ninterface <%s> not found, returning default nKey :%s = %s",model.c_str(),key.c_str(),defaultValue.c_str());
+        DEBUG_PRINT("\n<%s>=<%s> not found, returning default %s = %s",keyValue.c_str(),key.c_str(),adjacent.c_str(),defaultValue.c_str());
         return defaultValue;
+    }
+
+
+    // Fonction pour modifier la clé adjacente dans le JsonDocument
+    // modifyAdjacentKeyValueIntOfRootArray(doc, "interfaces", "model", "XR12", BUS_SIZE_KEY, 6);
+
+    void modifyAdjacentKeyValueIntOfRootArray(JsonDocument& doc, String root, String modelKey, String modelValue, String key, int newValue) {
+      // Parcours des interfaces dans le tableau
+      JsonArray interfaces = doc[root];
+      for (JsonObject interfaceObj : interfaces) {
+        // Vérifie si le modèle correspond
+        if (interfaceObj[modelKey] == modelValue) {
+          // Vérifie si la clé existe
+          if (interfaceObj.containsKey(key)) {
+            // Modifie la valeur de la clé spécifiée
+            interfaceObj[key] = newValue;
+            DEBUG_PRINT("\nValeur modifiée avec succès !");
+            return;
+          } else {
+            DEBUG_PRINT("\nClé non trouvée !");
+            return;
+          }
+        }
+      }
+      DEBUG_PRINT("\nModèle non trouvé !");
     }
 
 
@@ -243,14 +284,14 @@ class OSCMixerInterface: public MixerInterface {
         lastOSCCheck = millis();
         lastQueryTime = millis();   // REMOVE THIS ONE IF YOU STILL WANT TO CHECK REST API WHEN OSC IS RESPONDING (CONSUMME MORE TIME)        
         OSClive = true;
-        DEBUG_PRINT("\t* * * OSCLIVE true * * *\t");
+        //DEBUG_PRINT("\t* * * OSCLIVE true * * *\t");
         return true;
       }
 
       if (millis()-lastOSCCheck > queryDelay*2){
         lastOSCCheck = millis();
         OSClive = false;
-        DEBUG_PRINT("\t!!! OSCLIVE false !!!\t");
+        //DEBUG_PRINT("\t!!! OSCLIVE false !!!\t");
         LogUDP::sendLog("OSCLIVE false",hwm.network->udp);        
       } 
             
@@ -259,9 +300,7 @@ class OSCMixerInterface: public MixerInterface {
       if (millis()-lastQueryTime > queryDelay){
         lastQueryTime = millis();
         queryState();
-          //DEBUG_PRINT("\t--- ----\t");
-          //OSClive = true;     // we reset the flag and assume that OSC is reachable
-          osc->SendCmd2OSC(echoCommand.c_str());        
+        osc->SendCmd2OSC(echoCommand.c_str());        
       }     
 
       return false;
@@ -473,6 +512,14 @@ class MixingStation : public OSCMixerInterface {
     Network* network;
     String RESTState=UNDEF;
 
+    typedef struct {
+      bool info = false;      
+      bool availableModels = false;
+      bool mixTargets = false;      
+    } SyncInfo;    
+
+    SyncInfo mixerDataSync;
+    
   public:
 
     MixingStation(DataRepository* dr, OSCInterface* osc,Network* net,uint16_t _port): network(net), REST_API_port(_port), OSCMixerInterface(dr,MIXING_STATION_MODEL, osc){      
@@ -495,6 +542,7 @@ class MixingStation : public OSCMixerInterface {
     }
 
     virtual ~MixingStation(){
+      disconnect();
       DEBUG_PRINT("\n~MixingStation()");   
     }
 
@@ -518,28 +566,61 @@ class MixingStation : public OSCMixerInterface {
     }
 
     // call back for REST API command send
-    void RESTAPICommand(String param) {
+    void RESTAPIConnect(String param) {
+      // {"errorMsg": "App state is not idle, please disconnect first"}
+      // {"errorMsg": "Console not available, start offline mode or connect to a mixer"}
+
       if (param == "failed"){
         // if we didn't have any answer from the HTTP rest, it means the server is also disconnected
         interfaceState = CONNECTFAILED;
+        mixerDataSync.info = false;
         DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! AUTO CONNECT FAILED !!!----");          
       }else{
-        DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API COMMAND %s ----", param.c_str());
+        DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API COMMAND <%s> ----", param.c_str());
         RESTState = "connecting";
         progress = 0.0;
       }
     }
 
 
+    // call back for REST API command send
+    void RESTAPIInfo(String param) {
+      // {"errorMsg": "App state is not idle, please disconnect first"}
+      // {"errorMsg": "Console not available, start offline mode or connect to a mixer"}
+      //DEBUG_PRINT("\n%s",param.c_str());
+      JsonDocument doc;
+
+      auto error = deserializeJson(doc, param);
+      if (error) {
+          DEBUG_PRINT("\nJSON info parsing failed: %s",error.c_str());
+          return;
+      }        
+      chSize = getAdjacentValueByKeyFromRootArray(doc,"channelTypes","shortName","Ch","count",String(chSize)).toInt();
+      busSize = getAdjacentValueByKeyFromRootArray(doc,"channelTypes","shortName","Mix","count",String(busSize)).toInt();
+      mixerDataSync.info = true;
+
+    }
+
+
     virtual void queryState(){       
 
-      if (!msRESTAPIClient.isClientConnecting){
-        msRESTAPIClient.method = HTTP_METHOD_GET;
-        msRESTAPIClient.URL = MS_API_STATE;
-        msRESTAPIClient.post = "";
-        msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPIState(param);};    
-        msRESTAPIClient.failConnectCallback = [&]() {RESTAPIState("fail");};   
-        network->asyncConnect(&msRESTAPIClient);
+      if (!msRESTAPIClient.isClientConnecting){ 
+          
+          // this is where we drop REST API request
+
+          msRESTAPIClient.method = HTTP_METHOD_GET;
+          msRESTAPIClient.post = "";          
+          
+          if (interfaceState == CONSOLE_INFO && !mixerDataSync.info){ // every thing looks good, so we ask the mixer data
+            msRESTAPIClient.URL = "/console/information";           
+            msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPIInfo(param);};    
+            msRESTAPIClient.failConnectCallback = [&]() {RESTAPIConnect("failed");};
+          }else{    // otherwise we just perform the routine check
+            msRESTAPIClient.URL = MS_API_STATE;
+            msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPIState(param);};    
+            msRESTAPIClient.failConnectCallback = [&]() {RESTAPIState("fail");};   
+          }
+          network->asyncConnect(&msRESTAPIClient);
       }
       //if (RESTState == UNDEF) return; // we wait completion of the first REST API query to continue detrmining the full status
 
@@ -563,10 +644,22 @@ class MixingStation : public OSCMixerInterface {
         if (OSClive) {
 
           if (RESTState == "connected" || RESTState == "backgroundSync"){        
-            interfaceState = CONNECTED;   // all good
-            queryDelay = MS_PING_DELAY * 2; // we slow down the check as we are connected
+            if (!mixerDataSync.info){     // if the mixer days it is connected and we retreived its data, then we set the interface status to CONNECTED
+              interfaceState = CONSOLE_INFO;
+            }else{           
+              interfaceState = CONNECTED;               
+              queryDelay = MS_PING_DELAY * 2; // we slow down the check as we are connected      
+              static bool serialized = false;
+              if (!serialized) // only do it once at first connection
+                if (serialize()>0){                //save the properties into interfaces.json file                              
+                  DEBUG_PRINT("\nmixing station properties saved into interface file");
+                  serialized = true;
+                }else{
+                  DEBUG_PRINT("\nError savingmixing station properties into interface file");
+                }
+            }
+          }   
 
-          }    
           else if (RESTState == "offline"){
             interfaceState = MS_UNREACHABLE;  // inconsistent
           }      
@@ -578,15 +671,7 @@ class MixingStation : public OSCMixerInterface {
             LogUDP::sendLog("MIXER_UNREACHABLE",hwm.network->udp);        
           } 
           else if (RESTState == "offline"){
-            interfaceState = DISCONNECTED;     // no REST API and no OSC
-            if (msRESTAPIClient.taskHandle != nullptr){
-              DEBUG_PRINT("\ndeleting task");
-              vTaskDelete(msRESTAPIClient.taskHandle);
-              DEBUG_PRINT("\ntask deleted");
-              if (msRESTAPIClient.client != NULL) msRESTAPIClient.client->stop();
-              DEBUG_PRINT("\nclient stoppped");
-              msRESTAPIClient.taskHandle  = nullptr;
-            }   
+            disconnect();
           }
           //else interfaceState == SEARCHING;
         }           
@@ -597,8 +682,36 @@ class MixingStation : public OSCMixerInterface {
 
     }
 
+    size_t serialize(){
+      JsonDocument interfaceDoc;
+      deserialize(&interfaceDoc);
+
+      modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, BUS_SIZE_KEY, busSize);
+      modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, CH_SIZE_KEY, chSize);
+
+      String dataToCompress;
+      serializeJson(interfaceDoc,dataToCompress);      
+      DEBUG_PRINT("\ndataToCompress->%s",dataToCompress.c_str());
+      size_t dataSize = writeBufferToGzFile("/webapp/interfaces.json.gz",&dataToCompress);
+
+      return dataSize;
+      
+    }
+
     virtual void disconnect(){
-     
+      interfaceState = DISCONNECTED;     // no REST API and no OSC
+      DEBUG_PRINT("\nWaiting semaphore release in disconnect()");
+      if (xSemaphoreTake(msRESTAPIClient.mutex, portMAX_DELAY)) { // Prendre le mutex
+        if (msRESTAPIClient.taskHandle != NULL) {
+          DEBUG_PRINT("\ndeleting task");
+          vTaskDelete(msRESTAPIClient.taskHandle); // Supprimer la tâche
+          msRESTAPIClient.taskHandle = NULL;       // Mettre à jour le pointeur
+          if (msRESTAPIClient.client != NULL) msRESTAPIClient.client->stop();
+          DEBUG_PRINT("\nclient stoppped");
+          msRESTAPIClient.taskHandle  = nullptr;
+        }
+        xSemaphoreGive(msRESTAPIClient.mutex); // Relâcher le mutex
+      }
     }
 
     static String getJsonState(String jsonString, float* prog){
@@ -616,10 +729,7 @@ class MixingStation : public OSCMixerInterface {
 
     virtual void connect(Config* config){       
       // launch the  REST API command to connect in case user config say so.
-      if (config->getInt(MIXER_AUTOMODEL_KEY) == -1){
-        // do nothing, just wait
-      }else{       
-        
+      if (config->getInt(MIXER_AUTOMODEL_KEY) != -1){       
         if (msRESTAPIClient.isClientConnecting) return;
         if (RESTState != "idle") return;
         if (interfaceState != IDLE) return;
@@ -632,8 +742,8 @@ class MixingStation : public OSCMixerInterface {
         postParam["ip"] = *config->getString(MIXER_AUTOIP_KEY);
         serializeJson(postParam, msRESTAPIClient.post);
 
-        msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPICommand(param);};    
-        msRESTAPIClient.failConnectCallback = [&]() {RESTAPICommand("failed");};
+        msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPIConnect(param);};    
+        msRESTAPIClient.failConnectCallback = [&]() {RESTAPIConnect("failed");};
 
         if (network->asyncConnect(&msRESTAPIClient)){
           progress = 0.0; 
@@ -642,20 +752,22 @@ class MixingStation : public OSCMixerInterface {
           LogUDP::sendLog("AUTO CONNECT MS",hwm.network->udp);
           lastQueryTime = 0; // try the next one straight with no delay
         }
-
       }
     }
 
     virtual bool update(){      
-      if (monitor()){
-        DEBUG_PRINT("\nMixing station processs QUEUE");
+      if (monitor()){        
+        // process queue
+        //DEBUG_PRINT("\nMixing station processs QUEUE");
         if (osc->addressStr == "value"){
 
         }else if (osc->addressStr == "value2"){
 
         }
+       
         return true;
-      }
+
+      }      
       return false;
     }
 

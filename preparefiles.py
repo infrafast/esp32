@@ -132,7 +132,8 @@ def prep_data_folder():
 
     #add filetypes (extensions only) to be gzipped before uploading. Everything else will be copied directly
     filetypes_to_gzip = ['ttf','js', 'html','css','json']
-    gzip_exceptions = ['interfaces.json']
+    #gzip_exceptions = ['interfaces.json']
+    gzip_exceptions = []
     minified_files = ['js', 'html','css','json']
     filetypes_to_ignore = ['php','db','mac','log','conf','csv']
     

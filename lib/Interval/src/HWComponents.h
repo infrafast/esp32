@@ -549,7 +549,8 @@ struct AsyncHttpClient{
     String post="";    
     bool isClientConnecting = false; // Indicateur pour éviter de lancer plusieurs tâches
     uint32_t timeOut = 1000;
-    TaskHandle_t taskHandle;
+    TaskHandle_t taskHandle;    
+    SemaphoreHandle_t mutex = xSemaphoreCreateMutex(); // Mutex pour la synchronisation    
 };
 
 // Prototype pour la tâche de connexion
@@ -607,7 +608,7 @@ void connectHTTPTask(void *parameter) {
             yield();
           }
 
-          DEBUG_PRINT("\nRéponse reçue :%s",payload.c_str());
+          DEBUG_PRINT("\nRéponse %s reçue :<%s>",method.c_str(),payload.c_str());
           clientObj->onConnectedCallback(payload);
         } else {        
           clientObj->failConnectCallback();
@@ -625,13 +626,17 @@ void connectHTTPTask(void *parameter) {
     }
     // Fin de la tentative de connexion, réinitialiser l'indicateur
     clientObj->isClientConnecting = false;
-    // Tâche terminée, suppression
-    vTaskDelete(clientObj->taskHandle);
-    clientObj->taskHandle = nullptr;          //flag the task as finished
-    DEBUG_PRINT("\nconnectHTTPTask finished");
+    // Tâche terminée, suppression    
+    DEBUG_PRINT("\nWaiting semaphore release in connectTask");
+    if (xSemaphoreTake(clientObj->mutex, portMAX_DELAY)) { // Prendre le mutex
+      if (clientObj->taskHandle != NULL) {
+        clientObj->taskHandle = NULL;       // Mettre à jour le pointeur
+      }
+      DEBUG_PRINT("\nconnectHTTPTask finished");
+      xSemaphoreGive(clientObj->mutex); // Relâcher le mutex
+      vTaskDelete(NULL); // Supprimer la tâche    
+    }
 }
-
-
 
 class Network : public HWComponent2State{
 
@@ -1053,7 +1058,7 @@ class WiFiEth : public Network{
         //DEBUG_PRINT("\n\t client connection pending, no more attempt allowed");
         /*clientParam->client->stop();
         vTaskDelete(httpTaskHandle);*/
-        clientParam->taskHandle = nullptr;
+        //clientParam->taskHandle = nullptr;
         return false;
       }else{
         DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
