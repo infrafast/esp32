@@ -552,7 +552,7 @@ void userBankScreenBuilder(int subScreen){
   
   uint8_t interfaceState = mixerServer.mixerInterface->interfaceState;
 
-  if (interfaceState == CONNECTED){
+  if (interfaceState == CONNECTED || interfaceState == SYNCING_CONSOLE){
     app.disabledBankRendering = false; // normal strips and bank display
   }else{
     app.disabledBankRendering = true;
@@ -567,7 +567,7 @@ void userBankScreenBuilder(int subScreen){
 
     gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor,false));
 
-    if (interfaceState == SYNCING) gui.add(new Arc(&mixerServer.mixerInterface->progress, 0.0, 100.0, &app.midScreenHoriz, &monY, 100, &GUI::green, &GUI::transparentColor,0,true));
+    if (interfaceState == SYNCING_MS) gui.add(new Arc(&mixerServer.mixerInterface->progress, 0.0, 100.0, &app.midScreenHoriz, &monY, 100, &GUI::green, &GUI::transparentColor,0,true));
     else gui.add(new Label(&interfaceStateMessage, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
 
   }
@@ -586,11 +586,7 @@ void userBankScreenBuilder(int subScreen){
   \"" MIXER_AUTOIP_KEY "\":\"192.168.0.1\"\
 }"
 
-
-
-
 void setup() {
-
 
   stripSendSkel = new StripSkeleton(STRIP_CH2BUS,STRIP_XAIR_GROUP,sendStripConstructorCallback,'!');  
   stripSendSkel->registerDataSetAddress(ADDRESS_CHNAME);
@@ -698,7 +694,7 @@ void loop() {
 
     previousInterfaceState = interfaceState;
     
-    if (interfaceState == SYNCING){
+    if (interfaceState == SYNCING_MS){
       //fixed color
       mixerGlowingColor.value = &GUI::unUsedColor;
       iconMixerColor = GUI::green;
@@ -708,8 +704,8 @@ void loop() {
             
       // interfaceState
       if (interfaceState == CONNECTING || interfaceState == IDLE)  mixerGlowingColor.baseColor = GUI::blue;
-      else if (interfaceState == MIXER_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::blue;
-      else if (interfaceState == MS_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::blue;
+      else if (interfaceState == MIXER_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::yellow;
+      else if (interfaceState == MS_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::orange;
       else{
         // mixer state
         if (mixerServer.state == CONNECTED) mixerGlowingColor.baseColor = GUI::blue;

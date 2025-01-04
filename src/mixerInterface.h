@@ -32,19 +32,20 @@
 enum{
   IDLE = CONNECTED+1,
   CONNECTING,
-  SYNCING,
+  SYNCING_MS,
   MIXER_UNREACHABLE,
   MS_UNREACHABLE,
   SEARCHING,
   CONNECTFAILED,
-  CONSOLE_INFO,
-  MIX_TARGETS,
+  SYNCING_CONSOLE,
   EOF_STATE
 };
 
 #define UNDEF "undef"
 
-#define MS_API_STATE "/app/state"
+#define RESTCALL_APP_STATE "/app/state"
+#define RESTCALL_CONSOLE_INFO "/console/information"
+#define RESTCALL_CONNECT "/app/mixers/connect"
 
 String stateNames[EOF_STATE]={
   "disconnected",
@@ -56,8 +57,7 @@ String stateNames[EOF_STATE]={
   "mixing s. unreachable",
   "searching",
   "connect failed",
-  "console info",
-  "mix targets"
+  "syncing console"
 };
 
 // interfaces.json
@@ -274,7 +274,7 @@ class OSCMixerInterface: public MixerInterface {
       // restart monitoring value
       if (interfaceState == CONNECTED){
         if (millis()-lastRestartMonitorTime > restartMonitorDelay){
-          osc->SendCmd2OSC(restartMonitorCommand.c_str(), false);          // otherwise we ask mixer to send message for the next 10 sec (see behringer protocol)
+          //osc->SendCmd2OSC(restartMonitorCommand.c_str(), false);          // otherwise we ask mixer to send message for the next 10 sec (see behringer protocol)
           lastRestartMonitorTime = millis();
         }
       }
@@ -513,7 +513,7 @@ class MixingStation : public OSCMixerInterface {
     String RESTState=UNDEF;
 
     typedef struct {
-      bool info = false;      
+      bool consoleInfo = false;      
       bool availableModels = false;
       bool mixTargets = false;      
     } SyncInfo;    
@@ -536,6 +536,8 @@ class MixingStation : public OSCMixerInterface {
       msRESTAPIClient.timeOut = queryDelay-1000; // maximum duration of the request is the period of check minus one second
       msRESTAPIClient.client = network->client;
 
+      msRESTAPIClient.callback =  [&](String param) {processRESTcallback(param);};
+
       interfaceState = SEARCHING;
       progress = 0.0;
 
@@ -550,55 +552,70 @@ class MixingStation : public OSCMixerInterface {
       return interfaceState;
     }
 
-    // call back for REST API state check
-    void RESTAPIState(String param) {
-        if (param == "fail"){
-          // if we didn't have any answer from the HTTP rest, it means the server is also disconnected
-          RESTState = "offline";
-          DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! REST API Offline !!!----");          
-        }else{
-          RESTState = getJsonState(param, &progress);         
+
+    void processRESTcallback(String param){
+      
+      DEBUG_PRINT("\nprocessRESTcallback(%s...)",param.substring(0,100).c_str());
+
+      JsonDocument doc;    
+      auto error = deserializeJson(doc, param);
+      if (error) {
+          DEBUG_PRINT("\nprocessRESTcallback parsing failed: %s",error.c_str()); 
+          return;
+      }
+
+      uint8_t status = doc[HTTP_REST_STATUS];
+      JsonObject data = doc[HTTP_REST_DATA];
+      String origin = doc[HTTP_REST_ORIGIN];     
+
+      /*
+      String dataString;
+      serializeJson(data, dataString);      
+      DEBUG_PRINT("\n\tSTATUS: <%s>",status==HTTP_REST_OK?"ok":"error");
+      DEBUG_PRINT("\n\tORIGIN: <%s>",origin.c_str());
+      DEBUG_PRINT("\n\tDATA: <%s>",dataString.substring(0,50).c_str());*/
+
+      if (origin == RESTCALL_CONSOLE_INFO){
+        if (status == HTTP_REST_OK){
+          chSize = getAdjacentValueByKeyFromRootArray(data,"channelTypes","shortName","Ch","count",String(chSize)).toInt();
+          busSize = getAdjacentValueByKeyFromRootArray(data,"channelTypes","shortName","Mix","count",String(busSize)).toInt();
+          mixerDataSync.consoleInfo = true;
+        }else setConnectFailed();
+      }
+      
+      else if (origin == RESTCALL_APP_STATE){
+        if (status == HTTP_REST_OK){
+          RESTState = data["state"].as<String>();
+          progress = data["progress"].as<int>();
           DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API STATE %s %d% ----", RESTState.c_str(), (int)progress);
           progress = progress * 1.1; // we fill the gap due to the latency of http checks
           if (progress > 100) progress = 100; 
-          if (interfaceState == SYNCING) lastQueryTime = 0; // speed up the call to ping with no delay in between
+          if (interfaceState == SYNCING_MS) lastQueryTime = 0; // speed up the call to ping with no delay in between
+        }else{
+          RESTState = "offline";
+          DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! REST API Offline !!!----");          
         }
-    }
-
-    // call back for REST API command send
-    void RESTAPIConnect(String param) {
-      // {"errorMsg": "App state is not idle, please disconnect first"}
-      // {"errorMsg": "Console not available, start offline mode or connect to a mixer"}
-
-      if (param == "failed"){
-        // if we didn't have any answer from the HTTP rest, it means the server is also disconnected
-        interfaceState = CONNECTFAILED;
-        mixerDataSync.info = false;
-        DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! AUTO CONNECT FAILED !!!----");          
-      }else{
-        DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API COMMAND <%s> ----", param.c_str());
-        RESTState = "connecting";
-        progress = 0.0;
       }
+      
+      else if (origin == RESTCALL_CONNECT){       
+        if (status == HTTP_REST_OK){
+          RESTState = "connecting";
+          progress = 0.0;
+        }else{
+          setConnectFailed();
+        }
+      }
+      
+      else if (origin == "Z"){
+        
+      }
+      doc.clear();
     }
 
-
-    // call back for REST API command send
-    void RESTAPIInfo(String param) {
-      // {"errorMsg": "App state is not idle, please disconnect first"}
-      // {"errorMsg": "Console not available, start offline mode or connect to a mixer"}
-      //DEBUG_PRINT("\n%s",param.c_str());
-      JsonDocument doc;
-
-      auto error = deserializeJson(doc, param);
-      if (error) {
-          DEBUG_PRINT("\nJSON info parsing failed: %s",error.c_str());
-          return;
-      }        
-      chSize = getAdjacentValueByKeyFromRootArray(doc,"channelTypes","shortName","Ch","count",String(chSize)).toInt();
-      busSize = getAdjacentValueByKeyFromRootArray(doc,"channelTypes","shortName","Mix","count",String(busSize)).toInt();
-      mixerDataSync.info = true;
-
+    void setConnectFailed(){
+        DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! COMMAND FAILED !!!----");                          
+        interfaceState = CONNECTFAILED;
+        mixerDataSync.consoleInfo = false;      
     }
 
 
@@ -609,16 +626,11 @@ class MixingStation : public OSCMixerInterface {
           // this is where we drop REST API request
 
           msRESTAPIClient.method = HTTP_METHOD_GET;
-          msRESTAPIClient.post = "";          
           
-          if (interfaceState == CONSOLE_INFO && !mixerDataSync.info){ // every thing looks good, so we ask the mixer data
-            msRESTAPIClient.URL = "/console/information";           
-            msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPIInfo(param);};    
-            msRESTAPIClient.failConnectCallback = [&]() {RESTAPIConnect("failed");};
+          if (interfaceState == SYNCING_CONSOLE && !mixerDataSync.consoleInfo){ // every thing looks good, so we ask the mixer data
+            msRESTAPIClient.URL = RESTCALL_CONSOLE_INFO;           
           }else{    // otherwise we just perform the routine check
-            msRESTAPIClient.URL = MS_API_STATE;
-            msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPIState(param);};    
-            msRESTAPIClient.failConnectCallback = [&]() {RESTAPIState("fail");};   
+            msRESTAPIClient.URL = RESTCALL_APP_STATE;
           }
           network->asyncConnect(&msRESTAPIClient);
       }
@@ -629,7 +641,7 @@ class MixingStation : public OSCMixerInterface {
       //////////////////////////////////// REST API HAS RESPONDED
 
       if (RESTState == "syncing"){
-        interfaceState = SYNCING;
+        interfaceState = SYNCING_MS;
         //lastQueryTime = 0; // try the next one straight with no delay
       }
       else if (RESTState == "connecting"){
@@ -644,8 +656,8 @@ class MixingStation : public OSCMixerInterface {
         if (OSClive) {
 
           if (RESTState == "connected" || RESTState == "backgroundSync"){        
-            if (!mixerDataSync.info){     // if the mixer days it is connected and we retreived its data, then we set the interface status to CONNECTED
-              interfaceState = CONSOLE_INFO;
+            if (!mixerDataSync.consoleInfo){     // if the mixer days it is connected and we retreived its data, then we set the interface status to CONNECTED
+              interfaceState = SYNCING_CONSOLE;
             }else{           
               interfaceState = CONNECTED;               
               queryDelay = MS_PING_DELAY * 2; // we slow down the check as we are connected      
@@ -678,7 +690,7 @@ class MixingStation : public OSCMixerInterface {
 
       }
 
-      DEBUG_PRINT("\n\n\t\tqueryState()=> %d\n\n",interfaceState);
+      DEBUG_PRINT("\n\t\tqueryState()=> %d\n",interfaceState);
 
     }
 
@@ -691,7 +703,7 @@ class MixingStation : public OSCMixerInterface {
 
       String dataToCompress;
       serializeJson(interfaceDoc,dataToCompress);      
-      DEBUG_PRINT("\ndataToCompress->%s",dataToCompress.c_str());
+      //DEBUG_PRINT("\ndataToCompress->%s",dataToCompress.c_str());
       size_t dataSize = writeBufferToGzFile("/webapp/interfaces.json.gz",&dataToCompress);
 
       return dataSize;
@@ -714,36 +726,20 @@ class MixingStation : public OSCMixerInterface {
       }
     }
 
-    static String getJsonState(String jsonString, float* prog){
-      // Utiliser ArduinoJson pour parser le JSON
-      JsonDocument doc;
-      DeserializationError error = deserializeJson(doc, jsonString);     
-      if (!error) {
-        //doc["msg"];       // unused
-        *prog = doc["progress"]; 
-        return doc["state"];
-      }
-      DEBUG_PRINT("\nparseJsonState error");        
-      return "error";            
-    }
-
     virtual void connect(Config* config){       
       // launch the  REST API command to connect in case user config say so.
       if (config->getInt(MIXER_AUTOMODEL_KEY) != -1){       
+
         if (msRESTAPIClient.isClientConnecting) return;
         if (RESTState != "idle") return;
         if (interfaceState != IDLE) return;
 
         msRESTAPIClient.method = HTTP_METHOD_POST;
-        msRESTAPIClient.URL = "/app/mixers/connect";
+        msRESTAPIClient.URL = RESTCALL_CONNECT;
         JsonDocument postParam;
         postParam["consoleId"] = config->getInt(MIXER_AUTOMODEL_KEY);
-        //postParam["mixTarget"] = -1; // no restrictions   // not used anymore
         postParam["ip"] = *config->getString(MIXER_AUTOIP_KEY);
         serializeJson(postParam, msRESTAPIClient.post);
-
-        msRESTAPIClient.onConnectedCallback = [&](String param) {RESTAPIConnect(param);};    
-        msRESTAPIClient.failConnectCallback = [&]() {RESTAPIConnect("failed");};
 
         if (network->asyncConnect(&msRESTAPIClient)){
           progress = 0.0; 

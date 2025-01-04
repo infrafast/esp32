@@ -45,6 +45,11 @@ class MixerServer: public HWComponent2State{
       config = conf;
       disconnect(); // this sets default mixer as offline and force trying to reconnect at next refresh
       network = net;
+      
+      msHttpClientParam.callback = [&](String param) { processRESTcallback(param); };
+      msHttpClientParam.timeOut = MIXER_DETECTION_PERIOD-1000; // maximum duration of the request is the period of check minus one second    
+      msHttpClientParam.URL = RESTCALL_APP_STATE;  
+
     }
 
     bool refresh(bool force=false){    
@@ -199,11 +204,6 @@ class MixerServer: public HWComponent2State{
     void testMS_REST_API(){
       msHttpClientParam.host = serverIP;
       msHttpClientParam.port = msAPIPort; 
-      msHttpClientParam.timeOut = MIXER_DETECTION_PERIOD-1000; // maximum duration of the request is the period of check minus one second    
-      //msHttpClientParam.client = network->client;
-      msHttpClientParam.URL = MS_API_STATE;
-      msHttpClientParam.onConnectedCallback = [&](String param) { msREST_API_on(param); };
-      msHttpClientParam.failConnectCallback = [&]() { msREST_API_off(); };      
       network->asyncConnect(&msHttpClientParam);
     }
 
@@ -302,15 +302,24 @@ class MixerServer: public HWComponent2State{
 
     }
 
-    void msREST_API_off(){
-      DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API not responding ----");
-      msAPIOnline = false;
-    }
+    void processRESTcallback(String param){     
+      JsonDocument doc;
+      
+      auto error = deserializeJson(doc, param);
+      if (error) {
+          DEBUG_PRINT("\nprocessRESTcallback parsing failed: %s",error.c_str());
+          return;
+      }
+      uint8_t status = doc[HTTP_REST_STATUS];
 
-    void msREST_API_on(String s){
-      DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API is ON ----");
-      msAPIOnline = true;  // do not set state = CONNECTED as this will be done by setmixer otherwise connect() will not trigger creation of mixing station
-      lastDetectionAttemptTime = 0; // we detected the mixer so we shorten the delay to treat the information
+      if (status == HTTP_REST_OK){
+        DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API is ON ----");
+        msAPIOnline = true;  // do not set state = CONNECTED as this will be done by setmixer otherwise connect() will not trigger creation of mixing station
+        lastDetectionAttemptTime = 0; // we detected the mixer so we shorten the delay to treat the information
+      }else{
+        DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API not responding ----");
+        msAPIOnline = false;
+      }
     }
 
 };

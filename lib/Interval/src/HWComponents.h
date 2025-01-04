@@ -535,15 +535,15 @@ void pingTask(void* parameter) {
   vTaskDelete(NULL);
 }
 
-typedef std::function<void()> StdFunctionCallbackVoid; 
+//typedef std::function<void()> StdFunctionCallbackVoid; 
 typedef std::function<void(String)> StdFunctionCallbackString;
 
 struct AsyncHttpClient{  
     IPAddress host;
     uint16_t port;
     Client* client;
-    StdFunctionCallbackString onConnectedCallback;
-    StdFunctionCallbackVoid failConnectCallback;
+    StdFunctionCallbackString callback;
+    //StdFunctionCallbackVoid failConnectCallback;
     String method = HTTP_METHOD_GET;
     String URL;
     String post="";    
@@ -562,14 +562,18 @@ void connectHTTPTask(void *parameter) {
     Client* client = clientObj->client;
     
     String url = clientObj->URL;
-    String post = clientObj->post;
     IPAddress serverIP = clientObj->host;
     uint16_t port = clientObj->port;
     uint32_t timeOut = clientObj->timeOut;
-    String method = clientObj->method;
+    String method = clientObj->method;  
     if (timeOut<1000) timeOut = 1000;
-
+    String post = "";
+    if (method == HTTP_METHOD_POST) post = clientObj->post;
+    
     DEBUG_PRINT("\nconnectHTTPTask(%s,%s,%i,<%s>)",serverIP.toString().c_str(),url.c_str(),port,post.c_str());
+
+    JsonDocument doc;        
+    doc[HTTP_REST_ORIGIN] = url;
 
     if (client != NULL){
       HttpClient httpClient(*client);      
@@ -578,8 +582,6 @@ void connectHTTPTask(void *parameter) {
       httpClient.setHttpResponseTimeout(timeOut);
       int httpResponseCode = httpClient.startRequest(serverIP.toString().c_str(),port,url.c_str(),method.c_str(),"ESP32HttpClient/1.0");     
 
-      String payload="";
-
       if (httpResponseCode == 0) {
         DEBUG_PRINT("\nRequête %s lancée",method.c_str());
 
@@ -587,7 +589,7 @@ void connectHTTPTask(void *parameter) {
           // Ajouter un en-tête Content-Type pour indiquer JSON
           httpClient.sendHeader("Content-Type", "application/json");
           httpClient.sendHeader("Content-Length", String(post.length()).c_str());
-          DEBUG_PRINT("\nPOST write: %s",post.c_str());
+          //DEBUG_PRINT("\nPOST write: %s",post.c_str());
           // Envoyer le corps de la requête
           httpClient.write((const uint8_t*)post.c_str(), post.length());               
         }
@@ -596,11 +598,12 @@ void connectHTTPTask(void *parameter) {
         httpClient.endRequest();
 
         int httpStatusCode = httpClient.responseStatusCode();
-        DEBUG_PRINT("\nStatut HTTP : %d\n", httpStatusCode);
+        //DEBUG_PRINT("\nStatut HTTP : %d\n", httpStatusCode);
 
         if (httpStatusCode == 200) {
           httpClient.skipResponseHeaders();    // we want to read the body only
           /*payload = httpClient.readString();*/
+          String payload="";
 
           while (httpClient.available()) { // Tant qu'il y a des données disponibles
             char c = httpClient.read();    // Lire un caractère
@@ -608,32 +611,42 @@ void connectHTTPTask(void *parameter) {
             yield();
           }
 
-          DEBUG_PRINT("\nRéponse %s reçue :<%s>",method.c_str(),payload.c_str());
-          clientObj->onConnectedCallback(payload);
-        } else {        
-          clientObj->failConnectCallback();
+          //DEBUG_PRINT("\nRéponse %s reçue :<%s>",method.c_str(),payload.c_str());
+          JsonDocument jo;
+          deserializeJson(jo,payload);
+          doc[HTTP_REST_STATUS] = HTTP_REST_OK;
+          doc[HTTP_REST_DATA] = jo;
+        } else {           
+          doc[HTTP_REST_STATUS] = HTTP_REST_ERROR;
+          doc[HTTP_REST_DATA] = "httpStatusCode: "+String(httpStatusCode);
         }
       } else {
-        DEBUG_PRINT("\nMauvaise requete : %d", httpResponseCode);
         // ça veut dire pas de serveur a cette adresse
-        clientObj->failConnectCallback();
+        doc[HTTP_REST_STATUS] = HTTP_REST_ERROR;
+        doc[HTTP_REST_DATA] = "Bad request: "+String(httpResponseCode);
       }
       httpClient.stop();    
     }else{
-        DEBUG_PRINT("\nClient NULL");
         // ça veut dire pas de serveur a cette adresse
-        clientObj->failConnectCallback();      
+        doc[HTTP_REST_STATUS] = HTTP_REST_ERROR;
+        doc[HTTP_REST_DATA] = "NULL client";
     }
+    // envoie la reponse
+    String result;
+    serializeJson(doc,result);
+    clientObj->callback(result);
+    //DEBUG_PRINT("\nRESULT=>%s",result.c_str());
     // Fin de la tentative de connexion, réinitialiser l'indicateur
     clientObj->isClientConnecting = false;
     // Tâche terminée, suppression    
-    DEBUG_PRINT("\nWaiting semaphore release in connectTask");
+    //DEBUG_PRINT("\nWaiting semaphore release in connectTask");
     if (xSemaphoreTake(clientObj->mutex, portMAX_DELAY)) { // Prendre le mutex
       if (clientObj->taskHandle != NULL) {
         clientObj->taskHandle = NULL;       // Mettre à jour le pointeur
       }
-      DEBUG_PRINT("\nconnectHTTPTask finished");
+      //DEBUG_PRINT("\nconnectHTTPTask finished");
       xSemaphoreGive(clientObj->mutex); // Relâcher le mutex
+      doc.clear();
       vTaskDelete(NULL); // Supprimer la tâche    
     }
 }
@@ -1061,7 +1074,7 @@ class WiFiEth : public Network{
         //clientParam->taskHandle = nullptr;
         return false;
       }else{
-        DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
+        //DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
         clientParam->client = client;
         clientParam->isClientConnecting = true;
         // Démarrer la tâche FreeRTOS pour la connexion

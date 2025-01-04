@@ -3018,6 +3018,7 @@ void setup() {
 
       res.set("Content-Type", "application/json");
 
+
       unsigned long t0 = millis();
       #define POST_TIME_OUT 5000
 
@@ -3036,17 +3037,32 @@ void setup() {
           DEBUG_PRINT("\n\n\t httpPost <%s>:<%s>\n\n",name,options);
         } 
 
-        // Analyser et traiter l'entrée
-        String jsonAnswer = parseJsonInput(name);
-        if (jsonAnswer.length() == 0) {
-            jsonAnswer = "{\"error\": \"Parsing failed\"}";
+
+        String jsonAnswer = parseJsonInput(name);        
+
+        // version compressée
+        ByteBuffer compressedBuffer;
+        size_t dataSize = bufferToGz(&jsonAnswer,&compressedBuffer);
+        res.set("Content-Encoding", "gzip"); // Indique que la réponse est en gzip
+        #define PACKET_SIZE 64 // Taille d'un paquet (64 octets)
+        uint8_t packet[PACKET_SIZE];             // Crée un buffer temporaire de 64 octets               
+        while (compressedBuffer.available()) {
+          size_t bytesToRead = min(PACKET_SIZE, compressedBuffer.available()); // Détermine le nombre d'octets à lire
+          compressedBuffer.readBytes((char*)packet, bytesToRead);
+          res.write(packet, bytesToRead);
+          yield(); // Libérer le CPU pour éviter le watchdog timeout
         }
 
-        if (debug){
-          //DEBUG_PRINT("\n\t httpres:<%s>",jsonAnswer.c_str());
-        }
+        /*
+        // avoid using the ByteBuffer class => 
+          uint8_t* dstBuf = NULL;
+          size_t dstBufLen = LZPacker::compress( srcBuf, srcBufLen, &dstBuf );
+          // do something with dstBuf
+          free(dstBuf);        
+        */
 
-        // Envoi du contenu par paquets de 64 octets
+        // versionnon  compressée
+        /*        
         size_t chunkSize = 64;
         size_t totalSize = jsonAnswer.length();
         size_t sentSize = 0;
@@ -3056,7 +3072,9 @@ void setup() {
             res.write((uint8_t*)(jsonAnswer.c_str() + sentSize), currentChunkSize);
             sentSize += currentChunkSize;
             yield();
-        }
+        }*/
+
+
 
       }  
       res.end();

@@ -76,21 +76,80 @@ class GenericComponent{
 
 };
 
+
+///////////////////// REST API MANAGEMENT //////////////////////
+
+#define HTTP_REST_ORIGIN "origin"
+#define HTTP_REST_STATUS "status"
+  #define HTTP_REST_OK 1
+  #define HTTP_REST_ERROR 0
+#define HTTP_REST_DATA   "data"
+
 // Structure pour stocker les données décompressées dans un buffer
-struct ByteBuffer {
-  uint8_t* buffer = nullptr; // Pointeur vers le buffer
-  size_t size = 0;           // Taille actuelle des données dans le buffer
-  size_t capacity = 0;       // Capacité maximale allouée au buffer
+struct ByteBuffer : public Stream {
+  // Attributs
+  uint8_t* buffer = nullptr;  // Pointeur vers le buffer
+  size_t size = 0;            // Taille actuelle des données dans le buffer
+  size_t capacity = 0;        // Capacité maximale allouée au buffer
+  size_t readIndex = 0;       // Position actuelle de lecture
+
+  // Constructeur
+  ByteBuffer(size_t initialCapacity = 64) { // Capacité initiale par défaut
+    capacity = initialCapacity;
+    buffer = (uint8_t*)malloc(capacity);
+  }
 
   // Méthode pour écrire des données dans le buffer
-  void write(const uint8_t* data, size_t len) {
+  size_t write(const uint8_t* data, size_t len) override {
     if (size + len > capacity) {
       // Reallocation de mémoire si le buffer est plein
-      capacity = (size + len) * 2;
+      capacity = (size + len) * 2;  // Double la capacité
       buffer = (uint8_t*)realloc(buffer, capacity);
     }
     memcpy(buffer + size, data, len); // Copier les données
     size += len;
+    return len; // Retourne le nombre d'octets écrits
+  }
+
+  // Méthode d'écriture d'un seul octet
+  size_t write(uint8_t data) override {
+    return write(&data, 1);
+  }
+
+  // Méthode pour vérifier la disponibilité des données (taille restante non lue)
+  int available() override {
+    return size - readIndex; // Données non lues restantes
+  }
+
+  // Méthode pour lire un octet
+  int read() override {
+    if (readIndex < size) {              // Vérifie s'il reste des données à lire
+      return buffer[readIndex++];       // Retourne l'octet et avance l'index
+    }
+    return -1; // Retourne -1 si aucune donnée disponible
+  }
+
+  // Méthode pour lire plusieurs octets dans un buffer
+  size_t readBytes(char* dest, size_t len) {
+    size_t bytesRead = 0;
+    while (bytesRead < len && available()) {
+      dest[bytesRead++] = read(); // Lit octet par octet
+    }
+    return bytesRead;
+  }
+
+  // Méthode pour lire sans avancer l'index
+  int peek() override {
+    if (readIndex < size) {
+      return buffer[readIndex]; // Retourne l'octet sans avancer l'index
+    }
+    return -1;
+  }
+
+  // Méthode pour vider le buffer
+  void flush() override {
+    readIndex = 0; // Réinitialise l'index de lecture
+    size = 0;      // Réinitialise la taille
   }
 
   // Libérer la mémoire allouée
@@ -100,6 +159,9 @@ struct ByteBuffer {
     }
   }
 };
+
+
+
 
 // buffer pour stocker les données décompressées
 ByteBuffer* uncompressedByteBuffer;
@@ -127,10 +189,24 @@ size_t writeBufferToGzFile(String filename, String* buf){
   // deflate!
   size_t outputSize = LZPacker::compress( (uint8_t*)data, len, &fout );
   //size_t fileSize = fout.position();
-  Serial.printf("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
+  Serial.printf("\nCompressed %d input bytes to %u raw bytes in file%s\n", len, outputSize, filename.c_str());
   fout.close();
   return outputSize;
 }
+
+
+
+size_t bufferToGz(String* buf, ByteBuffer* dest){
+  // using miniz (does not work)
+  const char* data = buf->c_str();
+  size_t len = strlen(data);
+  // deflate!
+  size_t outputSize = LZPacker::compress( (uint8_t*)data, len, dest );
+  //size_t fileSize = fout.position();
+  Serial.printf("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
+  return outputSize;
+}
+
 
 /*
 size_t writeBufferToGzFile(String filename, String* buf){
