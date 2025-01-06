@@ -12,11 +12,11 @@
 
 class OSCInterface{
     public:
-        #define OSCLEN 40
+        #define OSC_MAX_LEN 64
         uint8_t * bValue = new uint8_t[bSize];
         int iValue            = -1;           // values returned by the mixer
         float   fValue          = -0.1;
-        char    sValue[OSCLEN+10]; char sValue2[OSCLEN]; char sValue1[OSCLEN];
+        char    sValue[OSC_MAX_LEN+10]; char sValue2[OSC_MAX_LEN]; char sValue1[OSC_MAX_LEN];
         char   TypeStr;
         String addressStr, expectedStr="";
         IPAddress ip;
@@ -34,7 +34,7 @@ class OSCInterface{
         }
 
         void setNetwork(UDP* _udp, uint16_t _latency){
-            DEBUG_PRINT("\nOSC.setUDP()");
+            //DEBUG_PRINT("\nOSC.setUDP()");
             udp = _udp;
             latency = _latency;
         }
@@ -88,7 +88,9 @@ class OSCInterface{
 
             iValue = -1;
             fValue = -0.1;
-            /*strcpy(sValue1,"");
+            /*addressStr = "";
+            strcpy(sValue,"");
+            strcpy(sValue1,"");
             strcpy(sValue2,"");*/
 
             // Check if packet was received

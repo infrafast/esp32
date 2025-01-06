@@ -49,7 +49,7 @@ class MyIcon : public Font{
   public:
     static OpenFontRender* ofr; 
     
-    MyIcon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):Font(v, a, posX, posY, s, fC , bC , d){
+    MyIcon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=false):Font(v, a, posX, posY, s, fC , bC , d){
       id = "Icon"+String(*posX)+"x"+String(*posY)+"~"+*v;   
       //if (debug) DEBUG_PRINT("\n new %s",id);
     };
@@ -376,18 +376,18 @@ DataSet portDS = DataSet(ADDRESS_PORT,INPUTTEXT,&localProvider);
 DataSet msgDS = DataSet(ADDRESS_MESSAGE,INPUTTEXT,&localProvider); 
 
 Strip* testOSCStripConstructorCallback(){
-  return new OSCTestStrip(stripOSCSkel,&gui,&mixerServer,true);
+  return new OSCTestStrip(stripOSCSkel,&gui,&mixerServer);
 }
 
 Strip* sendStripConstructorCallback(){
   //DEBUG_PRINT("\n\tch2busStripConstructorCallback()");
-  return new Ch2BusStrip(stripSendSkel,&gui,&mixerServer,true);
+  return new Ch2BusStrip(stripSendSkel,&gui,&mixerServer);
 }
 
 StripSkeleton* stripChGainSkel;
 Strip* gain2chStripConstructorCallback(){
   //DEBUG_PRINT("\n\tgain2chStripConstructorCallback()");
-  return new ChGainStrip(stripChGainSkel,&gui,&mixerServer,true);
+  return new ChGainStrip(stripChGainSkel,&gui,&mixerServer);
 }
 
 String demoIP = "";
@@ -565,10 +565,10 @@ void userBankScreenBuilder(int subScreen){
     /*if (interfaceState == MIXER_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.serverUDPPort);
     else if (interfaceState == MS_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.msAPIPort);*/
 
-    gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor,false));
+    gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
 
-    if (interfaceState == SYNCING_MS) gui.add(new Arc(&mixerServer.mixerInterface->progress, 0.0, 100.0, &app.midScreenHoriz, &monY, 100, &GUI::green, &GUI::transparentColor,0,true));
-    else gui.add(new Label(&interfaceStateMessage, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
+    if (interfaceState == SYNCING_MS) gui.add(new Arc(&mixerServer.mixerInterface->progress, 0.0, 100.0, &app.midScreenHoriz, &monY, 100, &GUI::green, &GUI::transparentColor,0));
+    else gui.add(new Label(&interfaceStateMessage, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
   }
 }

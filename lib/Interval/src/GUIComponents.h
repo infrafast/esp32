@@ -450,7 +450,7 @@ class Font : public Widget{
 class Label : public Font{
   public:
       static OpenFontRender* ofr; 
-      Label(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):Font(v, a, posX, posY, s, fC , bC , d){
+      Label(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=false):Font(v, a, posX, posY, s, fC , bC , d){
       };
   protected:
       virtual OpenFontRender* getOfr(){return ofr;}

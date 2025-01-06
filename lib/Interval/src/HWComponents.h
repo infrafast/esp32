@@ -30,7 +30,7 @@ class HWComponent2State : public HWComponent{
     bool state;
     bool previousState;
 
-    HWComponent2State(uint8_t pin, bool s = false, boolean d=true):HWComponent(pin,d){      
+    HWComponent2State(uint8_t pin, bool s = false, boolean d=false):HWComponent(pin,d){      
       state = s;
       previousState = state;
     }
@@ -409,7 +409,7 @@ enum{
 class DigitalButton: public Button{
   public:
   
-    DigitalButton(uint8_t p, uint8_t mode=INPUT_PULLUP, int e=LOW, boolean d=true, uint16_t push = DEFAULT_PUSH_DELAY, uint16_t dClic = DEFAULT_DCLIC_DELAY):Button(p, e,d, push, dClic){      
+    DigitalButton(uint8_t p, uint8_t mode=INPUT_PULLUP, int e=LOW, boolean d=false, uint16_t push = DEFAULT_PUSH_DELAY, uint16_t dClic = DEFAULT_DCLIC_DELAY):Button(p, e,d, push, dClic){      
       pinMode(p, mode); //
       id = "DigitalButton~"+String(getID());
     }
@@ -517,7 +517,7 @@ struct PingTaskParameters {
 void pingTask(void* parameter) {
   // Récupérer les paramètres passés à la tâche
   PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
-  DEBUG_PRINT("pingTask=>%s",params->ipAddress);
+  //DEBUG_PRINT("pingTask=>%s",params->ipAddress);
   if (Ping.ping(params->ipAddress)) {
     if (params->onSuccess) {
       params->onSuccess();  // Appel du callback en cas de succès
@@ -549,7 +549,7 @@ struct AsyncHttpClient{
     String post="";    
     bool isClientConnecting = false; // Indicateur pour éviter de lancer plusieurs tâches
     uint32_t timeOut = 1000;
-    TaskHandle_t taskHandle;    
+    //TaskHandle_t taskHandle;    
     SemaphoreHandle_t mutex = xSemaphoreCreateMutex(); // Mutex pour la synchronisation    
 };
 
@@ -583,7 +583,7 @@ void connectHTTPTask(void *parameter) {
       int httpResponseCode = httpClient.startRequest(serverIP.toString().c_str(),port,url.c_str(),method.c_str(),"ESP32HttpClient/1.0");     
 
       if (httpResponseCode == 0) {
-        DEBUG_PRINT("\nRequête %s lancée",method.c_str());
+        //DEBUG_PRINT("\nRequête %s lancée",method.c_str());
 
         if (method == HTTP_METHOD_POST ){
           // Ajouter un en-tête Content-Type pour indiquer JSON
@@ -638,15 +638,17 @@ void connectHTTPTask(void *parameter) {
     //DEBUG_PRINT("\nRESULT=>%s",result.c_str());
     // Fin de la tentative de connexion, réinitialiser l'indicateur
     clientObj->isClientConnecting = false;
+    doc.clear();
     // Tâche terminée, suppression    
     //DEBUG_PRINT("\nWaiting semaphore release in connectTask");
     if (xSemaphoreTake(clientObj->mutex, portMAX_DELAY)) { // Prendre le mutex
-      if (clientObj->taskHandle != NULL) {
-        clientObj->taskHandle = NULL;       // Mettre à jour le pointeur
-      }
       //DEBUG_PRINT("\nconnectHTTPTask finished");
+
+      /*if (clientObj->taskHandle != NULL) {
+        clientObj->taskHandle = NULL;       // Mettre à jour le pointeur
+      }*/
+
       xSemaphoreGive(clientObj->mutex); // Relâcher le mutex
-      doc.clear();
       vTaskDelete(NULL); // Supprimer la tâche    
     }
 }
@@ -723,7 +725,7 @@ class Network : public HWComponent2State{
     }
 
     void unpauseWiFi(){
-      DEBUG_PRINT("\n\t\t\t\t---------> unpauseWiFi() <------------");
+      //DEBUG_PRINT("\n\t\t\t\t---------> unpauseWiFi() <------------");
       WiFiEnabled = true ;      
     }
 
@@ -1046,7 +1048,6 @@ class WiFiEth : public Network{
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
-    // Fonction pour démarrer la tâche de ping non bloquante
     virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback) {
       // Allouer la mémoire pour stocker les paramètres de la tâche
       PingTaskParameters* params = new PingTaskParameters;
@@ -1084,7 +1085,7 @@ class WiFiEth : public Network{
             4096*2,                  // Taille de la pile (en octets)
             clientParam,           // Paramètre passé à la tâche (ici, l'objet courant)
             1,                     // Priorité de la tâche
-            &clientParam->taskHandle,       // Pointeur vers l'identifiant de la tâche (inutile ici)
+            NULL, //&clientParam->taskHandle,       // Pointeur vers l'identifiant de la tâche (inutile ici)
             0                      // Utilisation du 1er cœur de l'ESP32, qui est different de la boucle principale afin de ne pas perturber l'affichage
         );
       }
@@ -1092,7 +1093,7 @@ class WiFiEth : public Network{
     }
 
     void checkInternet(){
-      DEBUG_PRINT("\n\n\n\t\t\tcheckInternet => ");
+      //DEBUG_PRINT("\n\n\n\t\t\tcheckInternet => ");
       // Utiliser des lambdas pour passer les méthodes membres comme callbacks
       asyncPing("8.8.8.8", 
         [&]() { onInternetPing(true); }, 
@@ -1110,7 +1111,7 @@ class WiFiEth : public Network{
       // next WiFi attempt will start with the last one that was connected
       _newWifiAttempt = true; // reset flag for immediate reconnection at the deco.
       SSID = lastConnectedSSID;          
-      DEBUG_PRINT("\n         + - + - + restoring SSID=%s",SSID.c_str());
+      //DEBUG_PRINT("\n         + - + - + restoring SSID=%s",SSID.c_str());
     }
 /*    void test(){
       if (client->connect("httpbin.org", 80)) {

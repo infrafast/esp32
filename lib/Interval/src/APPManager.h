@@ -228,6 +228,11 @@ class DataRepository{
   public:
     DataRepository(){}
 
+    DataSet* getDataSet(int i){
+      if (i<size()) return dataSets.get(i);
+      else return nullptr;
+    }
+
     DataSet* getDataSet(String address){
       for (uint8_t i=0;i<dataSets.size();i++){
         DataSet* ds = dataSets.get(i);        
@@ -268,6 +273,10 @@ class DataRepository{
         //DEBUG_PRINT("name: %s size:%i address:%s",ds->dataProvider->name.c_str(),ds->size(),ds->address.c_str());
         jsonDataSets->add(ds->serialize());
       }
+    }
+
+    int size(){
+      return dataSets.size();
     }
 
   private:
@@ -601,15 +610,15 @@ class TextStrip : public Strip{
       // textProperty = /text/%s
       // value = toto
       char buffer[50];
-      DEBUG_PRINT("\n deserializeProperty %%%%%%%%%%%%%% %s %s", property.c_str(), textPropertyAddress.c_str());
+      //DEBUG_PRINT("\n deserializeProperty %%%%%%%%%%%%%% %s %s", property.c_str(), textPropertyAddress.c_str());
       if (sscanf(property.c_str(), textPropertyAddress.c_str(), buffer) == 1){
         text = String(buffer);
-        DEBUG_PRINT("\t MATCH %s",text.c_str());
+        //DEBUG_PRINT("\t MATCH %s",text.c_str());
       }           
     }
 
     virtual void serializeProperties(){
-      DEBUG_PRINT("\n serializeProperties %%%%%%%%%%%%%% %s %s", text.c_str(), textPropertyAddress.c_str());
+      //DEBUG_PRINT("\n serializeProperties %%%%%%%%%%%%%% %s %s", text.c_str(), textPropertyAddress.c_str());
       char* buf = (char*)malloc(textPropertyAddress.length()*sizeof(char*));
       sprintf(buf,textPropertyAddress.c_str(),text.c_str());
       properties.add(String(buf));
@@ -1660,7 +1669,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
           // no break, we continue normal startup
         case NORMAL_STARTUP:
           // perform all application initialization
-          DEBUG_PRINT("\n\n\n********");
+          //DEBUG_PRINT("\n\n\n********");
 
           bootScreen();
 

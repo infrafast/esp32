@@ -277,6 +277,9 @@ size_t writeBufferToGzFile(String filename, String* buf){
 }
 */
 
+void targzNullLoggerCallback(const char* format, ...){}
+
+
 // Fonction pour lire un fichier gz et remplir le buffer de bytes décompressés
 size_t readGzFileToBuffer(String filename, ByteBuffer* _buffer) {
   // Ouvrir le fichier compressé
@@ -290,12 +293,12 @@ size_t readGzFileToBuffer(String filename, ByteBuffer* _buffer) {
 
   // Créer un décompresseur
   GzUnpacker gzUnpacker;
-  /*
+  
   //GZUnpacker->haltOnError( true ); // stop on fail (manual restart/reset required)
   gzUnpacker.setupFSCallbacks( targzTotalBytesFn, targzFreeBytesFn ); // prevent the partition from exploding, recommended
-  gzUnpacker.setGzProgressCallback( BaseUnpacker::defaultProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
-  gzUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );    // gz log verbosity
-
+  gzUnpacker.setGzProgressCallback( BaseUnpacker::targzNullProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
+  gzUnpacker.setLoggerCallback(targzNullLoggerCallback);    // gz log verbosity BaseUnpacker::targzPrintLoggerCallback
+  /*
   if( !gzUnpacker.gzExpander(tarGzFS, filename.c_str(), tarGzFS, "/tmp.unzip") ) {
     DEBUG_PRINT("\ngzExpander failed with return code #%d", GZUnpacker->tarGzGetError() );
   }*/
@@ -345,6 +348,17 @@ uint8_t countWord(String str, String sub) {
     
     return count;
 }
+
+String removePattern(const char* input, const char* pattern) {
+    char result[strlen(input)]; // Buffer pour stocker la sous-chaîne extraite
+    // Utilisation de sscanf pour extraire la partie après "/con/n"
+    if (sscanf(input, pattern, result) == 1) {
+        return String(result);
+    } else {
+        return String(input);
+    }
+}
+
 
 float truncateToOneDecimal(float num) {
     return ((int)(num * 10.0)) / 10.0;
@@ -1411,7 +1425,7 @@ void socketConnectionCallback(IWebSocket &ws) {
 //////////////////////////////////////////////////////////////
 Strip* textStripConstructorCallback(){
   //DEBUG_PRINT("\n\ttextStripConstructorCallback()"/*,values.c_str()*/);
-  return new TextStrip(stripTextSkel,&gui, true);
+  return new TextStrip(stripTextSkel,&gui);
 }
 
 #endif

@@ -41,7 +41,7 @@ class MixerServer: public HWComponent2State{
     ~MixerServer(){}
 
     void init(Config* conf, Network* net){
-      DEBUG_PRINT("\n Init MixerServer");
+      //DEBUG_PRINT("\n Init MixerServer");
       config = conf;
       disconnect(); // this sets default mixer as offline and force trying to reconnect at next refresh
       network = net;
@@ -136,6 +136,7 @@ class MixerServer: public HWComponent2State{
       state = DISCONNECTED;
       msAPIOnline = false;
       mixerInterface = new MixerOfflineInterface(dataRepository,*config->getString(SERVER_MODEL_KEY));
+      mixerInterface->init();
       name = "auto";
     }
 
@@ -156,14 +157,14 @@ class MixerServer: public HWComponent2State{
 
     void connect() {    
 
-      DEBUG_PRINT("\n * * * Detect mixer * * *");
+      //DEBUG_PRINT("\n * * * Detect mixer * * *");
       state = DISCONNECTED ;
 
                  
       String configIP = *config->getString(SERVER_IP_KEY); 
       if (!serverIP.fromString(configIP)) serverIP = IPAddress(0,0,0,0);
 
-      DEBUG_PRINT("\n * * SERVER_IP_KEY = %s, serverIP = %s",configIP.c_str(),serverIP.toString().c_str());
+      DEBUG_PRINT("\n * * DETECT MIXER SERVER_IP_KEY = %s, serverIP = %s",configIP.c_str(),serverIP.toString().c_str());
 
       discovery=false; //if IP address is 0 or not set, we use auto detection 
       if ((serverIP[0] == 0 && serverIP[1] == 0 && serverIP[2] == 0 && serverIP[3] == 0) || configIP == "") discovery = true;
@@ -219,7 +220,7 @@ class MixerServer: public HWComponent2State{
 
       osc.setClient(serverIP,msUDPPort);
       DEBUG_PRINT("\tTesting msUDP IP:%s/%i",serverIP.toString().c_str(),msUDPPort);      
-      if (osc.ping(MIXING_STATION_PING)){
+      if (osc.ping(OSC_MS_PING)){
         DEBUG_PRINT("\n =========> mixerServerPing MS OSC");
         setMixingStationMixer(osc.udp->remoteIP()); 
         return;
@@ -259,8 +260,8 @@ class MixerServer: public HWComponent2State{
       if (mixerInterface != nullptr) delete mixerInterface;
       osc.setClient(serverIP,serverUDPPort); 
       mixerInterface = new MixingStation(dataRepository,&osc, network, msAPIPort);  
-
-      name = serverIP.toString();
+      mixerInterface->init();
+      name = MIXING_STATION_MODEL;
 
     } 
 
@@ -299,7 +300,7 @@ class MixerServer: public HWComponent2State{
       if (mixerInterface != nullptr) delete mixerInterface;
       osc.setClient(serverIP,serverUDPPort);
       mixerInterface = new BehringerMixer(dataRepository,osc.sValue2,&osc); 
-
+      mixerInterface->init();
     }
 
     void processRESTcallback(String param){     
