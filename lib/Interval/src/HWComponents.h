@@ -505,12 +505,11 @@ uint8_t LadderButton::bCount = 0;
   #warning "USE_HSPI_PORT ACTIVATED"
 #endif
 
-typedef std::function<void(void)> PingCallback; // Utilisation de std::function pour plus de flexibilité
+typedef std::function<void(bool)> PingCallback; // Utilisation de std::function pour plus de flexibilité
 
 struct PingTaskParameters {
   const char* ipAddress;
-  PingCallback onSuccess;
-  PingCallback onFailure;
+  PingCallback callback;
 };
 
 // Tâche de ping non bloquante
@@ -519,13 +518,9 @@ void pingTask(void* parameter) {
   PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
   //DEBUG_PRINT("pingTask=>%s",params->ipAddress);
   if (Ping.ping(params->ipAddress)) {
-    if (params->onSuccess) {
-      params->onSuccess();  // Appel du callback en cas de succès
-    }
+    params->callback(true);  // Appel du callback en cas de succès
   } else {
-    if (params->onFailure) {
-      params->onFailure();  // Appel du callback en cas d'échec
-    }
+    params->callback(false);  // Appel du callback en cas d'échec
   }
 
   // Libérer la mémoire allouée pour les paramètres
@@ -536,24 +531,24 @@ void pingTask(void* parameter) {
 }
 
 //typedef std::function<void()> StdFunctionCallbackVoid; 
-typedef std::function<void(String)> StdFunctionCallbackString;
+typedef std::function<void(const char*)> StdFunctionCallbackStringPointer;
 
 struct AsyncHttpClient{  
     IPAddress host;
     uint16_t port;
     Client* client;
-    StdFunctionCallbackString callback;
+    StdFunctionCallbackStringPointer callback;
     //StdFunctionCallbackVoid failConnectCallback;
     String method = HTTP_METHOD_GET;
     String URL;
     String post="";    
     bool isClientConnecting = false; // Indicateur pour éviter de lancer plusieurs tâches
     uint32_t timeOut = 1000;
-    //TaskHandle_t taskHandle;    
-    SemaphoreHandle_t mutex = xSemaphoreCreateMutex(); // Mutex pour la synchronisation    
+    SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
 };
 
 // Prototype pour la tâche de connexion
+/* 
 void connectHTTPTask(void *parameter) {
     bool success = false;
     
@@ -571,10 +566,13 @@ void connectHTTPTask(void *parameter) {
     if (method == HTTP_METHOD_POST) post = clientObj->post;
     
     DEBUG_PRINT("\nconnectHTTPTask(%s,%s,%i,<%s>)",serverIP.toString().c_str(),url.c_str(),port,post.c_str());
-
-    JsonDocument doc;        
+    
+    JsonDocument doc;      
     doc[HTTP_REST_ORIGIN] = url;
 
+    String payload="";
+
+    client = NULL;
     if (client != NULL){
       HttpClient httpClient(*client);      
       //int httpResponseCode = httpClient->get(serverIP.toString().c_str(),url.c_str());
@@ -594,16 +592,12 @@ void connectHTTPTask(void *parameter) {
           httpClient.write((const uint8_t*)post.c_str(), post.length());               
         }
 
-        // Terminer la requête
-        httpClient.endRequest();
-
         int httpStatusCode = httpClient.responseStatusCode();
         //DEBUG_PRINT("\nStatut HTTP : %d\n", httpStatusCode);
 
         if (httpStatusCode == 200) {
           httpClient.skipResponseHeaders();    // we want to read the body only
-          /*payload = httpClient.readString();*/
-          String payload="";
+          //payload = httpClient.readString();
 
           while (httpClient.available()) { // Tant qu'il y a des données disponibles
             char c = httpClient.read();    // Lire un caractère
@@ -624,38 +618,146 @@ void connectHTTPTask(void *parameter) {
         // ça veut dire pas de serveur a cette adresse
         doc[HTTP_REST_STATUS] = HTTP_REST_ERROR;
         doc[HTTP_REST_DATA] = "Bad request: "+String(httpResponseCode);
-      }
-      httpClient.stop();    
+      }  
+      httpClient.endRequest();
+      httpClient.stop();
     }else{
         // ça veut dire pas de serveur a cette adresse
         doc[HTTP_REST_STATUS] = HTTP_REST_ERROR;
         doc[HTTP_REST_DATA] = "NULL client";
     }
     // envoie la reponse
-    String result;
+    String result;        
     serializeJson(doc,result);
-    clientObj->callback(result);
+    clientObj->callback(result); 
+    //clientObj->callback("{\"origin\":\"/app/state\",\"status\":1,\"data\":{\"progress\": 0,\"state\": \"connected\"}}");
     //DEBUG_PRINT("\nRESULT=>%s",result.c_str());
     // Fin de la tentative de connexion, réinitialiser l'indicateur
     clientObj->isClientConnecting = false;
-    doc.clear();
+    doc.clear();   
+    
     // Tâche terminée, suppression    
     //DEBUG_PRINT("\nWaiting semaphore release in connectTask");
     if (xSemaphoreTake(clientObj->mutex, portMAX_DELAY)) { // Prendre le mutex
       //DEBUG_PRINT("\nconnectHTTPTask finished");
 
-      /*if (clientObj->taskHandle != NULL) {
-        clientObj->taskHandle = NULL;       // Mettre à jour le pointeur
-      }*/
+      //if (clientObj->taskHandle != NULL) {
+        //clientObj->taskHandle = NULL;       // Mettre à jour le pointeur
+      //}
 
+      xSemaphoreGive(clientObj->mutex); // Relâcher le mutex
+      vTaskDelete(NULL); // Supprimer la tâche    
+    }
+}*/
+String httpTaskResult;
+ByteBuffer readHttpBuffer;
+
+// Prototype pour la tâche de connexion
+void connectHTTPTask(void *parameter) {
+    AsyncHttpClient *clientObj = static_cast<AsyncHttpClient *>(parameter);
+    DEBUG_PRINT("\nconnectHTTPTask(%s,%s,%i,<%s>)",clientObj->host.toString().c_str(),clientObj->URL.c_str(),clientObj->port,clientObj->post.c_str());
+     
+    Client* client = clientObj->client;  
+
+    if (clientObj->method == HTTP_METHOD_GET) clientObj->post = ""; 
+
+    //String result="{\""+String(HTTP_REST_ORIGIN)+"\":\""+clientObj->URL+"\",";
+
+    JsonDocument doc;        
+    doc[HTTP_REST_ORIGIN] = clientObj->URL;
+
+    if (client != NULL){
+      HttpClient httpClient(*client);      
+      //int httpResponseCode = httpClient->get(serverIP.toString().c_str(),url.c_str());
+      httpClient.beginRequest();
+      httpClient.setHttpResponseTimeout(clientObj->timeOut);
+      int httpResponseCode = httpClient.startRequest(clientObj->host.toString().c_str(),clientObj->port,clientObj->URL.c_str(),clientObj->method.c_str(),"ESP32HttpClient/1.0");     
+
+      if (httpResponseCode == 0) {
+        //DEBUG_PRINT("\nRequête %s lancée",method.c_str());
+
+        if (clientObj->method == HTTP_METHOD_POST ){
+          // Ajouter un en-tête Content-Type pour indiquer JSON
+          httpClient.sendHeader("Content-Type", "application/json");
+          httpClient.sendHeader("Content-Length", String(clientObj->post.length()).c_str());
+          //DEBUG_PRINT("\nPOST write: %s",post.c_str());
+          // Envoyer le corps de la requête
+          httpClient.write((const uint8_t*)clientObj->post.c_str(), clientObj->post.length());               
+        }
+
+        // Terminer la requête
+        httpClient.endRequest();
+
+        int httpStatusCode = httpClient.responseStatusCode();
+        DEBUG_PRINT("\nStatut HTTP : %d\n", httpStatusCode);
+
+        if (httpStatusCode == 200) {
+          httpClient.skipResponseHeaders();    // we want to read the body only
+
+          readHttpBuffer.flush();
+          while (httpClient.available()) { // Tant qu'il y a des données disponibles
+            readHttpBuffer.write(httpClient.read());    // Lire un caractère
+            yield();
+          }
+
+          JsonDocument payload;
+          //deserializeJson(payload,httpClient);
+          deserializeJson(payload,readHttpBuffer.buffer);
+          doc[HTTP_REST_STATUS] = HTTP_REST_OK;
+          doc[HTTP_REST_DATA] = payload;
+
+          //DEBUG_PRINT("\nRéponse %s reçue : %s",clientObj->method.c_str(),payload.c_str());
+        } else {           
+          doc[HTTP_REST_STATUS] = HTTP_REST_ERROR;
+          doc[HTTP_REST_DATA] = String(httpStatusCode);
+        }
+      } else {
+        doc[HTTP_REST_DATA] = String(httpResponseCode);
+        doc[HTTP_REST_STATUS] = HTTP_REST_ERROR;
+
+      }
+      httpClient.stop();    
+    }else{
+        doc[HTTP_REST_DATA] = "\"Null client\"";
+        doc[HTTP_REST_STATUS] = HTTP_REST_ERROR;
+    }
+
+    //result += "\"status\":"+String(status)+",\"data\":"+String(payload)+"}";
+    //result ="{\"origin\":\"/app/state\",\"status\":1,\"data\":{\"progress\": 0,\"state\": \"connected\"}}";
+
+    //DEBUG_PRINT("\nsend => %s",result.c_str());
+
+
+    // envoie la reponse
+    serializeJson(doc,httpTaskResult);
+    //clientObj->callback("{\"origin\":\"/app/state\",\"status\":1,\"data\":{\"progress\": 0,\"state\": \"connected\"}}");
+    clientObj->callback(httpTaskResult.c_str());
+    //DEBUG_PRINT("\nRESULT=>%s",result.c_str());
+    // Fin de la tentative de connexion, réinitialiser l'indicateur
+    //doc.clear();
+    // Tâche terminée, suppression    
+    //DEBUG_PRINT("\nWaiting semaphore release in connectTask");
+
+    doc.clear();
+
+    if (xSemaphoreTake(clientObj->mutex, portMAX_DELAY)) { // Prendre le mutex
+      //DEBUG_PRINT("\nconnectHTTPTask finished");
+
+      //if (clientObj->taskHandle != NULL) {
+      //  clientObj->taskHandle = NULL;       // Mettre à jour le pointeur
+      //}
+      clientObj->isClientConnecting = false;
       xSemaphoreGive(clientObj->mutex); // Relâcher le mutex
       vTaskDelete(NULL); // Supprimer la tâche    
     }
 }
 
+
 class Network : public HWComponent2State{
 
   public:
+    
+    //IWebSocketServer *wss{ nullptr };
     UDP* udp = NULL;
     Server* server=NULL;
     uint8_t media = NO_MEDIA;
@@ -663,7 +765,7 @@ class Network : public HWComponent2State{
     //HttpClient* http = NULL;    
     Client* client = NULL;   
     bool internet = false; 
-    uint16_t WANlatency = 250, LANlatency = 20;
+    uint16_t WANlatency = 250, LANlatency = 38;
 
     bool ethEnabled = true;
     bool WiFiEnabled = true;
@@ -683,7 +785,7 @@ class Network : public HWComponent2State{
       wiFiList->addValue(SSID,pwd);         
     }
     
-    virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback)=0;
+    virtual void asyncPing(const char* ipAddress, PingCallback callback)=0;
     // Méthode pour initier la connexion non bloquante, appelée dans la boucle
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
 
@@ -1048,18 +1150,16 @@ class WiFiEth : public Network{
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
-    virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback) {
+    virtual void asyncPing(const char* ipAddress, PingCallback callBack) {
       // Allouer la mémoire pour stocker les paramètres de la tâche
       PingTaskParameters* params = new PingTaskParameters;
       params->ipAddress = ipAddress;
-      params->onSuccess = successCallback;
-      params->onFailure = failureCallback;
-
+      params->callback = callBack;
       // Créer la tâche FreeRTOS pour le ping
       xTaskCreate(
         pingTask,         // Tâche à exécuter
         "PingTask",       // Nom de la tâche
-        4096,             // Taille de la pile de la tâche
+        4096*2,             // Taille de la pile de la tâche
         params,           // Paramètres de la tâche (adresse IP et callbacks)
         1,                // Priorité
         &pingTaskHandle   // Handle de la tâche
@@ -1070,12 +1170,12 @@ class WiFiEth : public Network{
       // Si nous sommes déjà en train de tenter une connexion, on ne relance pas la tâche
       if (clientParam->isClientConnecting ) {
         //DEBUG_PRINT("\n\t client connection pending, no more attempt allowed");
-        /*clientParam->client->stop();
-        vTaskDelete(httpTaskHandle);*/
+        //clientParam->client->stop();
+        //vTaskDelete(httpTaskHandle);
         //clientParam->taskHandle = nullptr;
         return false;
       }else{
-        //DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
+        DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
         clientParam->client = client;
         clientParam->isClientConnecting = true;
         // Démarrer la tâche FreeRTOS pour la connexion
@@ -1096,12 +1196,11 @@ class WiFiEth : public Network{
       //DEBUG_PRINT("\n\n\n\t\t\tcheckInternet => ");
       // Utiliser des lambdas pour passer les méthodes membres comme callbacks
       asyncPing("8.8.8.8", 
-        [&]() { onInternetPing(true); }, 
-        [&]() { onInternetPing(false); }
+        [&](bool online) { onInternetPing(online); }
       );
       // latency
       //if (LAN) 
-        LANlatency = 20;
+      //LANlatency = 20;
       //else 
         WANlatency = 150;
 
@@ -1221,7 +1320,7 @@ class  NoNetwork: public Network{
     virtual void stop(){}    
     virtual String getConnectedDeviceIP(){return "";}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
-    virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback){};
+    virtual void asyncPing(const char* ipAddress, PingCallback callback){};
     virtual void setUserInternetCallback(StdFunctionCallbackVoidBool uic){};
 };
 
@@ -1256,7 +1355,7 @@ class AccessPoint : public Network{
       }
     }
 
-    virtual void asyncPing(const char* ipAddress, PingCallback successCallback, PingCallback failureCallback){};
+    virtual void asyncPing(const char* ipAddress, PingCallback callback){};
     virtual bool asyncConnect(AsyncHttpClient *clientParam){ return false;}
     virtual void setUserInternetCallback(StdFunctionCallbackVoidBool uic){};
 

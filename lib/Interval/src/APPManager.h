@@ -19,6 +19,14 @@ using WiFiWebSocketServer = WebSocketServer<WiFiServer, WiFiClient, 1>;
 using EthernetWebSocketServer = WebSocketServer<EthernetServer, EthernetClient, 1>;
 void socketConnectionCallback(IWebSocket &ws);
 
+/*
+#include <WebSocketClient.hpp>    // https://github.com/skaarj1989/mWebSockets#meta     // use a local repository with SOCKETBUFFER SIZE CHANGED one because of https://github.com/skaarj1989/mWebSockets/issues/72
+using namespace net;
+using WiFiWebSocketClient = WebSocketClient<WiFiClient>;
+using EthernetWebSocketClient = WebSocketClient<EthernetClient>;
+void socketClientCallback(IWebSocket &ws);
+*/
+
 ///////////////////// WIDGET LOCATION & SIZE ////////////////////////
 #define OVERLAY_ICON_SIZE TFT_WIDTH/20
 
@@ -179,6 +187,7 @@ class DataProvider{
   public :
     virtual uint16_t size(String addrr) = 0;
     virtual String getValue(String addrr, uint16_t index) = 0;
+    //virtual String setValue(String addrr, uint16_t index) = 0;
 };
 
 class DataSet{
@@ -3059,7 +3068,7 @@ void setup() {
           size_t bytesToRead = min(PACKET_SIZE, compressedBuffer.available()); // Détermine le nombre d'octets à lire
           compressedBuffer.readBytes((char*)packet, bytesToRead);
           res.write(packet, bytesToRead);
-          yield(); // Libérer le CPU pour éviter le watchdog timeout
+          yield(); // 
         }
 
         /*

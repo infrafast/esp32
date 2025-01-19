@@ -431,12 +431,13 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
     //"setMixer","param":{"serverIP":"192.168.0.200","serverPort":"10024","mixerPort":"8080","serverModel":"XR16","autoConnectModel":"-1","autoConnectIP":"192.168.0.1"}
     mixerServer.serverIP.fromString(jsonDoc["param"][SERVER_IP_KEY].as<String>());
     mixerServer.serverUDPPort = jsonDoc["param"][SERVER_PORT_KEY];
+    mixerServer.msAPIPort = jsonDoc["param"][MIXER_PORT_KEY];
 
     userConfig.setValue(SERVER_IP_KEY,mixerServer.serverIP.toString());    
     userConfig.setValue(SERVER_PORT_KEY,String(mixerServer.serverUDPPort));
     userConfig.setValue(SERVER_MODEL_KEY,jsonDoc["param"][SERVER_MODEL_KEY]);
 
-    userConfig.setValue(MIXER_PORT_KEY,jsonDoc["param"][MIXER_PORT_KEY]);    
+    userConfig.setValue(MIXER_PORT_KEY,String(mixerServer.msAPIPort));     
     userConfig.setValue(MIXER_AUTOMODEL_KEY,jsonDoc["param"][MIXER_AUTOMODEL_KEY]);
     userConfig.setValue(MIXER_AUTOIP_KEY,jsonDoc["param"][MIXER_AUTOIP_KEY]);
     
@@ -489,7 +490,7 @@ void QueryingDemoMixer(bool internet){
 
     String testAddr = "/xinfo";
 
-    if(osc.ping(testAddr,hwm.network->WANlatency)){
+    if(osc.blockingPing(testAddr)){
         demoIP = "82.65.4.93";                // should be retrieved by an http request
         DEBUG_PRINT("\tDemo Mixer responded");    
     }else{
@@ -506,7 +507,7 @@ void QueryingDemoMixer(bool internet){
 
 void usertNetChangeStateCallback(bool state){
   //DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);
-  QueryingDemoMixer(hwm.network->internet);  
+  //QueryingDemoMixer(hwm.network->internet);  
 }
 
 void userWizardGUI(void){
@@ -704,7 +705,7 @@ void loop() {
             
       // interfaceState
       if (interfaceState == CONNECTING || interfaceState == IDLE)  mixerGlowingColor.baseColor = GUI::blue;
-      else if (interfaceState == MIXER_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::yellow;
+      else if (interfaceState == MIXER_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::orange;
       else if (interfaceState == MS_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::orange;
       else{
         // mixer state
@@ -717,6 +718,24 @@ void loop() {
 
     if (screen.id == SCREEN_BANK) screen.focus = screen.focus - 1;    // rebuild GUI, will call userBuildScreen 
   }
+
+  if (mixerServer.mixerInterface->interfaceState == SYNCING_MS){
+    static uint8_t previousProgress = 254;
+    uint8_t progress = mixerServer.mixerInterface->progress;
+    if (progress<100 && previousProgress!=progress){
+      previousProgress = progress;
+      app.broadCast("{\"syncProgress\":"+String(progress)+"}");
+    }
+  }else if (mixerServer.mixerInterface->interfaceState == SYNCING_CONSOLE ){
+    static uint8_t previousDataProgress = 254;
+    uint8_t progress = mixerServer.mixerInterface->syncDataProgress();
+    if (progress<100 && previousDataProgress!=progress){
+      previousDataProgress = progress;
+      app.broadCast("{\"syncProgress\":"+String(progress)+"}");
+    }
+  }
+
+
 
   #if defined(USE_FTP) && defined(USE_NETWORK)
     ftp.handle();

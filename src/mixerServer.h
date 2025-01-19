@@ -15,6 +15,7 @@
   #define SERVER_INTERFACE_KEY "interface"
   #define SERVER_IP_KEY "serverIP"
   #define SERVER_PORT_KEY "serverPort"
+  #define SERVER_DISCOVERY_KEY "serverDiscovery"
   #define SERVER_MODEL_KEY "serverModel"
   #define SERVER_CONNECTED_KEY "serverConnected"
   #define SERVER_NAME_KEY "serverName"
@@ -24,11 +25,10 @@
 class MixerServer: public HWComponent2State{
   public:
     IPAddress serverIP;
-    uint16_t serverUDPPort, behringerUDPPort, msUDPPort, msAPIPort;
+    int serverUDPPort, behringerUDPPort = 10023, msUDPPort, msAPIPort;
 
     bool msAPIOnline = false;
 
-    String configIP="";
     String name;
     Config* config;
     MixerInterface *mixerInterface;  // Pointeur vers l'interface abstraite (HAL)  
@@ -46,7 +46,7 @@ class MixerServer: public HWComponent2State{
       disconnect(); // this sets default mixer as offline and force trying to reconnect at next refresh
       network = net;
       
-      msHttpClientParam.callback = [&](String param) { processRESTcallback(param); };
+      msHttpClientParam.callback = [&](const char* param) { processRESTcallback(param); };
       msHttpClientParam.timeOut = MIXER_DETECTION_PERIOD-1000; // maximum duration of the request is the period of check minus one second    
       msHttpClientParam.URL = RESTCALL_APP_STATE;  
 
@@ -91,6 +91,7 @@ class MixerServer: public HWComponent2State{
         json[SERVER_STATE_KEY][SERVER_INTERFACE_KEY] = mixerInterface->name;
         json[SERVER_STATE_KEY][SERVER_MODEL_KEY] = mixerInterface->model;
         json[SERVER_STATE_KEY][SERVER_IP_KEY] = serverIP.toString();
+        json[SERVER_STATE_KEY][SERVER_DISCOVERY_KEY] = getDiscoveryMode()?"auto":"manual";
         json[SERVER_STATE_KEY][SERVER_PORT_KEY] = serverUDPPort;
         json[SERVER_STATE_KEY][SERVER_CONNECTED_KEY] = state;
         json[SERVER_STATE_KEY][SERVER_NAME_KEY] = name;
@@ -104,6 +105,17 @@ class MixerServer: public HWComponent2State{
         serializeJson(json,jsonString);
 
         return jsonString;
+    }
+
+    bool getDiscoveryMode(){
+      bool discovery = false;
+      String configIP = *config->getString(SERVER_IP_KEY); 
+
+      IPAddress ip;
+      if (!ip.fromString(configIP)) ip = IPAddress(0,0,0,0);  
+
+      if ((ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0) || configIP == "") discovery = true;
+      return discovery;
     }
 
     String getInterfaces(){
@@ -137,18 +149,11 @@ class MixerServer: public HWComponent2State{
       msAPIOnline = false;
       mixerInterface = new MixerOfflineInterface(dataRepository,*config->getString(SERVER_MODEL_KEY));
       mixerInterface->init();
-      name = "auto";
+      name = *app.lang.getString("searching");
     }
 
   private:    
-
-    bool discovery = false;
-
-    uint8_t mixerPortCounter = 0;
-      
-    #define MAXMIXERPORT 2
-    uint16_t UDPPortTotest[MAXMIXERPORT]={10024,10023};
-   
+  
     unsigned long lastDetectionAttemptTime = 0;
 
     //AsyncClient msHttpClientParam;
@@ -158,35 +163,23 @@ class MixerServer: public HWComponent2State{
     void connect() {    
 
       //DEBUG_PRINT("\n * * * Detect mixer * * *");
-      state = DISCONNECTED ;
+      state = DISCONNECTED ;              
 
-                 
-      String configIP = *config->getString(SERVER_IP_KEY); 
-      if (!serverIP.fromString(configIP)) serverIP = IPAddress(0,0,0,0);
+      String configIP = *config->getString(SERVER_IP_KEY);
+      if (!serverIP.fromString(configIP) || configIP=="") serverIP = IPAddress(0,0,0,0);  
 
-      DEBUG_PRINT("\n * * DETECT MIXER SERVER_IP_KEY = %s, serverIP = %s",configIP.c_str(),serverIP.toString().c_str());
-
-      discovery=false; //if IP address is 0 or not set, we use auto detection 
-      if ((serverIP[0] == 0 && serverIP[1] == 0 && serverIP[2] == 0 && serverIP[3] == 0) || configIP == "") discovery = true;
+      DEBUG_PRINT("\n * * MIXER SERVER_IP_KEY = %s, serverIP = %s",configIP.c_str(),serverIP.toString().c_str());
 
       // *************** autodetect:  **********************      
-      if (discovery){
+      if (getDiscoveryMode()){
         DEBUG_PRINT(" - D I S C O V E R Y - ");
         
         serverIP = network->IP;      
         serverIP[3] = 255 ; // broadcast IP for Behringer and MS
-
-        // for behringer native : we uses brodcast on UDP
-
-        behringerUDPPort = UDPPortTotest[mixerPortCounter];
-        // for mixing station, we uses TCP next IP                      
-        
+       
         msAPIPort = 8080;    
         msUDPPort = 3000;
-
-        mixerPortCounter = (mixerPortCounter+1) % MAXMIXERPORT;
-     
-        //in auto mode we test both
+          
         if (!testBehringer()) testMixingStation();
 
       }else{
@@ -208,39 +201,49 @@ class MixerServer: public HWComponent2State{
       network->asyncConnect(&msHttpClientParam);
     }
 
-    void testMixingStation(){      
+    bool testMixingStation(){      
       // TEST MIXING STATION
       // for mixing station:  REST API is over HTTP (so uses TCP), hence we cannot broadact. We have to test all IP address from the subnet range and see if we can connect the client provided by network hardware layer
       // which is not realistic, hence we test the dfault TCP port 8080       IN ASYNC HTTP REQUEST  
       if (msAPIOnline){  //gather async answer
         DEBUG_PRINT("\n =========> msAPIOnline");
         setMixingStationMixer(serverIP);    
-        return;
+        return true;
       }
 
+      // first method
       osc.setClient(serverIP,msUDPPort);
-      DEBUG_PRINT("\tTesting msUDP IP:%s/%i",serverIP.toString().c_str(),msUDPPort);      
-      if (osc.ping(OSC_MS_PING)){
-        DEBUG_PRINT("\n =========> mixerServerPing MS OSC");
-        setMixingStationMixer(osc.udp->remoteIP()); 
-        return;
+      DEBUG_PRINT("\nTesting msUDP IP:%s/%i",serverIP.toString().c_str(),msUDPPort);    
+      if (osc.blockingPing(OSC_MS_PING)){
+        setMixingStationMixer(osc.udp->remoteIP());
+        return true;
       }
 
       // second method, 
-      DEBUG_PRINT("\tTesting msREST IP:%s/%i TCP:%i ",serverIP.toString().c_str(),msAPIPort);      
+      DEBUG_PRINT("\nTesting msREST IP:%s/%i ",serverIP.toString().c_str(),msAPIPort);      
       testMS_REST_API();  //trigger async answer               
+
+      return false;
     }
 
     bool testBehringer(){      
-      bool behringerIsLive = false;
+      
+      uint16_t latency = osc.latency;
+
+      DEBUG_PRINT("\nTesting BehringerUDP IP:%s/%i",serverIP.toString().c_str(),behringerUDPPort);
       
       osc.setClient(serverIP,behringerUDPPort);
-      DEBUG_PRINT("\tTesting BehringerUDP IP:%s/%i",serverIP.toString().c_str(),msUDPPort);            
-      behringerIsLive = osc.ping(BEHRINGER_QUERY);
-      
-      if (behringerIsLive) setBehringerMixer();
+      if (osc.blockingPing(BEHRINGER_QUERY,latency)){
+        setBehringerMixer();
+        return true;
+      }
 
-      return behringerIsLive;
+      latency = (latency + 10) % 250;
+
+      if (behringerUDPPort == 10023) behringerUDPPort = 10024;
+      else behringerUDPPort = 10023;
+
+      return false;
     }
 
     void setMixingStationMixer(IPAddress _ip){
@@ -261,7 +264,7 @@ class MixerServer: public HWComponent2State{
       osc.setClient(serverIP,serverUDPPort); 
       mixerInterface = new MixingStation(dataRepository,&osc, network, msAPIPort);  
       mixerInterface->init();
-      name = MIXING_STATION_MODEL;
+      name = *app.lang.getString("software");
 
     } 
 
@@ -276,39 +279,37 @@ class MixerServer: public HWComponent2State{
       //sValue: 172.17.0.2
       //sValue1: X32OnlineIntervalDemo
       //sValue2: X32
-      IPAddress UDPIP = network->udp->remoteIP();
-      if (UDPIP[0] != serverIP[0]){
-        // the IP returned from the mixer differs from the on in the UDP packet,
-        // this happens for instance when the mixer is on a different network (emulator on DSM for example)
-        // therefore, we force the IP to be fixed and the one from UDP packet
-        DEBUG_PRINT("\nServerIP (%s) differs from UDPIP (%s)",serverIP.toString().c_str(),UDPIP.toString().c_str());
-        //serverIP = UDPIP;
-      }
-      IPAddress remoteMixerIP = remoteMixerIP.fromString(osc.sValue);
+      //IPAddress UDPIP = 
+      serverIP = osc.udp->remoteIP();
+      IPAddress remoteMixerIP = remoteMixerIP.fromString(osc.data.sValue); // <======== get 1.0.0.0 in remoteServerIP, why ?
       if (serverIP[0] != remoteMixerIP[0]){
         DEBUG_PRINT("\nRemoteMixer IP (%s) differs from ServerIP (%s)",remoteMixerIP.toString().c_str(),serverIP.toString().c_str());
         //serverIP = remoteMixerIP;          
       }
 
-      serverUDPPort = behringerUDPPort; //network->udp->remotePort();
+      serverUDPPort = osc.udp->remotePort(); 
       //config->setValue(SERVER_MODEL_KEY,osc.sValue2);
       //config->setValue(SERVER_IP_KEY,serverIP.toString()); we never do that as it would override the default user setting 0.0.0.0 auto for instance
       //config->setValue(SERVER_PORT_KEY,String(serverUDPPort));
       //config->save();
 
-      name = osc.sValue1;
+      name = osc.data.sValue1;
       if (mixerInterface != nullptr) delete mixerInterface;
       osc.setClient(serverIP,serverUDPPort);
-      mixerInterface = new BehringerMixer(dataRepository,osc.sValue2,&osc); 
+      mixerInterface = new BehringerMixer(dataRepository,osc.data.sValue2,&osc); 
       mixerInterface->init();
     }
 
-    void processRESTcallback(String param){     
+    void processRESTcallback(const char* param){     
+      
+      DEBUG_PRINT("\nServerProcessRESTcallback: %s",param);
+
       JsonDocument doc;
       
       auto error = deserializeJson(doc, param);
       if (error) {
-          DEBUG_PRINT("\nprocessRESTcallback parsing failed: %s",error.c_str());
+          DEBUG_PRINT("\nServerProcessRESTcallback parsing failed: %s",error.c_str());
+          doc.clear();
           return;
       }
       uint8_t status = doc[HTTP_REST_STATUS];
@@ -321,7 +322,9 @@ class MixerServer: public HWComponent2State{
         DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API not responding ----");
         msAPIOnline = false;
       }
+      doc.clear();
     }
+    
 
 };
 

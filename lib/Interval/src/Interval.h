@@ -150,7 +150,15 @@ struct ByteBuffer : public Stream {
   void flush() override {
     readIndex = 0; // Réinitialise l'index de lecture
     size = 0;      // Réinitialise la taille
+    shrink();
   }
+
+  void shrink() {
+      if (size == 0) {
+          capacity = 64; // Reset to initial size
+          buffer = (uint8_t*)realloc(buffer, capacity);
+      }
+  }  
 
   // Libérer la mémoire allouée
   ~ByteBuffer() {
@@ -172,24 +180,24 @@ bool streamWriterCallback(unsigned char* buff, size_t buffsize) {
   return true; // Retourner true pour indiquer que l'écriture est réussie
 }
 
+void gzCallback(size_t bytes_read, size_t total_bytes){
+  //DEBUG_PRINT("\n ungzip %d bytes ",bytes_read);
+  yield();
+}
 
-size_t writeBufferToGzFile(String filename, String* buf){
-  // using miniz (does not work)
-  const char* data = buf->c_str();
-
-  // open the fz file for writing
+size_t writeBufferToGzFile(String filename, const char* data){
+  DEBUG_PRINT("\nwriteBufferToGzFile->%s",data);  
   File fout = LittleFS.open(filename, "w");
   if(!fout)
   {
-    Serial.println("Unable to create output file, halting");
+    DEBUG_PRINT("\nUnable to create output file, halting");
     return 0;
   }
-
+  LZPacker::setProgressCallBack( gzCallback );
   size_t len = strlen(data);
-  // deflate!
   size_t outputSize = LZPacker::compress( (uint8_t*)data, len, &fout );
   //size_t fileSize = fout.position();
-  Serial.printf("\nCompressed %d input bytes to %u raw bytes in file%s\n", len, outputSize, filename.c_str());
+  DEBUG_PRINT("\nCompressed %d input bytes to %u raw bytes in file%s\n", len, outputSize, filename.c_str());
   fout.close();
   return outputSize;
 }
@@ -1419,6 +1427,12 @@ void socketConnectionCallback(IWebSocket &ws) {
   ws.send(WebSocketDataType::TEXT, connectivityConfig.c_str(), connectivityConfig.length());
 
 }
+
+
+void socketClientCallback(IWebSocket &ws) {
+
+}
+
 
 //////////////////////////////////////////////////////////////
 ////                DEFAULT STRIPS CONSTRUCTOR         ///////

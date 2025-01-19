@@ -12,6 +12,9 @@
 
 #define ADDRESS_CHNAME "/ch/config/%d/name"
 #define ADDRESS_BUSNAME "/bus/config/%d/name"
+#define ADDRESS_AUXNAME "/aux/config/%d/name"
+#define ADDRESS_FXRETNAME "/fxret/config/%d/name"
+#define ADDRESS_MAINNAME "/main/config/%d/name"
 
 
 /***************************************************************/
@@ -49,8 +52,12 @@
 //              JSON API DATA CONTENT DEFINITION
 #define MS_CHANNEL_TYPES                  "channelTypes"
   #define MS_TYPE_SHORTNAME_KEY   "shortName"
-    #define MS_CH_SHORTNAME               "Ch"
-    #define MS_BUS_SHORTNAME               "Mix"
+    #define MS_CH_SHORTNAME         "Ch"
+    #define MS_BUS_SHORTNAME        "Mix"
+    #define MS_AUX_SHORTNAME        "Aux"       
+    #define MS_FXRET_SHORTNAME      "FxRet"
+    #define MS_MAIN_SHORTNAME       "Main"
+
 /*********************************************************************/
 /*********************** JSON WEBAPP DEFINITION ******************/
 /*******************************************************************/
@@ -70,6 +77,9 @@
 #define MODEL_KEY             "model"
   #define CH_SIZE_KEY         "chSize"
   #define BUS_SIZE_KEY        "busSize"
+  #define AUX_SIZE_KEY        "auxSize"
+  #define FXRET_SIZE_KEY      "fxRetSize"
+  #define MAIN_SIZE_KEY       "mainSize"
   #define PROTOCOL_KEY        "protocol"
 #define CONSOLE_KEY           "consoles"
   #define CONSOLEID_KEY       "consoleId"
@@ -97,28 +107,34 @@ String stateNames[EOF_STATE]={
   "connected",
   "idle",
   "connecting",
-  "syncing",
+  "syncing software",
   "console unreachable",
-  "mixing s. unreachable",
+  "software unreachable",
   "searching",
   "connect failed",
-  "syncing console"
+  "syncing data",
 };
 
 #define UNSYNC_PATTERN "~"
+
 
 class DataSetPattern: public DataSet{
   
   public:
     String* values = nullptr;
     uint16_t size = 0;
+    uint16_t sync = 0;
     String pattern = "";
+    int offset = 0;
+    String shortName;
+    std::function<void(DataSetPattern*, OSCValues)> callback;
 
-    DataSetPattern(String addr,String obj, DataProvider* dp) : DataSet(addr,obj, dp){}
+    DataSetPattern(String _shortName, String addr,String obj, DataProvider* dp) : shortName(_shortName), DataSet(addr,obj, dp){}
 
-    void init(uint16_t _size,String defVal){
+    void init(uint16_t _size,String defVal, int _offset){
       size = _size;
-      DEBUG_PRINT("\nDataSetPattern init(%d,%s)",size,defVal.c_str());
+      offset = _offset;
+      DEBUG_PRINT("\nDataSetPattern init(%s,%d,%s,%d)",shortName.c_str(),size,defVal.c_str(),offset);
       // Supprimer le tableau existant s'il y en a un
       if (values != nullptr) delete[] values; // Libérer la mémoire précédemment allouée
       // Créer un nouveau tableau dynamique avec la taille passée
@@ -137,16 +153,17 @@ class MixerInterface : public DataProvider{
     DataRepository* dataRepository = nullptr;
     String name="abstract";
     uint8_t interfaceState = DISCONNECTED;
-    String OSCprotocol="";
 
     String unsyncPattern="~";
-
-    float progress = 0.0;  // connection progression indicator in %
 
     virtual void queryState()=0;
 
     DataSetPattern* chNames;
     DataSetPattern* busNames;  
+    DataSetPattern* auxNames;  
+    DataSetPattern* fxRetNames;
+    DataSetPattern* mainNames;
+
 
     MixerInterface(DataRepository* dr,String _model){  
       if (_model == "") model = MIXING_STATION_MODEL;
@@ -161,25 +178,32 @@ class MixerInterface : public DataProvider{
     void init(){
       JsonDocument interfaceDoc;
       deserialize(&interfaceDoc);
-      parseInterfaceProtocol(interfaceDoc);      
+      parseInterfaceProtocol(interfaceDoc.as<JsonVariant>());      
     }
 
-    virtual void parseInterfaceProtocol(JsonDocument& interfaceDoc){
+    virtual void parseInterfaceProtocol(JsonVariant interfaceDoc){
       // getting the properties of the interface in the json document
-      //DEBUG_PRINT("\n\n\n\tAPPEL DE BASE");
-      uint16_t chSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,CH_SIZE_KEY,"6").toInt();      
-      uint16_t busSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,BUS_SIZE_KEY,"2").toInt();
+      DEBUG_PRINT("\n\n\n\tAPPEL DE BASE");
+      uint16_t chSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,CH_SIZE_KEY,"12").toInt();      
+      uint16_t busSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,BUS_SIZE_KEY,"4").toInt();
+      uint16_t auxSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,AUX_SIZE_KEY,"2").toInt();      
+      uint16_t fxRetSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,FXRET_SIZE_KEY,"4").toInt();
+      uint16_t mainSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,MAIN_SIZE_KEY,"1").toInt();
 
-      chNames = new DataSetPattern(ADDRESS_CHNAME,INPUTSELECT,this);
-      busNames = new DataSetPattern(ADDRESS_BUSNAME,INPUTSELECT,this);
+      chNames = new DataSetPattern(MS_CH_SHORTNAME,ADDRESS_CHNAME,INPUTSELECT,this);
+      busNames = new DataSetPattern(MS_BUS_SHORTNAME,ADDRESS_BUSNAME,INPUTSELECT,this);
+      auxNames = new DataSetPattern(MS_AUX_SHORTNAME,ADDRESS_AUXNAME,INPUTSELECT,this);
+      fxRetNames = new DataSetPattern(MS_FXRET_SHORTNAME,ADDRESS_FXRETNAME,INPUTSELECT,this);
+      mainNames = new DataSetPattern(MS_MAIN_SHORTNAME,ADDRESS_MAINNAME, INPUTSELECT,this);
 
-      chNames->init(chSize,UNSYNC_PATTERN+String("CH"));
-      busNames->init(busSize,UNSYNC_PATTERN+String("BUS"));
+      chNames->init(chSize,UNSYNC_PATTERN "CH",1);
+      busNames->init(busSize,UNSYNC_PATTERN "BUS",1);
+      auxNames->init(auxSize,UNSYNC_PATTERN "AUX",1);
+      fxRetNames->init(fxRetSize,UNSYNC_PATTERN "FX",1);
+      mainNames->init(mainSize,UNSYNC_PATTERN "MAIN",1);
 
-      //DEBUG_PRINT("\n\n\n");
-
-      dataRepository->addDataSet(chNames);
-      dataRepository->addDataSet(busNames);        
+      dsNames = { chNames, busNames, auxNames, fxRetNames,  mainNames};
+      for (const auto& dsName : dsNames) dataRepository->addDataSet(dsName);
 
     }
 
@@ -230,13 +254,10 @@ class MixerInterface : public DataProvider{
 
 
     virtual ~MixerInterface(){
-
-      dataRepository->removeDataSet(chNames);
-      delete chNames;
-
-      dataRepository->removeDataSet(busNames);      
-      delete busNames;
-
+      for (const auto& dsName : dsNames){
+        dataRepository->removeDataSet(dsName);
+        delete dsName;
+      } 
       //DEBUG_PRINT("\n\n~MixerInterface()");
     }
 
@@ -250,7 +271,7 @@ class MixerInterface : public DataProvider{
 
     virtual bool update()=0;
     
-    String getAdjacentValueByKeyFromRootArray(JsonDocument& doc, String root, String key, String keyValue, String adjacent, String defaultValue="") {  // key = "model" , adjacent = "size"
+    String getAdjacentValueByKeyFromRootArray(JsonVariant& doc, String root, String key, String keyValue, String adjacent, String defaultValue="") {  // key = "model" , adjacent = "size"
         // Vérifier si le document contient une clé "consoles"
         if (!doc[root].is<JsonArray>()) {
             DEBUG_PRINT("\nRoot '%s' not found or not an array in JSON",root.c_str());
@@ -265,7 +286,7 @@ class MixerInterface : public DataProvider{
                 // Retourner la valeur de la clé spécifiée si elle existe
                 if (elem.containsKey(adjacent.c_str())) {
                     String s = elem[adjacent.c_str()];
-                    //DEBUG_PRINT("\n%s:%s = %s",keyValue.c_str(),adjacent.c_str(),s.c_str());
+                    DEBUG_PRINT("\n%s:%s = %s",keyValue.c_str(),adjacent.c_str(),s.c_str());
                     return s;
                 } else {
                     DEBUG_PRINT("\nadjacent:%s   not found.",adjacent.c_str());
@@ -340,9 +361,12 @@ class MixerInterface : public DataProvider{
     virtual void connect(Config* conf)=0;
     virtual bool sendCommand(String command, JsonDocument param) = 0;
     virtual void disconnect()=0;
+    virtual uint8_t syncDataProgress()=0;
+    virtual uint8_t syncSoftwareProgress()=0;
 
   protected:
     //uint16_t chSize=1,busSize=1;    
+    std::vector<DataSetPattern*> dsNames;
 
 };
 
@@ -351,112 +375,128 @@ class OSCMixerInterface: public MixerInterface {
 
   public: 
     static String echoCommand;    
-    bool OSClive = true;
+    #define SYNC_TIMEOUT 10000
+    String OSCprotocol="";
 
-    // offset for bus, chanel and other  names
-    uint8_t chOffset = 0;
-    uint8_t busOffset = 0;
-
-
-    struct DataSetsSync {
-        uint8_t ch = 0;
-        uint8_t bus = 0;
-        OSCMixerInterface* parent;
-
-        DataSetsSync(OSCMixerInterface* _parent):parent(_parent){}
-
-        uint8_t progress(){
-          uint16_t totalToSync = parent->chNames->size + parent->busNames->size;
-          uint16_t syncedSoFar = ch + bus;
-          return map(syncedSoFar, 0, totalToSync, 0, 100);
-        }
-    };
-
-    DataSetsSync dataSetSync;
-
-    OSCMixerInterface(DataRepository* dr,String m, OSCInterface* _osc): osc(_osc), MixerInterface(dr,m),dataSetSync(this){
+    OSCMixerInterface(DataRepository* dr,String m, OSCInterface* _osc): osc(_osc), MixerInterface(dr,m){
       DEBUG_PRINT("\nnew OSCMixerInterface(%s %s,%d)",model.c_str(),osc->ip.toString().c_str(),osc->port);
     }
 
     virtual void syncDataSet()=0;
+
+    virtual uint8_t syncDataProgress(){
+      uint16_t totalToSync = 0;
+      uint16_t syncedSoFar = 0;
+      for (const auto& dsName : dsNames){
+        totalToSync += dsName->size;
+        syncedSoFar += dsName->sync;
+      }
+      return map(syncedSoFar, 0, totalToSync, 0, 100);
+    }
 
     virtual bool monitor(){
 
       // restart monitoring value
       if (interfaceState == CONNECTED){
         if (millis()-lastRestartMonitorTime > restartMonitorDelay){
-          osc->SendCmd2OSC(restartMonitorCommand.c_str(), false);          // otherwise we ask mixer to send message for the next 10 sec (see behringer protocol)
+          osc->SendCmd2OSC(restartMonitorCommand.c_str());          // otherwise we ask mixer to send message for the next 10 sec (see behringer protocol)
           lastRestartMonitorTime = millis();
         }
       }
 
-      // processing OSC queue
+      // PROCESS OSC QUEUE
       if (osc->OSCReadIn()){
-        lastOSCCheck = millis();
-        lastQueryTime = millis();   // REMOVE THIS ONE IF YOU STILL WANT TO CHECK REST API WHEN OSC IS RESPONDING (CONSUMME MORE TIME)        
-        OSClive = true;
-        //DEBUG_PRINT("\t* * * OSCLIVE true * * *\t");
-
-        //in case there is a common prefix (like for mixing station, all OSC starts with /con/? ), we have to remove it to prevent scanf matching the first characters to be in common
-        /*String addressWithoutPrefix = removePattern(osc->addressStr.c_str(), OSC_MS_PRE "%s") ;  //"/con/n/%s"         
-        int val1;
-        
-        // data sets
-        String patternWithoutPrefix = removePattern(chNames->pattern.c_str(), OSC_MS_PRE "%s");
-        DEBUG_PRINT("\n<<%s versus %s",addressWithoutPrefix.c_str(),patternWithoutPrefix.c_str());
-        if (sscanf(addressWithoutPrefix.c_str(), patternWithoutPrefix.c_str(), &val1) == 1){
-            DEBUG_PRINT("\nGOT chname %d = %d \t%s <=> %s",val1,osc->iValue, addressWithoutPrefix.c_str(),chNames->pattern.c_str());
-        }*/
+        //////////////////////////// match names        
+        String prevPattern="";
+        for (const auto& dsName : dsNames){
+          if (prevPattern == dsName->pattern) break;
+          else{
+            prevPattern = dsName->pattern;
+            if (osc->matchPattern(dsName->pattern,osc->data.addressStr)){
+              if (updateName(dsName,osc->data)) break;
+            }
+          }
+        } 
+        lastQueryTime = millis();   // remove THIS ONE IF YOU STILL WANT TO CHECK REST API WHEN OSC IS RESPONDING (CONSUMME MORE TIME)                
+        OSCechoAttempt = 0;                        
         return true;
       }
 
-      if (millis()-lastOSCCheck > queryDelay*2){
-        lastOSCCheck = millis();
-        OSClive = false;
-        //DEBUG_PRINT("\t!!! OSCLIVE false !!!\t");
-        //LogUDP::sendLog("OSCLIVE false",hwm.network->udp);        
-      } 
-            
-      /////// MANAGE CONNECTION ////////////////////////////////////////////////////   
+      //////// DATA SET SYNC
+      if (interfaceState == SYNCING_CONSOLE ){         //we should not try to sync if we are not connected
+        syncDataSet();
+      }        
 
-      if (millis()-lastQueryTime > queryDelay){
+      /////// MANAGE CONNECTION ////////////////////////////////////////////////////   
+      if (millis()-lastQueryTime > queryDelay){        
         lastQueryTime = millis();
         queryState();
-        osc->SendCmd2OSC(echoCommand.c_str());        
-      }     
-
-      //////// DATA SET SYNC
-      if (dataSetSync.progress()<100 ){         //&& interfaceState == SYNCING_CONSOLE
-        syncDataSet();
-      }
-
-
+        OSCechoAttempt++;
+        osc->SendCmd2OSC(echoCommand.c_str());                      
+        DEBUG_PRINT("\t OSCechoAttempt: %d",OSCechoAttempt);
+      } 
       return false;
+    }    
+
+    virtual bool updateName(DataSetPattern* ds, OSCValues val){
+      // this is the specific part that uses scanf to extract the value => we have to know in advance that we want ot retrieve an int.
+      int index = 0;
+      if (!sscanf(val.addressStr.c_str(), ds->pattern.c_str(), &index) == 1){
+        DEBUG_PRINT("\nparse %s failed",ds->pattern.c_str());
+      }
+      DEBUG_PRINT("\nUpdate index %d - offset(%d) = ",index,ds->offset);      
+      ////////////////////////////////////
+      index = index - ds->offset;
+      if (index<0) index = 0;
+      if (index>=ds->size){
+        DEBUG_PRINT("\tNO DS IMPLEMENTED FOR THIS INDEX");
+        return false;
+      }
+      DEBUG_PRINT("%d",index);
+      // first we check the value of IVal which indicate which channel has been received      
+      if (ds->values[index].indexOf(UNSYNC_PATTERN) != -1){ // the channel was notsync so we flag it as sync.        
+        ds->sync++;    // next one
+        DEBUG_PRINT("\t SYNCED");
+      }
+      // and in all cases we update the value
+      ds->values[index] = val.sValue;      
+      DEBUG_PRINT("\t%s(%d)=>%s",ds->shortName.c_str(),index, val.sValue);      
+      return true;
     }
 
-    void dropNextSyncQuery(){
-      if (dataSetSync.ch<chNames->size){ // are channel complete ?
-        DEBUG_PRINT("\nSyncing CH%d",dataSetSync.ch);
-        if (chNames->values[dataSetSync.ch].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.
-          sprintf(OSCCommand, chNames->pattern.c_str(), dataSetSync.ch+chOffset);
-          if (osc->ping(OSCCommand)){
-            chNames->values[dataSetSync.ch] = osc->sValue;
-            DEBUG_PRINT("\t: %s",osc->sValue);
-            dataSetSync.ch++;    // next one
+    void dropParrallelAsyncQuery(){
+      strcpy(OSCCommand,"");   
+      for (const auto& dsName : dsNames){
+        if (dsName->sync<dsName->size){ // then are buses complete ?
+          DEBUG_PRINT("\nSyncing %s%d =>",dsName->shortName.c_str(),dsName->sync);
+          if (dsName->values[dsName->sync].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.
+            sprintf(OSCCommand, dsName->pattern.c_str(), dsName->sync+dsName->offset);
+            osc->SendCmd2OSC(OSCCommand);                          
+          }   
+        } 
+      }  
+    }
+
+    void dropSequentialSyncQuery(){
+      static uint16_t latency = osc->latency;
+      static uint8_t dsNameIndex = 0;
+
+      if (dsNameIndex >= dsNames.size()) return;
+
+      DataSetPattern* dsName = dsNames[dsNameIndex]; //sync in serial, next dsName
+
+      if (dsName->sync<dsName->size){ // then are buses complete ?
+        DEBUG_PRINT("\nSyncing %s%d =>",dsName->shortName.c_str(),dsName->sync);
+        if (dsName->values[dsName->sync].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.
+          sprintf(OSCCommand, dsName->pattern.c_str(), dsName->sync+dsName->offset);
+          //osc->SendCmd2OSC(OSCCommand,false);                          
+          if (osc->blockingPing(OSCCommand, latency)){
+            latency = osc->latency; // recall the latency from the last ping
+            updateName(dsName,osc->data);
           }
-        }else dataSetSync.ch++;
-      }
-      if (dataSetSync.bus<busNames->size){ // are buses complete ?
-        DEBUG_PRINT("\nSyncing BUS%d =>",dataSetSync.bus);
-        if (busNames->values[dataSetSync.bus].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.
-          sprintf(OSCCommand, busNames->pattern.c_str(), dataSetSync.bus+busOffset);
-          if (osc->ping(OSCCommand)){
-            busNames->values[dataSetSync.bus] = osc->sValue;
-            DEBUG_PRINT("\t: %s",osc->sValue);
-            dataSetSync.bus++;    // next one
-          }
-        }else dataSetSync.bus++;      
-      }      
+          else latency = (latency + 20) % 250;
+        }   
+      }else dsNameIndex++;
     }
 
     // Envoi d'une commande générique    
@@ -479,13 +519,13 @@ class OSCMixerInterface: public MixerInterface {
 
   protected:
     uint16_t restartMonitorDelay=0, queryDelay=0;
-
+    uint8_t OSCechoAttempt = 0;
     String restartMonitorCommand ="";
     OSCInterface* osc;
 
     char OSCCommand[OSC_MAX_LEN];
 
-    unsigned long lastQueryTime = 0, lastRestartMonitorTime = 0, lastOSCCheck = 0;   
+    unsigned long lastQueryTime = 0, lastRestartMonitorTime = 0;   
 };
 
 String OSCMixerInterface::echoCommand = "";
@@ -514,6 +554,9 @@ class MixerOfflineInterface: public MixerInterface {
       // do nothing
     }
 
+    virtual uint8_t syncDataProgress(){return 0;}
+    virtual uint8_t syncSoftwareProgress(){return 0;}
+
     virtual void disconnect(){}
 
     virtual void queryState(){}               
@@ -527,7 +570,7 @@ class MixerOfflineInterface: public MixerInterface {
       return v;
     }*/
 
-    virtual void parseInterfaceProtocol(JsonDocument& doc){
+    virtual void parseInterfaceProtocol(JsonVariant doc) override{
       //DEBUG_PRINT("\n\n\n\tAPPEL DERIVE OFFLINE");
       MixerInterface::parseInterfaceProtocol(doc);
     }
@@ -548,7 +591,7 @@ class BehringerMixer : public OSCMixerInterface {
       restartMonitorCommand = OSC_BEHRINGER_REMOTE;
       restartMonitorDelay = BEHRINGER_RESTART_PERIOD;
       queryDelay = BEHRINGER_PING_DELAY;
-      interfaceState = CONNECTED;
+      interfaceState = SYNCING_CONSOLE;
     }
 
     virtual ~BehringerMixer(){
@@ -556,12 +599,12 @@ class BehringerMixer : public OSCMixerInterface {
     }
 
     virtual void queryState(){
-      if (!OSClive){
-        DEBUG_PRINT("\t second chance");
-        if (!osc->ping(echoCommand)) interfaceState = DISCONNECTED;     // second chance;
-        else OSClive = true;
-        lastQueryTime = millis();
-      } 
+      if (OSCechoAttempt == 2) interfaceState = DISCONNECTED;     
+      else if (interfaceState == SYNCING_CONSOLE){
+        if (syncDataProgress() == 100) {
+          interfaceState = CONNECTED;          
+        }
+      }
     }
 
     virtual void connect(Config* conf){
@@ -570,9 +613,11 @@ class BehringerMixer : public OSCMixerInterface {
 
     virtual void disconnect(){}
 
-    virtual void syncDataSet(){      
-      dropNextSyncQuery();
+    virtual void syncDataSet(){   
+      dropSequentialSyncQuery();
     }
+
+    virtual uint8_t syncSoftwareProgress(){return 100;}
 
     bool sendCommand(String command, JsonDocument param) override {
       bool success;
@@ -629,9 +674,9 @@ class BehringerMixer : public OSCMixerInterface {
     virtual bool update(){
       if (monitor()){
         DEBUG_PRINT("\nBehringer processs QUEUE");
-        if (osc->addressStr == "value"){
+        if (osc->data.addressStr == "value"){
 
-        }else if (osc->addressStr == "value2"){
+        }else if (osc->data.addressStr == "value2"){
 
         }
         return true;
@@ -639,31 +684,17 @@ class BehringerMixer : public OSCMixerInterface {
       return false;
     }
 
-    /*virtual String getValue(String addrr, uint16_t index){
-      String value="";
-      
-      if (addrr == ADDRESS_CHNAME){
-        value="CH"+String(index); // default
-        sprintf(OSCCommand, chNames->pattern.c_str(), index);        
-      } 
-      else if (addrr == ADDRESS_BUSNAME){
-        value="BUS"+String(index);  // default
-        sprintf(OSCCommand, busNames->pattern.c_str(), index);
-      }
-
-      if (osc->ping(OSCCommand)){
-        value = osc->sValue;
-      }
-
-      return value;
-    } */  
-
-    virtual void parseInterfaceProtocol(JsonDocument& interfaceDoc){
+    virtual void parseInterfaceProtocol(JsonVariant interfaceDoc) override{
       MixerInterface::parseInterfaceProtocol(interfaceDoc);
       OSCprotocol = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,PROTOCOL_KEY,"ms"); 
 
       chNames->pattern = "/ch/%02d/config/name";
       busNames->pattern = "/bus/%02d/config/name";
+      auxNames->pattern = "/auxin/%02d/config/name";
+      fxRetNames->pattern = "/fxrtn/%02d/config/name";
+      mainNames->pattern = "/main/st/config/name";
+
+      //for (const auto& dsName : dsNames) dsName->offset = 1; //index starts at 1 // this is initialized by default when creating names in init of Base Class
       /*parse following json:
       "ch":{
 				"name":"/ch/config/%d/name",
@@ -696,10 +727,12 @@ class MixingStation : public OSCMixerInterface {
   private:
     //WiFiClient client;    
     AsyncHttpClient msRESTAPIClient;
-    
+    //WebSocketServer<EthernetServer, EthernetClient> server;
+
     uint16_t REST_API_port;
     Network* network;
     String RESTState="";
+    uint8_t RESTSyncProgress=0;
 
     struct SyncInfo {
         bool consoleInfo = false;
@@ -727,7 +760,7 @@ class MixingStation : public OSCMixerInterface {
       
       DEBUG_PRINT("\n\nNew MixingStation()\n\n");   
       name="undef";                    // to be replaced by the outcome of a REST query 
-      echoCommand = getOSC(OSC_MS_PING);
+      echoCommand = OSCprefix(OSC_MS_PING);
       restartMonitorCommand = OSC_MS_REMOTE;
       restartMonitorDelay = MS_RESTART_PERIOD;
       queryDelay = MS_PING_DELAY;      
@@ -737,14 +770,14 @@ class MixingStation : public OSCMixerInterface {
       msRESTAPIClient.timeOut = queryDelay-1000; // maximum duration of the request is the period of check minus one second
       msRESTAPIClient.client = network->client;
 
-      msRESTAPIClient.callback =  [&](String param) {processRESTcallback(param);};
+      msRESTAPIClient.callback =  [&](const char* param) {processRESTcallback(param);};
 
       interfaceState = SEARCHING;
       progress = 0.0;
 
     }
 
-    String getOSC(String command){
+    String OSCprefix(String command){
       return String(OSC_MS_PRE)+command;
     }
 
@@ -759,19 +792,20 @@ class MixingStation : public OSCMixerInterface {
     }
 
 
-    void processRESTcallback(String param){
+    void processRESTcallback(const char* param){
       
-      DEBUG_PRINT("\nprocessRESTcallback(%s...)",param.substring(0,100).c_str());
-
+      DEBUG_PRINT("\nInterfaceprocessRESTcallback(%s...)",param);
+      
       JsonDocument doc;    
       auto error = deserializeJson(doc, param);
       if (error) {
-          DEBUG_PRINT("\nprocessRESTcallback parsing failed: %s",error.c_str()); 
+          DEBUG_PRINT("\nInterfaceprocessRESTcallback parsing failed: %s",error.c_str()); 
+          doc.clear();
           return;
       }
 
       uint8_t status = doc[HTTP_REST_STATUS];
-      JsonDocument data = doc[HTTP_REST_DATA];
+      JsonVariant data = doc[HTTP_REST_DATA];
       String origin = doc[HTTP_REST_ORIGIN];     
 
       /*
@@ -784,16 +818,44 @@ class MixingStation : public OSCMixerInterface {
       if (origin == RESTCALL_CONSOLE_INFO){
         if (status == HTTP_REST_OK){
           
-          uint16_t chSize = getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,MS_CH_SHORTNAME,"count",String(chSize)).toInt();
-          uint16_t busSize = getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,MS_BUS_SHORTNAME,"count",String(busSize)).toInt();      
+          chNames->init(
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,chNames->shortName,"count",String(2)).toInt(),
+            UNSYNC_PATTERN "MSCH", 
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,chNames->shortName,"offset","0").toInt()
+          );
 
-          chNames->init(chSize,UNSYNC_PATTERN+String("MSCH"));
-          busNames->init(busSize,UNSYNC_PATTERN+String("MSCH"));
+          busNames->init(
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,busNames->shortName,"count",String(2)).toInt(),
+            UNSYNC_PATTERN "MSBUS", 
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,busNames->shortName,"offset","0").toInt()
+          );
+          
+          auxNames->init(
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,auxNames->shortName,"count",String(2)).toInt(),
+            UNSYNC_PATTERN "MSAUX", 
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,auxNames->shortName,"offset","0").toInt()
+          );
+          
+          fxRetNames->init(
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,fxRetNames->shortName,"count",String(2)).toInt(),
+            UNSYNC_PATTERN "MSFX", 
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,fxRetNames->shortName,"offset","0").toInt()
+          );
+          
+          mainNames->init(
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,mainNames->shortName,"count",String(2)).toInt(),
+            UNSYNC_PATTERN "MSMAIN", 
+            getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,mainNames->shortName,"offset","0").toInt()
+          );
 
-          chOffset = getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,MS_CH_SHORTNAME,"offset","0").toInt();
-          busOffset = getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,MS_BUS_SHORTNAME,"offset","48").toInt();
+
+          std::sort(dsNames.begin(), dsNames.end(), [](const DataSetPattern* a, const DataSetPattern* b) {
+              return a->offset > b->offset; // Tri décroissant
+          });
+
 
           lastQueryTime = 0; // speed up the call to ping with no delay in between
+
           mixerRESTSync.consoleInfo = true;
         }else{
           setConnectFailed();
@@ -847,12 +909,12 @@ class MixingStation : public OSCMixerInterface {
             newInterface[CONSOLEID_KEY] = console[CONSOLEID_KEY];      // Ajouter une clé "consoleId"
             newInterface[NAME_KEY] = console[NAME_KEY];  // Ajouter une clé "name"
           }
-
           // save the file
-          String dataToCompress;
-          serializeJson(interfaceDoc,dataToCompress);      
-          DEBUG_PRINT("\ndataToCompress->%s",dataToCompress.c_str());
-          size_t dataSize = writeBufferToGzFile(INTERFACES_FILENAMEGZ,&dataToCompress);     
+          if (serialize(interfaceDoc)){
+            DEBUG_PRINT("\nmixingstation serialized correctly");
+          }else{
+            DEBUG_PRINT("\nmixingstation serialized failed");
+          }
           mixerRESTSync.availableModels = true;
           lastQueryTime = 0; // speed up the call to ping with no delay in between          
         }else{
@@ -930,7 +992,6 @@ class MixingStation : public OSCMixerInterface {
       queryDelay = MS_PING_DELAY;
 
       //////////////////////////////////// REST API HAS RESPONDED
-
       if (RESTState == "syncing"){
         interfaceState = SYNCING_MS;
         //lastQueryTime = 0; // try the next one straight with no delay
@@ -941,13 +1002,18 @@ class MixingStation : public OSCMixerInterface {
       else if (RESTState == "idle"){
         interfaceState = IDLE;
       }else{
-
         /////////////////////////////////////  REST API HAS !NOT RESPONDED! OR !IS CONNECTED!
-        
-        if (OSClive) {
-
+        if (OSCechoAttempt>1){
+          if (RESTState == "connected"){
+            interfaceState = MIXER_UNREACHABLE;        // inconsistent
+            LogUDP::sendLog("MIXER_UNREACHABLE",hwm.network->udp);        
+          } 
+          else if (RESTState == "offline"){
+            disconnect();
+          }
+        }else{
           if (RESTState == "connected" || RESTState == "backgroundSync"){        
-            if (!mixerRESTSync.allSync() && !dataSetSync.progress()<100){     // if the mixer days it is connected and we retreived its data, then we set the interface status to CONNECTED
+            if (!mixerRESTSync.allSync() || syncDataProgress()<100){     // if the mixer days it is connected and we retreived its data, then we set the interface status to CONNECTED
               interfaceState = SYNCING_CONSOLE;
             }else{           
               interfaceState = CONNECTED;               
@@ -956,7 +1022,14 @@ class MixingStation : public OSCMixerInterface {
               // now we save the mixing station interface properties so in case user starts offline, we are able to provide the virtual information like number of buses and channels, etc... from the last connected device
               static bool serialized = false;
               if (!serialized){ // only do it once at first connection
-                if (serialize()>0){                //save the properties into interfaces.json file                              
+                JsonDocument interfaceDoc;
+                deserialize(&interfaceDoc);
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, BUS_SIZE_KEY, busNames->size);
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, CH_SIZE_KEY, chNames->size);
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, AUX_SIZE_KEY, auxNames->size);
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, FXRET_SIZE_KEY, fxRetNames->size);
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, MAIN_SIZE_KEY, mainNames->size);
+                if (serialize(interfaceDoc)>0){                //save the properties into interfaces.json file                              
                   DEBUG_PRINT("\nmixing station properties saved into interface file");
                   serialized = true;
                 }else{
@@ -970,16 +1043,7 @@ class MixingStation : public OSCMixerInterface {
             interfaceState = MS_UNREACHABLE;  // inconsistent
           }      
 
-        }else{
-
-          if (RESTState == "connected"){
-            interfaceState = MIXER_UNREACHABLE;        // inconsistent
-            LogUDP::sendLog("MIXER_UNREACHABLE",hwm.network->udp);        
-          } 
-          else if (RESTState == "offline"){
-            disconnect();
-          }
-        }           
+        }          
 
       }
 
@@ -990,23 +1054,19 @@ class MixingStation : public OSCMixerInterface {
     virtual void syncDataSet(){
       // data sets can only be made available once the mixer info and mix targets has been retrieved, especially offset of the names etc...
       if (mixerRESTSync.consoleInfo && mixerRESTSync.mixTargets){
-        dropNextSyncQuery();
+        dropParrallelAsyncQuery(); // for mixing station => in case it push data every 3 seconds, there is no need to call for a syncQuery as it will come anyway
       }
       return;
     }
 
-    size_t serialize(){
-      JsonDocument interfaceDoc;
-      deserialize(&interfaceDoc);
+    virtual uint8_t syncSoftwareProgress(){
+      return 0;
+    }
 
-      modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, BUS_SIZE_KEY, busNames->size);
-      modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, CH_SIZE_KEY, chNames->size);
-
+    size_t serialize(JsonVariant interfaceDoc){
       String dataToCompress;
       serializeJson(interfaceDoc,dataToCompress);      
-      //DEBUG_PRINT("\ndataToCompress->%s",dataToCompress.c_str());
-      size_t dataSize = writeBufferToGzFile("/webapp/interfaces.json.gz",&dataToCompress);
-
+      size_t dataSize = writeBufferToGzFile("/webapp/interfaces.json.gz",dataToCompress.c_str());
       return dataSize;
       
     }
@@ -1056,9 +1116,9 @@ class MixingStation : public OSCMixerInterface {
       if (monitor()){        
         // process queue
         //DEBUG_PRINT("\nMixing station processs QUEUE");
-        if (osc->addressStr == "value"){
+        if (osc->data.addressStr == "value"){
 
-        }else if (osc->addressStr == "value2"){
+        }else if (osc->data.addressStr == "value2"){
 
         }
        
@@ -1105,17 +1165,32 @@ class MixingStation : public OSCMixerInterface {
       return success;
     }
 
-    virtual void parseInterfaceProtocol(JsonDocument& interfaceDoc){
+    virtual void parseInterfaceProtocol(JsonVariant interfaceDoc){
       MixerInterface::parseInterfaceProtocol(interfaceDoc);
 
-      chNames->pattern = getOSC("/ch.%d.cfg.name");
-      busNames->pattern = getOSC("/ch.%d.cfg.name");
+      for (const auto& dsName : dsNames) dsName->pattern = OSCprefix("/ch.%d.cfg.name");
 
-      //DEBUG_PRINT("\n\n\n\tAPPEL DERIVE MS");
+      //DEBUG_PRINT("\n\n\n\tAPPEL DERIVE MS => chNames->pattern = %s",chNames->pattern.c_str());
       //String getNameOSCcommand = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,"getName","ms"); 
       //DEBUG_PRINT("\n\n\n");          
     }
 
+
+    virtual bool updateName(DataSetPattern* ds, OSCValues val) override{
+      // since mixingstation use the same address for updating different properties (ch/bus...) 
+      // the routing is performed based on the offset which tells which one is the target
+      int index = 0;
+      if (!sscanf(val.addressStr.c_str(), ds->pattern.c_str(), &index) == 1){
+        DEBUG_PRINT("\nparse %s failed",ds->pattern.c_str());
+      }
+
+      for (const auto& dsName : dsNames) {          
+          //dsName are sorted 
+          if (index >= dsName->offset) if (OSCMixerInterface::updateName(dsName,val)) return true;
+      }
+
+      return false;
+    }
 
 };
 
