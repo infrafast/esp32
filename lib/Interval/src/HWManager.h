@@ -130,10 +130,6 @@ public:
       hwComponents.add(&battery);    
     }
     
-    void setUserInternetCallback(StdFunctionCallbackVoidBool uic){
-      network->setUserInternetCallback(uic);
-    }
-
     /*
     virtual ~HardwareManager(){
         delete button
@@ -212,7 +208,7 @@ public:
       digitalWrite(D7,HIGH);
       delay(100);*/
    
-      xTaskCreatePinnedToCore(xTaskBackground, "secondCPU", 4096, NULL, 3, NULL, 0);
+      xTaskCreatePinnedToCore(xTaskBackground, "backgroundHWandGUI", 4096, NULL, 3, NULL, 0);
       
       debounceTimer = millis();
       lastInterrupt = millis();

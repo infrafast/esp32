@@ -10,188 +10,231 @@
     #define DEBUG_PRINT(...) 
 #endif
 
+#ifdef DEBUG_OSC  
+  #define OSC_DEBUG_PRINT(...)   Serial.printf(__VA_ARGS__); Serial.flush() //ets_printf(__VA_ARGS__) //
+#else
+  #define OSC_DEBUG_PRINT(...) 
+#endif
 
-struct OSCValues{
-    
-    #define OSC_MAX_LEN 64
 
-    uint16_t bSize = 20, oldbSize = bSize ;
-    uint8_t * bValue = new uint8_t[bSize];
+
+struct OSCValues{   
+    #define OSC_MAX_LEN 128
+    uint16_t    bSize = 20, oldbSize = bSize ;
+    uint8_t *   bValue;
     int         iValue            = -1;           // values returned by the mixer
     float       fValue          = -0.1;
-    char        sValue[OSC_MAX_LEN+10]; char sValue2[OSC_MAX_LEN]; char sValue1[OSC_MAX_LEN];
-    char   TypeStr;
-    String addressStr, expectedStr="";
+    char        sValue[OSC_MAX_LEN]; char sValue2[OSC_MAX_LEN]; char sValue1[OSC_MAX_LEN];
+    char        TypeStr;
+    char        addressStr[OSC_MAX_LEN];
+    const char* expectedStr;
 };
+
+typedef std::function<void(bool, OSCValues*, int)> OSCPingCallback; 
+
+class OSCInterface;
+
+struct OSCPingTaskParameters {
+  OSCValues* data;
+  IPAddress ip;
+  int port;
+  bool isPinging = false;
+  uint16_t timeOut = 32;
+  OSCPingCallback callback;
+  OSCInterface* osc;
+};
+
+void OSCpingTask(void* parameter);
 
 class OSCInterface{
     public:
         IPAddress ip;
         int port;
         uint16_t latency = 49;      // default reasonnable latency
-        UDP *udp = NULL;
+        Network* network;
         unsigned long RXtimerStart = 0;
-        OSCValues data;
         
-        OSCInterface(){}
+        OSCInterface(Network* _net):network(_net){
+            latency = network->LANlatency;
+        }
    
         void setClient(const IPAddress defaultIP, const int defaultPort){
             ip = defaultIP;
             port = defaultPort;
-            DEBUG_PRINT("\nOSC.setClient(%s,%d)",ip.toString().c_str(),port);
-        }
-
-        void setNetwork(UDP* _udp, uint16_t _latency){
-            //DEBUG_PRINT("\nOSC.setUDP()");
-            udp = _udp;
-            latency = _latency;
+            OSC_DEBUG_PRINT("\nOSC.setClient(%s,%d)",ip.toString().c_str(),port);
         }
         
-        bool sendOSCMessage(OSCMessage *msg, const IPAddress _ip, const int _port, bool countRXtime = true){           
-            DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString(),_port);
-            if (udp == NULL){
-                DEBUG_PRINT(":null UDP",msg->getAddress());
+        bool sendOSCMessage(OSCMessage *msg, const IPAddress _ip, const int _port){           
+            OSC_DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString(),_port);
+            if (network->udp == NULL){
+                OSC_DEBUG_PRINT(":null UDP",msg->getAddress());
                 return false;
             }             
-            udp->beginPacket(_ip, _port);
-            msg->send(*udp);
-            udp->endPacket();
-
-            if (countRXtime){
-                data.expectedStr = msg->getAddress();       // instruction is flagged to measure the latency
-                RXtimerStart = millis();               // hence we start counting
-            }
+            network->udp->beginPacket(_ip, _port);
+            msg->send(*network->udp);
+            network->udp->endPacket();
 
             msg->empty(); 
             return true;          
         }
 
-        void SendCmd2OSC(const char* address, bool countRXtime = false){
-            SendCmd2OSC(address,ip,port, countRXtime);
+        void SendCmd2OSC(const char* address){
+            SendCmd2OSC(address,ip,port);
         }
 
-        void SendCmd2OSC(const char* address, const IPAddress _ip, const int _port,  bool countRXtime = true){                        
+        void SendCmd2OSC(const char* address, const IPAddress _ip, const int _port){                        
             OSCMessage msg(address);
-            sendOSCMessage(&msg,_ip,_port, countRXtime);
+            sendOSCMessage(&msg,_ip,_port);
         }
 
-        void SendInt2OSC(const char* address, int val,  bool countRXtime = true){            
-            OSCMessage msg(address);
-            msg.add(val);
-            if (sendOSCMessage(&msg,ip,port, countRXtime)) DEBUG_PRINT("%d",address, val);          
-        }
-
-        void SendFloat2OSC(const char* address, float val, bool countRXtime = true){    
+        void SendInt2OSC(const char* address, int val){            
             OSCMessage msg(address);
             msg.add(val);
-            if (sendOSCMessage(&msg,ip,port,countRXtime)) DEBUG_PRINT("%.2f",address, val);         
+            if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%d",address, val);          
+        }
+
+        void SendFloat2OSC(const char* address, float val){    
+            OSCMessage msg(address);
+            msg.add(val);
+            if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%.2f",address, val);         
         }        
 
-        boolean OSCReadIn() {
+        boolean OSCReadIn(OSCValues* data) {
             
-            if (udp == NULL){
-                DEBUG_PRINT("\n<<OSCReadIn : null UDP");
+            if (network->udp == NULL){
+                //OSC_DEBUG_PRINT("\n<<OSCReadIn : null UDP");
                 return false;                
             } 
 
-            data.iValue = -1;
-            data.fValue = -0.1;
-            data.addressStr = "";
-            strcpy(data.sValue,"");
-            strcpy(data.sValue1,"");
-            strcpy(data.sValue2,"");
+            data->iValue = -1;
+            data->fValue = -0.1;
+            strcpy(data->addressStr,"");
+            strcpy(data->sValue,"");
+            strcpy(data->sValue1,"");
+            strcpy(data->sValue2,"");
 
             // Check if packet was received
-            int size = udp->parsePacket();
+            int size = network->udp->parsePacket();
             if (size < 1) return false;
 
             OSCMessage msg;
 
             while (size--){
-                msg.fill(udp->read());
+                msg.fill(network->udp->read());
                 yield();
             }
+
             // Check for errors
             if (msg.hasError()) {
                 //DEBUG_OSCMSG("error: %s\n", msg.getError());
                 return false;
             }
             // Parse return OSC command
-            msg.getAddress(PacketBuffer, 0);                // get message path
-            data.addressStr = String(PacketBuffer);              // assign to addressStr
-            data.TypeStr = msg.getType(0);                       // get data type
+            msg.getAddress(data->addressStr, 0);      // get message path
+            data->TypeStr = msg.getType(0);                       // get data type
 
-            DEBUG_PRINT("\n<<%s,%c,",data.addressStr.c_str(),data.TypeStr);
+            OSC_DEBUG_PRINT("\n<<%s,%c,",data->addressStr,data->TypeStr);
 
-            if (data.expectedStr != "" && data.expectedStr == data.addressStr){
+            /*if (data->expectedStr != "" && data->expectedStr == data->addressStr){
                 unsigned long t = millis()-RXtimerStart;
                 latency = (latency + t) / 2;            //avg with old value
                 if (latency<10) latency = 10;
-                DEBUG_PRINT("[%dms], ",latency);
-            }          
+                OSC_DEBUG_PRINT("[%dms], ",latency);
+            } */         
 
             if (msg.isInt(0)){
-                data.iValue = msg.getInt(0);    // integer
-                DEBUG_PRINT("%i",data.iValue);
+                data->iValue = msg.getInt(0);    // integer
+                OSC_DEBUG_PRINT("%i",data->iValue);
             }
             if (msg.isFloat(0)){
-                data.fValue = msg.getFloat(0);  // float
-                DEBUG_PRINT("%.2f",data.fValue);
+                data->fValue = msg.getFloat(0);  // float
+                OSC_DEBUG_PRINT("%.2f",data->fValue);
             }
             if (msg.isString(0)) {
-                msg.getString(0, data.sValue);  // string
-                msg.getString(1, data.sValue1);
-                msg.getString(2, data.sValue2);
-                DEBUG_PRINT("%s, %s, %s",data.sValue,data.sValue1,data.sValue2);
+                msg.getString(0, data->sValue);  // string
+                msg.getString(1, data->sValue1);
+                msg.getString(2, data->sValue2);
+                OSC_DEBUG_PRINT("%s, %s, %s",data->sValue,data->sValue1,data->sValue2);
             }
             if (msg.isBlob(0)) {
-                data.bSize = msg.getBlobLength(0);
-                //DEBUG_OSCMSG("BLOB(%i)", bSize);
-                if (data.bSize > data.oldbSize) {
-                //DEBUG_PRINT("\nResizing blob buffer");
-                delete data.bValue;
-                data.bValue = new uint8_t[data.bSize];
-                data.oldbSize = data.bSize;
+                data->bSize = msg.getBlobLength(0);
+                //OSC_DEBUG_PRINT("BLOB(%i)", bSize);
+                if (data->bSize > data->oldbSize) {
+                //OSC_DEBUG_PRINT("\nResizing blob buffer");
+                delete data->bValue;
+                data->bValue = new uint8_t[data->bSize];
+                data->oldbSize = data->bSize;
                 }
-                if (msg.getBlob(0, data.bValue) != data.bSize) return false;
+                if (msg.getBlob(0, data->bValue) != data->bSize) return false;
                 //DEBUG_OSCMSG("\nbValue=(%s)", bValue);
             }
             msg.empty();    
 
-            data.expectedStr = ""; // next receive we by default don't  count time
-
             return true;
         }    
 
-        bool blockingPing(const String command, uint32_t timeOut = 0){
+        // Fonction pour démarrer la tâche de ping non bloquante
+        virtual bool asyncPing(OSCPingTaskParameters* params) {
+            OSC_DEBUG_PRINT("\nOSCasyncPing %s %s:%d T.O:%d",params->data->expectedStr,params->ip.toString().c_str(),params->port,params->timeOut);
+            if (params->isPinging){
+                OSC_DEBUG_PRINT("\t=>ping pending, no more allowed, stop.");
+            }
+            params->isPinging = true;
+            // Créer la tâche FreeRTOS pour le ping
+            xTaskCreatePinnedToCore(
+                OSCpingTask,         
+                "OSCPingTask",       
+                4096*2,             
+                params,           
+                1,                
+                NULL,   
+                APP_CPU_NUM  
+            );
+            return true;
+        }
+
+        bool blockingPing(OSCValues* data,uint32_t timeOut){
+            return blockingPing(ip,port,data, timeOut);
+        }
+
+        bool blockingPing(IPAddress _ip, int _port, OSCValues* data, uint32_t timeOut = 0){
+            //OSC_DEBUG_PRINT("\tblockingPing: %dms", timeOut);
             if (timeOut == 0) timeOut = latency;
-            udp->flush();
-            SendCmd2OSC(command.c_str(),true);
-            DEBUG_PRINT("\tblockingPing: %dms", timeOut);            
+
+            OSCValues dataFlush;
+            while(OSCReadIn(&dataFlush)) yield();   //we flush the OSC queue
+
+            RXtimerStart = millis();
+
+            SendCmd2OSC(data->expectedStr,_ip,_port);            
             unsigned long t0 = millis();
             while (millis()-t0 < timeOut){
                 yield();
-                if (OSCReadIn()){
-                    if (data.addressStr == command) return true;
+                if (OSCReadIn(data)){
+                    if (strcmp(data->addressStr,data->expectedStr) == 0){
+                        latency = millis()-RXtimerStart;
+                        //OSC_DEBUG_PRINT("\t new latency: %d", latency);
+                        return true;
+                    }
                     else{
-                        DEBUG_PRINT("\t wrong frame");
+                        //OSC_DEBUG_PRINT("\t wrong frame");
                         return false;
                     }
-                }                
+                }               
             }
-            DEBUG_PRINT("\t timed out");
+            //OSC_DEBUG_PRINT("\t timed out");
             return false;
         }
 
         bool matchPattern(String pattern, const String& input) {
             
-            DEBUG_PRINT("\nmatchPattern");
+            OSC_DEBUG_PRINT("\nmatchPattern");
 
             pattern.replace("%02d", "*");
             pattern.replace("%d", "*");
             pattern.replace("%s", "*");
 
-            DEBUG_PRINT("(%s,%s)",pattern.c_str(),input.c_str());
+            OSC_DEBUG_PRINT("(%s,%s)",pattern.c_str(),input.c_str());
 
             int pLen = pattern.length();
             int iLen = input.length();
@@ -227,13 +270,32 @@ class OSCInterface{
                 p++;
             }
 
-            DEBUG_PRINT(": %s",p == pLen?"true":"false");
+            OSC_DEBUG_PRINT(": %s",p == pLen?"true":"false");
             return p == pLen; // Vrai si tout le pattern est traité
         }        
 
     
     private:       
-        char   PacketBuffer[UDP_TX_PACKET_MAX_SIZE];       
+        char   PacketBuffer[OSC_MAX_LEN/*UDP_TX_PACKET_MAX_SIZE*/];       
 };
+
+// Tâche de ping non bloquante
+void OSCpingTask(void* parameter) {
+  // Récupérer les paramètres passés à la tâche
+  OSCPingTaskParameters* params = static_cast<OSCPingTaskParameters*>(parameter);
+  //OSC_DEBUG_PRINT("pingTask=>%s",params->ipAddress);
+  if (params->osc->blockingPing(params->ip,params->port,params->data,params->timeOut)) {
+    params->callback(true, params->data,params->port);  // Appel du callback en cas de succès
+  } else {
+    params->callback(false, params->data,params->port);  // Appel du callback en cas d'échec
+  }
+
+  // Libérer la mémoire allouée pour les paramètres
+
+  params->isPinging = false;
+
+  // Suspendre la tâche après chaque ping (exécution ponctuelle)
+  vTaskDelete(NULL);
+}
 
 #endif

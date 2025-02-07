@@ -25,7 +25,7 @@
 typedef void (*VoidCallback)();
 typedef void (*VoidIntCallback)(int);
 typedef String (*ReturnStringCallback)();
-typedef std::function<void(bool)> StdFunctionCallbackVoidBool; 
+typedef std::function<void(bool*)> StdFunctionCallbackVoidBool; 
 
 //typedef void (BaseManager::*GUIScreenBuilderCallBack)(uint8_t);
 #define MAX_PACKET_SIZE 500
@@ -77,13 +77,52 @@ class GenericComponent{
 };
 
 
-///////////////////// REST API MANAGEMENT //////////////////////
+class EventDispatcher {
 
-#define HTTP_REST_ORIGIN "origin"
-#define HTTP_REST_STATUS "status"
-  #define HTTP_REST_OK 1
-  #define HTTP_REST_ERROR 0
-#define HTTP_REST_DATA   "data"
+  public:
+
+      struct Event{
+        uint8_t type;
+        void* data;
+      };
+
+      using eventCallback = std::function<void(Event*)>;
+
+      enum EventType {
+        EVENT_ANALOG_BUTTON,     
+        EVENT_DIGITAL_BUTTON,     
+        EVENT_NETWORK_CHANGED_STATE,
+        EVENT_NETWORK,
+        EVENT_INTERNET_PING,
+        EVENT_APPLICATION
+      };
+
+
+
+    void registerCallback(eventCallback cb) {
+      callbacks.push_back(cb);
+    }
+
+    void fireEvent(Event* event) {
+      for (auto& callback : callbacks) {
+          callback(event);
+      }
+    }
+
+  protected:
+    std::function<void(Event*)> callback;
+    std::vector<eventCallback> callbacks;
+
+};
+
+
+///////////////////// API MANAGEMENT //////////////////////
+
+#define API_ORIGIN "origin"
+#define API_STATUS "status"
+  #define API_OK 1
+  #define API_ERROR 0
+#define API_BODY   "body"
 
 // Structure pour stocker les données décompressées dans un buffer
 struct ByteBuffer : public Stream {
@@ -186,7 +225,7 @@ void gzCallback(size_t bytes_read, size_t total_bytes){
 }
 
 size_t writeBufferToGzFile(String filename, const char* data){
-  DEBUG_PRINT("\nwriteBufferToGzFile->%s",data);  
+  //DEBUG_PRINT("\nwriteBufferToGzFile->%s",data);  
   File fout = LittleFS.open(filename, "w");
   if(!fout)
   {
@@ -697,316 +736,26 @@ void webServerTaskWrapper(void * parameter){
 
 
 void OnWiFiEvent(WiFiEvent_t event){
-  switch (event) {
-    case ARDUINO_EVENT_WIFI_READY:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_READY");
-    break;
-    case ARDUINO_EVENT_WIFI_STA_START:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_START");
-    break;    
-    case ARDUINO_EVENT_WIFI_STA_STOP:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_STOP");
-    break;
-    case ARDUINO_EVENT_WIFI_STA_CONNECTED:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_CONNECTED");
-    break;
-    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_GOT_IP");
-    break;
-    case ARDUINO_EVENT_WIFI_AP_STOP: //SYSTEM_EVENT_STA_STOP:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STOP");
-    break;
-    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: //SYSTEM_EVENT_STA_DISCONNECTED:
-      DEBUG_PRINT("~");
-    break;
-    case ARDUINO_EVENT_WIFI_AP_START: //SYSTEM_EVENT_AP_START:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_START");
-      break;
-    case ARDUINO_EVENT_WIFI_AP_STACONNECTED: //SYSTEM_EVENT_AP_STACONNECTED:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STACONNECTED");
-      break;
-    case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED: //SYSTEM_EVENT_AP_STADISCONNECTED:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STADISCONNECTED");
-      //hwm.ap->state = DISCONNECTED;
-      break;
-    case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED: //SYSTEM_EVENT_AP_STAIPASSIGNED:
-      //hwm.ap->state = CONNECTED;
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED");
-    break;
-    case ARDUINO_EVENT_ETH_START:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_START");
-    break;
-    case ARDUINO_EVENT_ETH_STOP:
-      DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_ETH_STOP");
-    break;
-    case ARDUINO_EVENT_WIFI_STA_LOST_IP:
-      DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_LOST_IP");
-    break;
-    case ARDUINO_EVENT_ETH_CONNECTED:
-      DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_ETH_CONNECTED");
-    break;
-    case ARDUINO_EVENT_ETH_DISCONNECTED:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_DISCONNECTED");
-    break;
-    case ARDUINO_EVENT_ETH_GOT_IP:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_GOT_IP");
-    break;
-    default: 
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: %i",event);
-    break;
+  app.evt.type = EventDispatcher::EVENT_NETWORK;
+  app.evt.data = &event;
+  app.fireEvent(&app.evt);
+  // below line is to avoid that a call to start wifi cut a pending connection DIRTY CODE
+  if (event == ARDUINO_EVENT_WIFI_STA_CONNECTED){    
+    hwm.network->wiFiTimeout = 10000; // we let 10s to get the IP and setup the wifi link
   }
 }
 
 /*
 String minSec,testString="jtestSTRING-123g",connectionState="",vBat="",milli3,milli4;
 String longText="The Game of Life, also known simply as Life, is a cellular automaton devised by the British mathematician John Horton Connway in 1970.";
-int16_t midVertical = 120, belowTop = 35, topScreen = 10, leftScreen = 10, bottomScreen = 220, x1=40, x2=100, x3=130, x4=200;
-int16_t m2 = belowTop + 32;
-int16_t m3 = belowTop + 64;
+int16_t midVertical = 120, tenPixels = 35, topScreen = 10, leftScreen = 10, bottomScreen = 220, x1=40, x2=100, x3=130, x4=200;
+int16_t m2 = tenPixels + 32;
+int16_t m3 = tenPixels + 64;
 bool onOff = true;
 
 int16_t xa = 20, xb=90, xc=220;
 float negative = -5.5, positive = 5; 
 String db="dB",ms="ms";*/
-
-//////////////////////////////////////////////////////////////
-////                BUTTONS CALLBACKS UTILITIES        ///////
-//////////////////////////////////////////////////////////////
-void handleSwitchScreen(uint8_t buttonID){
-  DEBUG_PRINT("\nhandleSwitchScreen");
-  if (buttonID == hwm.buttons[MIDDLEB]->getID() ){    
-    app.bankMenu->select();    
-    app.setBankMenuItems();
-  }else{
-    if (buttonID == hwm.buttons[RIGHTB]->getID()) app.bankMenu->next(true);
-    else app.bankMenu->prev(true);
-    app.menuSwitchBankFullRefresh();
-  }   
-}
-
-void handleMenuButton(uint8_t buttonID){
-  if (buttonID == hwm.buttons[MIDDLEB]->getID() || buttonID == hwm.onOff.getID()){
-    app.ms.select();
-    app.setRootMenuItems(&app.ms);
-  }else{
-    if (buttonID == hwm.buttons[LEFTB]->getID()) app.ms.prev(true);
-    else app.ms.next(true);
-    app.menuSystemFullRefresh();
-  }      
-}
-
-void moduleSimpleClic(uint8_t buttonID){
-  // perform the behaviour defined in the config file
-  // at the moment, this is hard coded
-  if (buttonID == hwm.buttons[MIDDLEB]->getID()){
-    if (!app.stripAction(SIMPLE_CLIC)){
-      DEBUG_PRINT("\nAction failed!!!");
-      // code if execution fails: example: popup a message with the error
-    }
-  }
-  else{
-    Bank* bank = app.banks.get(screen.state);
-    app.stripScroll(buttonID,bank);
-  }
-}
-
-
-void moduleHoldClic(uint8_t buttonID, unsigned long time){
-  // perform the behaviour defined in the config file
-  // at the moment, this is hard coded
-  app.stripChangeValue(buttonID, time, HOLD);
-}
-
-void moduleLongClic(uint8_t buttonID){
-  if (buttonID == hwm.buttons[MIDDLEB]->getID()){
-    app.switchBank();
-    //LogUDP::sendLog("moduleLongClic",hwm.network->udp);
-  }else if(buttonID == hwm.buttons[LEFTB]->getID()){    
-    //LogUDP::sendLog("testOSC",hwm.network->udp);
-  }else{
-    //app.testHttpRequest();
-    //LogUDP::sendLog("testHTTP",hwm.network->udp);
-  }
-}
-
-//////////////////////////////////////////////////////////////
-////                BUTTONS CALLBACKS                  ///////
-//////////////////////////////////////////////////////////////
-void menuSwitchCallback(uint8_t buttonID, unsigned long time=0){
-  if (screen.id == SCREEN_MENU){   //set GUI
-    app.restoreScreen();
-  }else{
-    app.restoreMenu();
-  } 
-}
-
-void simpleClicCallBack(uint8_t buttonID, unsigned long time){
-  switch(screen.id){
-    case SCREEN_STARTUP:
-
-    break;
-    case SCREEN_WIZARD:
-      
-    break;
-    case SCREEN_MENU:
-      handleMenuButton(buttonID);   
-    break;
-    case SCREEN_BANK_SWITCH:
-      handleSwitchScreen(buttonID);
-    break;
-    case SCREEN_PROMPT:
-
-    break;
-    case SCREEN_UTILS:
-      switch(screen.state){
-        case STATE_UTILS_SEARCHING_CONNECTION:
-
-        break;
-        case STATE_UTILS_INFO:
-          app.restoreMenu();  // any button calls the method
-        break;
-        case STATE_UTILS_WEBAPPCONNECTED:
-          app.restoreScreen();
-        break;
-      }
-    break;
-    case SCREEN_BANK:
-      //DEBUG_PRINT("\nsimpleClicCallBack: %i",buttonID);
-      moduleSimpleClic(buttonID);      
-    break;
-  }
-}
-
-void longClicCallBack(uint8_t buttonID, unsigned long time){
-  switch(screen.id){
-    case SCREEN_STARTUP:
-
-    break;
-    case SCREEN_WIZARD:
-
-    break;
-    case SCREEN_MENU:
-      handleMenuButton(buttonID);
-    break;
-    case SCREEN_PROMPT:
-
-    break;
-    case SCREEN_BANK_SWITCH:
-      handleSwitchScreen(buttonID);
-    break;    
-    case SCREEN_UTILS:
-      switch(screen.state){
-        case STATE_UTILS_SEARCHING_CONNECTION:
-
-        break;
-        case STATE_UTILS_INFO:
-          app.restoreMenu();  // any button calls the method
-        break;
-        case STATE_UTILS_WEBAPPCONNECTED:
-          app.restoreScreen();
-        break;
-      }
-    break;
-    case SCREEN_BANK:
-      DEBUG_PRINT("\nlongClicCallBack: %i",buttonID);    
-      moduleLongClic(buttonID);      
-    break;
-  }  
-}
-
-void doubleClicCallBack(uint8_t buttonID, unsigned long time){
-  switch(screen.id){
-    case SCREEN_STARTUP:
-
-    break;
-    case SCREEN_WIZARD:
-
-    break;
-    case SCREEN_MENU:
-    
-    break;
-    case SCREEN_PROMPT:
-
-    break;
-    case SCREEN_UTILS:
-      switch(screen.state){
-        case STATE_UTILS_SEARCHING_CONNECTION:
-
-        break;
-        case STATE_UTILS_INFO:
-
-        break;
-      }
-    break;
-    case SCREEN_BANK:
-      DEBUG_PRINT("\ndoubleClicCallBack: %i",buttonID);
-      app.broadCast("{\"mixerIP\":\"192.168.199.199\"}");
-    break;
-  }  
-}
-
-void releaseHoldCallback(uint8_t buttonID, unsigned long time){
-  switch(screen.id){
-    case SCREEN_STARTUP:
-
-    break;
-    case SCREEN_WIZARD:
-
-    break;
-    case SCREEN_MENU:
-      handleMenuButton(buttonID);
-    break;
-    case SCREEN_PROMPT:
-
-    break;
-    case SCREEN_UTILS:
-      switch(screen.state){
-        case STATE_UTILS_SEARCHING_CONNECTION:
-
-        break;
-        case STATE_UTILS_INFO:
-          app.restoreMenu();  // any button calls the method
-        break;
-        case STATE_UTILS_WEBAPPCONNECTED:
-          app.restoreScreen();
-        break;
-      }
-    break;
-    case SCREEN_BANK:
-      DEBUG_PRINT("\nreleaseHoldCallback: %i",buttonID);
-    break;
-  }  
-}
-
-void holdCallback(uint8_t buttonID, unsigned long time){
-  switch(screen.id){
-    case SCREEN_STARTUP:
-
-    break;
-    case SCREEN_WIZARD:
-
-    break;
-    case SCREEN_MENU:
-    
-    break;
-    case SCREEN_PROMPT:
-
-    break;
-    case SCREEN_UTILS:
-      switch(screen.state){
-        case STATE_UTILS_SEARCHING_CONNECTION:
-
-        break;
-        case STATE_UTILS_INFO:
-
-        break;
-      }
-    break;
-    case SCREEN_BANK:
-      moduleHoldClic(buttonID, time);  
-    break;
-  }  
-}
 
 //////////////////////////////////////////////////////////////
 ////                MENU ACTION ITEM CALLBACKS         ///////
@@ -1130,9 +879,12 @@ void voidOverlay(uint8_t id){DEBUG_PRINT("\nvoidOverlay()");}
 void baseOverLayBuilder(uint8_t id){
   /*GUI::tft->fillRect(0,app.overlayIconY,TFT_WIDTH,OVERLAY_ICON_SIZE,GUI::overlayIconBackgroundColor);
   GUI::tft->drawFastHLine(0,app.overlayIconY-1,TFT_WIDTH,TFT_SILVER);*/
-  gui.add(new Icon(&app.networkIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.networkIconColorIdle,&GUI::defaultBcolor,false));                
+  gui.add(new Icon(&app.networkIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.networkIconColorIdle,&GUI::defaultBcolor,false));             
+  gui.add(new AnimatedIcon(app.iconRolling,TWOFRAMEICON,Align::Center,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,ANIMATE_REPEAT,250,&GUI::blue,&GUI::defaultBcolor,false));              
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor,false));                  
-  gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor,false));                   
+  gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor,false));    
+      
+  app.rollingIcon(false);
 }
 
 float testV = 76;
@@ -1181,18 +933,22 @@ void bankScreenBuilder(uint8_t subScreen){
     Strip* strip = bank->getStrip(bank->nav.selector);
     
     if (strip != nullptr){
-      //DEBUG_PRINT("\n\n\n---------------------------------\n\n bankScreenBuilder %s\n\n ---------------------------------",bank->name.c_str());
-      strip->buildWidgets(layout);
+      DEBUG_PRINT("\n\n\n---------------------------------\n\n bankScreenBuilder %s\n\n ---------------------------------",bank->name.c_str());
+
+
       strip->refresh(true);
+      strip->buildHeader();
+      strip->buildWidgets(layout);
+      
     }else{
       DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
-      gui.add(new TextArea(app.lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.belowTop,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
+      gui.add(new TextArea(app.lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
     }
 
 
   }else{
       DEBUG_PRINT("\nNO BANK");
-      gui.add(new TextArea(app.lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.belowTop,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
+      gui.add(new TextArea(app.lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
   }
 
 }
@@ -1201,7 +957,7 @@ void addTopandBottomTextLabel(){
   //DEBUG_PRINT("\naddTopandBottomTextLabel");
   app.widgets[MENU_LABEL_TITLE] = new Label(&app.bottomLabelTitle, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false);
   gui.add(app.widgets[MENU_LABEL_TITLE]);  
-  app.widgets[CONFIG_TEXTAREA_MESSAGE] = new TextArea(&app.topLabelItem, TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.belowTop,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false);
+  app.widgets[CONFIG_TEXTAREA_MESSAGE] = new TextArea(&app.topLabelItem, TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false);
   gui.add(app.widgets[CONFIG_TEXTAREA_MESSAGE]);
 }
 
@@ -1295,9 +1051,9 @@ void promptScreenBuiler(uint8_t id){}
 
 void addLeftRightIcons(){
     //DEBUG_PRINT("addLeftRightIcons()");
-    GUI::tft->fillScreen(GUI::menuBackGroundColor);    
-    gui.add(new Icon(&app.leftIcon, Align::Right,&app.quarter2xPos,&app.menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::menuBackGroundColor,false));
-    gui.add(new Icon(&app.rightIcon, Align::Left,&app.quarter3xPos,&app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor,false));
+    GUI::tft->fillScreen(GUI::defaultBcolor);    
+    gui.add(new Icon(&app.leftIcon, Align::Right,&app.hquarter2xPos,&app.menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor,false));
+    gui.add(new Icon(&app.rightIcon, Align::Left,&app.hquarter3xPos,&app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor,false));
     addTopandBottomTextLabel();    
 }
 
@@ -1307,6 +1063,28 @@ void addConnectAP(){
   app.leftIcon = ICON_AP;
 }
 
+void buildNetworkScreen(String rightIcon, String topLabel){
+  app.configIconGlowingRedColor.value = &app.leftIconColor;
+  addLeftRightIcons();    // must be put before the label are setup otherwise app.widgets[MENU_LABEL_TITLE]->setText(&hwm.configMedia->SSID); will crash
+  //gui.add(new AnimatedIcon(app.iconRolling,2,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));              
+  #ifdef USE_NETWORK
+    if (!hwm.network->ethEnabled){
+      //if ethernet bank is absent, we only offer to connect the AP
+      addConnectAP();                    
+    }else{
+      //app.widgets[CONFIG_TEXTAREA_MESSAGE]->setText(app.lang.getString("Connect")); // doesnt work          
+      app.topLabelItem = topLabel;                    
+      app.leftIcon = ICON_MIXETHWIFI;
+    }
+  #else
+    addConnectAP();
+  #endif
+  app.widgets[MENU_LABEL_TITLE]->setText(&hwm.configMedia->SSID);
+  //app.bottomLabelTitle = hwm.configMedia->SSID;
+  app.rightIcon = rightIcon;
+}
+
+
 void utilsScreenBuilder(uint8_t state){
   DEBUG_PRINT("\nutilsScreenBuilder(%d)",state);
   switch (state) {
@@ -1315,6 +1093,7 @@ void utilsScreenBuilder(uint8_t state){
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_INFO:
+      setMenuColors();  // in case it's called directly from the wizard@startup
       DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());
       GUI::tft->fillScreen(GUI::menuBackGroundColor);
       app.topLabelItem = *app.lang.getString("Info item");
@@ -1324,35 +1103,17 @@ void utilsScreenBuilder(uint8_t state){
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_CONNECTCONFIGMEDIA:
       setMenuColors();  // in case it's called directly from the wizard@startup
-      app.configIconGlowingRedColor.value = &app.leftIconColor;
-      addLeftRightIcons();
-      app.iconPending[0] = ICON_ROLLING1;
-      app.iconPending[1] = ICON_ROLLING2;
-      //gui.add(new AnimatedIcon(app.iconPending,2,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));              
-      #ifdef USE_NETWORK
-        if (!hwm.network->ethEnabled){
-          //if ethernet bank is absent, we only offer to connect the AP
-          addConnectAP();                    
-        }else{
-          //app.widgets[CONFIG_TEXTAREA_MESSAGE]->setText(app.lang.getString("Connect")); // doesnt work          
-          app.topLabelItem = *app.lang.getString("Connect");                    
-          app.leftIcon = ICON_MIXETHWIFI;
-        }
-      #else
-        addConnectAP();
-      #endif
-      app.widgets[MENU_LABEL_TITLE]->setText(&hwm.configMedia->SSID);
-      //app.bottomLabelTitle = hwm.configMedia->SSID;
-      app.rightIcon = ICON_LAPTOP;
+      buildNetworkScreen(ICON_LAPTOP,*app.lang.getString("Connect"));
       DEBUG_PRINT("\nSTATE_UTILS_CONNECTCONFIGMEDIA: %s",app.topLabelItem.c_str());
     break;
     case STATE_UTILS_CONNECTWEBAPP:
+      setMenuColors();  // in case it's called directly from the wizard@startup
       app.configIconGlowingRedColor.value = &GUI::unUsedColor;
       app.leftIconColor = GUI::menuActiveIconColor;
       addLeftRightIcons();  
       app.iconPending[0] = ICON_TIMER;
       app.iconPending[1] = " ";
-      gui.add(new AnimatedIcon(app.iconPending,ICONPENDINGCOUNT,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));                    
+      gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));                    
       app.widgets[CONFIG_TEXTAREA_MESSAGE]->setText(app.lang.getString("Open browser"));
       app.widgets[MENU_LABEL_TITLE]->setText(&hwm.configIP);
       app.leftIcon = ICON_LAPTOP;
@@ -1360,12 +1121,13 @@ void utilsScreenBuilder(uint8_t state){
       DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP: %s",app.topLabelItem.c_str());
     break;
     case STATE_UTILS_WEBAPPCONNECTED:   
+      setMenuColors();  // in case it's called directly from the wizard@startup
       addLeftRightIcons();
       //gui.add(new Label(&app.configClientIP, Align::Left,&app.quarter1xPos, &app.belowMenuIcon,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor,false));
       //gui.add(new Label(&hwm.configIP, Align::Right,&app.quarter4xPos, &app.belowMenuIcon,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor,false));      
       app.iconPending[0] = ICON_LEFTDOT;
       app.iconPending[1] = ICON_RIGHTDOT;      
-      gui.add(new AnimatedIcon(app.iconPending,ICONPENDINGCOUNT,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));                    
+      gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor,false));                    
       app.widgets[CONFIG_TEXTAREA_MESSAGE]->setText(app.lang.getString("Press button"));
       app.widgets[MENU_LABEL_TITLE]->setText(app.lang.getString("Connected"));
       app.leftIcon = ICON_LAPTOP;
@@ -1376,9 +1138,9 @@ void utilsScreenBuilder(uint8_t state){
   }
 }
 
-//////////////////////////////////////////////////////////////
-////                SOCKET CALLBACKS                   ///////
-//////////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////////////////
+ ////                SERVER SOCKET CALLBACKS                   ///////
+////////////////////////////////////////////////////////////////////
 
 void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, const char *message, uint16_t length){
   String response;
@@ -1427,12 +1189,6 @@ void socketConnectionCallback(IWebSocket &ws) {
   ws.send(WebSocketDataType::TEXT, connectivityConfig.c_str(), connectivityConfig.length());
 
 }
-
-
-void socketClientCallback(IWebSocket &ws) {
-
-}
-
 
 //////////////////////////////////////////////////////////////
 ////                DEFAULT STRIPS CONSTRUCTOR         ///////

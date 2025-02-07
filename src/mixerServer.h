@@ -19,22 +19,28 @@
   #define SERVER_MODEL_KEY "serverModel"
   #define SERVER_CONNECTED_KEY "serverConnected"
   #define SERVER_NAME_KEY "serverName"
+  #define SERVER_OFFLINE_KEY "serverOffline"
+  #define SERVER_SELECTED_KEY "serverSelected"
 
 #define MIXER_DETECTION_PERIOD 3000
 
 class MixerServer: public HWComponent2State{
   public:
     IPAddress serverIP;
-    int serverUDPPort, behringerUDPPort = 10023, msUDPPort, msAPIPort;
+    int serverUDPPort, behringerUDPPort = 10024, msUDPPort, msAPIPort;
 
-    bool msAPIOnline = false;
+    bool msOnline = false;
+    bool behringerOnline = false;
+    bool offline = false, previousOffline = false;
+
 
     String name;
     Config* config;
     MixerInterface *mixerInterface;  // Pointeur vers l'interface abstraite (HAL)  
     DataRepository* dataRepository;
     Network* network;
-    OSCInterface osc;
+    OSCInterface* osc;
+    OSCValues data;
 
     MixerServer(DataRepository* dataRepo) : HWComponent2State(0), dataRepository(dataRepo){}
 
@@ -42,31 +48,44 @@ class MixerServer: public HWComponent2State{
 
     void init(Config* conf, Network* net){
       //DEBUG_PRINT("\n Init MixerServer");
+      network = net;
+      osc = new OSCInterface(network);
       config = conf;
       disconnect(); // this sets default mixer as offline and force trying to reconnect at next refresh
-      network = net;
-      
-      msHttpClientParam.callback = [&](const char* param) { processRESTcallback(param); };
-      msHttpClientParam.timeOut = MIXER_DETECTION_PERIOD-1000; // maximum duration of the request is the period of check minus one second    
-      msHttpClientParam.URL = RESTCALL_APP_STATE;  
 
+      
+      //
+      msHttpClientParam.callback = [&](const char* param) { processJsonData(param); };
+      msHttpClientParam.timeOut = MIXER_DETECTION_PERIOD-1000; // maximum duration of the request is the period of check minus one second    
+      msHttpClientParam.URL = APICALL_APP_STATE;  
+      //
+      userWSclientOnMessage = std::bind(&MixerServer::wsOnMessageCallback, this, std::placeholders::_1);
+
+      pingParam.data = &data;
+      pingParam.osc = osc;
+      pingParam.timeOut = osc->latency;
+      pingParam.callback = [this](bool success, OSCValues* data, int port) {
+        this->pingCallBack(success, data, port);
+      };
+
+      pingLatency = network->LANlatency;
+      
     }
 
     bool refresh(bool force=false){    
       HWComponent2State::refresh(force);
 
-      if (network->refreshed){
-        // network has changed state
-        //if (network->state == DISCONNECTED && state == CONNECTED) disconnect();
-        osc.setNetwork(network->udp,network->LANlatency);
-
-        //maybe put here mixerInterface->disconnect() and esnure that it contains the code to stop httpclient
-      }
-
       if (!mixerInterface->update()){
         // we may do this after 2 attempts
         if (mixerInterface->interfaceState == DISCONNECTED) disconnect();
       }
+
+      if (previousOffline != offline){
+        previousOffline = offline;
+        refreshed = true;
+      }
+
+      if (offline) return refreshed; // do not try to connect if offline parameter is set to truem, we just stop here
 
       if (network->state == CONNECTED){                
                
@@ -91,10 +110,12 @@ class MixerServer: public HWComponent2State{
         json[SERVER_STATE_KEY][SERVER_INTERFACE_KEY] = mixerInterface->name;
         json[SERVER_STATE_KEY][SERVER_MODEL_KEY] = mixerInterface->model;
         json[SERVER_STATE_KEY][SERVER_IP_KEY] = serverIP.toString();
-        json[SERVER_STATE_KEY][SERVER_DISCOVERY_KEY] = getDiscoveryMode()?"auto":"manual";
+        json[SERVER_STATE_KEY][SERVER_DISCOVERY_KEY] = discovery()?"auto":"manual";
         json[SERVER_STATE_KEY][SERVER_PORT_KEY] = serverUDPPort;
         json[SERVER_STATE_KEY][SERVER_CONNECTED_KEY] = state;
         json[SERVER_STATE_KEY][SERVER_NAME_KEY] = name;
+        json[SERVER_STATE_KEY][SERVER_OFFLINE_KEY] = offline;
+        
         
         json[INTERFACE_STATE_KEY][MIXER_PORT_KEY] = msAPIPort;        
         json[INTERFACE_STATE_KEY][MIXER_CONNECTED_KEY] = stateNames[mixerInterface->interfaceState] ;
@@ -107,7 +128,7 @@ class MixerServer: public HWComponent2State{
         return jsonString;
     }
 
-    bool getDiscoveryMode(){
+    bool discovery(){
       bool discovery = false;
       String configIP = *config->getString(SERVER_IP_KEY); 
 
@@ -146,24 +167,36 @@ class MixerServer: public HWComponent2State{
         delete mixerInterface;
       }      
       state = DISCONNECTED;
-      msAPIOnline = false;
+      msOnline = false;
+      behringerOnline = false;
       mixerInterface = new MixerOfflineInterface(dataRepository,*config->getString(SERVER_MODEL_KEY));
       mixerInterface->init();
       name = *app.lang.getString("searching");
     }
 
   private:    
-  
+    uint16_t pingLatency = 0;
+
     unsigned long lastDetectionAttemptTime = 0;
 
-    //AsyncClient msHttpClientParam;
     AsyncHttpClient msHttpClientParam;
+    OSCPingTaskParameters pingParam;
 
 
-    void connect() {    
-
-      //DEBUG_PRINT("\n * * * Detect mixer * * *");
+    void connect() { 
+      static bool toggleBehringerMSTest = true;   
+            
       state = DISCONNECTED ;              
+
+      if (msOnline){
+        instantiateMixingStationMixer();
+        return;
+      }
+
+      if (behringerOnline){
+        instantiateBehringerMixer();
+        return;
+      }
 
       String configIP = *config->getString(SERVER_IP_KEY);
       if (!serverIP.fromString(configIP) || configIP=="") serverIP = IPAddress(0,0,0,0);  
@@ -171,7 +204,7 @@ class MixerServer: public HWComponent2State{
       DEBUG_PRINT("\n * * MIXER SERVER_IP_KEY = %s, serverIP = %s",configIP.c_str(),serverIP.toString().c_str());
 
       // *************** autodetect:  **********************      
-      if (getDiscoveryMode()){
+      if (discovery()){
         DEBUG_PRINT(" - D I S C O V E R Y - ");
         
         serverIP = network->IP;      
@@ -179,8 +212,13 @@ class MixerServer: public HWComponent2State{
        
         msAPIPort = 8080;    
         msUDPPort = 3000;
-          
-        if (!testBehringer()) testMixingStation();
+
+        if (!toggleBehringerMSTest) 
+          setBehringerTest();
+        else
+          setMixingStationTest();
+
+        toggleBehringerMSTest = !toggleBehringerMSTest;
 
       }else{
         DEBUG_PRINT(" - U S E R   D E F I N E D - ");
@@ -189,56 +227,83 @@ class MixerServer: public HWComponent2State{
         msUDPPort = config->getInt(SERVER_PORT_KEY); 
         msAPIPort = config->getInt(MIXER_PORT_KEY);
 
-        if (*config->getString(SERVER_MODEL_KEY) == MIXING_STATION_MODEL) testMixingStation();
-        else testBehringer();
+        if (*config->getString(SERVER_MODEL_KEY) == MIXING_STATION_MODEL) setMixingStationTest();
+        else setBehringerTest();
   
       }   
+      
+      pingParam.ip = serverIP;
+      if (!pingParam.isPinging){
+        osc->asyncPing(&pingParam);
+      }                
+          
     }
 
     void testMS_REST_API(){
+      DEBUG_PRINT("\nTesting msREST IP:%s/%i ",serverIP.toString().c_str(),msAPIPort);      
       msHttpClientParam.host = serverIP;
       msHttpClientParam.port = msAPIPort; 
       network->asyncConnect(&msHttpClientParam);
     }
 
-    bool testMixingStation(){      
-      // TEST MIXING STATION
-      // for mixing station:  REST API is over HTTP (so uses TCP), hence we cannot broadact. We have to test all IP address from the subnet range and see if we can connect the client provided by network hardware layer
-      // which is not realistic, hence we test the dfault TCP port 8080       IN ASYNC HTTP REQUEST  
-      if (msAPIOnline){  //gather async answer
-        DEBUG_PRINT("\n =========> msAPIOnline");
-        setMixingStationMixer(serverIP);    
-        return true;
-      }
+    void testMS_WS_API(){
+      DEBUG_PRINT("\nTesting msWS IP:%s/%i ",serverIP.toString().c_str(),msAPIPort);      
+      if (network->clientSocketState() == WebSocketReadyState::CLOSED)
+        network->clientSocketOpen(serverIP.toString().c_str(), msAPIPort, "/");
 
-      // first method
-      osc.setClient(serverIP,msUDPPort);
-      DEBUG_PRINT("\nTesting msUDP IP:%s/%i",serverIP.toString().c_str(),msUDPPort);    
-      if (osc.blockingPing(OSC_MS_PING)){
-        setMixingStationMixer(osc.udp->remoteIP());
-        return true;
-      }
+      String API_Call = APICALL_APP_STATE;      
+      //{ "path": "/app/state", "method": "GET", "body": null }
+      JsonDocument doc;
+      doc[MS_API_PATH] = API_Call;   
+      doc[API_BODY] = doc.createNestedObject(); //empty object {}
 
-      // second method, 
-      DEBUG_PRINT("\nTesting msREST IP:%s/%i ",serverIP.toString().c_str(),msAPIPort);      
-      testMS_REST_API();  //trigger async answer               
+      network->clientSocketSend(doc.as<String>().c_str());
+      doc.clear();
 
-      return false;
     }
 
-    bool testBehringer(){      
-      
-      uint16_t latency = osc.latency;
+    void setMixingStationTest(){      
+      DEBUG_PRINT("\nsetMixingStationTest()");     
+      pingParam.data->expectedStr = OSC_MS_PRE OSC_MS_PING;
+      pingParam.port = msUDPPort;
+      testMS_REST_API();  //trigger async answer               
+      //testMS_WS_API();   // ==> very slow if clientSocketOpen(192.168.0.180,8080,/)Error in connection establishment: net::ERR_CONNECTION_REFUSED
+    }
 
-      DEBUG_PRINT("\nTesting BehringerUDP IP:%s/%i",serverIP.toString().c_str(),behringerUDPPort);
+    void setBehringerTest(){    
+      DEBUG_PRINT("\nsetBehringerTest()");
+      pingParam.data->expectedStr = BEHRINGER_QUERY;
+      if (behringerUDPPort == 10024) behringerUDPPort = 10023;
+      else behringerUDPPort = 10024;
+      pingParam.port = behringerUDPPort;          
+    }
+
+    void pingCallBack(bool _success, OSCValues* data, int _port){
+      DEBUG_PRINT("\npingCallBack %s:%d => %s",data->expectedStr,_port,_success?"OK":"failed");      
+      lastDetectionAttemptTime = 0;   // don't wait next cycle      
+      if(_success){
+        // set the flags used by setBehringerTest() and testMS() to instantiate mixerinterface
+        if (_port == 10023 || _port == 10024){
+          behringerOnline = true;
+          behringerUDPPort = _port;
+        }else msOnline = true;        
+        DEBUG_PRINT("\nsetting flags: MS:%d BEHRINGER:%d",msOnline,behringerOnline);
+      }else{
+        pingLatency = (pingLatency + 20) % 250;             
+        pingParam.timeOut = pingLatency;        
+        DEBUG_PRINT("\nincreasing latency");
+      }     
+    }
+
+    bool testBehringer2(){      
       
-      osc.setClient(serverIP,behringerUDPPort);
-      if (osc.blockingPing(BEHRINGER_QUERY,latency)){
-        setBehringerMixer();
+      DEBUG_PRINT("\nTesting BehringerUDP IP:%s/%i",serverIP.toString().c_str(),behringerUDPPort);
+      data.expectedStr = BEHRINGER_QUERY;
+      //osc->setClient(serverIP,behringerUDPPort);
+      if (osc->blockingPing(serverIP,behringerUDPPort,&data,pingLatency)){
+        instantiateBehringerMixer();
         return true;
       }
-
-      latency = (latency + 10) % 250;
 
       if (behringerUDPPort == 10023) behringerUDPPort = 10024;
       else behringerUDPPort = 10023;
@@ -246,64 +311,94 @@ class MixerServer: public HWComponent2State{
       return false;
     }
 
-    void setMixingStationMixer(IPAddress _ip){
-      //DEBUG_PRINT("\nsetMixingStationMixer(%d,%s)",interfaceState,_ip.toString().c_str());
-      DEBUG_PRINT("\nsetMixingStationMixer(%s)",_ip.toString().c_str());
-      LogUDP::sendLog("setMixingStationMixer",hwm.network->udp);
-      state = CONNECTED;            // we connected mixing station
-
-      //config->setValue(SERVER_MODEL_KEY,MIXING_STATION_MODEL);
-      //config->setValue(SERVER_IP_KEY,serverIP.toString()); we never do that as it would override the default user setting 0.0.0.0 auto for instance
-      //config->setValue(MIXER_PORT_KEY,String(msAPIPort));
-      //config->setValue(SERVER_PORT_KEY,String(msUDPPort));
-      //config->save();
-
-      serverIP = _ip;
-      serverUDPPort = msUDPPort;
+    void initInterface(const char* _name){
+      String udpLogString="instantiate "+String(_name)+" interface";
+      DEBUG_PRINT("\n%s",udpLogString.c_str());
+      state = CONNECTED;      
+      LogUDP::sendLog(udpLogString.c_str(),hwm.network->udp);
+      if (discovery()) serverIP = network->udp->remoteIP(); 
       if (mixerInterface != nullptr) delete mixerInterface;
-      osc.setClient(serverIP,serverUDPPort); 
-      mixerInterface = new MixingStation(dataRepository,&osc, network, msAPIPort);  
-      mixerInterface->init();
-      name = *app.lang.getString("software");
+      osc->setClient(serverIP,serverUDPPort);
+      name = _name;
+    }
 
+    void instantiateMixingStationMixer(){
+      serverUDPPort = msUDPPort;
+      initInterface(app.lang.getString("software")->c_str());
+      mixerInterface = new MixingStation(dataRepository,osc, msAPIPort);  
+      mixerInterface->init();
     } 
 
-    void setBehringerMixer(){
-
-      DEBUG_PRINT("\nsetBehringerMixer()");
-      LogUDP::sendLog("setBehringerMixer",hwm.network->udp);
-
-      state = CONNECTED;      
-
+    void instantiateBehringerMixer(){
       //<</xinfo,s,172.17.0.2, X32OnlineIntervalDemo, 
       //sValue: 172.17.0.2
       //sValue1: X32OnlineIntervalDemo
-      //sValue2: X32
-      //IPAddress UDPIP = 
-      serverIP = osc.udp->remoteIP();
-      IPAddress remoteMixerIP = remoteMixerIP.fromString(osc.data.sValue); // <======== get 1.0.0.0 in remoteServerIP, why ?
+      //sValue2: X32           
+      IPAddress remoteMixerIP;
+      remoteMixerIP.fromString(data.sValue);
       if (serverIP[0] != remoteMixerIP[0]){
-        DEBUG_PRINT("\nRemoteMixer IP (%s) differs from ServerIP (%s)",remoteMixerIP.toString().c_str(),serverIP.toString().c_str());
+        DEBUG_PRINT("\nRemoteMixer IP (%s)->(%s) differs from ServerIP (%s)",data.sValue,remoteMixerIP.toString().c_str(),serverIP.toString().c_str());
         //serverIP = remoteMixerIP;          
-      }
+      }           
 
-      serverUDPPort = osc.udp->remotePort(); 
-      //config->setValue(SERVER_MODEL_KEY,osc.sValue2);
-      //config->setValue(SERVER_IP_KEY,serverIP.toString()); we never do that as it would override the default user setting 0.0.0.0 auto for instance
-      //config->setValue(SERVER_PORT_KEY,String(serverUDPPort));
-      //config->save();
-
-      name = osc.data.sValue1;
-      if (mixerInterface != nullptr) delete mixerInterface;
-      osc.setClient(serverIP,serverUDPPort);
-      mixerInterface = new BehringerMixer(dataRepository,osc.data.sValue2,&osc); 
+      serverUDPPort = behringerUDPPort; //serverUDPPort = osc->udp->remotePort();       
+      initInterface(data.sValue1);
+      mixerInterface = new BehringerMixer(dataRepository,data.sValue2,osc); 
       mixerInterface->init();
     }
 
-    void processRESTcallback(const char* param){     
+    void wsOnMessageCallback(const char* message){
+      /*
+        {
+          "path": "/app/state",
+          "method": "GET",
+          "body": {
+            "msg": "",
+            "progress": 0,
+            "state": "connected",
+            "topState": "connected"
+          }
+        }    
+
+        or
+
+        {
+          "method": "GET",
+          "error": "Could not parse json message: Could not assign value body  to field 'body'"
+        }
+
+      */
+      //DEBUG_PRINT("\n\t\t\twsOnMessageCallback <<<<< %s",message);
+      
+      JsonDocument input;    
+      auto error = deserializeJson(input, message);
+      if (error) {
+          DEBUG_PRINT("\nwsMixerServer OnMessageCallback parsing failed: %s",error.c_str()); 
+          input.clear();
+          return;
+      }
+
+      JsonDocument output;
+      if (input.containsKey(MS_API_ERROR)){
+        output[API_STATUS] = API_ERROR;        
+        output[API_BODY] = input[MS_API_ERROR];
+      }else{
+        output[API_ORIGIN] = input[MS_API_PATH];
+        output[API_STATUS] = API_OK;
+        output[API_BODY] = input[API_BODY];
+      }
+
+      processJsonData(output.as<String>().c_str());
+
+      input.clear();
+      output.clear();
+    }
+
+
+    void processJsonData(const char* param){     
       
       DEBUG_PRINT("\nServerProcessRESTcallback: %s",param);
-
+      lastDetectionAttemptTime = 0;   // don't wait next cycle to create interface      
       JsonDocument doc;
       
       auto error = deserializeJson(doc, param);
@@ -312,15 +407,14 @@ class MixerServer: public HWComponent2State{
           doc.clear();
           return;
       }
-      uint8_t status = doc[HTTP_REST_STATUS];
+      uint8_t status = doc[API_STATUS];
 
-      if (status == HTTP_REST_OK){
+      if (status == API_OK){
         DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API is ON ----");
-        msAPIOnline = true;  // do not set state = CONNECTED as this will be done by setmixer otherwise connect() will not trigger creation of mixing station
-        lastDetectionAttemptTime = 0; // we detected the mixer so we shorten the delay to treat the information
+        msOnline = true;  // do not set state = CONNECTED as this will be done by setmixer otherwise connect() will not trigger creation of mixing station
       }else{
         DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API not responding ----");
-        msAPIOnline = false;
+        msOnline = false;
       }
       doc.clear();
     }

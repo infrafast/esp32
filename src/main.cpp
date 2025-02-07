@@ -31,7 +31,9 @@
 #define ADDRESS_PORT "/port/%s"
 #define ADDRESS_MESSAGE "/message/%s"
 
-String iconMixer = "!";
+String iconMixer = "!";  
+String iconMS = ">"; //ICON_MIXING_STATION;
+String iconDisconnected = ICON_FOOTSWITCH;
 uint16_t iconMixerColor = GUI::red;
 AlteredColor mixerGlowingColor = AlteredColor{.baseColor = GUI::red, .value =  &iconMixerColor};
 
@@ -125,10 +127,8 @@ class OSCTestStrip : public TextStrip, public StripMixer{
     virtual void buildWidgets(uint8_t layout){
       TextStrip::buildWidgets(layout);
       switch(layout){
-        case LAYOUT_QUATUOR:
-        break;
-        case LAYOUT_ICON:
-        break;
+        case LAYOUT_ZOOM:
+
         case LAYOUT_DETAILS: 
         default:
           topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor );          
@@ -155,7 +155,8 @@ class OSCTestStrip : public TextStrip, public StripMixer{
 class SendStrip : public ThreeSelectStrip, public StripMixer{
   public:
 
-    SendStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):ThreeSelectStrip(s,g, &sendName, &returnName, debug),StripMixer(ms){}
+    SendStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):ThreeSelectStrip(s,g, debug),StripMixer(ms){
+    }
 
     ~SendStrip(){};
   
@@ -168,17 +169,11 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
     virtual void buildWidgets(uint8_t layout){
       this->layout = layout;
       switch(layout){
-
-        case LAYOUT_QUATUOR:
-
-        case LAYOUT_ICON:
+        case LAYOUT_ZOOM:
 
         case LAYOUT_DETAILS: 
         default:
        
-          topLabels = new Top2Toggles(&gui->screenGUIs,&sendName, &returnName, &sendMute, &returnMute,&frontColor,&backColor );          
-          gui->add(topLabels);
-
           // add the SliderWidget here based on value
           // value float
 
@@ -187,11 +182,7 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
     }    
 
   protected:
-    bool sendMute = false, returnMute = false;
-    String sendName = "sendName";
-    String returnName ="returnName";
     float value;
-    Top2Toggles* topLabels;
 };
 
 
@@ -208,17 +199,17 @@ class Ch2BusStrip : public SendStrip{
 
   public:
 
-    Ch2BusStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):SendStrip(s,g,ms,debug){
-      select2PropertyAddress = s->dataSetAddresses.get(0);
-      select3PropertyAddress = s->dataSetAddresses.get(1);
+    Ch2BusStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):SendStrip(s,g,ms,debug){      
+      /*sendName = skeleton->getValuePtr(select2PropertyAddress,select2ID-1);
+      returnName = skeleton->getValuePtr(select3PropertyAddress,select3ID-1);*/
     }
 
     virtual bool actionCallback(uint8_t trigger){
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
-      DEBUG_PRINT("\nCh2BusStrip actionCallback");
-      sendMute = !sendMute;
-      return setChBusMute(sendMute,select2ID,select3ID);     
+      //DEBUG_PRINT("\nCh2BusStrip actionCallback");
+      toggleTop = !toggleTop;
+      return setChBusMute(toggleTop,select2ID,select3ID);     
 
     }
 
@@ -227,8 +218,7 @@ class Ch2BusStrip : public SendStrip{
       refreshed = force;
       SendStrip::refresh(force);
       // this code should only be called if select2ID != oldSelect2ID
-      sendName = skeleton->getValue(select2PropertyAddress,select2ID-1);
-      returnName = skeleton->getValue(select3PropertyAddress,select3ID-1);
+      //...
       // put then the code specific here to treatment, for the value treatment like OSC frame to read the value
       return refreshed;
     }
@@ -242,11 +232,11 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
   #define STRIP_CHGAIN "chGain"
 
   public:
-    ChGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):TwoSelectStrip(s,g, &chName,debug),StripMixer(ms){
-      select2PropertyAddress = ADDRESS_CHNAME;
+    ChGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):TwoSelectStrip(s,g,debug),StripMixer(ms){
       valueMin = CHGAINDB_MIN;
       valueMax = CHGAINDB_MAX;
       value = (valueMin + valueMax)/2;
+      label = "gain";
       //icon = ICON_CHGAIN_STRIP;
     }
 
@@ -292,32 +282,30 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
     virtual bool refresh(bool force=false){
       refreshed = force;
       TwoSelectStrip::refresh(force);
-      chName = skeleton->getValue(ADDRESS_CHNAME,select2ID-1);
       return refreshed;
     };    
 
     virtual void buildWidgets(uint8_t layout){
       switch(layout){
-        case LAYOUT_QUATUOR:
-        break;
-        case LAYOUT_ICON:
-        break;
+        case LAYOUT_ZOOM:
+
         case LAYOUT_DETAILS: 
         default:
        
-          Top1Toggle1Label* topLabels = new Top1Toggle1Label(&gui->screenGUIs,&chName, &gainString, &chMute,&frontColor,&backColor );          
-          gui->add(topLabels);
-
-          RingMeter* ringMeter1 = new RingMeter(&value, -1000,1000, 1, &app.quarter1xPos,&y, 32, &dBstring,&frontColor,&GUI::transparentColor,false);
+          /*RingMeter* ringMeter1 = new RingMeter(&value, -1000,1000, 1, &app.quarter1xPos,&y, 32, &dBstring,&frontColor,&GUI::transparentColor,false);
           gui->add(ringMeter1);          
 
           RingMeter* ringMeter2 = new RingMeter(&value2, -1000,1000, 0, &app.quarter2xPos,&y, 32, &testUnitString,&GUI::blue,&GUI::transparentColor,false);
-          gui->add(ringMeter2);          
+          gui->add(ringMeter2);          */
 
           //RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &app.third3xPos,&y, 64, &testUnitString,GUI::glowingGoldColor.value,&GUI::transparentColor,false);
-          RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &app.third3xPos,&y, 64, &testUnitString,&GUI::red,&GUI::transparentColor,false);
+          RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &app.hthird3xPos,&y, 64, &testUnitString,&GUI::red,&GUI::transparentColor,false);
           gui->add(ringMeter3);               
 
+          ProgressBarH* ph = new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &app.hquarter1xPos /*x*/, &y /*y*/, 150 /*w*/, 20 /*h*/, 3 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, false);
+          gui->add(ph);
+          ProgressBarV* pv = new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &app.tenPixels /*x*/, &app.vquarter1xPos /*y*/, 20 /*w*/, 150 /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, false);                              
+          gui->add(pv);
 
         break;
       }      
@@ -333,11 +321,8 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
 
   private:
     float value2 = 0;
-    String chName = "chName";
-    String gainString = "Gain";
     String dBstring = "Hz";
-    String testUnitString = "gate";
-    bool chMute = false;
+    String testUnitString = "gate";    
     int16_t y = TFT_HEIGHT-WIDGET_BIG_WIDTH-OVERLAY_ICON_SIZE*2;
 };
 
@@ -346,17 +331,18 @@ class LocalDataProvider: public DataProvider{ // temp while shortcut factory is 
     
     #define ADDRESS_ACTION_SIZE 5
 
-    virtual uint16_t size(String addrr){
+    virtual uint16_t getSize(String addrr){
       if (addrr == ADDRESS_MACRONAME) return 0;
       else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
       else return 1;
     }
     
-    virtual String getValue(String addrr, uint16_t index){
-      if (addrr == ADDRESS_MACRONAME) return "getMacroName";
-      else if (addrr = ADDRESS_ACTION) return actionNames[index];         //javascript local function callback
-      else return "voidStatic";
+    virtual const String* getValuePtr(String addrr, uint16_t index){
+      if (addrr == ADDRESS_MACRONAME) return &getMacroName;
+      else if (addrr = ADDRESS_ACTION) return &actionNames[index];         //javascript local function callback
+      else return &voidStatic;
     }
+
 
   private:
     String actionNames[ADDRESS_ACTION_SIZE] = {
@@ -366,14 +352,17 @@ class LocalDataProvider: public DataProvider{ // temp while shortcut factory is 
       "FF",
       "RW"      
     };
+
+    String getMacroName = "getMacroName";
+
 } localProvider; // temp while shortcut factory is not implemented;
 
-DataSet macroNames = DataSet(ADDRESS_MACRONAME,INPUTSELECT,&localProvider); // temp while shortcut factory is not implemented
-DataSet actionPlay = DataSet(ADDRESS_ACTION,INPUTSELECT,&localProvider); // temp while shortcut factory is not implemented
+DynamicDataSet macroNames = DynamicDataSet(ADDRESS_MACRONAME,INPUTSELECT,&localProvider); // temp while shortcut factory is not implemented
+DynamicDataSet actionPlay = DynamicDataSet(ADDRESS_ACTION,INPUTSELECT,&localProvider); // temp while shortcut factory is not implemented
 
-DataSet ipDS = DataSet(ADDRESS_IP,INPUTTEXT,&localProvider); 
-DataSet portDS = DataSet(ADDRESS_PORT,INPUTTEXT,&localProvider); 
-DataSet msgDS = DataSet(ADDRESS_MESSAGE,INPUTTEXT,&localProvider); 
+DynamicDataSet ipDS = DynamicDataSet(ADDRESS_IP,INPUTTEXT,&localProvider); 
+DynamicDataSet portDS = DynamicDataSet(ADDRESS_PORT,INPUTTEXT,&localProvider); 
+DynamicDataSet msgDS = DynamicDataSet(ADDRESS_MESSAGE,INPUTTEXT,&localProvider); 
 
 Strip* testOSCStripConstructorCallback(){
   return new OSCTestStrip(stripOSCSkel,&gui,&mixerServer);
@@ -440,12 +429,18 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
     userConfig.setValue(MIXER_PORT_KEY,String(mixerServer.msAPIPort));     
     userConfig.setValue(MIXER_AUTOMODEL_KEY,jsonDoc["param"][MIXER_AUTOMODEL_KEY]);
     userConfig.setValue(MIXER_AUTOIP_KEY,jsonDoc["param"][MIXER_AUTOIP_KEY]);
-    
-    
-    /*jsonAnswer->callback = RET_RELOAD_BANKS;
-    jsonAnswer->value = "";       */
-    jsonAnswer->callback = RET_SAVEBUTTON;
-    jsonAnswer->value ="1";
+
+
+    String serverConnection = jsonDoc["param"][SERVER_SELECTED_KEY];
+    if (serverConnection == "offline"){
+      mixerServer.offline = true;
+      jsonAnswer->callback = RET_RELOAD_BANKS;  // when offline we reload the banks to adapt the number of channel to the selected mixer
+      jsonAnswer->value = "";      
+    }else{
+      mixerServer.offline = false;    // do not reload bank, this will be done if interface is connected 
+      jsonAnswer->callback = RET_SAVEBUTTON;
+      jsonAnswer->value ="1";
+    }  
 
     success = true;
     mixerServer.disconnect(); // this will force trying to reconnect with new parameters
@@ -468,9 +463,9 @@ String userPongCallback(){
   String pong = "";
   JsonDocument doc;
   // we send server connection attempts status only if network is connected, otherwise we polute the webapp with useless information
-  if (mixerServer.mixerInterface->interfaceState == DISCONNECTED && mixerServer.state == CONNECTED){
+  if (hwm.network->state == CONNECTED && mixerServer.state == DISCONNECTED){
     //{"serverAttempt":"Trying 192.168.0.212 / 10026"}}>
-    String serverAttempt = *app.lang.getString("Trying")+" "+mixerServer.serverIP.toString()+" "+mixerServer.serverUDPPort+"/"+String(mixerServer.msUDPPort)+"/"+String(mixerServer.msAPIPort);
+    String serverAttempt = *app.lang.getString("Trying")+" "+mixerServer.serverIP.toString()+" "+mixerServer.behringerUDPPort+"/"+String(mixerServer.msUDPPort)+"/"+String(mixerServer.msAPIPort);
     doc["serverAttempt"] = serverAttempt;
   }
   serializeJson(doc,pong);
@@ -483,14 +478,13 @@ void QueryingDemoMixer(bool internet){
   if (internet){
     DEBUG_PRINT("\nQuerying demo mixer");    
     IPAddress demoServer(82,65,4,93);
-    OSCInterface osc;
+    OSCInterface osc(hwm.network);
+    //osc.setClient(demoServer,10023);
 
-    osc.setNetwork(hwm.network->udp,hwm.network->WANlatency);
-    osc.setClient(demoServer,10023);
+    OSCValues data;
+    data.expectedStr = "/xinfo";
 
-    String testAddr = "/xinfo";
-
-    if(osc.blockingPing(testAddr)){
+    if(osc.blockingPing(demoServer,10023,&data,hwm.network->WANlatency)){
         demoIP = "82.65.4.93";                // should be retrieved by an http request
         DEBUG_PRINT("\tDemo Mixer responded");    
     }else{
@@ -506,7 +500,7 @@ void QueryingDemoMixer(bool internet){
 }
 
 void usertNetChangeStateCallback(bool state){
-  //DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);
+  DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);
   //QueryingDemoMixer(hwm.network->internet);  
 }
 
@@ -522,8 +516,7 @@ void userWizardStepFlow(){
 }
 
 void userInternetCallBack(bool internet){
-  DEBUG_PRINT("\n\n\n\t\t\t * * * * USER INTERNET CALLBACK %s * * * *",internet?"OK":"fail");
-  
+  DEBUG_PRINT("\n\n\n\t\t\t * * * * USER INTERNET CALLBACK %s * * * *",internet?"OK":"fail"); 
   // check updates
 
   // check remote instruction
@@ -533,11 +526,66 @@ void userInternetCallBack(bool internet){
   // check demoMixer
 }
 
-/*String getJsonUserConfWrapper(){
-  // add any other json object here before converting them to String  
-  // so far only mixer state
-  return getMixersState();
-}*/
+void networkEvent(WiFiEvent_t event){
+  switch (event) {
+    case ARDUINO_EVENT_WIFI_READY:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_READY");
+    break;
+    case ARDUINO_EVENT_WIFI_STA_START:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_START");
+    break;    
+    case ARDUINO_EVENT_WIFI_STA_STOP:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_STOP");
+    break;
+    case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_CONNECTED");
+    break;
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_GOT_IP");
+    break;
+    case ARDUINO_EVENT_WIFI_AP_STOP: //SYSTEM_EVENT_STA_STOP:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STOP");
+    break;
+    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: //SYSTEM_EVENT_STA_DISCONNECTED:
+      DEBUG_PRINT("~");
+    break;
+    case ARDUINO_EVENT_WIFI_AP_START: //SYSTEM_EVENT_AP_START:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_START");
+      break;
+    case ARDUINO_EVENT_WIFI_AP_STACONNECTED: //SYSTEM_EVENT_AP_STACONNECTED:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STACONNECTED");
+      break;
+    case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED: //SYSTEM_EVENT_AP_STADISCONNECTED:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STADISCONNECTED");
+      //hwm.ap->state = DISCONNECTED;
+      break;
+    case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED: //SYSTEM_EVENT_AP_STAIPASSIGNED:
+      //hwm.ap->state = CONNECTED;
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED");
+    break;
+    case ARDUINO_EVENT_ETH_START:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_START");
+    break;
+    case ARDUINO_EVENT_ETH_STOP:
+      DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_ETH_STOP");
+    break;
+    case ARDUINO_EVENT_WIFI_STA_LOST_IP:
+      DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_LOST_IP");
+    break;
+    case ARDUINO_EVENT_ETH_CONNECTED:
+      DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_ETH_CONNECTED");
+    break;
+    case ARDUINO_EVENT_ETH_DISCONNECTED:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_DISCONNECTED");
+    break;
+    case ARDUINO_EVENT_ETH_GOT_IP:
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_GOT_IP");
+    break;
+    default: 
+      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: %i",event);
+    break;
+  }
+}
 
 void userBootScreen(){
   Icon bootSprite = Icon(&app.intervalIcon,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*1.2,app.byeIconColor,&GUI::defaultBcolor,false);
@@ -545,32 +593,54 @@ void userBootScreen(){
   bootSprite.sprite->pushSprite(bootSprite.getX(),bootSprite.getY(),TFT_TRANSPARENT);      
 }
 
-float tV = 95.0;
-int16_t monY = TFT_HEIGHT - 120;
+//float tV = 95.0;
+int16_t mixerY = TFT_HEIGHT - 120;
 String interfaceStateMessage = "";
+float dataProgress = 0.0;
+#define PROGRESS_BAR_HEIGHT 20
+int16_t progressBarY = PROGRESS_BAR_HEIGHT; //app.overlayIconY - PROGRESS_BAR_HEIGHT;
 
 void userBankScreenBuilder(int subScreen){
   
   uint8_t interfaceState = mixerServer.mixerInterface->interfaceState;
 
-  if (interfaceState == CONNECTED || interfaceState == SYNCING_CONSOLE){
-    app.disabledBankRendering = false; // normal strips and bank display
-  }else{
+  if (mixerServer.mixerInterface->interfaceSubState == "backgroundSync") app.rollingIcon(true);
+
+  if (hwm.network->state == DISCONNECTED && mixerServer.offline == false){
     app.disabledBankRendering = true;
+    buildNetworkScreen(ICON_FOOTSWITCH,*app.lang.getString("Scanning network"));
+  }else{
+    if (interfaceState == CONNECTED || mixerServer.offline == true/*|| interfaceState == SYNCING_DATA*/){
+      app.disabledBankRendering = false; // normal strips and bank display
+    }else{
+      app.disabledBankRendering = true;
 
-    GUI::defaultBcolor = TFT_BGCOLOR;
-    GUI::defaultFcolor = TFT_FCOLOR;
-    GUI::cls();
+      GUI::defaultBcolor = TFT_BGCOLOR;
+      GUI::defaultFcolor = TFT_FCOLOR;
+      GUI::cls();
 
-    interfaceStateMessage = *app.lang.getString(stateNames[interfaceState]);
-    /*if (interfaceState == MIXER_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.serverUDPPort);
-    else if (interfaceState == MS_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.msAPIPort);*/
+      interfaceStateMessage = *app.lang.getString(stateNames[interfaceState]);
+      /*if (interfaceState == MIXER_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.serverUDPPort);
+      else if (interfaceState == SOFTWARE_UNREACHABLE) interfaceStateMessage += " " + String(mixerServer.msAPIPort);*/  
 
-    gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
+      if (mixerServer.state == DISCONNECTED) gui.add(new Icon(&iconDisconnected,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
+      else if (interfaceState == SYNCING_SOFTWARE){
+        gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
+        //gui.add(new Arc(&mixerServer.mixerInterface->syncSoftwareProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));
+        gui.add (new ProgressBarH(&mixerServer.mixerInterface->syncSoftwareProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &progressBarY /*y*/, TFT_WIDTH /*w*/, PROGRESS_BAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/, false));                  
+      }else{                        
+        if (interfaceState == SYNCING_DATA){
+          gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
+          //gui.add(new Arc(&dataProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));
+          gui.add (new ProgressBarH(&dataProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &progressBarY /*y*/, TFT_WIDTH /*w*/, PROGRESS_BAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/, false));                    
+        }else{
+          if (mixerServer.mixerInterface->model == MIXING_STATION_MODEL) gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
+          else gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));        
+        }      
+      }
+      gui.add(new Label(&interfaceStateMessage, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
-    if (interfaceState == SYNCING_MS) gui.add(new Arc(&mixerServer.mixerInterface->progress, 0.0, 100.0, &app.midScreenHoriz, &monY, 100, &GUI::green, &GUI::transparentColor,0));
-    else gui.add(new Label(&interfaceStateMessage, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-
+    }
   }
 }
 
@@ -586,6 +656,35 @@ void userBankScreenBuilder(int subScreen){
   \"" MIXER_AUTOMODEL_KEY "\":-1,\
   \"" MIXER_AUTOIP_KEY "\":\"192.168.0.1\"\
 }"
+
+void eventHandling(EventDispatcher::Event* event){  
+  switch(event->type){
+    case EventDispatcher::EVENT_DIGITAL_BUTTON:{
+      ButtonEvent* btnEvt = (ButtonEvent*)event->data;
+      switch(btnEvt->id){
+        case Button::BUTTON_SIMPLE_CLIC:
+          DEBUG_PRINT("\n\t\t *** EVENT_DIGITAL_BUTTON SIMPLE_CLIC");
+          if (screen.id == SCREEN_BANK){
+            mixerServer.offline = true;
+            app.broadCast(getMixersState());
+          }
+        break;
+      }
+    }break;
+    case EventDispatcher::EVENT_NETWORK:{
+      WiFiEvent_t* evt = (WiFiEvent_t*)event->data;
+      networkEvent(*evt);
+    }break;
+    case EventDispatcher::EVENT_NETWORK_CHANGED_STATE:{
+      bool state = (bool*)event->data;
+      usertNetChangeStateCallback(state);
+    }break;
+    case EventDispatcher::EVENT_INTERNET_PING:{
+      bool online = (bool*)event->data;
+      userInternetCallBack(online);
+    }break;
+  } 
+}
 
 void setup() {
 
@@ -606,19 +705,18 @@ void setup() {
   app.stripFactory.add(stripChGainSkel);
   app.stripFactory.add(stripOSCSkel);
 
-  app.dataRepository.addDataSet(&macroNames);   // temp while shortcut factory is not implemented
-  app.dataRepository.addDataSet(&actionPlay);  // temp while shortcut factory is not implemented
+  app.dataRepository.addDataSet(&macroNames);   
+  app.dataRepository.addDataSet(&actionPlay);  
   app.dataRepository.addDataSet(&ipDS);  
   app.dataRepository.addDataSet(&portDS);  
   app.dataRepository.addDataSet(&msgDS);  
 
+  app.registerCallback(eventHandling);
+
   app.userParseJsonInputCallback = userHTMLJsonInput;
-  //app.userJsonConfigCallback = getJsonUserConfWrapper;
-  app.userNetworkChangeStateCallback = usertNetChangeStateCallback;
   app.userJsonPongCallback = userPongCallback;    
   app.userWizardScreenBuilder = userWizardGUI;
   app.userWizardstepFlow = userWizardStepFlow;
-  app.setUserInternetCallback((StdFunctionCallbackVoidBool)userInternetCallBack);
   app.bootScreen = userBootScreen;
   app.userBankScreenBuilder = userBankScreenBuilder;
 
@@ -680,22 +778,24 @@ void setup() {
 }
 
 void loop() {
+
   app.refresh();
   mixerServer.refresh();
 
   static uint8_t previousInterfaceState = DISCONNECTED;
-
-  app.refresh();
-  mixerServer.refresh();
+  static String  previousInterfaceSubState = "";
 
   uint8_t interfaceState = mixerServer.mixerInterface->interfaceState;
 
-  if (interfaceState != previousInterfaceState || mixerServer.refreshed){   
-    if (!mixerServer.refreshed) DEBUG_PRINT("\n*********************** INTERFACE CHANGED STATE FROM:%s TO: %s",stateNames[previousInterfaceState].c_str(),stateNames[interfaceState].c_str());
-
+  if (interfaceState != previousInterfaceState || mixerServer.refreshed || hwm.network->refreshed  ){   
+    if (mixerServer.refreshed){
+      
+    }else{
+      DEBUG_PRINT("\n*********************** INTERFACE CHANGED STATE FROM:%s TO: %s",stateNames[previousInterfaceState].c_str(),stateNames[interfaceState].c_str());
+    }
     previousInterfaceState = interfaceState;
     
-    if (interfaceState == SYNCING_MS){
+    if (interfaceState == SYNCING_SOFTWARE || interfaceState == SYNCING_DATA){
       //fixed color
       mixerGlowingColor.value = &GUI::unUsedColor;
       iconMixerColor = GUI::green;
@@ -706,10 +806,12 @@ void loop() {
       // interfaceState
       if (interfaceState == CONNECTING || interfaceState == IDLE)  mixerGlowingColor.baseColor = GUI::blue;
       else if (interfaceState == MIXER_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::orange;
-      else if (interfaceState == MS_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::orange;
+      else if (interfaceState == SOFTWARE_UNREACHABLE)  mixerGlowingColor.baseColor = GUI::orange;
       else{
         // mixer state
-        if (mixerServer.state == CONNECTED) mixerGlowingColor.baseColor = GUI::blue;
+        if (mixerServer.state == CONNECTED){
+          mixerGlowingColor.baseColor = GUI::blue;      
+        }
         else mixerGlowingColor.baseColor = GUI::red;
       }
     }
@@ -719,23 +821,29 @@ void loop() {
     if (screen.id == SCREEN_BANK) screen.focus = screen.focus - 1;    // rebuild GUI, will call userBuildScreen 
   }
 
-  if (mixerServer.mixerInterface->interfaceState == SYNCING_MS){
+  if (mixerServer.mixerInterface->interfaceState == SYNCING_SOFTWARE){
     static uint8_t previousProgress = 254;
-    uint8_t progress = mixerServer.mixerInterface->progress;
+    app.rollingIcon(true);
+    uint8_t progress = mixerServer.mixerInterface->syncSoftwareProgress;
     if (progress<100 && previousProgress!=progress){
       previousProgress = progress;
       app.broadCast("{\"syncProgress\":"+String(progress)+"}");
     }
-  }else if (mixerServer.mixerInterface->interfaceState == SYNCING_CONSOLE ){
+  }else if (mixerServer.mixerInterface->interfaceState == SYNCING_DATA ){
     static uint8_t previousDataProgress = 254;
-    uint8_t progress = mixerServer.mixerInterface->syncDataProgress();
-    if (progress<100 && previousDataProgress!=progress){
-      previousDataProgress = progress;
-      app.broadCast("{\"syncProgress\":"+String(progress)+"}");
+    app.rollingIcon(true);
+    dataProgress = mixerServer.mixerInterface->syncDataProgress();
+    if (dataProgress<100 && previousDataProgress!=dataProgress){
+      previousDataProgress = dataProgress;
+      app.broadCast("{\"syncProgress\":"+String(dataProgress)+"}");
     }
   }
 
-
+  if (previousInterfaceSubState != mixerServer.mixerInterface->interfaceSubState){
+    previousInterfaceSubState = mixerServer.mixerInterface->interfaceSubState;
+    if (mixerServer.mixerInterface->interfaceSubState == "backgroundSync") app.rollingIcon(true);
+    else app.rollingIcon(false);
+  }
 
   #if defined(USE_FTP) && defined(USE_NETWORK)
     ftp.handle();

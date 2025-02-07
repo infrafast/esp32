@@ -19,14 +19,6 @@ using WiFiWebSocketServer = WebSocketServer<WiFiServer, WiFiClient, 1>;
 using EthernetWebSocketServer = WebSocketServer<EthernetServer, EthernetClient, 1>;
 void socketConnectionCallback(IWebSocket &ws);
 
-/*
-#include <WebSocketClient.hpp>    // https://github.com/skaarj1989/mWebSockets#meta     // use a local repository with SOCKETBUFFER SIZE CHANGED one because of https://github.com/skaarj1989/mWebSockets/issues/72
-using namespace net;
-using WiFiWebSocketClient = WebSocketClient<WiFiClient>;
-using EthernetWebSocketClient = WebSocketClient<EthernetClient>;
-void socketClientCallback(IWebSocket &ws);
-*/
-
 ///////////////////// WIDGET LOCATION & SIZE ////////////////////////
 #define OVERLAY_ICON_SIZE TFT_WIDTH/20
 
@@ -139,12 +131,12 @@ struct JsonAnswer{
 };
 
 typedef bool (*ParseJsonInputCallback)(JsonDocument,JsonAnswer*);
-typedef void (*NetworkChangeStateCallback)(bool state);
+//typedef void (*NetworkChangeStateCallback)(bool state);
 
 bool defaultParseJsonInputCallback(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
   String jsonInputString;
   serializeJson(jsonDoc, jsonInputString);
-  DEBUG_PRINT("\ndefaultParseJsonInputCallback(%s)",jsonInputString.c_str());
+  //DEBUG_PRINT("\ndefaultParseJsonInputCallback(%s)",jsonInputString.c_str());
   return false;
 }
 
@@ -155,16 +147,6 @@ void defaultVoidBool(bool state){}
 void defaultWizardScreenBuilder();
 void defaultWizardStepFlow();
 void defaultBootScreen();
-
-///////////////////// BUTTONS CALLBACKS ////////////////////////
-void simpleClicCallBack(uint8_t buttonID, unsigned long time);
-void longClicCallBack(uint8_t buttonID, unsigned long time);
-void doubleClicCallBack(uint8_t buttonID, unsigned long time);
-void releaseHoldCallback(uint8_t buttonID, unsigned long time);
-void holdCallback(uint8_t buttonID, unsigned long time);
-
-void menuSwitchCallback(uint8_t buttonID, unsigned long time);
-
 
 void info_item_selected(MenuComponent* p_menu_component);
 void config_menu_item_selected(MenuComponent* p_menu_component);
@@ -185,53 +167,80 @@ void handleConfigConnection();  //
 
 class DataProvider{
   public :
-    virtual uint16_t size(String addrr) = 0;
-    virtual String getValue(String addrr, uint16_t index) = 0;
-    //virtual String setValue(String addrr, uint16_t index) = 0;
+    virtual uint16_t getSize(String addrr) = 0;
+    virtual const String* getValuePtr(String addrr, uint16_t index) = 0;
+  protected:
+    String voidStatic="voidStatic";
 };
+
 
 class DataSet{
   public:
     String address;
     String object;
-    DataProvider* dataProvider;    
 
     ~DataSet(){
       //DEBUG_PRINT("\n\t~DataSet(%s)",address.c_str());
     }
 
-    virtual uint16_t size(){
-      return dataProvider->size(address);
-    }
+    // Ensure dataProvider is valid before accessing it
+    virtual uint16_t getSize() = 0;
+    virtual const String* getValuePtr(uint16_t i) = 0;
 
-    virtual String getValue(uint16_t i){
-      return dataProvider->getValue(address,i);
-    }
+    DataSet(const String& addr,const String& obj): address(addr), object(obj) {}
 
-    DataSet(String addr,String obj, DataProvider* dp): dataProvider(dp), address(addr), object(obj) {}
-
-    String serialize(){
-
+    virtual String serialize(){
       JsonDocument doc;
-
       // a dataset either return an array of value from a data provider (size>0)
       // or a no value (size=0) which is the name of a javascript function callback
-
-      uint16_t n = size();
-
+      uint16_t n = getSize();
       if (n>0){
         JsonArray jsonValues = doc[address].to<JsonArray>();
-        for (uint8_t i=0; i< n; i++) jsonValues.add(getValue(i));
+        for (uint8_t i=0; i< n; i++) jsonValues.add(*getValuePtr(i));
       }else{
-        doc[address] = dataProvider->getValue(address,0);
+        doc[address] = *getValuePtr(0);
       }
 
       String data;
       serializeJson(doc,data);
       //DEBUG_PRINT("\n\n\tdataset->serialize: %s\n\n", data.c_str());
       return data;
-    }      
+    }     
 };
+
+class StaticDataSet : public DataSet{
+  public:
+
+    StaticDataSet(const String& addr,const String& obj): DataSet(addr, obj){}
+
+    // Ensure dataProvider is valid before accessing it
+    virtual uint16_t getSize(){
+        return size;
+    }
+
+  protected:
+    uint16_t size=0;
+};
+
+
+
+
+class DynamicDataSet : public DataSet{
+  public:
+    DataProvider* dataProvider;    
+
+    DynamicDataSet(const String& addr,const String& obj, DataProvider* dp): dataProvider(dp), DataSet(addr, obj) {}
+
+    // Ensure dataProvider is valid before accessing it
+    virtual uint16_t getSize() {
+        return (dataProvider) ? dataProvider->getSize(address) : 0;
+    }
+
+    virtual const String* getValuePtr(uint16_t i) {
+        return (dataProvider) ? dataProvider->getValuePtr(address, i) : nullptr;
+    }
+};
+
 
 class DataRepository{
   public:
@@ -298,9 +307,9 @@ class StripSkeleton;
 #define INPUTSELECT "dropdown"
 #define INPUTTEXT   "freetext"
 
-#define LAYOUT_DETAILS  0b00000001
-#define LAYOUT_ICON     0b00000100
-#define LAYOUT_QUATUOR  0b00010000
+#define LAYOUT_ZOOM     0b00000001
+#define LAYOUT_DETAILS  0b00000010
+
 
 class Strip : public GenericComponent{  
   #define JSON_STRIP_PROPERTY_SIZE 100
@@ -427,7 +436,7 @@ class Strip : public GenericComponent{
 
       unsigned long waitBetween2update; 
       
-      if (trigger == HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
+      if (trigger == Button::BUTTON_HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
       else waitBetween2update = 50 ; // 50ms 
 
       unsigned long delaySoFar = millis() - lastCall;
@@ -447,7 +456,7 @@ class Strip : public GenericComponent{
     virtual float getIncrement(unsigned long time,uint8_t trigger){
       float increment;
 
-      if (trigger == HOLD){
+      if (trigger == Button::BUTTON_HOLD){
         //value = roundHalf(value);
         if (time<2000){
           increment = 0.1;
@@ -475,7 +484,7 @@ class Strip : public GenericComponent{
       if (value > valueMax) value = valueMax;
       //value = truncateToOneDecimal(value);
       
-      DEBUG_PRINT("\nincreaseCallBack: %s, time:%s",String(value).c_str(),String(time).c_str());
+      //DEBUG_PRINT("\nincreaseCallBack: %s, time:%s",String(value).c_str(),String(time).c_str());
 
       return delta;      
     }
@@ -492,7 +501,7 @@ class Strip : public GenericComponent{
 
       //value = truncateToOneDecimal(value);
 
-      DEBUG_PRINT("\ndecreaseCallback: %.2f",value);
+      //DEBUG_PRINT("\ndecreaseCallback: %.2f",value);
 
       return delta;      
     }
@@ -502,6 +511,7 @@ class Strip : public GenericComponent{
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;    
     virtual void buildWidgets(uint8_t layout)=0;
+    virtual void buildHeader()=0;
     
 
     JsonArray properties;
@@ -542,10 +552,10 @@ class StripSkeleton{
       constructor = b;
     }
 
-    String getValue(String address, uint8_t index){
+    const String* getValuePtr(String address, uint8_t index){
       DataSet* ds = dataRepo->getDataSet(address);
-      if (ds != nullptr) return ds->getValue(index);
-      else return "null";
+      if (ds != nullptr) return ds->getValuePtr(index);
+      else return &emptyString;
     }
 
     bool registerDataSetAddress(String address){
@@ -597,13 +607,11 @@ class TextStrip : public Strip{
 
     virtual void buildWidgets(uint8_t layout){
       switch(layout){
-        case LAYOUT_QUATUOR:
-        break;
-        case LAYOUT_ICON:
+        case LAYOUT_ZOOM:
         break;
         case LAYOUT_DETAILS: 
         default:
-          if (debug) DEBUG_PRINT("\n%s:buildWidgets Label(%s)",id.c_str(),text.c_str());
+          //if (debug) DEBUG_PRINT("\n%s:buildWidgets Label(%s)",id.c_str(),text.c_str());
 
           uint8_t fontSize = TFT_WIDTH / text.length() *3;
 
@@ -613,6 +621,8 @@ class TextStrip : public Strip{
         break;
       }
     }
+
+    virtual void buildHeader(){};
 
     virtual void deserializeProperty(String property)  {  
       // property = /text/toto   
@@ -658,8 +668,9 @@ class TextStrip : public Strip{
 class TwoSelectStrip : public Strip{
 
   public: 
-    TwoSelectStrip(StripSkeleton* s,GUIManager* g,String *select2String, bool debug=false):Strip(s,g,debug){
-      select2Content = select2String;
+    TwoSelectStrip(StripSkeleton* s,GUIManager* g, bool debug=false):Strip(s,g,debug){
+      select2PropertyAddress = s->dataSetAddresses.get(0);
+      select2Content = skeleton->getValuePtr(select2PropertyAddress,select2ID-1);
     }
 
     void serializeProperties(){
@@ -669,6 +680,14 @@ class TwoSelectStrip : public Strip{
       delete buf;
 
     }
+
+    virtual bool refresh(bool force=false){
+      refreshed = force;
+      Strip::refresh(force);
+      select2Content = skeleton->getValuePtr(select2PropertyAddress,select2ID-1);
+      return refreshed;
+    }
+
 
     void deserializeProperty(String property){
       if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
@@ -680,17 +699,25 @@ class TwoSelectStrip : public Strip{
       return skeleton->numberOfProperties;      
     }
  
+    virtual void buildHeader(){
+      Top1Toggle1Label* topLabels = new Top1Toggle1Label(&gui->screenGUIs,select2Content, &label, &toggleLabel,&frontColor,&backColor,&frontColor,&backColor,true );          
+      gui->add(topLabels);     
+    }
+
   protected:
     uint8_t select2ID=1; 
-    String *select2Content;
-    String select2PropertyAddress;
+    const String *select2Content;
+    String select2PropertyAddress; 
+    bool toggleLabel = false;
+    String label = "";    
 };
 
 
 class ThreeSelectStrip: public TwoSelectStrip{
   public:
-    ThreeSelectStrip(StripSkeleton* s,GUIManager* g, String *select2String, String *select3String, bool debug=false):TwoSelectStrip(s,g,select2String,debug){
-      select3Content = select3String;
+    ThreeSelectStrip(StripSkeleton* s,GUIManager* g, bool debug=false):TwoSelectStrip(s,g,debug){
+      select3PropertyAddress = s->dataSetAddresses.get(1);
+      select3Content = skeleton->getValuePtr(select3PropertyAddress,select3ID-1);      
     }
   
     void serializeProperties(){
@@ -701,6 +728,13 @@ class ThreeSelectStrip: public TwoSelectStrip{
       properties.add(String(buf));
       delete buf;
 
+    }
+
+    virtual bool refresh(bool force=false){
+      refreshed = force;
+      TwoSelectStrip::refresh(force);
+      select3Content = skeleton->getValuePtr(select3PropertyAddress,select3ID-1); //select2Content = skeleton->getValuePtr(select2PropertyAddress,select2ID-1);
+      return refreshed;
     }
 
     void deserializeProperty(String property){
@@ -715,11 +749,17 @@ class ThreeSelectStrip: public TwoSelectStrip{
       return skeleton->numberOfProperties;      
     }
 
+    virtual void buildHeader(){
+      topLabels = new Top2Toggles(&gui->screenGUIs,select2Content, select3Content, &toggleTop, &toggleBottom,&frontColor,&backColor );          
+      gui->add(topLabels);       
+    }
+
   protected:
     uint8_t select3ID=1; 
-    String *select3Content;
+    const String *select3Content;
     String select3PropertyAddress;
-
+    Top2Toggles* topLabels;  
+    bool toggleTop = false, toggleBottom = false;    
 };
 
 
@@ -813,7 +853,7 @@ class Bank{
     }
 
     ~Bank(){
-      DEBUG_PRINT("\n~Bank: %s",name.c_str());
+      //DEBUG_PRINT("\n~Bank: %s",name.c_str());
       for (uint8_t i=0; i<strips.size(); i++){
         if (strips[i] != nullptr ) delete strips[i];
       }      
@@ -876,9 +916,9 @@ class Bank{
       return success;
     }
 
-    bool insertStrip(JsonObject jsonStrip){
+    /*bool insertStrip(JsonObject jsonStrip){
 
-    }
+    }*/
 
     Strip* buildStrip(JsonObject jsonStrip){      
       String stripID = jsonStrip[C_STRIPTYPE];
@@ -1009,7 +1049,7 @@ class BankNavigator: public Widget{
         oldNumberOfStrips = bank->strips.size();
         id = bank->name;
         oldNav.value = bank->nav.value;        
-        if (debug) DEBUG_PRINT("\n\t bank <%s> nav changed to <%i/%i>",id.c_str(),bank->nav.selector,bank->nav.window);        
+        //if (debug) DEBUG_PRINT("\n\t bank <%s> nav changed to <%i/%i>",id.c_str(),bank->nav.selector,bank->nav.window);        
 
      
         #define NAV_HEIGHT OVERLAY_ICON_SIZE+1
@@ -1247,20 +1287,29 @@ enum{
 #define ADDRESS_STRIPIDS  "/strip/id/%s"
 
 
-class StaticProvider: public DataProvider{
+class DefaultDynamicProvider: public DataProvider{
   public :
     
-    virtual uint16_t size(String addrr){
+    virtual uint16_t getSize(String addrr){
       if (addrr == ADDRESS_SIMPLETEXT) return 1;
       else if (addrr == ADDRESS_STRIPIDS) return 0;
       else return 0;
     }
     
-    virtual String getValue(String addrr, uint16_t index){
-      if (addrr == ADDRESS_SIMPLETEXT) return "hello"+String(index);
-      else if (addrr = ADDRESS_STRIPIDS) return "getStripID";         //javascript local function callback
-      else return "voidStatic";
+    virtual const String* getValuePtr(String addrr, uint16_t index){
+      if (addrr == ADDRESS_SIMPLETEXT){
+        simpleText = "hello"+String(index);
+        return &simpleText;
+      } 
+      else if (addrr = ADDRESS_STRIPIDS){
+        return &getStripID;         //javascript local function callback
+      } 
+      else return &voidStatic;
     }
+
+  private:
+    String simpleText, getStripID="getStripID";
+
 };
 
 class Shortcuts{
@@ -1275,27 +1324,29 @@ class Shortcuts{
 };
 
 
-class ApplicationManager : public GenericComponent,MenuComponentRenderer{
+class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher{
   public:    
+
+    Event evt;
+
     Application* webServer = nullptr;
     bool  httpServing = false;  //flag to indicate if http file are currently streamed
     ///////////////////// USER CALLBACKS ////////////////////////////////////////////////////
-    ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;
-    //ReturnStringCallback userJsonConfigCallback = defaultStringReturn;
+    ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;    
     ReturnStringCallback userJsonPongCallback = defaultStringReturn;
-    NetworkChangeStateCallback userNetworkChangeStateCallback = defaultVoidBool;
     VoidCallback userWizardScreenBuilder = defaultWizardScreenBuilder;
     VoidCallback userWizardstepFlow = defaultWizardStepFlow;
     VoidCallback bootScreen = defaultBootScreen;
     VoidIntCallback userBankScreenBuilder = defaultVoidInt;
+
     ///////////////////// STRIPS & BANKS CONTAINERS AND DEFINITION ////////////////////////
     LinkedList<Bank*> banks = LinkedList<Bank*>(); 
     StripFactory stripFactory;
     DataRepository dataRepository;
     
-    StaticProvider staticProvider;
-    DataSet simpleText = DataSet(ADDRESS_SIMPLETEXT,INPUTTEXT,&staticProvider);
-    DataSet stripIDs = DataSet(ADDRESS_STRIPIDS,INPUTSELECT,&staticProvider);
+    DefaultDynamicProvider defaultDynamicProvider;
+    DynamicDataSet simpleText = DynamicDataSet(ADDRESS_SIMPLETEXT,INPUTTEXT,&defaultDynamicProvider);
+    DynamicDataSet stripIDs = DynamicDataSet(ADDRESS_STRIPIDS,INPUTSELECT,&defaultDynamicProvider);
     
     ///////////////////// OVERLAY ICONS ////////////////////////
     String networkIcon, apIcon;
@@ -1323,20 +1374,28 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     #define WIDGET_BIG_WIDTH TFT_WIDTH/5
     #define ICON_MAX_SIZE TFT_WIDTH/2
 
-    int16_t belowTop = 10, midScreenHoriz = TFT_WIDTH/2, rightScreen = TFT_WIDTH, midScreenVertical = TFT_HEIGHT/2, bigWidgetMidY = midScreenVertical-WIDGET_BIG_WIDTH/2, iconMidY = midScreenVertical-ICON_MAX_SIZE/2 ;
+    const int16_t tenPixels = 10, midScreenHoriz = TFT_WIDTH/2, rightScreen = TFT_WIDTH, midScreenVertical = TFT_HEIGHT/2, bigWidgetMidY = midScreenVertical-WIDGET_BIG_WIDTH/2, iconMidY = midScreenVertical-ICON_MAX_SIZE/2 ;
+    int16_t iconRow2 = OVERLAY_ICON_SIZE*1.5;
 
     uint16_t rainbowC;
     AlteredColor rainbowColor = AlteredColor{.baseColor = TFT_WHITE, .value = &rainbowC};
     Widget* widgets[NUMBER_OF_WIDGETS]; 
 
-    #define TFT_QUARTER TFT_WIDTH/4
-    int16_t quarter1xPos = TFT_QUARTER-TFT_QUARTER/2;
-    int16_t quarter2xPos = TFT_QUARTER*2-TFT_QUARTER/2;
-    int16_t quarter3xPos = TFT_QUARTER*3-TFT_QUARTER/2;
-    int16_t quarter4xPos = TFT_QUARTER*4-TFT_QUARTER/2;
+    #define TFT_HQUARTER TFT_WIDTH/4
+    int16_t hquarter1xPos = TFT_HQUARTER-TFT_HQUARTER/2;
+    int16_t hquarter2xPos = TFT_HQUARTER*2-TFT_HQUARTER/2;
+    int16_t hquarter3xPos = TFT_HQUARTER*3-TFT_HQUARTER/2;
+    int16_t hquarter4xPos = TFT_HQUARTER*4-TFT_HQUARTER/2;
 
-    #define TFT_THIRD TFT_WIDTH/3
-    int16_t third3xPos = TFT_THIRD*2+TFT_QUARTER/2;
+    #define TFT_VQUARTER TFT_HEIGHT/4
+    int16_t vquarter1xPos = TFT_VQUARTER-TFT_VQUARTER/2;
+    int16_t vquarter2xPos = TFT_VQUARTER*2-TFT_VQUARTER/2;
+    int16_t vquarter3xPos = TFT_VQUARTER*3-TFT_VQUARTER/2;
+    int16_t vquarter4xPos = TFT_VQUARTER*4-TFT_VQUARTER/2;
+
+
+    #define TFT_HTHIRD TFT_WIDTH/3
+    int16_t hthird3xPos = TFT_HTHIRD*2+TFT_HQUARTER/2;
 
     String leftIcon,rightIcon;
 
@@ -1362,8 +1421,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
     int16_t menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2, leftMenuIconXpos = midScreenHoriz-MENU_ICON_SIZE*1.4,rightMenuIconXpos = midScreenHoriz+MENU_ICON_SIZE*1.4;
     int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE;
 
-    #define ICONPENDINGCOUNT 2
-    String iconPending[ICONPENDINGCOUNT];
+    #define TWOFRAMEICON 2
+    String iconRolling[TWOFRAMEICON] = {ICON_ROLLING1,ICON_ROLLING2};
+    String iconPending[TWOFRAMEICON];
 
     const char* quitMenuString ={ICON_QUIT":QUIT"};
     const char* infoMenuString ={ICON_INFO":INFO"};
@@ -1409,14 +1469,33 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       dataRepository.addDataSet(&stripIDs);
       
       stripTextSkel->registerDataSetAddress(ADDRESS_SIMPLETEXT);
+
+      hwm->network->userInternetCallback = [this](bool* online) {
+          this->internetCallBack(online);
+      };         
+
+      /*callback = [this](Event* event) {
+          this->defaultEventHandling(event);
+      };*/         
     }
 
     bool getButtonState(uint8_t B){
       return hwm->buttons[B]->refreshed;
     }
 
-    void setUserInternetCallback(StdFunctionCallbackVoidBool userInternetCallback){
-      hwm->setUserInternetCallback(userInternetCallback);
+    /*void defaultEventHandling(EventDispatcher::Event* event){  
+      switch(event->type){
+        case EventDispatcher::EVENT_APPLICATION:{
+        
+        }break;
+      } 
+    }*/
+
+
+    void internetCallBack(bool* online){
+      evt.type = EVENT_INTERNET_PING;
+      evt.data = online;
+      fireEvent(&evt);
     }
 
     void setBatIcon(){
@@ -1456,6 +1535,16 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
         }else{
           apIconGlowingRedColor.value = &apIconColor;
         }
+      }
+    }
+
+    void rollingIcon(bool on){
+      if (on){
+        iconRolling[0]=ICON_ROLLING1;
+        iconRolling[1]=ICON_ROLLING2;
+      }else{
+        iconRolling[0]=" ";
+        iconRolling[1]=" ";
       }
     }
 
@@ -1602,15 +1691,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
             
       for (uint8_t i=0;i<MAXB;i++){
-        hwm->buttons[i]->setCallBack(SIMPLE_CLIC,simpleClicCallBack);
-        hwm->buttons[i]->setCallBack(DOUBLE_CLIC,doubleClicCallBack);
-        hwm->buttons[i]->setCallBack(LONG_CLIC,longClicCallBack);
-        hwm->buttons[i]->setCallBack(HOLD,holdCallback);
-        hwm->buttons[i]->setCallBack(RELEASE_HOLD,releaseHoldCallback);
+        hwm->buttons[i]->registerCallback([this](Event* event) {
+            this->buttonCallBack(event);
+        });
       }
 
-      hwm->onOff.setCallBack(LONG_CLIC,menuSwitchCallback);
-      hwm->onOff.setCallBack(SIMPLE_CLIC,simpleClicCallBack);
+      hwm->onOff.registerCallback([this](Event* event) {
+        this->onOffCallback(event);
+      });
 
       back_menu_item = new MenuItem(quitMenuString, &back_menu_item_selected);
       info_menu_item = new MenuItem(infoMenuString, &info_item_selected);
@@ -1695,6 +1783,299 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       }
     }
 
+    // EVENTS HANDLING
+
+    void onOffCallback(Event* event){
+      ButtonEvent* btnEvt = (ButtonEvent*) event->data;
+      switch(btnEvt->id){
+        case Button::BUTTON_DOUBLE_CLIC:
+          
+        break;
+        case Button::BUTTON_HOLD:
+          
+        break;
+        case Button::BUTTON_LONG_CLIC:
+          menuSwitchCallback(btnEvt->buttonId,btnEvt->time);
+        break;
+        case Button::BUTTON_RELEASE_HOLD:
+          
+        break;
+        case Button::BUTTON_SIMPLE_CLIC:
+          simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+      }
+      // propagate the event
+      fireEvent(event);      
+    }
+
+    void buttonCallBack(Event* event) {
+      ButtonEvent* btnEvt = (ButtonEvent*) event->data;             
+      switch(btnEvt->id){
+        case Button::BUTTON_DOUBLE_CLIC:
+          doubleClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+        case Button::BUTTON_HOLD:
+          holdCallback(btnEvt->buttonId,btnEvt->time);
+        break;
+        case Button::BUTTON_LONG_CLIC:
+          longClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+        case Button::BUTTON_RELEASE_HOLD:
+          releaseHoldCallback(btnEvt->buttonId,btnEvt->time);
+        break;
+        case Button::BUTTON_SIMPLE_CLIC:
+          simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+      }
+      // propagate the event
+      fireEvent(event);
+    }
+
+
+    //////////////////////////////////////////////////////////////
+    ////                BUTTONS CALLBACKS                  ///////
+    //////////////////////////////////////////////////////////////
+    void menuSwitchCallback(uint8_t buttonID, unsigned long time){
+      if (screen.id == SCREEN_MENU){   //set GUI
+        restoreScreen();
+      }else{
+        restoreMenu();
+      } 
+    }
+
+    void simpleClicCallBack(uint8_t buttonID, unsigned long time){
+      switch(screen.id){
+        case SCREEN_STARTUP:
+
+        break;
+        case SCREEN_WIZARD:
+          
+        break;
+        case SCREEN_MENU:
+          handleMenuButton(buttonID);   
+        break;
+        case SCREEN_BANK_SWITCH:
+          handleSwitchScreen(buttonID);
+        break;
+        case SCREEN_PROMPT:
+
+        break;
+        case SCREEN_UTILS:
+          switch(screen.state){
+            case STATE_UTILS_SEARCHING_CONNECTION:
+
+            break;
+            case STATE_UTILS_INFO:
+              restoreMenu();  // any button calls the method
+            break;
+            case STATE_UTILS_WEBAPPCONNECTED:
+              restoreScreen();
+            break;
+          }
+        break;
+        case SCREEN_BANK:
+          //DEBUG_PRINT("\nsimpleClicCallBack: %i",buttonID);
+          moduleSimpleClic(buttonID);      
+        break;
+      }
+    }
+
+    void longClicCallBack(uint8_t buttonID, unsigned long time){
+      switch(screen.id){
+        case SCREEN_STARTUP:
+
+        break;
+        case SCREEN_WIZARD:
+
+        break;
+        case SCREEN_MENU:
+          handleMenuButton(buttonID);
+        break;
+        case SCREEN_PROMPT:
+
+        break;
+        case SCREEN_BANK_SWITCH:
+          handleSwitchScreen(buttonID);
+        break;    
+        case SCREEN_UTILS:
+          switch(screen.state){
+            case STATE_UTILS_SEARCHING_CONNECTION:
+
+            break;
+            case STATE_UTILS_INFO:
+              restoreMenu();  // any button calls the method
+            break;
+            case STATE_UTILS_WEBAPPCONNECTED:
+              restoreScreen();
+            break;
+          }
+        break;
+        case SCREEN_BANK:
+          //DEBUG_PRINT("\nlongClicCallBack: %i",buttonID);    
+          moduleLongClic(buttonID);      
+        break;
+      }  
+    }
+
+    void doubleClicCallBack(uint8_t buttonID, unsigned long time){
+      switch(screen.id){
+        case SCREEN_STARTUP:
+
+        break;
+        case SCREEN_WIZARD:
+
+        break;
+        case SCREEN_MENU:
+        
+        break;
+        case SCREEN_PROMPT:
+
+        break;
+        case SCREEN_UTILS:
+          switch(screen.state){
+            case STATE_UTILS_SEARCHING_CONNECTION:
+
+            break;
+            case STATE_UTILS_INFO:
+
+            break;
+          }
+        break;
+        case SCREEN_BANK:
+          //DEBUG_PRINT("\ndoubleClicCallBack: %i",buttonID);
+          broadCast("{\"mixerIP\":\"192.168.199.199\"}");
+        break;
+      }  
+    }
+
+    void releaseHoldCallback(uint8_t buttonID, unsigned long time){
+      switch(screen.id){
+        case SCREEN_STARTUP:
+
+        break;
+        case SCREEN_WIZARD:
+
+        break;
+        case SCREEN_MENU:
+          handleMenuButton(buttonID);
+        break;
+        case SCREEN_PROMPT:
+
+        break;
+        case SCREEN_UTILS:
+          switch(screen.state){
+            case STATE_UTILS_SEARCHING_CONNECTION:
+
+            break;
+            case STATE_UTILS_INFO:
+              restoreMenu();  // any button calls the method
+            break;
+            case STATE_UTILS_WEBAPPCONNECTED:
+              restoreScreen();
+            break;
+          }
+        break;
+        case SCREEN_BANK:
+          //DEBUG_PRINT("\nreleaseHoldCallback: %i",buttonID);
+        break;
+      }  
+    }
+
+    void holdCallback(uint8_t buttonID, unsigned long time){
+      switch(screen.id){
+        case SCREEN_STARTUP:
+
+        break;
+        case SCREEN_WIZARD:
+
+        break;
+        case SCREEN_MENU:
+        
+        break;
+        case SCREEN_PROMPT:
+
+        break;
+        case SCREEN_UTILS:
+          switch(screen.state){
+            case STATE_UTILS_SEARCHING_CONNECTION:
+
+            break;
+            case STATE_UTILS_INFO:
+
+            break;
+          }
+        break;
+        case SCREEN_BANK:
+          moduleHoldClic(buttonID, time);  
+        break;
+      }  
+    }
+
+
+  //////////////////////////////////////////////////////////////
+  ////                BUTTONS CALLBACKS UTILITIES        ///////
+  //////////////////////////////////////////////////////////////
+  void handleSwitchScreen(uint8_t buttonID){
+    //DEBUG_PRINT("\nhandleSwitchScreen");
+    if (buttonID == hwm->buttons[MIDDLEB]->getID() ){    
+      bankMenu->select();    
+      setBankMenuItems();
+    }else{
+      if (buttonID == hwm->buttons[RIGHTB]->getID()) bankMenu->next(true);
+      else bankMenu->prev(true);
+      menuSwitchBankFullRefresh();
+    }   
+  }
+
+  void handleMenuButton(uint8_t buttonID){
+    if (buttonID == hwm->buttons[MIDDLEB]->getID() || buttonID == hwm->onOff.getID()){
+      ms.select();
+      setRootMenuItems(&ms);
+    }else{
+      if (buttonID == hwm->buttons[LEFTB]->getID()) ms.prev(true);
+      else ms.next(true);
+      menuSystemFullRefresh();
+    }      
+  }
+
+  void moduleSimpleClic(uint8_t buttonID){
+    // perform the behaviour defined in the config file
+    // at the moment, this is hard coded
+    if (buttonID == hwm->buttons[MIDDLEB]->getID()){
+      if (!stripAction(Button::BUTTON_SIMPLE_CLIC)){
+        DEBUG_PRINT("\nAction failed!!!");
+        // code if execution fails: example: popup a message with the error
+      }
+    }
+    else{
+      Bank* bank = banks.get(screen.state);
+      stripScroll(buttonID,bank);
+    }
+  }
+
+
+  void moduleHoldClic(uint8_t buttonID, unsigned long time){
+    // perform the behaviour defined in the config file
+    // at the moment, this is hard coded
+    stripChangeValue(buttonID, time, Button::BUTTON_HOLD);
+  }
+
+  void moduleLongClic(uint8_t buttonID){
+    if (buttonID == hwm->buttons[MIDDLEB]->getID()){
+      switchBank();
+      //LogUDP::sendLog("moduleLongClic",hwm->network->udp);
+    }else if(buttonID == hwm->buttons[LEFTB]->getID()){    
+      //LogUDP::sendLog("testOSC",hwm->network->udp);
+    }else{
+      //testHttpRequest();
+      //LogUDP::sendLog("testHTTP",hwm->network->udp);
+    }
+  }
+
+
+
+
+
     void setScreenAndButtonRotation(){
       if (persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES){
         //swap button
@@ -1720,7 +2101,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer{
       if (screen.id == SCREEN_BANK && screen.state > banks.size()-1){
         screen.state = 0; // prevents branching a bank which is not existing anymore
         persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state); 
-        DEBUG_PRINT("\n\n\n*********************** RESETING TO BANK: %i",screen.state );                     
+        //DEBUG_PRINT("\n\n\n*********************** RESETING TO BANK: %i",screen.state );                     
       }
       oldScreen.value = screen.value - 1;      
     }
@@ -1864,58 +2245,57 @@ void setup() {
       langMenu->add_item(back_menu_item);
       ms.get_root_menu().add_menu(langMenu);              
     }
-    
+
+    //------------------
+    //
+    // MANAGE WEB APPLICATION
+    //
+    //------------------     
     void handleWeb(void * parameter){
-      //------------------
-      //
-      // MANAGE WEB APPLICATION
-      //
-      //------------------  
+
+      //unsigned long lastActivity = millis();
+
       Network* configMedia = hwm->configMedia;
-      
-      if (configMedia->refreshed){
-        if (configMedia->state == CONNECTED){
-          setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
-        }else{
-          webAppConnected = false;            
-        }
-      }
 
+      vTaskDelay(1);    //crash wifi otherwise
 
-      if (configMedia->state == CONNECTED){    
-        if(webServer != nullptr){                       
-          
-          wss->listen();  //sockets      
-          
-          // then webserver
-          if (configMedia->media == CABLE_MEDIA){
-            EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                          
-            // Création de la tâche "handleWebConnection" avec le client en paramètre
-            /*xTaskCreate(
-              handleWebConnection,          // Nom de la fonction de tâche
-              "handleWebConnection",        // Nom de la tâche
-              8192*2,                         // Taille de la pile (4 Ko)
-              (void*)&newEthClient,               // Paramètre (pointeur vers EthernetClient)
-              1,                            // Priorité de la tâche
-              NULL                          // Pas besoin de handle de tâche ici
-            );*/                       
-            if (newEthClient.connected()) {
-              ets_printf("\n\tEth ---> ");
-              webServer->process(&newEthClient);
-              newEthClient.stop();
-              ets_printf(" STOP");
-            }             
+      if (xSemaphoreTake(configMedia->networkBusy, pdMS_TO_TICKS(100)) == pdTRUE){     
+        if (configMedia->refreshed){
+          if (configMedia->state == CONNECTED){
+            setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
           }else{
-            WiFiClient newWiFiClient = ((WiFiServer *)configMedia->server)->available();
-            if (newWiFiClient.connected()) {
-              ets_printf("\n\tWiFi ---> ");
-              webServer->process(&newWiFiClient);
-              newWiFiClient.stop();
-              ets_printf(" STOP");
-            }   
+            webAppConnected = false;            
+          }
+        }        
+        if (configMedia->state == CONNECTED){    
+          if(webServer != nullptr){                       
+            // then webserver
+            if (configMedia->media == CABLE_MEDIA){
+              EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                                            
+              if (newEthClient.connected()) {
+                ets_printf("\n\tEth ---> ");
+                webServer->process(&newEthClient);
+                newEthClient.stop();              
+                ets_printf(" STOP");
+              }             
+            }else{
+              WiFiClient newWiFiClient = ((WiFiServer *)configMedia->server)->available();
+              bool stop = false;
+              if (newWiFiClient.connected()) {
+                taskYIELD();
+                ets_printf("\n\tWiFi ---> ");
+                webServer->process(&newWiFiClient);
+                newWiFiClient.stop();              
+                ets_printf(" STOP");
+              }   
+            }
+
+            wss->listen();  //sockets                    
+
           }
         }
-      }
+        xSemaphoreGive(configMedia->networkBusy);  
+      }    
     }
 
     bool refresh(bool force=false){
@@ -1937,13 +2317,16 @@ void setup() {
         // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
         broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivityConfig\"}"));  // inform webclient               could be done via ws.send as well
         // ============>>> CALLBACK APPLICATION
-        userNetworkChangeStateCallback(hwm->network->state);
+        evt.type = EVENT_NETWORK_CHANGED_STATE;
+        evt.data = &hwm->network->state;
+        fireEvent(&evt);
+        //userNetworkChangeStateCallback(hwm->network->state);
 
         if (hwm->network->state == CONNECTED){         
           // network has refreshed so we shift to appropriate configMedia
           if (hwm->network->media == WIFI_MEDIA){
             //we set last used Wifi SSID (id) and save config, hence keep WIFI_MEDIA credential
-            DEBUG_PRINT("\n------> SAVING SSID");
+            //DEBUG_PRINT("\n------> SAVING SSID");
             system.setValue(S_LAST_USED_SSID,hwm->network->SSID);
             system.save(); 
             /* add this to the possible SSID "ssid": {
@@ -1955,7 +2338,7 @@ void setup() {
           
           if (!webAppConnected){
             // there is no connection to any application, therefore, we prefer to use the network as the one to configure the application
-            if (debug) DEBUG_PRINT("\n\tsetting the configMedia to WiFiEth");
+            //if (debug) DEBUG_PRINT("\n\tsetting the configMedia to WiFiEth");
             hwm->configMedia = hwm->network;    // since the normal network gets reconnected,
 
           }else{
@@ -1974,6 +2357,19 @@ void setup() {
       // real time signal strength display
       if (hwm->network->state == CONNECTED && hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();
     
+      //------------------
+      //
+      // MANAGE WEBAPP
+      //
+      //------------------
+      handleWeb(nullptr);
+
+      //------------------
+      //
+      // MANAGE UTILITIES
+      //
+      //------------------
+
       // BATTERY LEVEL CHECK
       if (0/*hwm->battery.refreshed*/){        
         setBatIcon();
@@ -1984,8 +2380,6 @@ void setup() {
           goToBigBatteryIconScreenAndSleep();
         }          
       }
-   
-      handleWeb(nullptr);
 
 
       //------------------
@@ -1997,7 +2391,7 @@ void setup() {
         refreshed = true;
         // we changed the screen, therefore we rebuild the screen
         // first we acknowledge the update so it is not done te next round
-        if (debug) DEBUG_PRINT("\n%s changed from screen.id:%i.state:%i.focus:%i to screen.id:%i.state:%i.focus:%i",id.c_str(),oldScreen.id,oldScreen.state,oldScreen.focus, screen.id,screen.state,screen.focus);        
+        //if (debug) DEBUG_PRINT("\n%s changed from screen.id:%i.state:%i.focus:%i to screen.id:%i.state:%i.focus:%i",id.c_str(),oldScreen.id,oldScreen.state,oldScreen.focus, screen.id,screen.state,screen.focus);        
         // first clean up all component of the screen
         //for(int i = 0; i < gui->screenGUIs.size()-1; i++) delete(gui->screenGUIs.shift());
         while (gui->screenGUIs.size()>0){
@@ -2127,7 +2521,7 @@ void setup() {
     void broadCast(String msg){
         if (webAppConnected && hwm->configMedia->state == CONNECTED){
           wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());  
-          DEBUG_PRINT("\n\n\t\t\t * * * * broadCast(%s) * * * ",msg.c_str());
+          //DEBUG_PRINT("\n\n\t\t\t * * * * broadCast(%s) * * * ",msg.c_str());
         }
     }
 
@@ -2137,7 +2531,12 @@ void setup() {
       // next: delete conf file   
     }
 
+
+    #define WEB_STOP false
+    #define WEB_START true
+
     void setWSServer(){
+
       if (wss != nullptr){
         //wss->shutdown();  // need the patch here: https://github.com/skaarj1989/mWebSockets/discussions/67#
         delete wss; 
@@ -2151,42 +2550,78 @@ void setup() {
 
     }
 
+    TaskHandle_t webTaskHandle = nullptr;
+
+    static void webTaskLoop(void* parameter) {
+        ApplicationManager* self = static_cast<ApplicationManager*>(parameter);
+        while (true) {
+          self->handleWeb(nullptr);
+        }
+    }
+
+    // Méthode pour gérer la tâche en fonction de l'état
+    void webTaskhandle(bool state) {
+        if (state) {
+            if (webTaskHandle == nullptr) {
+                // Créer une nouvelle tâche si elle n'existe pas déjà
+                xTaskCreatePinnedToCore(
+                    webTaskLoop,       // Méthode de la tâche
+                    "webserver",         // Nom de la tâche
+                    4096*2,             // Taille de la pile
+                    this,             // Paramètre passé à la tâche
+                    1,                // Priorité
+                    &webTaskHandle,      // Handle de la tâche
+                    PRO_CPU_NUM       // CPU pour exécuter la tâche APP_CPU_NUM = 1 = loop()
+                );
+                //DEBUG_PRINT("\nwebTaskhandle start");
+            } else {
+                //DEBUG_PRINT("\nwebTaskhandle est déjà en cours.");
+            }
+        } else {
+            if (webTaskHandle != nullptr) {
+                // Arrêter et supprimer la tâche
+                vTaskDelete(webTaskHandle);
+                webTaskHandle = nullptr;
+                //DEBUG_PRINT("\nwebTaskhandle STOPPED.");
+            } else {
+                //DEBUG_PRINT("\nNo webstaskhandle to stop");
+            }
+        }
+    }
+
     bool startWebApp(){
       if (hwm->configMedia != nullptr){
-        if (webServer == nullptr && hwm->configMedia->state == CONNECTED){          
-          //start webserver
-          if (webServer != nullptr) delete webServer;
-          webServer = new Application();
-          //webServer->setTimeout(1000);
-          // inventory zipped file
-          populateFileList("gz","/webapp",&webGZFiles,"/",false);    
-          /*for (uint8_t i=0;i<webGZFiles.size();i++){          
-            webServer->get(webGZFiles.get(i)->c_str(), &gzFileServer);
-            DEBUG_PRINT("\n ...... REGISTERING WEB GZ FILE: %s",webGZFiles.get(i)->c_str());
-          }*/
-          // any other file
-          webServer->use(commonFileServerWrapper);
-          setWSServer();
-          hwm->configIP = "http://"+hwm->configMedia->IP.toString();
+        if (hwm->configMedia->state == CONNECTED){
+          if (webServer == nullptr){          
+            //start webserver
+            if (webServer != nullptr) delete webServer;
+            webServer = new Application();
+            //webServer->setTimeout(1000);
+            // inventory zipped file
+            /*populateFileList("gz","/webapp",&webGZFiles,"/",false);              
+            for (uint8_t i=0;i<webGZFiles.size();i++){          
+              webServer->get(webGZFiles.get(i)->c_str(), &gzFileServer);
+              DEBUG_PRINT("\n ...... REGISTERING WEB GZ FILE: %s",webGZFiles.get(i)->c_str());
+            }*/
 
+            //populateFileList("*","/webapp",&webFiles,"/");  // prefill, maybe usefull if LittleFS is too slow
 
-          /*xTaskCreate(
-            webServerTaskWrapper,          // Fonction de la tâche
-            "webServerHandle",         // Nom de la tâche
-            8096*2,            // Taille de la pile en mots
-            NULL,            // Paramètres passés à la tâche
-            2,               // Priorité de la tâche
-            NULL      // Handle de la tâche
-          );*/
+            // any other file
+            webServer->use(commonFileServerWrapper);
+            setWSServer();
+            hwm->configIP = "http://"+hwm->configMedia->IP.toString();
 
-          /* Initialize mDNS => doesnt work for ethernet so we give up and keep IP address
-          if (debug) DEBUG_PRINT("\nstarting mdns: %s",config.getString(S_AP_NAME)->c_str());
-          if (!MDNS.begin(*config.getString(S_AP_NAME))) {   // Set the hostname to "esp32.local"
-            if (debug) DEBUG_PRINT("Error setting up MDNS responder!");
-          } */           
-         return true;
+            //webTaskhandle(WEB_START);
+
+            /* Initialize mDNS => doesnt work for ethernet so we give up and keep IP address
+            if (debug) DEBUG_PRINT("\nstarting mdns: %s",config.getString(S_AP_NAME)->c_str());
+            if (!MDNS.begin(*config.getString(S_AP_NAME))) {   // Set the hostname to "esp32.local"
+              if (debug) DEBUG_PRINT("Error setting up MDNS responder!");
+            } */                       
+          }
+          return true;
         }
-        return true;
+        return false;
       }
       return false;
     }
@@ -2251,7 +2686,87 @@ void setup() {
         };
 
 
-    void commonFileServer(Request &req, Response &res){
+    /*bool webFileExists(String fileName){
+      //ets_printf("\nwebFileExists(%s)",fileName.c_str());
+      for (int i = 0; i < webFiles.size(); i++) {
+        //ets_printf("\n\t<> %s", webFiles.get(i)->c_str());
+        if (*webFiles.get(i) == fileName) return true; // Libérer la mémoire des objets String
+      }      
+      return false;
+    }*/
+
+    /*void commonFileServer2(Request &req, Response &res){      
+      httpServing = true;
+      //if (req.method() != Request::GET) return;
+      String path = req.path();
+
+      ets_printf("\t %s <---\t",path.c_str());
+
+      if(path=="/post/"){ 
+        
+        httpPost(req,res);
+
+      }else{
+
+        if(path == "/"){
+          path = "/index.html.gz"; //path = "/index.html";      INDEX is the only exception were we process the gz here because we remap / to index
+          #ifdef USE_NETWORK
+            if (persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD) path = "/wizard.html.gz"; //path = "/wizard.html";
+          #endif
+        }               
+
+        bool fileCheckedYet = false;
+
+        if (webFileExists(String(path)+".gz")){
+          path = path+".gz";
+          fileCheckedYet = true;
+        }
+        
+        String filenameRealExtension = path;
+
+        if (filenameRealExtension.endsWith(".gz")){
+          filenameRealExtension.replace(".gz","");
+          res.set("Content-Encoding", "gzip");
+        }
+
+        if (!fileCheckedYet){
+          if (!webFileExists(path)){
+            res.sendStatus(404);   //send(404, "text/plain", "Not found");    
+            res.set("Content-Type", "text/html");
+            res.print(path.c_str());
+            res.end();          
+            return;
+          }
+        }
+
+        String fullPath = "/webapp"+String(path);   
+        File file = LittleFS.open(fullPath);
+        if (file.isDirectory()) return;
+
+
+        String mimeType = mimeTypes[0][1];
+        for (uint8_t i=0;i<MIME_TYPES_MAX;i++){
+          if (filenameRealExtension.endsWith(mimeTypes[i][0])) mimeType = mimeTypes[i][1];
+        }
+
+        uint32_t free = ESP.getFreeHeap();
+
+        //if (debug) DEBUG_PRINT("\t\t\t\t REAL EXTENSION: \t\t\tt%s \t\t\tMIME:%s",filenameRealExtension.c_str(),mimeType.c_str());
+        ets_printf("\n\t\t<%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        
+        res.set("Content-Type", mimeType.c_str());
+
+       
+        res.set("Access-Control-Allow-Origin","*");
+
+        //if (hwm->network->media == WIFI_MEDIA) while (file.available()){ res.write(file.read()); vTaskDelay(1);}
+        //else
+          sendFileInChunks(&file,&res);
+        res.end();
+        httpServing = false;
+      }
+    }*/
+
+    void commonFileServer(Request &req, Response &res){      
       httpServing = true;
       //if (req.method() != Request::GET) return;
       String path = req.path();
@@ -2266,8 +2781,12 @@ void setup() {
           #endif
         }               
 
+        bool fileCheckedYet = false;
+
+        ets_printf("\tFS Exist1\t");
         if (LittleFS.exists("/webapp"+String(path)+".gz")){
           path = path+".gz";
+          fileCheckedYet = true;
         }
         
         String filenameRealExtension = path;
@@ -2278,13 +2797,18 @@ void setup() {
         }
 
         String fullPath = "/webapp"+String(path);   
-        if (!LittleFS.exists(fullPath)){
-          res.sendStatus(404);   //send(404, "text/plain", "Not found");    
-          res.set("Content-Type", "text/html");
-          res.print(fullPath.c_str());
-          res.end();          
-          return;
+
+        if (!fileCheckedYet){
+          ets_printf("\tFS Exist2\t");
+          if (!LittleFS.exists(fullPath)){
+            res.sendStatus(404);   //send(404, "text/plain", "Not found");    
+            res.set("Content-Type", "text/html");
+            res.print(fullPath.c_str());
+            res.end();          
+            return;
+          }
         }
+        
         File file = LittleFS.open(fullPath);
         if (file.isDirectory()) return;
         
@@ -2296,7 +2820,7 @@ void setup() {
         uint32_t free = ESP.getFreeHeap();
 
         //if (debug) DEBUG_PRINT("\t\t\t\t REAL EXTENSION: \t\t\tt%s \t\t\tMIME:%s",filenameRealExtension.c_str(),mimeType.c_str());
-        DEBUG_PRINT("\n\t\t<%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        
+        ets_printf("\t\t<%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        
         res.set("Content-Type", mimeType.c_str());
 
         /*byte buffer[33] = "Access-Control-Allow-Origin: *\r\n";
@@ -2306,31 +2830,34 @@ void setup() {
         
         res.set("Access-Control-Allow-Origin","*");
 
-        //while (file.available()) res.write(file.read());
+        /*if (hwm->network->media == WIFI_MEDIA) while (file.available()){ res.write(file.read()); vTaskDelay(1);}
+        else */
         sendFileInChunks(&file,&res);
         res.end();
         httpServing = false;
       }
     }
 
+
     void sendFileInChunks(File* file, Response* res) {      
-      size_t dataSize = 64; // with Ethernet we have to keep it low otherwise it doesnt work
+      size_t chunkedDataSize = 64; // with Ethernet we have to keep it low otherwise it doesnt work
             
-      /*if (hwm->network->media == WIFI_MEDIA){
-        dataSize = file->size();  // to try to send it once
-        if (dataSize>TCP_SND_BUF) dataSize = TCP_SND_BUF;   // size  of the TCP buffer as a maximum
-      }*/
+      if (hwm->network->media == WIFI_MEDIA){
+        chunkedDataSize = file->size();  // to try to send it once
+        if (chunkedDataSize>TCP_SND_BUF) chunkedDataSize = TCP_SND_BUF;   // size  of the TCP buffer as a maximum
+        chunkedDataSize = 8;
+      }
       
       byte *buffer = nullptr; // Pointeur pour la mémoire allouée dynamiquement
       // Allouer dynamiquement de la mémoire pour stocker les données
-      buffer = new (std::nothrow) byte[dataSize]; // +1 pour le caractère null
+      buffer = new (std::nothrow) byte[chunkedDataSize]; // +1 pour le caractère null
 
       int bytesRead;
       // Lire et envoyer des paquets de 256 octets jusqu'à ce que tout le fichier soit envoyé
-      while ((bytesRead = file->read(buffer, dataSize)) > 0) {
+      while ((bytesRead = file->read(buffer, chunkedDataSize)) > 0) {
         res->write(buffer, bytesRead);  // Écrire le tampon complet dans le client
-        DEBUG_PRINT( "%d,",bytesRead);  
-        yield();      
+        //DEBUG_PRINT( "%d,",bytesRead);  
+        taskYIELD();
       }
 
       free(buffer);
@@ -2504,7 +3031,7 @@ void setup() {
     ///////////////////////////////////////////////////////////////////////
     bool stripScroll(uint8_t direction, Bank* bank) {
         if (bank->strips.size()<=1){
-          DEBUG_PRINT("\n stripscroll: only one strip,exit");
+          //DEBUG_PRINT("\n stripscroll: only one strip,exit");
           return false; 
         }
 
@@ -2518,7 +3045,7 @@ void setup() {
 
         jumpToStrip(bank->nav.selector,bank->name);
 
-        DEBUG_PRINT("\t scroll(%i/%i):",bank->nav.selector,bank->nav.window);
+        //DEBUG_PRINT("\t scroll(%i/%i):",bank->nav.selector,bank->nav.window);
         
         return true;     
     }
@@ -2594,7 +3121,7 @@ void setup() {
 
         Strip* strip = bank->getStrip(id);
         if (strip != nullptr){
-          DEBUG_PRINT("\n ^^^^^^^^^jumpToStrip (%i,%s)",id,bankName.c_str());
+          //DEBUG_PRINT("\n ^^^^^^^^^jumpToStrip (%i,%s)",id,bankName.c_str());
           Bank* bank = jumpToBank(bankName);              
           bank->nav.selector = strip->index;
           bank->nav.window = strip->win;
@@ -2614,7 +3141,7 @@ void setup() {
       Bank* bank = getBank(bankName,&bankIndex);
       screen.id = SCREEN_BANK;
       screen.state = bankIndex;   
-      DEBUG_PRINT("\njumpToBank =>%s,%d",bank->name.c_str(),bankIndex);
+      //DEBUG_PRINT("\njumpToBank =>%s,%d",bank->name.c_str(),bankIndex);
       return bank;        
     }
 
@@ -2624,16 +3151,16 @@ void setup() {
       //uint8_t window = jsonInput["param"]["win"].as<int>();         
       // extract "positions"
       // Parcourir chaque objet dans le tableau
-      DEBUG_PRINT("\n Now updating selectors");
+      //DEBUG_PRINT("\n Now updating selectors");
       for (JsonObject position : positions) {
         int x = position[C_X]; // extraire la valeur de x
         int y = position[C_Y]; // extraire la valeur de y
         int win = position[C_WIN]; // extraire la valeur de y
         Strip* strip = bank->getStrip(x,y,win);
         if (strip != nullptr){
-          DEBUG_PRINT("\n\t updateStrip index #%i",strip->index);
+          //DEBUG_PRINT("\n\t updateStrip index #%i",strip->index);
           strip->index = position[C_INDEX]; // extraire la valeur de selector
-          DEBUG_PRINT(" to #%i",strip->index);
+          //DEBUG_PRINT(" to #%i",strip->index);
           success = true; 
         }
       }   
@@ -2665,7 +3192,7 @@ void setup() {
       jsonAnswer.callback = "undefinedCallBack";
       jsonAnswer.value = jsonInput.as<String>();
 
-      DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
+      //DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
       
       String command = jsonInput["command"];
 
@@ -2708,7 +3235,7 @@ void setup() {
         String section = jsonInput["param"]["section"];
         String id = jsonInput["param"]["id"];
         String value = jsonInput["param"]["value"];
-        DEBUG_PRINT("\t => section:%s id:%s value:%s",section.c_str(),id.c_str(),value.c_str());
+        //DEBUG_PRINT("\t => section:%s id:%s value:%s",section.c_str(),id.c_str(),value.c_str());
         bool success;        
         if (section == "system"){
           success = system.setValue(id,value);
@@ -2747,7 +3274,7 @@ void setup() {
         hwm->network->setSSID(ssid,pwd);        
         if (hwm->network->media != CABLE_MEDIA){
           jsonAnswer.callback = "wifiConnectTimeout"; // we give a try to connect wifi by setting up the timeout
-          jsonAnswer.value = hwm->network->getConnectTimeout();
+          jsonAnswer.value = hwm->network->wiFiTimeout;
         }
         // if media is ethernet, we just feedback save button
         else{
@@ -2759,18 +3286,18 @@ void setup() {
         //{"command":"setStrip","param":{"bank":"Test","strip":{"type":"chGain","size":"4x1","color":4,"icon":"6","properties":["/ch/3/config/name"],"position":{"win":0,"x":"0","y":"0"}},"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":1,"id":1},{"x":0,"y":2,"id":2}]}}
         //get the bank that need to be modified
         jsonAnswer.callback=RET_COMMANDERROR;
-        DEBUG_PRINT("\nsetStrip bankName:%s, strip:%s",jsonInput["param"]["bank"].as<String>().c_str(),jsonInput["param"].as<String>().c_str());        
+        //DEBUG_PRINT("\nsetStrip bankName:%s, strip:%s",jsonInput["param"]["bank"].as<String>().c_str(),jsonInput["param"].as<String>().c_str());        
         uint8_t bankIndex;
         Bank* bank = getBank(jsonInput["param"]["bank"],&bankIndex);  // get the bank and its index
         if (bank != nullptr){          
           uint8_t window = jsonInput["param"]["strip"]["position"]["win"];            
           uint8_t x = jsonInput["param"]["strip"]["position"]["x"];     
           uint8_t y = jsonInput["param"]["strip"]["position"]["y"];
-          DEBUG_PRINT("\nChecking if strip is existing: ");     
+          //DEBUG_PRINT("\nChecking if strip is existing: ");     
           Strip* strip = bank->getStrip(x,y,window);
           bool success = true;
           if (strip != nullptr){
-            DEBUG_PRINT(" YES, deleting it");
+            //DEBUG_PRINT(" YES, deleting it");
             success = bank->trash(strip); // if strip is existing we first delete it
           }  
           if (success){
@@ -2810,7 +3337,7 @@ void setup() {
                   jsonAnswer.value = "1";   
                   // we check if we delete the strip which is currently focused
                   if (indexToDelete == currentStrip->index){                   
-                    DEBUG_PRINT("\nDELETED FOCUSED STRIP");
+                    //DEBUG_PRINT("\nDELETED FOCUSED STRIP");
                     bank->resetStripNav();
                   }else{
                     // since updatePositions has shifted the index, the selector points to a strip that is not the one which was preivously displayed, we restore it
@@ -2827,7 +3354,7 @@ void setup() {
         }else{
           jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
         }  
-        DEBUG_PRINT("\n<TrashStrip end>");
+        //DEBUG_PRINT("\n<TrashStrip end>");
       }else if (command =="moveStrip"){
         //{"command":"moveStrip","param":{"bank":"Test2","x1":0,"y1":1,"x2":0,"y2":2,"win":0,"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":2,"id":1}]}}
         // use position here instead of x1, y1 
@@ -2862,7 +3389,7 @@ void setup() {
       }else if (command =="trashBank"){
         //{"command":"trashBank","param":{"name":"BANK j2"}}
         String bankName = jsonInput["param"]["name"];
-        DEBUG_PRINT("\ntrashBank %s",bankName);
+        //DEBUG_PRINT("\ntrashBank %s",bankName);
         uint8_t bankIndex;
         Bank* bankToDelete = getBank(bankName,&bankIndex);  // get the bank and its index
         Bank* currentBank = banks.get(screen.state);
@@ -2872,11 +3399,11 @@ void setup() {
           delete bankToDelete;
           if (bankIndex == screen.state || screen.id == SCREEN_BANK_SWITCH){
 
-            DEBUG_PRINT("\nDELETE CURRENT BANK");
+            //DEBUG_PRINT("\nDELETE CURRENT BANK");
 
             if (banks.size()>0) jumpToBank(banks.get(0)->name);  // go to first bank in case we delete the current displayed or we are showing menu switch
             else{
-              DEBUG_PRINT("\nLAST BANK WAS TRASHED");
+              //DEBUG_PRINT("\nLAST BANK WAS TRASHED");
               
             }
           }else{
@@ -2927,7 +3454,7 @@ void setup() {
           jsonAnswer.value = *lang.getString("Save error");
         }      
       }else{
-        DEBUG_PRINT("\n\t\t\t\t\tCalling userParseJsonInputCallback...");
+        //DEBUG_PRINT("\n\t\t\t\t\tCalling userParseJsonInputCallback...");
         if (!userParseJsonInputCallback(jsonInput,&jsonAnswer)){
           jsonAnswer.callback = RET_UNDEFINEDCALLBACK;
           jsonAnswer.value = jsonInput.as<String>();
@@ -2942,7 +3469,7 @@ void setup() {
       serializeJson(jsonOutput,jsonString);
       removeJsonQuote(&jsonString);
 
-      DEBUG_PRINT("\nbuildJsonOuput: %s",jsonString.c_str());
+      //DEBUG_PRINT("\nbuildJsonOuput: %s",jsonString.c_str());
       return jsonString;
 
     }    
@@ -2995,7 +3522,7 @@ void setup() {
       "\""+String(S_LAST_USED_SSID)+"\":\"intervalmix1\","
       "\""+String(S_LANG)+"\":\"francais\","
       "\""+String(S_FADERSPEED)+"\":\"157\","
-      "\""+String(S_SSID)+"\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"IpTch\":\"jt2p9ug1\"},"
+      "\""+String(S_SSID)+"\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},"
       "\""+String(S_BUTTON_ASSIGN)+"\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]},"
       "\""+String(S_SHORTCUTS)+"\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
     "}";
@@ -3005,7 +3532,8 @@ void setup() {
     ScreenUnion oldScreen;    
 
     LinkedList<String*> countryList = LinkedList<String*>();   
-    LinkedList<String*> webGZFiles = LinkedList<String*>();   
+    //LinkedList<String*> webGZFiles = LinkedList<String*>();   
+    //LinkedList<String*> webFiles = LinkedList<String*>();   
 
     IWebSocketServer *wss{ nullptr };        
 
@@ -3052,7 +3580,7 @@ void setup() {
         }        
         
         if (debug){
-          DEBUG_PRINT("\n\n\t httpPost <%s>:<%s>\n\n",name,options);
+          //DEBUG_PRINT("\n\n\t httpPost <%s>:<%s>\n\n",name,options);
         } 
 
 
@@ -3060,7 +3588,7 @@ void setup() {
 
         // version compressée
         ByteBuffer compressedBuffer;
-        size_t dataSize = bufferToGz(&jsonAnswer,&compressedBuffer);
+        size_t chunkedDataSize = bufferToGz(&jsonAnswer,&compressedBuffer);
         res.set("Content-Encoding", "gzip"); // Indique que la réponse est en gzip
         #define PACKET_SIZE 64 // Taille d'un paquet (64 octets)
         uint8_t packet[PACKET_SIZE];             // Crée un buffer temporaire de 64 octets               
@@ -3109,18 +3637,18 @@ void setup() {
       }
 
       File root = LittleFS.open(folder);
-      //DEBUG_PRINT("\nListing: .%s",extension.c_str());
+      //DEBUG_PRINT("\n\nListing: .%s in %S",extension.c_str(),folder.c_str());
       File file = root.openNextFile();
       while (file){
         if (!file.isDirectory()){
           String fullFileName = file.name();
-          if (fullFileName.endsWith(extension)) {
-            String* filename=new String(prefix);
+          if (fullFileName.endsWith(extension) || extension == "*") {
+            String* filename = new String(prefix);
             // if we don't want the extension, we remmove it          
             if (!withExtension) *filename += fullFileName.substring(0, fullFileName.lastIndexOf('.'));
             else *filename += fullFileName; // k is the icon ID
             list->add(filename);
-            //if (debug) DEBUG_PRINT("\n\t %s",filename->c_str());          
+            //DEBUG_PRINT("\n\t %s",filename->c_str());          
           }
         }
         file = root.openNextFile();

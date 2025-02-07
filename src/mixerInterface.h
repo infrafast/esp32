@@ -5,16 +5,23 @@
 #include "oscInterface.h"
 #include <ArduinoJson.h>
 #include <vector>
-
 #ifndef DEBUG_PRINT 
     #define DEBUG_PRINT(...) 
 #endif
 
-#define ADDRESS_CHNAME "/ch/config/%d/name"
-#define ADDRESS_BUSNAME "/bus/config/%d/name"
-#define ADDRESS_AUXNAME "/aux/config/%d/name"
-#define ADDRESS_FXRETNAME "/fxret/config/%d/name"
-#define ADDRESS_MAINNAME "/main/config/%d/name"
+#define ADDRESS_CHNAME "/ch/%d/name"
+#define ADDRESS_BUSNAME "/bus/%d/name"
+#define ADDRESS_AUXNAME "/aux/%d/name"
+#define ADDRESS_FXRETNAME "/fxret/%d/name"
+#define ADDRESS_MAINNAME "/main/%d/name"
+
+#define ADDRESS_CHMUTE "/ch/%d/mute"
+#define ADDRESS_BUSMUTE "/bus/%d/mute"
+#define ADDRESS_AUXMUTE "/aux/%d/mute"
+#define ADDRESS_FXMUTE "/fxret/%d/mute"
+#define ADDRESS_MAINMUTE "/main/%d/mute"
+
+// https://mixingstation.app/tasks/T5194
 
 
 /***************************************************************/
@@ -41,13 +48,17 @@
 #define OSC_MS_PING         "/ch.0.solo"
 
 
-//               REST API
-#define RESTCALL_APP_STATE        "/app/state"
-#define RESTCALL_CONSOLE_INFO     "/console/information"
-#define RESTCALL_CONNECT          "/app/mixers/connect"
-#define RESTCALL_AVAILABLE_MODELS "/app/mixers/available"
-#define RESTCALL_MIXTARGETS       "/console/mixTargets"
-#define RESTCALL_MIXER_CURRENT    "/app/mixers/current"
+//               API CALLS
+#define APICALL_CONNECT          "/app/mixers/connect"
+#define APICALL_APP_STATE        "/app/state"
+
+#define APICALL_SYNC_CONSOLE_INFO     "/console/information"
+#define APICALL_SYNC_AVAILABLE_MODELS "/app/mixers/available"
+#define APICALL_SYNC_MIXTARGETS       "/console/mixTargets"
+#define APICALL_SYNC_MIXER_CURRENT    "/app/mixers/current"
+
+#define MS_API_PATH              "path"
+#define MS_API_ERROR             "error"
 
 //              JSON API DATA CONTENT DEFINITION
 #define MS_CHANNEL_TYPES                  "channelTypes"
@@ -93,12 +104,12 @@
 enum{
   IDLE = CONNECTED+1,
   CONNECTING,
-  SYNCING_MS,
+  SYNCING_SOFTWARE,
   MIXER_UNREACHABLE,
-  MS_UNREACHABLE,
+  SOFTWARE_UNREACHABLE,
   SEARCHING,
   CONNECTFAILED,
-  SYNCING_CONSOLE,
+  SYNCING_DATA,
   EOF_STATE
 };
 
@@ -118,52 +129,89 @@ String stateNames[EOF_STATE]={
 #define UNSYNC_PATTERN "~"
 
 
-class DataSetPattern: public DataSet{
-  
-  public:
+class DataSetSynced: public StaticDataSet{
+  public: 
     String* values = nullptr;
-    uint16_t size = 0;
-    uint16_t sync = 0;
-    String pattern = "";
+    uint16_t syncIndex = 0;
+    //std::function<void(DataSetSynced*, OSCValues)> callback;
+    unsigned long lastSyncTime = 0; 
     int offset = 0;
-    String shortName;
-    std::function<void(DataSetPattern*, OSCValues)> callback;
+    String defaultName="";
+    String pattern="";
 
-    DataSetPattern(String _shortName, String addr,String obj, DataProvider* dp) : shortName(_shortName), DataSet(addr,obj, dp){}
+    DataSetSynced(String _shortName, String addr,String obj, uint16_t _size,String defVal, int _offset) : StaticDataSet(addr,obj), shortName(_shortName){
+      init(_size, defVal, _offset);
+    }
+
+    String shortName;
+
+    void set(uint16_t index, String value){
+      if (index>size) return;
+      
+      if (values[index] != value){
+        values[index] = value;
+        //brodcast
+      }
+       
+    }
 
     void init(uint16_t _size,String defVal, int _offset){
-      size = _size;
       offset = _offset;
-      DEBUG_PRINT("\nDataSetPattern init(%s,%d,%s,%d)",shortName.c_str(),size,defVal.c_str(),offset);
-      // Supprimer le tableau existant s'il y en a un
-      if (values != nullptr) delete[] values; // Libérer la mémoire précédemment allouée
-      // Créer un nouveau tableau dynamique avec la taille passée
-      values = new String[size];
-      // Initialiser les valeurs (par exemple, 0)
+      defaultName = defVal;
+      //DEBUG_PRINT("\nDataSetSynced init(%d,%s,%d)",size,defVal.c_str(),offset);
+
+      if (size != _size){
+        size = _size;
+        // Supprimer le tableau existant s'il y en a un
+        if (values != nullptr) delete[] values; // Libérer la mémoire précédemment allouée
+        // Créer un nouveau tableau dynamique avec la taille passée
+        values = new String[size];
+        // Initialiser les valeurs (par exemple, 0)
+      }
+     
       for (int i = 0; i < size; ++i) {
           values[i] = defVal+String(i);
       }
     }
+
+
+    virtual const String* getValuePtr(uint16_t i){    
+      if (i < size) return &values[i];
+      else return &defaultName;
+    }
+
+    /*virtual String serialize(){
+      JsonDocument doc;
+      doc[address]["getDS"+shortName] = size;  // function name that is called by javascript to populate the data by indicating the size example: getDSCh(32)  //{"/ch/%d/config/name": {"getDSCh":32}}
+      String data;
+      serializeJson(doc,data);
+      return data;
+    } */ 
+       
+
 };
 
+
 // Classe abstraite pour implémenter les commandes et la gestion de connexion spécifique à chaque table de mixage
-class MixerInterface : public DataProvider{
+class MixerInterface{
   public:
     String model;
     DataRepository* dataRepository = nullptr;
     String name="abstract";
     uint8_t interfaceState = DISCONNECTED;
+    String interfaceSubState = "";
 
     String unsyncPattern="~";
 
+    float syncSoftwareProgress = 0.0;
+
     virtual void queryState()=0;
 
-    DataSetPattern* chNames;
-    DataSetPattern* busNames;  
-    DataSetPattern* auxNames;  
-    DataSetPattern* fxRetNames;
-    DataSetPattern* mainNames;
-
+    DataSetSynced* chNames;
+    DataSetSynced* busNames;  
+    DataSetSynced* auxNames;  
+    DataSetSynced* fxRetNames;
+    DataSetSynced* mainNames;
 
     MixerInterface(DataRepository* dr,String _model){  
       if (_model == "") model = MIXING_STATION_MODEL;
@@ -183,40 +231,23 @@ class MixerInterface : public DataProvider{
 
     virtual void parseInterfaceProtocol(JsonVariant interfaceDoc){
       // getting the properties of the interface in the json document
-      DEBUG_PRINT("\n\n\n\tAPPEL DE BASE");
+      //DEBUG_PRINT("\n\n\n\tAPPEL DE BASE");
       uint16_t chSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,CH_SIZE_KEY,"12").toInt();      
       uint16_t busSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,BUS_SIZE_KEY,"4").toInt();
       uint16_t auxSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,AUX_SIZE_KEY,"2").toInt();      
       uint16_t fxRetSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,FXRET_SIZE_KEY,"4").toInt();
       uint16_t mainSize = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,MAIN_SIZE_KEY,"1").toInt();
 
-      chNames = new DataSetPattern(MS_CH_SHORTNAME,ADDRESS_CHNAME,INPUTSELECT,this);
-      busNames = new DataSetPattern(MS_BUS_SHORTNAME,ADDRESS_BUSNAME,INPUTSELECT,this);
-      auxNames = new DataSetPattern(MS_AUX_SHORTNAME,ADDRESS_AUXNAME,INPUTSELECT,this);
-      fxRetNames = new DataSetPattern(MS_FXRET_SHORTNAME,ADDRESS_FXRETNAME,INPUTSELECT,this);
-      mainNames = new DataSetPattern(MS_MAIN_SHORTNAME,ADDRESS_MAINNAME, INPUTSELECT,this);
-
-      chNames->init(chSize,UNSYNC_PATTERN "CH",1);
-      busNames->init(busSize,UNSYNC_PATTERN "BUS",1);
-      auxNames->init(auxSize,UNSYNC_PATTERN "AUX",1);
-      fxRetNames->init(fxRetSize,UNSYNC_PATTERN "FX",1);
-      mainNames->init(mainSize,UNSYNC_PATTERN "MAIN",1);
+      chNames = new DataSetSynced(MS_CH_SHORTNAME,ADDRESS_CHNAME,INPUTSELECT,chSize,UNSYNC_PATTERN "CH",1);
+      busNames = new DataSetSynced(MS_BUS_SHORTNAME,ADDRESS_BUSNAME,INPUTSELECT,busSize,UNSYNC_PATTERN "BUS",1);
+      auxNames = new DataSetSynced(MS_AUX_SHORTNAME,ADDRESS_AUXNAME,INPUTSELECT,auxSize,UNSYNC_PATTERN "AUX",1);
+      fxRetNames = new DataSetSynced(MS_FXRET_SHORTNAME,ADDRESS_FXRETNAME,INPUTSELECT,fxRetSize,UNSYNC_PATTERN "FX",1);
+      mainNames = new DataSetSynced(MS_MAIN_SHORTNAME,ADDRESS_MAINNAME, INPUTSELECT,mainSize,UNSYNC_PATTERN "MAIN",1);
 
       dsNames = { chNames, busNames, auxNames, fxRetNames,  mainNames};
-      for (const auto& dsName : dsNames) dataRepository->addDataSet(dsName);
+      for (const auto& dsName : dsNames) dataRepository->addDataSet(dsName);      
 
-    }
 
-    virtual String getValue(String addrr, uint16_t index){
-      String v=String(index)+"?";
-      if (addrr == ADDRESS_CHNAME){
-        if (index<chNames->size) v = chNames->values[index];
-        else v="CH OOR-"+String(index);
-      }else if (addrr == ADDRESS_BUSNAME){
-        if (index<busNames->size) v = busNames->values[index];
-        else v="BUS OOR-"+String(index);
-      } 
-      return v;
     }
 
     void deserialize(JsonDocument* interfaceDoc){
@@ -261,14 +292,6 @@ class MixerInterface : public DataProvider{
       //DEBUG_PRINT("\n\n~MixerInterface()");
     }
 
-    uint16_t size(String addrr){
-      uint16_t n=0;
-      if (addrr == ADDRESS_CHNAME) return chNames->size;
-      else if (addrr == ADDRESS_BUSNAME) return busNames->size;
-      else return 0;
-      //DEBUG_PRINT("\nSizeof(BehringerMixer,%s)=%i",addrr.c_str(),n);
-    }
-
     virtual bool update()=0;
     
     String getAdjacentValueByKeyFromRootArray(JsonVariant& doc, String root, String key, String keyValue, String adjacent, String defaultValue="") {  // key = "model" , adjacent = "size"
@@ -286,7 +309,7 @@ class MixerInterface : public DataProvider{
                 // Retourner la valeur de la clé spécifiée si elle existe
                 if (elem.containsKey(adjacent.c_str())) {
                     String s = elem[adjacent.c_str()];
-                    DEBUG_PRINT("\n%s:%s = %s",keyValue.c_str(),adjacent.c_str(),s.c_str());
+                    //DEBUG_PRINT("\n%s:%s = %s",keyValue.c_str(),adjacent.c_str(),s.c_str());
                     return s;
                 } else {
                     DEBUG_PRINT("\nadjacent:%s   not found.",adjacent.c_str());
@@ -313,7 +336,7 @@ class MixerInterface : public DataProvider{
           if (interfaceObj.containsKey(key)) {
             // Modifie la valeur de la clé spécifiée
             interfaceObj[key] = newValue;
-            DEBUG_PRINT("\nValeur modifiée avec succès !");
+            //DEBUG_PRINT("\nValeur modifiée avec succès !");
             return;
           } else {
             DEBUG_PRINT("\nClé non trouvée !");
@@ -362,11 +385,10 @@ class MixerInterface : public DataProvider{
     virtual bool sendCommand(String command, JsonDocument param) = 0;
     virtual void disconnect()=0;
     virtual uint8_t syncDataProgress()=0;
-    virtual uint8_t syncSoftwareProgress()=0;
 
   protected:
     //uint16_t chSize=1,busSize=1;    
-    std::vector<DataSetPattern*> dsNames;
+    std::vector<DataSetSynced*> dsNames;
 
 };
 
@@ -375,11 +397,13 @@ class OSCMixerInterface: public MixerInterface {
 
   public: 
     static String echoCommand;    
-    #define SYNC_TIMEOUT 10000
     String OSCprotocol="";
+    OSCValues data;
+    uint16_t latency;
 
     OSCMixerInterface(DataRepository* dr,String m, OSCInterface* _osc): osc(_osc), MixerInterface(dr,m){
       DEBUG_PRINT("\nnew OSCMixerInterface(%s %s,%d)",model.c_str(),osc->ip.toString().c_str(),osc->port);
+      delayBetween2SyncFrames = osc->latency*dsNames.size()*2;      
     }
 
     virtual void syncDataSet()=0;
@@ -388,8 +412,8 @@ class OSCMixerInterface: public MixerInterface {
       uint16_t totalToSync = 0;
       uint16_t syncedSoFar = 0;
       for (const auto& dsName : dsNames){
-        totalToSync += dsName->size;
-        syncedSoFar += dsName->sync;
+        totalToSync += dsName->getSize();
+        syncedSoFar += dsName->syncIndex;
       }
       return map(syncedSoFar, 0, totalToSync, 0, 100);
     }
@@ -404,28 +428,28 @@ class OSCMixerInterface: public MixerInterface {
         }
       }
 
+      //////// DATA SET SYNC
+      if (interfaceState == SYNCING_DATA ){         //we should not try to sync if we are not connected
+        syncDataSet();
+      }
+      
       // PROCESS OSC QUEUE
-      if (osc->OSCReadIn()){
-        //////////////////////////// match names        
+      if (osc->OSCReadIn(&data)){
+        /// match names pattern
         String prevPattern="";
         for (const auto& dsName : dsNames){
           if (prevPattern == dsName->pattern) break;
           else{
             prevPattern = dsName->pattern;
-            if (osc->matchPattern(dsName->pattern,osc->data.addressStr)){
-              if (updateName(dsName,osc->data)) break;
+            if (osc->matchPattern(dsName->pattern,data.addressStr)){
+              if (updateName(dsName,data)) break;
             }
           }
         } 
         lastQueryTime = millis();   // remove THIS ONE IF YOU STILL WANT TO CHECK REST API WHEN OSC IS RESPONDING (CONSUMME MORE TIME)                
         OSCechoAttempt = 0;                        
         return true;
-      }
-
-      //////// DATA SET SYNC
-      if (interfaceState == SYNCING_CONSOLE ){         //we should not try to sync if we are not connected
-        syncDataSet();
-      }        
+      } 
 
       /////// MANAGE CONNECTION ////////////////////////////////////////////////////   
       if (millis()-lastQueryTime > queryDelay){        
@@ -433,70 +457,57 @@ class OSCMixerInterface: public MixerInterface {
         queryState();
         OSCechoAttempt++;
         osc->SendCmd2OSC(echoCommand.c_str());                      
-        DEBUG_PRINT("\t OSCechoAttempt: %d",OSCechoAttempt);
+        //DEBUG_PRINT("\t OSCechoAttempt: %d",OSCechoAttempt);
       } 
       return false;
     }    
 
-    virtual bool updateName(DataSetPattern* ds, OSCValues val){
+    virtual bool updateName(DataSetSynced* ds, OSCValues val){
       // this is the specific part that uses scanf to extract the value => we have to know in advance that we want ot retrieve an int.
       int index = 0;
-      if (!sscanf(val.addressStr.c_str(), ds->pattern.c_str(), &index) == 1){
+      if (!sscanf(val.addressStr, ds->pattern.c_str(), &index) == 1){
         DEBUG_PRINT("\nparse %s failed",ds->pattern.c_str());
       }
-      DEBUG_PRINT("\nUpdate index %d - offset(%d) = ",index,ds->offset);      
+      //DEBUG_PRINT("\nUpdate index %d - offset(%d) = ",index,ds->offset);      
       ////////////////////////////////////
       index = index - ds->offset;
       if (index<0) index = 0;
-      if (index>=ds->size){
+      if (index>=ds->getSize()){
         DEBUG_PRINT("\tNO DS IMPLEMENTED FOR THIS INDEX");
         return false;
       }
-      DEBUG_PRINT("%d",index);
+      //DEBUG_PRINT("%d",index);
       // first we check the value of IVal which indicate which channel has been received      
       if (ds->values[index].indexOf(UNSYNC_PATTERN) != -1){ // the channel was notsync so we flag it as sync.        
-        ds->sync++;    // next one
-        DEBUG_PRINT("\t SYNCED");
+        ds->syncIndex++;    // next one
+        //DEBUG_PRINT("\t SYNCED");
+        ds->lastSyncTime = 0;
       }
       // and in all cases we update the value
-      ds->values[index] = val.sValue;      
-      DEBUG_PRINT("\t%s(%d)=>%s",ds->shortName.c_str(),index, val.sValue);      
+      if (strcmp(val.sValue,"")==0) ds->set(index,String(index+1));  // if we receive an empty string we define the name as the index (we add one to get  a value starting at one and not 0)
+      else ds->set(index,val.sValue) ;      
+      //DEBUG_PRINT("\t%s(%d)=>%s",ds->shortName.c_str(),index, val.sValue);      
       return true;
     }
 
     void dropParrallelAsyncQuery(){
       strcpy(OSCCommand,"");   
       for (const auto& dsName : dsNames){
-        if (dsName->sync<dsName->size){ // then are buses complete ?
-          DEBUG_PRINT("\nSyncing %s%d =>",dsName->shortName.c_str(),dsName->sync);
-          if (dsName->values[dsName->sync].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.
-            sprintf(OSCCommand, dsName->pattern.c_str(), dsName->sync+dsName->offset);
-            osc->SendCmd2OSC(OSCCommand);                          
+        if (dsName->syncIndex < dsName->getSize()){ // then are buses complete ?                                         
+          if (dsName->values[dsName->syncIndex].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.            
+            unsigned long elapsedTime = millis() - dsName->lastSyncTime;
+            if (elapsedTime >= delayBetween2SyncFrames){  // > dsNames.size * latency
+              //DEBUG_PRINT("\nSyncing %s%d =>",dsName->shortName.c_str(),dsName->syncIndex);                                             
+              dsName->lastSyncTime = millis();
+              sprintf(OSCCommand, dsName->pattern.c_str(), dsName->syncIndex+dsName->offset);
+              osc->SendCmd2OSC(OSCCommand);
+              delayBetween2SyncFrames = elapsedTime;
+            }else{
+              //DEBUG_PRINT("\t-X(%s/ %i < %i)-",dsName->shortName.c_str(),elapsedTime,delayBetween2SyncFrames);
+            }
           }   
-        } 
-      }  
-    }
-
-    void dropSequentialSyncQuery(){
-      static uint16_t latency = osc->latency;
-      static uint8_t dsNameIndex = 0;
-
-      if (dsNameIndex >= dsNames.size()) return;
-
-      DataSetPattern* dsName = dsNames[dsNameIndex]; //sync in serial, next dsName
-
-      if (dsName->sync<dsName->size){ // then are buses complete ?
-        DEBUG_PRINT("\nSyncing %s%d =>",dsName->shortName.c_str(),dsName->sync);
-        if (dsName->values[dsName->sync].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.
-          sprintf(OSCCommand, dsName->pattern.c_str(), dsName->sync+dsName->offset);
-          //osc->SendCmd2OSC(OSCCommand,false);                          
-          if (osc->blockingPing(OSCCommand, latency)){
-            latency = osc->latency; // recall the latency from the last ping
-            updateName(dsName,osc->data);
-          }
-          else latency = (latency + 20) % 250;
-        }   
-      }else dsNameIndex++;
+        }
+      } 
     }
 
     // Envoi d'une commande générique    
@@ -522,6 +533,7 @@ class OSCMixerInterface: public MixerInterface {
     uint8_t OSCechoAttempt = 0;
     String restartMonitorCommand ="";
     OSCInterface* osc;
+    unsigned long delayBetween2SyncFrames;
 
     char OSCCommand[OSC_MAX_LEN];
 
@@ -555,7 +567,6 @@ class MixerOfflineInterface: public MixerInterface {
     }
 
     virtual uint8_t syncDataProgress(){return 0;}
-    virtual uint8_t syncSoftwareProgress(){return 0;}
 
     virtual void disconnect(){}
 
@@ -591,7 +602,7 @@ class BehringerMixer : public OSCMixerInterface {
       restartMonitorCommand = OSC_BEHRINGER_REMOTE;
       restartMonitorDelay = BEHRINGER_RESTART_PERIOD;
       queryDelay = BEHRINGER_PING_DELAY;
-      interfaceState = SYNCING_CONSOLE;
+      interfaceState = SYNCING_DATA;
     }
 
     virtual ~BehringerMixer(){
@@ -600,8 +611,8 @@ class BehringerMixer : public OSCMixerInterface {
 
     virtual void queryState(){
       if (OSCechoAttempt == 2) interfaceState = DISCONNECTED;     
-      else if (interfaceState == SYNCING_CONSOLE){
-        if (syncDataProgress() == 100) {
+      else if (interfaceState == SYNCING_DATA){
+        if (syncDataProgress() >= 100) {
           interfaceState = CONNECTED;          
         }
       }
@@ -617,7 +628,25 @@ class BehringerMixer : public OSCMixerInterface {
       dropSequentialSyncQuery();
     }
 
-    virtual uint8_t syncSoftwareProgress(){return 100;}
+    void dropSequentialSyncQuery(){      
+      if (dsNameIndex >= dsNames.size()) return;
+
+      DataSetSynced* dsName = dsNames[dsNameIndex]; //sync in serial, next dsName
+
+      if (dsName->syncIndex < dsName->getSize()){ // then are buses complete ?
+        //DEBUG_PRINT("\nSyncing %s%d =>",dsName->shortName.c_str(),dsName->syncIndex);
+        if (dsName->values[dsName->syncIndex].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.
+          sprintf(OSCCommand, dsName->pattern.c_str(), dsName->syncIndex+dsName->offset);
+          //osc->SendCmd2OSC(OSCCommand,false);                          
+          data.expectedStr = OSCCommand;
+          if (osc->blockingPing(&data, latency)){
+            latency = osc->latency; // recall the latency from the last ping
+            updateName(dsName,data);
+          }
+          else latency = (latency + 20) % 250;
+        }   
+      }else dsNameIndex++;
+    }
 
     bool sendCommand(String command, JsonDocument param) override {
       bool success;
@@ -673,10 +702,10 @@ class BehringerMixer : public OSCMixerInterface {
 
     virtual bool update(){
       if (monitor()){
-        DEBUG_PRINT("\nBehringer processs QUEUE");
-        if (osc->data.addressStr == "value"){
+        //DEBUG_PRINT("\nBehringer processs QUEUE");
+        if (data.addressStr == "value"){
 
-        }else if (osc->data.addressStr == "value2"){
+        }else if (data.addressStr == "value2"){
 
         }
         return true;
@@ -702,7 +731,8 @@ class BehringerMixer : public OSCMixerInterface {
 				"lrValue":""
 			},*/      
     }
-
+  private:
+    uint8_t dsNameIndex = 0;
 
 };
 
@@ -729,55 +759,57 @@ class MixingStation : public OSCMixerInterface {
     AsyncHttpClient msRESTAPIClient;
     //WebSocketServer<EthernetServer, EthernetClient> server;
 
-    uint16_t REST_API_port;
-    Network* network;
-    String RESTState="";
-    uint8_t RESTSyncProgress=0;
+    uint16_t ms_API_port;
 
-    struct SyncInfo {
-        bool consoleInfo = false;
-        bool availableModels = false;
-        bool mixTargets = true;         //we skip it
-        bool mixerCurrent = false;
+    String API_Mixer_State="";
 
-        // Vérifie si tous les booléens sont vrais
-        bool allSync() {
-            if (
-              consoleInfo & 
-              availableModels &
-              mixTargets &
-              mixerCurrent          
-            ) return true;
-            else return false;
-        }
+    class SyncInfo {
+      public:
+        String APIcall ="";
+        bool synced = false;
+        SyncInfo(String s1, bool s2=false):APIcall(s1),synced(s2){}
     };
+    
+    bool serialized = false;
+ 
+    std::vector<SyncInfo> mixerAPISync; 
+    uint8_t APIsyncIndex = 0;
 
-    SyncInfo mixerRESTSync;
-       
+    SyncInfo syncConsoleInfo = SyncInfo(APICALL_SYNC_CONSOLE_INFO);
+    SyncInfo syncMixerCurrent = SyncInfo(APICALL_SYNC_MIXER_CURRENT);
+    SyncInfo syncAvailableModels = SyncInfo(APICALL_SYNC_AVAILABLE_MODELS);
+    SyncInfo syncMixTargets = SyncInfo(APICALL_SYNC_MIXTARGETS,true);       
+
   public:
 
-    MixingStation(DataRepository* dr, OSCInterface* osc,Network* net,uint16_t _port): network(net), REST_API_port(_port), OSCMixerInterface(dr,MIXING_STATION_MODEL, osc){      
+    MixingStation(DataRepository* dr, OSCInterface* osc,uint16_t _port): ms_API_port(_port), OSCMixerInterface(dr,MIXING_STATION_MODEL, osc){      
       
       DEBUG_PRINT("\n\nNew MixingStation()\n\n");   
       name="undef";                    // to be replaced by the outcome of a REST query 
-      echoCommand = OSCprefix(OSC_MS_PING);
+      echoCommand = OSC_MS_PRE OSC_MS_PING;
       restartMonitorCommand = OSC_MS_REMOTE;
       restartMonitorDelay = MS_RESTART_PERIOD;
       queryDelay = MS_PING_DELAY;      
 
+      // prepare REST API callback
       msRESTAPIClient.host = osc->ip;
-      msRESTAPIClient.port = REST_API_port; 
+      msRESTAPIClient.port = ms_API_port; 
       msRESTAPIClient.timeOut = queryDelay-1000; // maximum duration of the request is the period of check minus one second
-      msRESTAPIClient.client = network->client;
+      msRESTAPIClient.client = osc->network->client;
+      msRESTAPIClient.callback =  [&](const char* param) {processJsonData(param);};
 
-      msRESTAPIClient.callback =  [&](const char* param) {processRESTcallback(param);};
+      mixerAPISync = {syncAvailableModels, syncConsoleInfo, syncMixerCurrent, syncMixTargets};
+      
 
+      // prepare websocket API callback
+      userWSclientOnMessage = std::bind(&MixingStation::wsOnMessageCallback, this, std::placeholders::_1);
+      osc->network->clientSocketClose();                
+      
       interfaceState = SEARCHING;
-      progress = 0.0;
 
     }
 
-    String OSCprefix(String command){
+    String _OSCprefix(String command){
       return String(OSC_MS_PRE)+command;
     }
 
@@ -791,32 +823,98 @@ class MixingStation : public OSCMixerInterface {
       return interfaceState;
     }
 
+    bool getSynced(String s){
+      for (const auto& sync : mixerAPISync) if (sync.APIcall == s) return sync.synced;
+      return false;
+    }
 
-    void processRESTcallback(const char* param){
+    void setSynced(String s, bool b=true){
+      for (auto&sync : mixerAPISync){
+        if (sync.APIcall == s){
+          sync.synced = b;
+          return;
+        }
+      }
+    }
+
+    void wsOnMessageCallback(const char* message){
+      /*
+        {
+          "path": "/app/state",
+          "method": "GET",
+          "body": {
+            "msg": "",
+            "progress": 0,
+            "state": "connected",
+            "topState": "connected"
+          }
+        }    
+
+        or
+
+        {
+          "method": "GET",
+          "error": "Could not parse json message: Could not assign value body  to field 'body'"
+        }
+
+      */
+      //DEBUG_PRINT("\n\t\t\twsOnMessageCallback <<<<< %s",message);
       
-      DEBUG_PRINT("\nInterfaceprocessRESTcallback(%s...)",param);
+      JsonDocument input;    
+      auto error = deserializeJson(input, message);
+      if (error) {
+          DEBUG_PRINT("\nwsMixerInterface OnMessageCallback parsing failed: %s",error.c_str()); 
+          input.clear();
+          return;
+      }
+
+      JsonDocument output;
+      if (input.containsKey(MS_API_ERROR)){
+        output[API_STATUS] = API_ERROR;        
+        output[API_BODY] = input[MS_API_ERROR];
+      }else{
+        output[API_ORIGIN] = input[MS_API_PATH];
+        output[API_STATUS] = API_OK;
+        output[API_BODY] = input[API_BODY];
+      }
+
+      processJsonData(output.as<String>().c_str());
+
+      input.clear();
+      output.clear();
+    }
+
+    void processJsonData(const char* param){
+      /*
+        {
+          "orign": "/app/state",
+          "status": 1,
+          "body": {}
+        }
+      */
+      DEBUG_PRINT("\nprocessJsonData(%s...)",param);
       
       JsonDocument doc;    
       auto error = deserializeJson(doc, param);
       if (error) {
-          DEBUG_PRINT("\nInterfaceprocessRESTcallback parsing failed: %s",error.c_str()); 
+          DEBUG_PRINT("\nprocessJsonData parsing failed: %s",error.c_str()); 
           doc.clear();
           return;
       }
 
-      uint8_t status = doc[HTTP_REST_STATUS];
-      JsonVariant data = doc[HTTP_REST_DATA];
-      String origin = doc[HTTP_REST_ORIGIN];     
+      uint8_t status = doc[API_STATUS];
+      JsonVariant data = doc[API_BODY];
+      String origin = doc[API_ORIGIN];     
 
       /*
       String dataString;
       serializeJson(data, dataString);      
-      DEBUG_PRINT("\n\tSTATUS: <%s>",status==HTTP_REST_OK?"ok":"error");
+      DEBUG_PRINT("\n\tSTATUS: <%s>",status==API_OK?"ok":"error");
       DEBUG_PRINT("\n\tORIGIN: <%s>",origin.c_str());
       DEBUG_PRINT("\n\tDATA: <%s>",dataString.substring(0,50).c_str());*/
 
-      if (origin == RESTCALL_CONSOLE_INFO){
-        if (status == HTTP_REST_OK){
+      if (origin == APICALL_SYNC_CONSOLE_INFO){
+        if (status == API_OK){
           
           chNames->init(
             getAdjacentValueByKeyFromRootArray(data,MS_CHANNEL_TYPES,MS_TYPE_SHORTNAME_KEY,chNames->shortName,"count",String(2)).toInt(),
@@ -849,47 +947,48 @@ class MixingStation : public OSCMixerInterface {
           );
 
 
-          std::sort(dsNames.begin(), dsNames.end(), [](const DataSetPattern* a, const DataSetPattern* b) {
+          std::sort(dsNames.begin(), dsNames.end(), [](const DataSetSynced* a, const DataSetSynced* b) {
               return a->offset > b->offset; // Tri décroissant
           });
 
 
           lastQueryTime = 0; // speed up the call to ping with no delay in between
 
-          mixerRESTSync.consoleInfo = true;
+          setSynced(origin);
         }else{
           setConnectFailed();
-          mixerRESTSync.consoleInfo = false;      
+          setSynced(origin,false);
         }
       }
       
-      else if (origin == RESTCALL_APP_STATE){
-        if (status == HTTP_REST_OK){
-          RESTState = data["state"].as<String>();
-          progress = data["progress"].as<int>();
-          DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API STATE %s %d% ----", RESTState.c_str(), (int)progress);
-          progress = progress * 1.1; // we fill the gap due to the latency of http checks
-          if (progress > 100) progress = 100; 
-          if (interfaceState == SYNCING_MS) lastQueryTime = 0; // speed up the call to ping with no delay in between
+      else if (origin == APICALL_APP_STATE){
+        if (status == API_OK){
+          API_Mixer_State = data["topState"].as<String>();
+          interfaceSubState = data["state"].as<String>();
+          syncSoftwareProgress = data["progress"].as<int>();
+          DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API STATE %s %d% ----", API_Mixer_State.c_str(), (int)syncSoftwareProgress);
+          //syncSoftwareProgress = syncSoftwareProgress * 1.1; // we fill the gap due to the latency of http checks
+          if (syncSoftwareProgress > 100) syncSoftwareProgress = 100; 
+          if (interfaceState == SYNCING_SOFTWARE) lastQueryTime = 0; // speed up the call to ping with no delay in between
         }else{
-          RESTState = "offline";
+          API_Mixer_State = "offline";
           DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! REST API Offline !!!----");          
         }
       }
       
-      else if (origin == RESTCALL_CONNECT){       
-        if (status == HTTP_REST_OK){
-          RESTState = "connecting";
-          progress = 0.0;
+      else if (origin == APICALL_CONNECT){       
+        if (status == API_OK){
+          API_Mixer_State = "connecting";
+          syncSoftwareProgress = 0.0;
           lastQueryTime = 0; // speed up the call to ping with no delay in between          
         }else{
           setConnectFailed();
         }
       }
 
-      else if (origin == RESTCALL_AVAILABLE_MODELS){
+      else if (origin == APICALL_SYNC_AVAILABLE_MODELS){
         // this call is to retrieve all supported console by MS sor we can store them in the interfaces.json definition file in a compressed format
-        if (status == HTTP_REST_OK){
+        if (status == API_OK){
           JsonDocument interfaceDoc;      
           MixerInterface::deserialize(&interfaceDoc);
 
@@ -915,26 +1014,26 @@ class MixingStation : public OSCMixerInterface {
           }else{
             DEBUG_PRINT("\nmixingstation serialized failed");
           }
-          mixerRESTSync.availableModels = true;
+          setSynced(origin);
           lastQueryTime = 0; // speed up the call to ping with no delay in between          
         }else{
           setConnectFailed();
-          mixerRESTSync.availableModels = false;      
+          setSynced(origin,false);
         }
       }
 
-      else if (origin == RESTCALL_MIXTARGETS){
-        if (status == HTTP_REST_OK){            
-          mixerRESTSync.mixTargets = true;
+      else if (origin == APICALL_SYNC_MIXTARGETS){
+        if (status == API_OK){            
+          setSynced(origin);
         }else{
           setConnectFailed();
-          mixerRESTSync.mixTargets = false;      
+          setSynced(origin,false);
         }        
 
       }
 
-      else if (origin == RESTCALL_MIXER_CURRENT){
-        if (status == HTTP_REST_OK){                    
+      else if (origin == APICALL_SYNC_MIXER_CURRENT){
+        if (status == API_OK){                    
           /*
             {
               "consoleId": 0,
@@ -951,10 +1050,10 @@ class MixingStation : public OSCMixerInterface {
             }          
           */
           name = data["name"].as<String>();
-          mixerRESTSync.mixerCurrent = true;
+          setSynced(origin);
         }else{
           setConnectFailed();
-          mixerRESTSync.mixerCurrent = false;      
+          setSynced(origin,false);
         }        
 
       }
@@ -962,6 +1061,13 @@ class MixingStation : public OSCMixerInterface {
       else if (origin == "Z"){
         
       }
+
+      else {
+
+          DEBUG_PRINT("\n\t%s",doc.as<String>().c_str());
+
+      }
+
       //data.clear();  // doesnt change
       doc.clear();
     }
@@ -971,64 +1077,100 @@ class MixingStation : public OSCMixerInterface {
         interfaceState = CONNECTFAILED;
     }
 
+    bool getNextSyncAPICall(String* val){                      
+      if (APIsyncIndex == mixerAPISync.size()){
+        *val = "";
+        return false;
+      }
+      *val = mixerAPISync[APIsyncIndex].APIcall;
+      APIsyncIndex++; 
+      return true;     
+    }
+
+    void dropAPI_http_requests(){
+      if (!msRESTAPIClient.isClientConnecting){         
+        // this is where we drop REST API request
+        msRESTAPIClient.method = HTTP_METHOD_GET;
+        if (interfaceState == SYNCING_DATA){
+          if (!getNextSyncAPICall(&msRESTAPIClient.URL)) msRESTAPIClient.URL = "";
+        }
+        else msRESTAPIClient.URL = APICALL_APP_STATE;
+        osc->network->asyncConnect(&msRESTAPIClient);                     
+      }
+    }
+
+    void resetSyncData(){
+      DEBUG_PRINT("\n\n\n\n\t\t\t\t\t\t!!! RESET SYNC DATA !!!\n\n\n\n\n");
+      APIsyncIndex = 0;
+      for (auto&sync : mixerAPISync) sync.synced = false;  
+      for (const auto& dsName : dsNames) dsName->syncIndex = 0;
+      serialized = false;
+    }
+
+
+    void dropAPI_ws_requests(){
+      String API_Call = APICALL_APP_STATE;      
+      
+      if (interfaceState == SYNCING_DATA){
+        if (!getNextSyncAPICall(&API_Call)) API_Call = APICALL_APP_STATE;   // ======> bigger request use 7430 bytes => /console/mixTargets , use dropAPI_http_requests for this one
+      }
+
+      //{ "path": "/app/state", "method": "GET", "body": null }
+      JsonDocument doc;
+      doc[MS_API_PATH] = API_Call;   
+      doc[API_BODY] = doc.createNestedObject(); //empty object {}
+
+      if (osc->network->clientSocketState() != WebSocketReadyState::OPEN) osc->network->clientSocketOpen(osc->ip.toString().c_str(), ms_API_port, "/");
+
+      osc->network->clientSocketSend(doc.as<String>().c_str());
+      doc.clear();
+    }
 
     virtual void queryState(){       
-
-      if (!msRESTAPIClient.isClientConnecting){         
-          // this is where we drop REST API request
-          msRESTAPIClient.method = HTTP_METHOD_GET;
-          // by default we just perform the routine check
-          msRESTAPIClient.URL = RESTCALL_APP_STATE;
-          // unless we are needing some information from the mixer
-          if (interfaceState == SYNCING_CONSOLE){
-            if (!mixerRESTSync.consoleInfo) msRESTAPIClient.URL = RESTCALL_CONSOLE_INFO;           
-            if (!mixerRESTSync.availableModels) msRESTAPIClient.URL = RESTCALL_AVAILABLE_MODELS;
-            if (!mixerRESTSync.mixTargets) msRESTAPIClient.URL = RESTCALL_MIXTARGETS;
-            if (!mixerRESTSync.mixerCurrent) msRESTAPIClient.URL = RESTCALL_MIXER_CURRENT;
-          }
-          network->asyncConnect(&msRESTAPIClient);
-      }
+      //dropAPI_http_requests();
+      dropAPI_ws_requests();
 
       queryDelay = MS_PING_DELAY;
-
       //////////////////////////////////// REST API HAS RESPONDED
-      if (RESTState == "syncing"){
-        interfaceState = SYNCING_MS;
+      if (interfaceSubState == "syncing"){
+        // detect the state change
+        if(interfaceState != SYNCING_SOFTWARE){
+          resetSyncData();
+        }
+        interfaceState = SYNCING_SOFTWARE;
         //lastQueryTime = 0; // try the next one straight with no delay
       }
-      else if (RESTState == "connecting"){
+      else if (API_Mixer_State == "connecting" || API_Mixer_State == "reconnecting"){
         interfaceState = CONNECTING;
       }
-      else if (RESTState == "idle"){
+      else if (API_Mixer_State == "idle"){
         interfaceState = IDLE;
       }else{
         /////////////////////////////////////  REST API HAS !NOT RESPONDED! OR !IS CONNECTED!
         if (OSCechoAttempt>1){
-          if (RESTState == "connected"){
+          if (API_Mixer_State == "connected"){
             interfaceState = MIXER_UNREACHABLE;        // inconsistent
             LogUDP::sendLog("MIXER_UNREACHABLE",hwm.network->udp);        
           } 
-          else if (RESTState == "offline"){
+          else if (API_Mixer_State == "offline"){
             disconnect();
           }
         }else{
-          if (RESTState == "connected" || RESTState == "backgroundSync"){        
-            if (!mixerRESTSync.allSync() || syncDataProgress()<100){     // if the mixer days it is connected and we retreived its data, then we set the interface status to CONNECTED
-              interfaceState = SYNCING_CONSOLE;
+          if (API_Mixer_State == "connected"){        
+            if (syncDataProgress()<100){     // if the mixer days it is connected and we retreived its data, then we set the interface status to CONNECTED
+              interfaceState = SYNCING_DATA;
             }else{           
               interfaceState = CONNECTED;               
               queryDelay = MS_PING_DELAY * 2; // we slow down the check as we are connected                
-
               // now we save the mixing station interface properties so in case user starts offline, we are able to provide the virtual information like number of buses and channels, etc... from the last connected device
-              static bool serialized = false;
               if (!serialized){ // only do it once at first connection
                 JsonDocument interfaceDoc;
                 deserialize(&interfaceDoc);
-                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, BUS_SIZE_KEY, busNames->size);
-                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, CH_SIZE_KEY, chNames->size);
-                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, AUX_SIZE_KEY, auxNames->size);
-                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, FXRET_SIZE_KEY, fxRetNames->size);
-                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, MAIN_SIZE_KEY, mainNames->size);
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, BUS_SIZE_KEY, busNames->getSize());
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, CH_SIZE_KEY, chNames->getSize());
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, AUX_SIZE_KEY, auxNames->getSize());
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, FXRET_SIZE_KEY, fxRetNames->getSize());
+                modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, MAIN_SIZE_KEY, mainNames->getSize());
                 if (serialize(interfaceDoc)>0){                //save the properties into interfaces.json file                              
                   DEBUG_PRINT("\nmixing station properties saved into interface file");
                   serialized = true;
@@ -1039,29 +1181,40 @@ class MixingStation : public OSCMixerInterface {
             }
           }   
 
-          else if (RESTState == "offline"){
-            interfaceState = MS_UNREACHABLE;  // inconsistent
+          else if (API_Mixer_State == "offline"){
+            interfaceState = SOFTWARE_UNREACHABLE;  // inconsistent
           }      
 
         }          
 
       }
 
-      DEBUG_PRINT("\n\t\tqueryState()=> %d\n",interfaceState);
+      //DEBUG_PRINT("\n\t\tqueryState()=> %d\n",interfaceState);
 
     }
 
     virtual void syncDataSet(){
       // data sets can only be made available once the mixer info and mix targets has been retrieved, especially offset of the names etc...
-      if (mixerRESTSync.consoleInfo && mixerRESTSync.mixTargets){
+      if (getSynced(APICALL_SYNC_CONSOLE_INFO) && getSynced(APICALL_SYNC_MIXTARGETS)){
         dropParrallelAsyncQuery(); // for mixing station => in case it push data every 3 seconds, there is no need to call for a syncQuery as it will come anyway
       }
       return;
     }
 
-    virtual uint8_t syncSoftwareProgress(){
-      return 0;
+    
+    virtual uint8_t syncDataProgress(){      
+      
+      uint16_t syncWeight = mixerAPISync.size()*10;
+      uint16_t totalToSync = 100+syncWeight;
+      uint16_t syncedSoFar = OSCMixerInterface::syncDataProgress();
+
+      for (auto&sync : mixerAPISync){
+        if (sync.synced) syncedSoFar += syncWeight/mixerAPISync.size();
+      }
+
+      return map(syncedSoFar, 0, totalToSync, 0, 100);
     }
+
 
     size_t serialize(JsonVariant interfaceDoc){
       String dataToCompress;
@@ -1080,11 +1233,13 @@ class MixingStation : public OSCMixerInterface {
           //vTaskDelete(msRESTAPIClient.taskHandle); // Supprimer la tâche
           //msRESTAPIClient.taskHandle = NULL;       // Mettre à jour le pointeur
           if (msRESTAPIClient.client != NULL) msRESTAPIClient.client->stop();
-          DEBUG_PRINT("\nclient stoppped");
+          osc->network->clientSocketClose();
+          DEBUG_PRINT("\nnetwork client stoppped");
           //msRESTAPIClient.taskHandle  = nullptr;
         
         xSemaphoreGive(msRESTAPIClient.mutex); // Relâcher le mutex
       }
+      
     }
 
     virtual void connect(Config* config){       
@@ -1092,19 +1247,19 @@ class MixingStation : public OSCMixerInterface {
       if (config->getInt(MIXER_AUTOMODEL_KEY) != -1){       
 
         if (msRESTAPIClient.isClientConnecting) return;
-        if (RESTState != "idle") return;
+        if (API_Mixer_State != "idle") return;
         if (interfaceState != IDLE) return;
 
         msRESTAPIClient.method = HTTP_METHOD_POST;
-        msRESTAPIClient.URL = RESTCALL_CONNECT;
+        msRESTAPIClient.URL = APICALL_CONNECT;
         JsonDocument postParam;
         postParam["consoleId"] = config->getInt(MIXER_AUTOMODEL_KEY);
         postParam["ip"] = *config->getString(MIXER_AUTOIP_KEY);
         serializeJson(postParam, msRESTAPIClient.post);
 
-        if (network->asyncConnect(&msRESTAPIClient)){
-          progress = 0.0; 
-          RESTState = "connecting";
+        if (osc->network->asyncConnect(&msRESTAPIClient)){
+          syncSoftwareProgress = 0.0; 
+          API_Mixer_State = "connecting";
           DEBUG_PRINT("\nCONNECT MS TO %s\n", config->getString(MIXER_AUTOIP_KEY)->c_str());      
           LogUDP::sendLog("AUTO CONNECT MS",hwm.network->udp);
           lastQueryTime = 0; // try the next one straight with no delay
@@ -1116,9 +1271,9 @@ class MixingStation : public OSCMixerInterface {
       if (monitor()){        
         // process queue
         //DEBUG_PRINT("\nMixing station processs QUEUE");
-        if (osc->data.addressStr == "value"){
+        if (data.addressStr == "value"){
 
-        }else if (osc->data.addressStr == "value2"){
+        }else if (data.addressStr == "value2"){
 
         }
        
@@ -1168,7 +1323,7 @@ class MixingStation : public OSCMixerInterface {
     virtual void parseInterfaceProtocol(JsonVariant interfaceDoc){
       MixerInterface::parseInterfaceProtocol(interfaceDoc);
 
-      for (const auto& dsName : dsNames) dsName->pattern = OSCprefix("/ch.%d.cfg.name");
+      for (const auto& dsName : dsNames) dsName->pattern = OSC_MS_PRE "/ch.%d.cfg.name";
 
       //DEBUG_PRINT("\n\n\n\tAPPEL DERIVE MS => chNames->pattern = %s",chNames->pattern.c_str());
       //String getNameOSCcommand = getAdjacentValueByKeyFromRootArray(interfaceDoc,INTERFACE_KEY,MODEL_KEY,model,"getName","ms"); 
@@ -1176,11 +1331,11 @@ class MixingStation : public OSCMixerInterface {
     }
 
 
-    virtual bool updateName(DataSetPattern* ds, OSCValues val) override{
+    virtual bool updateName(DataSetSynced* ds, OSCValues val) override{
       // since mixingstation use the same address for updating different properties (ch/bus...) 
       // the routing is performed based on the offset which tells which one is the target
       int index = 0;
-      if (!sscanf(val.addressStr.c_str(), ds->pattern.c_str(), &index) == 1){
+      if (!sscanf(val.addressStr, ds->pattern.c_str(), &index) == 1){
         DEBUG_PRINT("\nparse %s failed",ds->pattern.c_str());
       }
 
