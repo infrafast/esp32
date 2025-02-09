@@ -925,7 +925,7 @@ void bankScreenBuilder(uint8_t subScreen){
   GUI::cls();
   
   Bank* bank = app.banks.get(subScreen);
-
+  DEBUG_PRINT("\n\n\n---------------------------------\n\n bankScreenBuilder ");
   if (bank != nullptr){
 
     uint8_t layout = bank->currentLayout;
@@ -933,23 +933,29 @@ void bankScreenBuilder(uint8_t subScreen){
     Strip* strip = bank->getStrip(bank->nav.selector);
     
     if (strip != nullptr){
-      DEBUG_PRINT("\n\n\n---------------------------------\n\n bankScreenBuilder %s\n\n ---------------------------------",bank->name.c_str());
-
-
-      strip->refresh(true);
-      strip->buildHeader();
-      strip->buildWidgets(layout);
-      
+      DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),bank->nav.window, bank->nav.selector,layout);
+      strip->refresh();
+      strip->buildHeaderAndFooter();     
+      if (layout == LAYOUT_ZOOM){        
+        strip->buildWidgets(true);    // affiche uniquement un strip qui est celui selectionné
+      }else{
+        for (const auto& winstrip : bank->strips) {
+            // affiche tous les strips de la fenetre courante
+            if (winstrip->win == bank->nav.window){
+              winstrip->refresh();
+              winstrip->buildWidgets();
+            }
+        }
+      }           
     }else{
       DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
       gui.add(new TextArea(app.lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
     }
-
-
   }else{
       DEBUG_PRINT("\nNO BANK");
       gui.add(new TextArea(app.lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,false));
   }
+  DEBUG_PRINT("\n---------------------------------");
 
 }
 

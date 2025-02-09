@@ -20,7 +20,20 @@ using EthernetWebSocketServer = WebSocketServer<EthernetServer, EthernetClient, 
 void socketConnectionCallback(IWebSocket &ws);
 
 ///////////////////// WIDGET LOCATION & SIZE ////////////////////////
-#define OVERLAY_ICON_SIZE TFT_WIDTH/20
+#define OVERLAY_ICON_SIZE TFT_HEIGHT/15
+
+#define WIDGET4X4W (TFT_WIDTH)
+#define WIDGET4X4H (TFT_HEIGHT-(TOP2WIDGET_SIZE*2)-OVERLAY_ICON_SIZE-WIDGET_PADDING*2)
+
+#define WIDGET1X4W (TFT_WIDTH/4)
+#define WIDGET1X4H (WIDGET4X4H)
+
+#define WIDGET4X1H (WIDGET1X4H/4)
+#define WIDGET4X1W (TFT_WIDTH)
+
+#define WIDGET2X2W (TFT_WIDTH/2)
+#define WIDGET2X2H (WIDGET4X4H/2)
+
 
 ///////////////////// SYSTEM PARAMETERS ////////////////////////
 #define S_PUSHDELAY         "pushDelay"
@@ -310,13 +323,25 @@ class StripSkeleton;
 #define LAYOUT_ZOOM     0b00000001
 #define LAYOUT_DETAILS  0b00000010
 
+enum{
+  SHAPE_FULL,
+  SHAPE_1X4,
+  SHAPE_4X1,
+  SHAPE_2X2
+};
 
 class Strip : public GenericComponent{  
   #define JSON_STRIP_PROPERTY_SIZE 100
   #define  JSON_STRIP_TEMPLATE_SIZE 300
   public:
     TFT_eSprite* sprite = nullptr;
+    
+    // logical position
     uint8_t x, y, win, index;
+    
+    // position on TFT screen
+    int16_t renderX, renderY;
+    
     String size;
     unsigned char icon = 0x21;
     uint8_t colorID=0; 
@@ -360,6 +385,7 @@ class Strip : public GenericComponent{
         index = jsonStrip["position"][C_INDEX].as<int>();
         size = jsonStrip[C_SIZE].as<String>();
         colorID = jsonStrip[C_COLOR];//.as<int>();
+        if (colorID>MAX_COLOR_ID-1) colorID = 0;
         icon = jsonStrip[C_ICON];//.as<unsigned char>();
         //DEBUG_PRINT("\tselector=%i, colorID=%i, icon=%c",selector,colorID,icon);
         properties = jsonStrip[C_PROPERTIES];
@@ -510,8 +536,58 @@ class Strip : public GenericComponent{
     virtual bool actionCallback(uint8_t trigger)=0;
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;    
-    virtual void buildWidgets(uint8_t layout)=0;
-    virtual void buildHeader()=0;
+    
+    virtual void buildWidgets(bool zoom=false){
+
+      if (zoom || size == "4x4"){
+        renderX = 0;
+        renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);
+        render(SHAPE_FULL);
+      }
+      else if (size=="1x4"){
+        renderX = x * WIDGET1X4W;
+        renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);        
+        render(SHAPE_1X4);
+      }
+      else if (size=="4x1"){
+        renderX = 0;
+        renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET4X1H) ;        
+        render(SHAPE_4X1);
+      }
+      else if (size=="2x2"){
+        renderX = (x * WIDGET2X2W/2);
+        renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
+        render(SHAPE_2X2);
+      }
+    }
+
+    virtual void render(uint8_t shape){
+      DEBUG_PRINT("\nrenderX: %d, renderY: %d",renderX,renderY);
+      switch (shape){
+        case SHAPE_FULL:{
+          //RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &renderX,&renderY, 64, &unitString,&GUI::red,&GUI::transparentColor);
+          Canva* ringMeter3 = new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &frontColor, &backColor);
+          gui->add(ringMeter3);  
+        }break;
+        case SHAPE_1X4:{
+          //ProgressBarV* pv = new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, WIDGET1X4W /*w*/, WIDGET1X4H /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/);                              
+          Canva* pv = new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &frontColor, &backColor);
+          gui->add(pv);
+        }break;
+        case SHAPE_2X2:{
+          //RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &renderX,&renderY, WIDGET2X2H/2, &unitString,&GUI::red,&GUI::transparentColor);
+          Canva* ringMeter3 = new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &frontColor, &backColor);          
+          gui->add(ringMeter3);  
+        }break;
+        case SHAPE_4X1:{
+          //ProgressBarH* ph = new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, WIDGET4X1W /*w*/, WIDGET4X1H /*h*/, 3 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/);
+          Canva* ph = new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &frontColor, &backColor);                    
+          gui->add(ph);
+        }break;
+      }      
+    } 
+
+    virtual void buildHeaderAndFooter()=0;
     
 
     JsonArray properties;
@@ -605,24 +681,15 @@ class TextStrip : public Strip{
 
     virtual bool actionCallback(uint8_t trigger){return true;}
 
-    virtual void buildWidgets(uint8_t layout){
-      switch(layout){
-        case LAYOUT_ZOOM:
-        break;
-        case LAYOUT_DETAILS: 
-        default:
-          //if (debug) DEBUG_PRINT("\n%s:buildWidgets Label(%s)",id.c_str(),text.c_str());
+    virtual void render(uint8_t shape){
+      uint8_t fontSize = TFT_WIDTH / text.length() *3;
 
-          uint8_t fontSize = TFT_WIDTH / text.length() *3;
-
-          Label* label = new Label(&text, Align::Center,&x,&y,fontSize,&frontColor,&backColor,false);
-          //widgetHandles.add(label);          
-          gui->add(label);
-        break;
-      }
+      Label* label = new Label(&text, Align::Center,&x,&y,fontSize,&frontColor,&backColor,false);
+      //widgetHandles.add(label);          
+      gui->add(label);
     }
 
-    virtual void buildHeader(){};
+    virtual void buildHeaderAndFooter(){};
 
     virtual void deserializeProperty(String property)  {  
       // property = /text/toto   
@@ -699,8 +766,8 @@ class TwoSelectStrip : public Strip{
       return skeleton->numberOfProperties;      
     }
  
-    virtual void buildHeader(){
-      Top1Toggle1Label* topLabels = new Top1Toggle1Label(&gui->screenGUIs,select2Content, &label, &toggleLabel,&frontColor,&backColor,&frontColor,&backColor,true );          
+    virtual void buildHeaderAndFooter(){
+      Top1Toggle1Label* topLabels = new Top1Toggle1Label(&gui->screenGUIs,select2Content, &label, &toggle1,&frontColor,&backColor,&frontColor,&backColor);          
       gui->add(topLabels);     
     }
 
@@ -708,8 +775,8 @@ class TwoSelectStrip : public Strip{
     uint8_t select2ID=1; 
     const String *select2Content;
     String select2PropertyAddress; 
-    bool toggleLabel = false;
-    String label = "";    
+    bool toggle1 = false;
+    String label = "Gain";    
 };
 
 
@@ -749,8 +816,8 @@ class ThreeSelectStrip: public TwoSelectStrip{
       return skeleton->numberOfProperties;      
     }
 
-    virtual void buildHeader(){
-      topLabels = new Top2Toggles(&gui->screenGUIs,select2Content, select3Content, &toggleTop, &toggleBottom,&frontColor,&backColor );          
+    virtual void buildHeaderAndFooter(){
+      topLabels = new Top2Toggles(&gui->screenGUIs,select2Content, select3Content, &toggle1, &toggle2,&frontColor,&backColor );          
       gui->add(topLabels);       
     }
 
@@ -759,9 +826,8 @@ class ThreeSelectStrip: public TwoSelectStrip{
     const String *select3Content;
     String select3PropertyAddress;
     Top2Toggles* topLabels;  
-    bool toggleTop = false, toggleBottom = false;    
+    bool toggle2 = false;
 };
-
 
 
 class StripFactory{
@@ -842,7 +908,8 @@ class Bank{
     uint8_t possibleLayout;
     uint8_t currentLayout;
     
-    LinkedList<Strip*> strips;
+    //LinkedList<Strip*> strips;
+    std::vector<Strip*> strips; // Vecteur de strips
 
     Bank(String n, String value, StripFactory* sf){ 
       name = n;
@@ -860,13 +927,13 @@ class Bank{
     }
 
     void resetStripNav(){
-      nav.selector = 254;
+      nav.selector = 1;
       nav.window = 0;      
-      if (strips.size() > 0){   //bank is not empty
+      /*if (strips.size() > 0){   //bank is not empty
         // find the strip which has the lower index;
         for (uint8_t i=0;i<strips.size();i++) nav.selector = min(nav.selector,strips[i]->index);  
         nav.window = strips[nav.selector]->win;
-      }else nav.selector = 1;
+      }else nav.selector = 1;*/
     }
 
     void init(){
@@ -933,7 +1000,7 @@ class Bank{
         serializeJson(jsonStrip, jsonStripString);                 
         if (strip->deserialize(jsonStripString)){
           //DEBUG_PRINT("\n\t\taddStrip=============>%s",jsonStripString.c_str());
-          strips.add(strip);
+          strips.push_back(strip);
         }  
       }
       return strip;
@@ -988,7 +1055,8 @@ class Bank{
       for (uint8_t i=0;i<strips.size();i++){
         if (strips[i] == strip){
           DEBUG_PRINT("\n!!!!TRASHSTRIP(%i,%i,win:%i)",strip->x,strip->y,strip->win);
-          strips.remove(i);
+          //strips.remove(i);
+          strips.erase(std::remove(strips.begin(), strips.end(), strip), strips.end());          
           delete strip;
           success = true;
           break;
@@ -1052,7 +1120,7 @@ class BankNavigator: public Widget{
         //if (debug) DEBUG_PRINT("\n\t bank <%s> nav changed to <%i/%i>",id.c_str(),bank->nav.selector,bank->nav.window);        
 
      
-        #define NAV_HEIGHT OVERLAY_ICON_SIZE+1
+        #define NAV_HEIGHT OVERLAY_ICON_SIZE
         
         #define WIN_WIDTH OVERLAY_ICON_SIZE*1.6
 
@@ -1381,20 +1449,17 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     AlteredColor rainbowColor = AlteredColor{.baseColor = TFT_WHITE, .value = &rainbowC};
     Widget* widgets[NUMBER_OF_WIDGETS]; 
 
-    #define TFT_HQUARTER TFT_WIDTH/4
     int16_t hquarter1xPos = TFT_HQUARTER-TFT_HQUARTER/2;
     int16_t hquarter2xPos = TFT_HQUARTER*2-TFT_HQUARTER/2;
     int16_t hquarter3xPos = TFT_HQUARTER*3-TFT_HQUARTER/2;
     int16_t hquarter4xPos = TFT_HQUARTER*4-TFT_HQUARTER/2;
 
-    #define TFT_VQUARTER TFT_HEIGHT/4
+    
     int16_t vquarter1xPos = TFT_VQUARTER-TFT_VQUARTER/2;
     int16_t vquarter2xPos = TFT_VQUARTER*2-TFT_VQUARTER/2;
     int16_t vquarter3xPos = TFT_VQUARTER*3-TFT_VQUARTER/2;
     int16_t vquarter4xPos = TFT_VQUARTER*4-TFT_VQUARTER/2;
-
-
-    #define TFT_HTHIRD TFT_WIDTH/3
+   
     int16_t hthird3xPos = TFT_HTHIRD*2+TFT_HQUARTER/2;
 
     String leftIcon,rightIcon;
@@ -3124,9 +3189,12 @@ void setup() {
           //DEBUG_PRINT("\n ^^^^^^^^^jumpToStrip (%i,%s)",id,bankName.c_str());
           Bank* bank = jumpToBank(bankName);              
           bank->nav.selector = strip->index;
+          
+          uint8_t formerWindow = bank->nav.window;
           bank->nav.window = strip->win;
-          //screen.focus = bank->nav.selector+(bank->nav.window*STRIP_PER_WINDOW);  // this trigger GUI rebuild
-          screen.focus = screen.focus - 1;
+          // we only refresh if we changed the window or if we display a full screen strip
+          //if (formerWindow != bank->nav.window || bank->currentLayout == LAYOUT_ZOOM)  
+            screen.focus = screen.focus - 1; 
           success = true;
         }
 

@@ -61,6 +61,18 @@
 
 #define BIT_DEPTH 8
 
+
+///////////////////////////////////////// WIDGET SIZE AND POSITION STARTS ////////////////////////////
+#define TOP2WIDGET_SIZE (TFT_HEIGHT/7)
+
+#define TFT_HQUARTER TFT_WIDTH/4
+#define TFT_VQUARTER TFT_HEIGHT/4
+#define TFT_HTHIRD TFT_WIDTH/3
+
+#define WIDGET_PADDING 4
+///////////////////////////////////////// WIDGET SIZE AND POSITION END ///////////////////////////////
+
+
 typedef struct {
   uint16_t fColor;
   uint16_t bColor;
@@ -73,16 +85,18 @@ typedef struct {
 
 #define TFT_GREY 0x5AEB // New colour
 
-stripColor colorMap[] = {
-  {TFT_SILVER, TFT_GREY},
+#define MAX_COLOR_ID 17
+
+stripColor colorMap[MAX_COLOR_ID] = {
+  {TFT_WHITE, TFT_GREY},
   {TFT_WHITE, TFT_RED},
-  {TFT_GREY, TFT_GREEN},
-  {TFT_GREY, TFT_YELLOW},
+  {TFT_WHITE, TFT_GREEN},
+  {TFT_WHITE, TFT_YELLOW},
   {TFT_WHITE, TFT_BLUE},
   {TFT_WHITE, TFT_MAGENTA},
-  {TFT_GREY, TFT_CYAN},
-  {TFT_GREY, TFT_WHITE},
-  {TFT_GREY, TFT_SILVER},
+  {TFT_WHITE, TFT_CYAN},
+  {TFT_WHITE, TFT_WHITE},
+  {TFT_WHITE, TFT_SILVER},
   {TFT_RED, TFT_GREY},
   {TFT_GREEN, TFT_GREY},
   {TFT_YELLOW, TFT_GREY},
@@ -125,6 +139,7 @@ public:
 
     static const int16_t zero;
     static const int16_t center;
+    static const int16_t y1;
 
     /*static uint16_t networkIconColor;
     static uint16_t configMediaIconColor;*/
@@ -326,7 +341,7 @@ class Canva : public Widget{
       refreshed = force;
       if(Widget::refresh(force)){     
         createSprite();
-        sprite->drawRect(*x,*y,width,height,*fColor);
+        sprite->drawRect(0,0,width,height,*fColor);
         // background is done by filling the sprite with bColor when creting it
       }
       return refreshed;
@@ -930,7 +945,7 @@ class RingMeter : public Arc{
   #define START_ANGLE 30
   public:
     
-    RingMeter(const float *v, float mini, float maxi, uint8_t deci, const int16_t* posX, const int16_t* posY, uint16_t r, String* u, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):Arc(v,mini, maxi, posX, posY, r, fC, bC, START_ANGLE, d){
+    RingMeter(const float *v, float mini, float maxi, uint8_t deci, const int16_t* posX, const int16_t* posY, uint16_t r, String* u, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=false):Arc(v,mini, maxi, posX, posY, r, fC, bC, START_ANGLE, d){
       unit = u; 
       id = "RingMeter"+String(*posX)+"x"+String(*posY);
       if (deci>1) deci = 1;
@@ -1233,7 +1248,7 @@ class ProgressBarV : public VerticalBar{
 
   public:
 
-    ProgressBarV(float* v, float min, float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, uint8_t fOffset, uint8_t r,const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):VerticalBar(v, min, max, posX, posY,w, h,fOffset, r,fC,bC,d){
+    ProgressBarV(float* v, float min, float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, uint8_t fOffset, uint8_t r,const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=false):VerticalBar(v, min, max, posX, posY,w, h,fOffset, r,fC,bC,d){
       id = "ProgressBarV"+String(*posX)+"x"+String(*posY); 
     }
 
@@ -1256,7 +1271,7 @@ class ProgressBarV : public VerticalBar{
 class PendingBar : public HorizontalBar{
 
   public:
-    PendingBar(float* v, float min, float max, const uint8_t* s, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, bool pp = false, uint8_t fOffset = 0, uint8_t r = 0, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=true):HorizontalBar(v, min, max, posX, posY,w, h,fOffset, r,fC,bC,d){
+    PendingBar(float* v, float min, float max, const uint8_t* s, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, bool pp = false, uint8_t fOffset = 0, uint8_t r = 0, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool d=false):HorizontalBar(v, min, max, posX, posY,w, h,fOffset, r,fC,bC,d){
       id = "PendingBar"+String(*posX)+"x"+String(*posY); 
       pingPong = pp; size = s;
     }
@@ -1280,8 +1295,6 @@ class PendingBar : public HorizontalBar{
 
 };
 
-#define TOP2WIDGET_SIZE TFT_HEIGHT/3
-
 class CompositeWidget: public Widget{
   public:
     CompositeWidget(LinkedList<Widget*>* g, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, bool debug=false):Widget(&GUI::zero,&GUI::zero,fC,bC,debug){
@@ -1292,7 +1305,6 @@ class CompositeWidget: public Widget{
 };
 
 class Top2Toggles : public CompositeWidget {
-  #define TOP2WIDGET_SIZE TFT_HEIGHT/3
   public:
     Top2Toggles(LinkedList<Widget*>* guiList, const String* topLabel, const String* bottomLabel, const bool* topReverse = &GUI::off, const bool* bottomReverse = &GUI::off, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint16_t *fC2 = &GUI::defaultFcolor, const uint16_t *bC2 = &GUI::silver, bool debug=false) : CompositeWidget(guiList, fC, bC, debug){
       id = "Top2Toggles";
@@ -1300,8 +1312,8 @@ class Top2Toggles : public CompositeWidget {
       topString = topLabel; bottomString = bottomLabel; fColor2 = fC2;
       topBool = topReverse; bottomBool = bottomReverse; bColor2 =bC2;
        
-      topToggle = new Toggle(topString,&GUI::zero,&GUI::zero,TOP2WIDGET_SIZE/2,topBool, fColor,bColor, debug);        
-      bottomToggle = new Toggle(bottomString,&GUI::zero,&y2,TOP2WIDGET_SIZE/2,bottomBool, fColor2, bColor2,debug);        
+      topToggle = new Toggle(topString,&GUI::zero,&GUI::zero,TOP2WIDGET_SIZE,topBool, fColor,bColor, debug);        
+      bottomToggle = new Toggle(bottomString,&GUI::zero,&GUI::y1,TOP2WIDGET_SIZE,bottomBool, fColor2, bColor2,debug);        
       
       guiList->add(topToggle);
       guiList->add(bottomToggle);         
@@ -1313,7 +1325,7 @@ class Top2Toggles : public CompositeWidget {
     const String *topString, *bottomString; 
     const bool *topBool, *bottomBool;
     Toggle *topToggle, *bottomToggle;
-    int16_t y2 = TOP2WIDGET_SIZE/2+1;
+
     const uint16_t *fColor2, *bColor2;
 };
 
@@ -1326,8 +1338,8 @@ class Top1Toggle1Label : public CompositeWidget {
       topString = topS; bottomString = bottomS; fColor2 = fC2;
       topBool = topReverse; bColor2 =bC2;
        
-      topToggle = new Toggle(topString,&GUI::zero,&GUI::zero,TOP2WIDGET_SIZE/2,topBool, fColor,bColor, debug);        
-      bottomLabel = new Label(bottomString, Align::Center,&GUI::center, &y2,(TOP2WIDGET_SIZE/2)*1.2,fC2,bC2,false);        
+      topToggle = new Toggle(topString,&GUI::zero,&GUI::zero,TOP2WIDGET_SIZE,topBool, fColor,bColor, debug);        
+      bottomLabel = new Label(bottomString, Align::Center,&GUI::center, &GUI::y1,(TOP2WIDGET_SIZE)*1.2,fC2,bC2,false);        
 
       guiList->add(topToggle);
       guiList->add(bottomLabel);         
@@ -1340,7 +1352,7 @@ class Top1Toggle1Label : public CompositeWidget {
     const bool *topBool;
     Toggle *topToggle;
     Label *bottomLabel;
-    int16_t y2 = TOP2WIDGET_SIZE/2;
+    int16_t y1 = TOP2WIDGET_SIZE;
     const uint16_t *fColor2, *bColor2;
 };
 
@@ -1403,6 +1415,7 @@ uint16_t GUI::configMediaIconColor = TFT_RED;*/
 
 const int16_t GUI::zero = 0;
 const int16_t GUI::center = TFT_WIDTH/2;
+const int16_t GUI::y1 = TOP2WIDGET_SIZE+1;
 
 AlteredColor GUI::glowingGoldColor = AlteredColor{.baseColor = GUI::gold, .value = &GUI::unUsedColor};
 

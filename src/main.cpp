@@ -124,17 +124,10 @@ class OSCTestStrip : public TextStrip, public StripMixer{
       return true;
     }
 
-    virtual void buildWidgets(uint8_t layout){
-      TextStrip::buildWidgets(layout);
-      switch(layout){
-        case LAYOUT_ZOOM:
-
-        case LAYOUT_DETAILS: 
-        default:
-          topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor );          
-          gui->add(topLabels);
-        break;
-      }
+    virtual void render(uint8_t shape){
+      TextStrip::render(shape);
+      topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor );          
+      gui->add(topLabels);
     }
 
 
@@ -165,24 +158,10 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
       ThreeSelectStrip::refresh(force);
       return refreshed;
     }
-
-    virtual void buildWidgets(uint8_t layout){
-      this->layout = layout;
-      switch(layout){
-        case LAYOUT_ZOOM:
-
-        case LAYOUT_DETAILS: 
-        default:
-       
-          // add the SliderWidget here based on value
-          // value float
-
-        break;
-      }      
-    }    
+  
 
   protected:
-    float value;
+    String unitString="U";
 };
 
 
@@ -200,16 +179,15 @@ class Ch2BusStrip : public SendStrip{
   public:
 
     Ch2BusStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):SendStrip(s,g,ms,debug){      
-      /*sendName = skeleton->getValuePtr(select2PropertyAddress,select2ID-1);
-      returnName = skeleton->getValuePtr(select3PropertyAddress,select3ID-1);*/
+      unitString = "dB";
     }
 
     virtual bool actionCallback(uint8_t trigger){
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
       //DEBUG_PRINT("\nCh2BusStrip actionCallback");
-      toggleTop = !toggleTop;
-      return setChBusMute(toggleTop,select2ID,select3ID);     
+      toggle1 = !toggle1;
+      return setChBusMute(toggle1,select2ID,select3ID);     
 
     }
 
@@ -255,10 +233,10 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
     }
 
     bool setChGain(){
-      JsonDocument command;
-      command["ch"] = select2ID;
-      command["value"] = value;
-      return mixerServer->mixerInterface->sendCommand("setChGain",command);      
+      JsonDocument param;
+      param["ch"] = select2ID;
+      param["value"] = value;
+      return mixerServer->mixerInterface->sendCommand("setChGain",param);      
     }
 
     virtual bool actionCallback(uint8_t trigger){
@@ -285,30 +263,19 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       return refreshed;
     };    
 
-    virtual void buildWidgets(uint8_t layout){
-      switch(layout){
-        case LAYOUT_ZOOM:
+    virtual void render(uint8_t shape){
 
-        case LAYOUT_DETAILS: 
-        default:
+      
        
-          /*RingMeter* ringMeter1 = new RingMeter(&value, -1000,1000, 1, &app.quarter1xPos,&y, 32, &dBstring,&frontColor,&GUI::transparentColor,false);
-          gui->add(ringMeter1);          
+      /*RingMeter* ringMeter1 = new RingMeter(&value, -1000,1000, 1, &app.quarter1xPos,&y, 32, &dBstring,&frontColor,&GUI::transparentColor,false);
+      gui->add(ringMeter1);          
 
-          RingMeter* ringMeter2 = new RingMeter(&value2, -1000,1000, 0, &app.quarter2xPos,&y, 32, &testUnitString,&GUI::blue,&GUI::transparentColor,false);
-          gui->add(ringMeter2);          */
+      RingMeter* ringMeter2 = new RingMeter(&value2, -1000,1000, 0, &app.quarter2xPos,&y, 32, &testUnitString,&GUI::blue,&GUI::transparentColor,false);
+      gui->add(ringMeter2);          */
 
-          //RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &app.third3xPos,&y, 64, &testUnitString,GUI::glowingGoldColor.value,&GUI::transparentColor,false);
-          RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &app.hthird3xPos,&y, 64, &testUnitString,&GUI::red,&GUI::transparentColor,false);
-          gui->add(ringMeter3);               
+      //RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &app.third3xPos,&y, 64, &testUnitString,GUI::glowingGoldColor.value,&GUI::transparentColor,false);
+             
 
-          ProgressBarH* ph = new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &app.hquarter1xPos /*x*/, &y /*y*/, 150 /*w*/, 20 /*h*/, 3 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, false);
-          gui->add(ph);
-          ProgressBarV* pv = new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &app.tenPixels /*x*/, &app.vquarter1xPos /*y*/, 20 /*w*/, 150 /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, false);                              
-          gui->add(pv);
-
-        break;
-      }      
     }    
 
     /*virtual float getIncrement(unsigned long time){                  
@@ -320,10 +287,7 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
     }*/
 
   private:
-    float value2 = 0;
-    String dBstring = "Hz";
-    String testUnitString = "gate";    
-    int16_t y = TFT_HEIGHT-WIDGET_BIG_WIDTH-OVERLAY_ICON_SIZE*2;
+
 };
 
 class LocalDataProvider: public DataProvider{ // temp while shortcut factory is not implemented
@@ -664,7 +628,7 @@ void eventHandling(EventDispatcher::Event* event){
       switch(btnEvt->id){
         case Button::BUTTON_SIMPLE_CLIC:
           DEBUG_PRINT("\n\t\t *** EVENT_DIGITAL_BUTTON SIMPLE_CLIC");
-          if (screen.id == SCREEN_BANK){
+          if (screen.id == SCREEN_BANK && mixerServer.state == DISCONNECTED){
             mixerServer.offline = true;
             app.broadCast(getMixersState());
           }
