@@ -1452,6 +1452,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     int16_t overlayIconY = TFT_HEIGHT-OVERLAY_ICON_SIZE, apIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE*2;
     int16_t batIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE;
 
+    float pendingBarWidth = TFT_WIDTH;
+
     ///////////////////// WIDGETS & ATTRIBUTES ////////////////////////
     #define WIDGET_SMALL_WIDTH TFT_WIDTH/8-5
     #define WIDGET_BIG_WIDTH TFT_WIDTH/5
@@ -2494,8 +2496,8 @@ void setup() {
         }
         //#ifdef DEBUG
           // DEBUG INDICATORS OVERLAY
-          gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::zero,TFT_WIDTH/16,&GUI::defaultFcolor,&GUI::defaultBcolor));    
-          gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::zero,TFT_WIDTH/16,&GUI::defaultFcolor,&GUI::defaultBcolor));              
+          gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::six,15,&GUI::defaultFcolor,&GUI::defaultBcolor));    
+          gui->add(new Label(&heapSize,Align::Left,&GUI::six,&GUI::zero,15,&GUI::defaultFcolor,&GUI::defaultBcolor));              
         //#endif
 
         //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
@@ -2504,6 +2506,8 @@ void setup() {
         // these are the only screens that can be recall after startup
       }
       gui->refresh(force);
+      // top bar
+      //pendingBarWidth = 50+gui->getSinVal(100); // min size : 20, max : 40;
 
       //------------------
       //

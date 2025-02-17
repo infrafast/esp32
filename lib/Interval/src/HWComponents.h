@@ -802,6 +802,8 @@ class Network : public HWComponent2State{
     WebSocketClient<WiFiClient> *wsWiFiClient{ nullptr };
     WebSocketClient<EthernetClient> *wsEthClient{ nullptr };
 
+    float wiFiConnectAttemptProgress = 0;
+
     SemaphoreHandle_t networkBusy;
 
     StdFunctionCallbackVoidBool userInternetCallback = nullptr;    
@@ -1189,7 +1191,11 @@ class WiFiEth : public Network{
                 String pass = *wiFiList->getString(SSID);    // getting the password for the given ssid
                 startWifi(SSID,pass);
               }              
-              if (millis()-lastWiFiAttempt>wiFiTimeout){
+
+              unsigned long delta = millis()-lastWiFiAttempt;
+              wiFiConnectAttemptProgress = scaleValue(delta,0,wiFiTimeout,0.0,100.0);
+
+              if (wiFiConnectAttemptProgress >= 100.0){
                 _newWifiAttempt = true;
                 //next  credential to attempt
                 wiFiIndex = (wiFiIndex + 1) % wiFiList->size();

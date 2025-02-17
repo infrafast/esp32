@@ -94,6 +94,7 @@ class GUIManager : public GenericComponent {
   
   public:
     bool transparency;
+    int sinI = 0; 
     String framePerSec;
     TFT_eSprite screenBuffer = TFT_eSprite(GUI::tft);  
     LinkedList<Widget*> screenGUIs = LinkedList<Widget*>();
@@ -254,12 +255,12 @@ class GUIManager : public GenericComponent {
         }
         //DEBUG_PRINT("\t\trtrip:%i , rloop:%i, windex:%i/%i",roundTrip,renderLoop,widgetIndex,screenGUIs.size());
       }
-
+   
       /* FX stuff*/
       if (millis() - lastFXmillis > 35){  // 35ms min to refresh
-        sinI = (sinI + 10) % 360;
         increment = increment+1 % 255;
-        sinusWave = sin( (float)sinI * 6.28 / 360.0) * (127) + 127;  //range 0-254     
+        sinI = (sinI + 10) % 360;  
+        sinusWave = getSinVal(254); // range 254
         for(int i = 0; i < glowingColors.size(); i++) *glowingColors.get(i)->value = GUI::luminance(glowingColors.get(i)->baseColor,sinusWave);
         for(int i = 0; i < rainbowColors.size(); i++) rainbowColors.get(i)->baseColor = GUI::rainbow(increment);
         for(int i = 0; i < alphaColors.size(); i++) *alphaColors.get(i)->value = GUI::tft->alphaBlend(sinusWave, alphaColors.get(i)->baseColor, GUI::defaultBcolor);
@@ -268,6 +269,10 @@ class GUIManager : public GenericComponent {
       fps(1);
 
       return refreshed;
+    }
+
+    uint16_t getSinVal(uint16_t range){
+      return sin( (float)sinI * 6.28 / 360.0) * (range/2) + range/2;  
     }
 
     int fps(const uint8_t seconds){
@@ -300,7 +305,6 @@ class GUIManager : public GenericComponent {
   private:   
     ByteBuffer fontBuffer;
 
-    int sinI = 0; 
     uint8_t increment = 0;
 
     String i18n_token;  

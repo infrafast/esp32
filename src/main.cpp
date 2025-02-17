@@ -62,7 +62,7 @@ OpenFontRender myOfr = OpenFontRender();
 
 I18n i18n = I18n();
 
-int16_t iconMidY = (TFT_HEIGHT/2)-(ICON_MAX_SIZE/2.5);
+int16_t netIconY = (TFT_HEIGHT/2)-(ICON_MAX_SIZE/2.3), bottomText = TFT_HEIGHT-OVERLAY_ICON_SIZE-(CONFIG_TEXTAREA_MESSAGE_SIZE/2), belowIconText = bottomText-CONFIG_TEXTAREA_MESSAGE_SIZE, aboveBottomText = bottomText-7;
 
 //float tV = 95.0;
 int16_t mixerY = TFT_HEIGHT - 120;
@@ -70,12 +70,16 @@ float dataProgress = 0.0;
 #define PROGRESS_BAR_HEIGHT 20
 int16_t progressBarY = PROGRESS_BAR_HEIGHT; //app.overlayIconY - PROGRESS_BAR_HEIGHT;
 
+float mixerPendingBarWidth = 100.0;
+
+int8_t previousInterfaceState = DISCONNECTED;
+
+
 ///////////////////////////////////////////////////////////////////
 /////////////////////                         /////////////////////
 /////////////////////    CLASS DEFINITIONS    /////////////////////
 /////////////////////                         ////////////////////
 //////////////////////////////////////////////////////////////////
-
 
 class MyIcon : public Font{
   public:
@@ -99,7 +103,6 @@ class StripMixer{
   protected:
     MixerServer* mixerServer;
 };
-
 
 
 class OSCTestStrip : public TextStrip, public StripMixer{
@@ -271,8 +274,6 @@ class Ch2BusStrip : public SendStrip{
       return refreshed;
     }
 };
-
-
 
 #define CHGAINDB_MIN  -12
 #define CHGAINDB_MAX  60
@@ -544,12 +545,13 @@ String userPongCallback(){
 }
 
 /////////////////////    NETWORK       /////////////////////
-void usertNetChangeStateCallback(bool state){
-  DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);
-  //QueryingDemoMixer(hwm.network->internet);  
+void netChangeState(bool state){
+  DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);  
+  // in case we were offline but footswitch connects a network, we give the possibility to connect again or offer user to confirm he wants to stay offline
+  if (mixerServer.offline == true && hwm.network->state == CONNECTED) mixerServer.offline = false;  
 }
 
-void userInternetCallBack(bool internet){
+void internetChangeState(bool internet){
   DEBUG_PRINT("\n\n\n\t\t\t * * * * USER INTERNET CALLBACK %s * * * *",internet?"OK":"fail"); 
   // check updates
 
@@ -642,11 +644,11 @@ void eventHandling(EventDispatcher::Event* event){
     }break;
     case EventDispatcher::EVENT_NETWORK_CHANGED_STATE:{
       bool state = (bool*)event->data;
-      usertNetChangeStateCallback(state);
+      netChangeState(state);
     }break;
     case EventDispatcher::EVENT_INTERNET_PING:{
       bool online = (bool*)event->data;
-      userInternetCallBack(online);
+      internetChangeState(online);
     }break;
   } 
 }
@@ -670,6 +672,12 @@ void userBootScreen(){
   if (sprite != nullptr) sprite->pushSprite(bootSprite.getX(),bootSprite.getY(),TFT_TRANSPARENT);      
 }
 
+void modalScreen(const String* topText, const String* midLabel, const String* bottomLabel){
+  gui.add(new TextArea(topText, TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(midLabel, Align::Center,&app.midScreenHoriz, &belowIconText,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
+  gui.add(new Label(bottomLabel, Align::Center,&app.midScreenHoriz, &bottomText,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,150));    
+}
+
 void userBankScreenBuilder(int subScreen){  
   DEBUG_PRINT("\n - - - - - - - userBankScreenBuilder - - - - -");
 
@@ -679,8 +687,11 @@ void userBankScreenBuilder(int subScreen){
 
   if (hwm.network->state == DISCONNECTED && mixerServer.offline == false){
     app.disabledBankRendering = true;    
-    gui.add(new Icon(&app.networkIcon,Align::Center,&app.midScreenHoriz, &iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
-    gui.add(new TextArea(i18n.getString("Attempt"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+    
+    gui.add(new Icon(&app.networkIcon,Align::Center,&app.midScreenHoriz, &netIconY,ICON_MAX_SIZE*0.9,&app.networkIconColorIdle,&GUI::defaultBcolor));    
+    modalScreen(i18n.getString("Attempt"),&hwm.network->SSID,i18n.getString("offline"));
+    gui.add (new ProgressBarH(&hwm.network->wiFiConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &aboveBottomText /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
+
   }else{
     if (interfaceState == CONNECTED || mixerServer.offline == true/*|| interfaceState == SYNCING_DATA*/){
       app.disabledBankRendering = false; // normal strips and bank display
@@ -691,23 +702,31 @@ void userBankScreenBuilder(int subScreen){
       GUI::defaultFcolor = TFT_FCOLOR;
       
       if (mixerServer.state == DISCONNECTED){
-        gui.add(new Icon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
-        gui.add(new TextArea(i18n.getString("offline"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));      
+
+        gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));   
+        modalScreen(i18n.getString("offline"),i18n.getString(stateNames[interfaceState]),i18n.getString("searching"));  
+        gui.add (new PendingBar(&mixerPendingBarWidth /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &aboveBottomText /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                          
+
       }else if (interfaceState == SYNCING_SOFTWARE){
-        gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
-        //gui.add(new Arc(&mixerServer.mixerInterface->syncSoftwareProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));
-        gui.add (new ProgressBarH(&mixerServer.mixerInterface->syncSoftwareProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &progressBarY /*y*/, TFT_WIDTH /*w*/, PROGRESS_BAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/));                  
+
+        gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));   
+        modalScreen(i18n.getString("offline"),i18n.getString(stateNames[interfaceState]),i18n.getString("searching"));  
+        gui.add (new ProgressBarH(&mixerServer.mixerInterface->syncSoftwareProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &aboveBottomText /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
+
+        //gui.add(new Arc(&mixerServer.mixerInterface->syncSoftwareProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));        
       }else{                        
+        modalScreen(&emptyString,i18n.getString(stateNames[interfaceState]),&emptyString);  
         if (interfaceState == SYNCING_DATA){
-          gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
+          
+          gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));   
+          gui.add (new ProgressBarH(&dataProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &aboveBottomText /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/));                               
+
           //gui.add(new Arc(&dataProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));
-          gui.add (new ProgressBarH(&dataProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &progressBarY /*y*/, TFT_WIDTH /*w*/, PROGRESS_BAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/));                    
         }else{
-          if (mixerServer.mixerInterface->model == MIXING_STATION_MODEL) gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));
-          else gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,&iconMixerColor,&GUI::defaultBcolor));        
+          if (mixerServer.mixerInterface->model == MIXING_STATION_MODEL) gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));
+          else gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));        
         }      
       }
-      gui.add(new Label(i18n.getString(stateNames[interfaceState]), Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
     }
   }
 }
@@ -829,17 +848,18 @@ void userBankScreenBuilder(int subScreen){
   app.refresh();
   mixerServer.refresh();
 
-  static uint8_t previousInterfaceState = DISCONNECTED;
   static String  previousInterfaceSubState = "";
 
   uint8_t interfaceState = mixerServer.mixerInterface->interfaceState;
 
-  if (interfaceState != previousInterfaceState || mixerServer.refreshed || hwm.network->refreshed  ){   
+  if (interfaceState != previousInterfaceState || mixerServer.refreshed || hwm.network->refreshed ){   
+    
     if (mixerServer.refreshed){
       
     }else{
       DEBUG_PRINT("\n*********************** INTERFACE CHANGED STATE FROM:%s TO: %s",stateNames[previousInterfaceState].c_str(),stateNames[interfaceState].c_str());
     }
+
     previousInterfaceState = interfaceState;
     
     if (interfaceState == SYNCING_SOFTWARE || interfaceState == SYNCING_DATA){

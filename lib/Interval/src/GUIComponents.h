@@ -138,6 +138,7 @@ public:
     static AlteredColor glowingGoldColor;
 
     static const int16_t zero;
+    static const int16_t six;
     static const int16_t center;
     static const int16_t y1;
 
@@ -886,7 +887,8 @@ class FromToWidget : public Widget{
     virtual bool refreshLogic(bool force) = 0;
     virtual void refreshContent(bool full) = 0;
     virtual void refreshFrame() = 0;
-    uint16_t from=0,to=0,oldFrom=254,oldTo=254;
+    uint16_t to=0,oldTo=254;
+    int16_t from=0,oldFrom=254;
     const float* value;
     float oldValue;
     float minValue, maxValue;
@@ -1127,6 +1129,8 @@ class Bar : public FromToWidget{
     virtual void setText(const String* text){};
 
   protected:
+    
+  uint8_t frameOffset = 0, radius = 5;
 
     virtual void refreshFrame(){
       createSprite(GUI::transparentColor);
@@ -1142,11 +1146,10 @@ class Bar : public FromToWidget{
         refreshContent(false); // partial refresh
         oldFrom = from;                    
         oldTo = to;
+        refreshed = true;
       }
       return refreshed;
     }
-
-    uint8_t frameOffset = 0, radius = 5;
 
 };
 
@@ -1223,28 +1226,31 @@ class HorizontalBar : public Bar{
         // only refresh tail/and or head
         refreshed = true;
 
-        uint16_t blockWidth;
+        int16_t blockWidth;
 
         if (from > oldFrom){
           // remove tail
-          sprite->fillRect(oldFrom+frameOffset,frameOffset,from-to-frameOffset,height-frameOffset*2,GUI::luminance(bCol1,lumi));   
-          //DEBUG_PRINT("\nRemove tail");
+          if (oldFrom<0) oldFrom = 0;
+          blockWidth = from-oldFrom-frameOffset;
+          sprite->fillRect(oldFrom+frameOffset,frameOffset,blockWidth,height-frameOffset*2,*bColor);   
+          //DEBUG_PRINT("\tRemove tail: %d",blockWidth);
         }else if (from < oldFrom){
           // add tail
-          //DEBUG_PRINT("\nAdd tail");
-          sprite->fillRect(from+frameOffset,frameOffset,oldFrom-from-frameOffset,height-frameOffset*2,GUI::luminance(fCol1,lumi));        
+          blockWidth = oldFrom-from-frameOffset;
+          //DEBUG_PRINT("\tAdd tail :%d",blockWidth);
+          sprite->fillRect(from+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(fCol1,lumi));        
         }          
 
         if (to > oldTo){
           // add head
           blockWidth = to-oldTo;
-          //DEBUG_PRINT("\nAdd head: %i",blockWidth);
+          //DEBUG_PRINT("\tAdd head: %i",blockWidth);
           sprite->fillRect(oldTo+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(fCol1,lumi));        
         }else if (to < oldTo){
           // remove head
           blockWidth = oldTo-to;
-          //DEBUG_PRINT("\nRemove head: %i",blockWidth);
-          sprite->fillRect(to+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(bCol1,lumi));                    
+          //DEBUG_PRINT("\tRemove head: %i",blockWidth);
+          sprite->fillRect(to+frameOffset,frameOffset,blockWidth,height-frameOffset*2,*bColor);                    
         }       
       }
     }
@@ -1284,10 +1290,10 @@ class ProgressBarV : public VerticalBar{
 
     virtual bool refreshLogic(bool force=false){ 
       refreshed = force;
+      VerticalBar::refreshLogic(refreshed);
       if (oldValue != *value){
         to = height - mapFloatToInt(*value,minValue,maxValue,0,height);    
-        //DEBUG_PRINT("\tFrom: %d To: %i",from, to) ;
-        VerticalBar::refreshLogic(refreshed);
+        //DEBUG_PRINT("\tFrom: %d To: %i",from, to) ;        
         oldValue = *value;
       }
       return refreshed;
@@ -1301,27 +1307,75 @@ class ProgressBarV : public VerticalBar{
 class PendingBar : public HorizontalBar{
 
   public:
-    PendingBar(float* v, float min, float max, const uint8_t* s, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, bool pp = false, uint8_t fOffset = 0, uint8_t r = 0, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, uint16_t _lumi=255, bool d=false):HorizontalBar(v, min, max, posX, posY,w, h,fOffset, r,fC,bC,_lumi,d){
+    PendingBar(float* size, float min, float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, bool pp = false, uint8_t fOffset = 0, uint8_t r = 0, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, uint16_t _speed = 40, uint8_t step = 2, uint16_t _lumi=255, bool d=false) : pingPong(pp), stepDirection(step), speed(_speed), HorizontalBar(size, min, max, posX, posY,w, h,fOffset, r,fC,bC,_lumi,d){
       id = "PendingBar"+String(*posX)+"x"+String(*posY); 
-      pingPong = pp; size = s;
-    }
-    
-    bool refreshLogic(bool force=false){ 
-      refreshed = force;
+      if (stepDirection > *size) stepDirection = *size;
+    }   
 
-      if(HorizontalBar::refresh(force) || force || *size != oldSize){
-        
-        oldSize = *size;
-      }
+    virtual bool refresh(bool force) override{
+      // delay 
+      if (millis() - lastRefreshTime < speed && !force) return false;
+      lastRefreshTime = millis();
+      refreshed = HorizontalBar::refresh(force);
       return refreshed;
     }
 
+    virtual bool refreshLogic(bool force = false) override{     
+
+      // Ensure 'value' is a valid pointer before dereferencing
+      if (!value) return false; // Exit early to avoid crash 
+      // Mark as refreshed if forced
+      refreshed = force;  
+      // Update the 'from' position, ensuring it remains within bounds
+      from += stepDirection;  
+
+      //from -= *value/2;     // center, otherwise: left align
+
+      // Handle negative wrap-around and keep 'from' in valid range
+      //if (from < - *value) from = - *value;
+  
+      // Check if we reached the boundaries
+      if (from >= width - abs(stepDirection) || from < - *value) { 
+        
+        if (from < - *value) from = - *value;
+
+        if (pingPong) { 
+          stepDirection = -stepDirection;  // Reverse direction
+          //EBUG_PRINT("\n%s", stepDirection > 0 ? "ping" : "pong");
+          if (from >= width) from = width - 1; 
+        }else{
+          if (from >= width) from = - *value; 
+        }
+      }
+  
+      // Compute the 'to' position while ensuring safe bounds
+      to = from + *value;  
+  
+      // Ensure 'to' does not exceed the width
+      if (to > width) to = width;
+  
+      // If 'value' is zero, ensure at least a 1-pixel width (optional)
+      if (*value < stepDirection ) {
+          //DEBUG_PRINT("\nWarning: 'value' is zero, ensuring visibility.");
+          to = from + stepDirection; 
+      }
+  
+      // Debug output to track bar movement
+      //DEBUG_PRINT("\npendingBar from: %d to:%d", from, to);
+  
+      // Call the base class method (assuming HorizontalBar is a parent class)
+      HorizontalBar::refreshLogic(force);
+  
+      return refreshed;
+    }
+  
+
+
   private:
     bool pingPong = false;
-    const uint8_t* size;
-    uint8_t oldSize = 101;
-
-    uint8_t begin = 0, finish = 0;
+    int8_t stepDirection = 15;
+    uint16_t speed = 50;
+    unsigned long lastRefreshTime = 0;
 
 };
 
@@ -1444,6 +1498,7 @@ const uint16_t GUI::menuBackGroundColor = TFT_WHITE;
 uint16_t GUI::configMediaIconColor = TFT_RED;*/
 
 const int16_t GUI::zero = 0;
+const int16_t GUI::six = 6;
 const int16_t GUI::center = TFT_WIDTH/2;
 const int16_t GUI::y1 = TOP2WIDGET_SIZE+1;
 
