@@ -79,7 +79,7 @@ void RenderTask(void *pvParameters);
 
 FT_Library g_FtLibrary;
 bool g_NeedInitialize                     = true;
-std::function<void(const char *)> g_Print = [](const char *s) { return; };
+std::function<void(const char *)> g_Print = [](const char *s) { Serial.printf("%s",s); };
 
 #ifdef FREERTOS_CONFIG_H
 TaskHandle_t g_RenderTaskHandle                   = NULL;

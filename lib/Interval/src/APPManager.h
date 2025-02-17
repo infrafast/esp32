@@ -5,7 +5,6 @@
 #include "nvs_flash.h" 
 #include <LinkedList.h>
 #include <ArduinoJson.h>
-#include <Preferences.h>
 //#include <esp32FOTA.hpp>
 
 #include <aWOT.h>                 // awOT lasselukkari/aWOT@^3.5.0 wifi+eth server
@@ -260,13 +259,13 @@ class DataRepository{
     DataRepository(){}
 
     DataSet* getDataSet(int i){
-      if (i<size()) return dataSets.get(i);
+      if (i<size()) return dataSets[i];
       else return nullptr;
     }
 
     DataSet* getDataSet(String address){
       for (uint8_t i=0;i<dataSets.size();i++){
-        DataSet* ds = dataSets.get(i);        
+        DataSet* ds = dataSets[i];        
         if (address == ds->address){          
           return ds;
         } 
@@ -275,24 +274,19 @@ class DataRepository{
     }
 
     bool addDataSet(DataSet* ds){
-      dataSets.add(ds);
+      dataSets.push_back(ds);
       /*String object = ds->object;
       String address = ds->address;      */
       return true;
     }
 
-    void removeDataSet(DataSet* ds){
-      //DEBUG_PRINT("\nremoveDataSet data set ",ds->address);
-      for (uint16_t i=0;i<dataSets.size();i++){
-        //DEBUG_PRINT("...%s",ds->address.c_str());
-        if (dataSets.get(i)->address == ds->address){            
-          dataSets.remove(i);
-          //DEBUG_PRINT("removed");
+    void removeDataSet(DataSet* ds) {
+      for (auto it = dataSets.begin(); it != dataSets.end(); ++it) {
+        if ((*it)->address == ds->address) {
+          dataSets.erase(it);
           break;
-        }else{
-          //DEBUG_PRINT("keep");                  
         }
-      }      
+      }
     }
 
 
@@ -300,7 +294,7 @@ class DataRepository{
       //DEBUG_PRINT("\n<<<<<<<<<<<<< SERIALIZATION OF DATASETS FROM DataRepository, qty: %i >>>>>>>>>>>>>>>>>>>",dataSets.size() );
       for (uint8_t i=0;i<dataSets.size();i++){        
         //DEBUG_PRINT("\ngetting next data set: ");
-        DataSet* ds = dataSets.get(i);
+        DataSet* ds = dataSets[i];
         //DEBUG_PRINT("name: %s size:%i address:%s",ds->dataProvider->name.c_str(),ds->size(),ds->address.c_str());
         jsonDataSets->add(ds->serialize());
       }
@@ -311,7 +305,8 @@ class DataRepository{
     }
 
   private:
-    LinkedList<DataSet*> dataSets = LinkedList<DataSet*>();
+    //LinkedList<DataSet*> dataSets = LinkedList<DataSet*>();
+    std::vector<DataSet*> dataSets;
 };
 
 
@@ -484,8 +479,8 @@ class Strip : public GenericComponent{
 
       if (trigger == Button::BUTTON_HOLD){
         //value = roundHalf(value);
-        if (time<2000){
-          increment = 0.1;
+        if (time<2500){
+          increment = valueMax*scaleValue(time, 0, 2500, 0.007, 0.1);
         }else{
           float diff = valueMax - value;
           float percentageToTarget = map(diff,0,valueMax-valueMin,100,1)/2000.0;  // 3000 seems to be a good compromise between delay and precision, 2000 react quicker but skip some decimal
@@ -493,7 +488,7 @@ class Strip : public GenericComponent{
           //DEBUG_PRINT("\t => diff: %.3f, percentageToTarget: %.3f",diff, percentageToTarget);        
         }
         //DEBUG_PRINT("\t value: %.3f, increment: %.4f, ",value,increment);
-      } else increment = 0.1;
+      } else increment = valueMax*0.05;
 
       return increment;
     }    
@@ -537,57 +532,83 @@ class Strip : public GenericComponent{
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;    
     
-    virtual void buildWidgets(bool zoom=false){
+    virtual bool buildWidgets(bool _focus, uint8_t layout = LAYOUT_DETAILS){
+      renderError = false;
 
-      if (zoom || size == "4x4"){
+      if (x>3 || y>3){
+        DEBUG_PRINT("\nstrip location out of range: %d:%d",x,y);
+        renderError = true;
+        return false;
+      }
+
+      focus = _focus;
+      uint8_t shape;
+
+      if (layout == LAYOUT_ZOOM || size == "4x4"){
         renderX = 0;
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);
-        render(SHAPE_FULL);
+        shape = SHAPE_FULL;
       }
-      else if (size=="1x4"){
+      else if (size == "1x4"){
         renderX = x * WIDGET1X4W;
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);        
-        render(SHAPE_1X4);
+        shape = SHAPE_1X4;
       }
-      else if (size=="4x1"){
+      else if (size == "4x1"){
         renderX = 0;
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET4X1H) ;        
-        render(SHAPE_4X1);
+        shape = SHAPE_4X1;
       }
-      else if (size=="2x2"){
+      else if (size == "2x2"){
         renderX = (x * WIDGET2X2W/2);
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
-        render(SHAPE_2X2);
-      }
+        shape = SHAPE_2X2;
+      }else{
+        DEBUG_PRINT("\nunsupported strip size: %s",size.c_str());
+        renderError = true;
+        return false;
+      }      
+
+      if (focus){
+        lumi = 255;
+        //Strip::render(shape);   // call default render that draw shape outline to highlight focus
+      }else{
+        lumi = 100;           // make colors darkest for non focused items
+      }        
+
+      render(shape);  // call virtual method
+      return true;
+
     }
 
+    uint16_t focusColor;
+
     virtual void render(uint8_t shape){
-      DEBUG_PRINT("\nrenderX: %d, renderY: %d",renderX,renderY);
+      DEBUG_PRINT("\nOutlineFrame renderX: %d renderY: %d, shape:%s(%d)",renderX,renderY,size.c_str(),shape);
+      focusColor = GUI::transparentColor;
+      if (focus) focusColor = frontColor;
       switch (shape){
         case SHAPE_FULL:{
-          //RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &renderX,&renderY, 64, &unitString,&GUI::red,&GUI::transparentColor);
-          Canva* ringMeter3 = new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &frontColor, &backColor);
-          gui->add(ringMeter3);  
+          gui->add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &focusColor));  
         }break;
         case SHAPE_1X4:{
-          //ProgressBarV* pv = new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, WIDGET1X4W /*w*/, WIDGET1X4H /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/);                              
-          Canva* pv = new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &frontColor, &backColor);
-          gui->add(pv);
+          gui->add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &focusColor));
         }break;
         case SHAPE_2X2:{
-          //RingMeter* ringMeter3 = new RingMeter(&value, valueMin,valueMax, 1, &renderX,&renderY, WIDGET2X2H/2, &unitString,&GUI::red,&GUI::transparentColor);
-          Canva* ringMeter3 = new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &frontColor, &backColor);          
-          gui->add(ringMeter3);  
+          gui->add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &focusColor));  
         }break;
         case SHAPE_4X1:{
-          //ProgressBarH* ph = new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, WIDGET4X1W /*w*/, WIDGET4X1H /*h*/, 3 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/);
-          Canva* ph = new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &frontColor, &backColor);                    
-          gui->add(ph);
+          gui->add(new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &focusColor));
         }break;
       }      
     } 
 
-    virtual void buildHeaderAndFooter()=0;
+    virtual void buildHeaderAndFooter(){
+      DEBUG_PRINT("\n buildHeaderAndFooter Strip");      
+      if (renderError) defaultLabel = new Label(&stripRenderErrorLabel, Align::Center,&GUI::center, &GUI::zero,(TOP2WIDGET_SIZE)*1.2,&frontColor,&backColor); 
+      else defaultLabel = new Label(&id, Align::Center,&GUI::center, &GUI::zero,(TOP2WIDGET_SIZE)*1.2,&frontColor,&backColor); 
+      gui->add(defaultLabel);     
+    }
     
 
     JsonArray properties;
@@ -597,7 +618,12 @@ class Strip : public GenericComponent{
   protected:
     uint16_t frontColor, backColor;    
     unsigned long lastCall;     
-    uint8_t layout = LAYOUT_DETAILS;   
+    uint8_t layout = LAYOUT_DETAILS;
+    bool focus = false;
+    uint16_t lumi = 255;
+    String stripRenderErrorLabel = "Strip render error";
+    bool renderError;
+    Label* defaultLabel = nullptr;
 };
 
 typedef Strip* (*StripBuilderCallback)(/*String values*/);
@@ -681,15 +707,40 @@ class TextStrip : public Strip{
 
     virtual bool actionCallback(uint8_t trigger){return true;}
 
-    virtual void render(uint8_t shape){
-      uint8_t fontSize = TFT_WIDTH / text.length() *3;
+    virtual void render(uint8_t shape) override{
 
-      Label* label = new Label(&text, Align::Center,&x,&y,fontSize,&frontColor,&backColor,false);
+      uint8_t fontSize;
+      switch (shape){
+        case SHAPE_FULL:{
+          renderX += WIDGET4X4W/2;
+          renderY += WIDGET4X4H/4;    
+          fontSize = WIDGET4X4W / text.length() * 3.3;
+        }break;
+        case SHAPE_1X4:{
+          renderX += WIDGET1X4W/2;
+          renderY += WIDGET1X4H/4;    
+          fontSize = WIDGET1X4W / text.length() * 3.3;
+        }break;
+        case SHAPE_2X2:{
+          renderX += WIDGET2X2W/2;
+          renderY += WIDGET2X2H/4;    
+          fontSize = WIDGET2X2W / text.length() * 3.3;
+        }break;
+        case SHAPE_4X1:{
+          renderX += WIDGET4X1W/2;
+          renderY += WIDGET4X1H/4;    
+          fontSize = WIDGET4X1W / text.length() * 3.3;
+        }break;
+      }  
+
+      Label* label = new Label(&text, Align::Center,&renderX,&renderY,fontSize,&frontColor,&backColor,lumi);
       //widgetHandles.add(label);          
       gui->add(label);
     }
 
-    virtual void buildHeaderAndFooter(){};
+    virtual void buildHeaderAndFooter() override{
+      DEBUG_PRINT("\n buildHeaderAndFooter TextStrip : empty");      
+    };
 
     virtual void deserializeProperty(String property)  {  
       // property = /text/toto   
@@ -766,12 +817,15 @@ class TwoSelectStrip : public Strip{
       return skeleton->numberOfProperties;      
     }
  
-    virtual void buildHeaderAndFooter(){
-      Top1Toggle1Label* topLabels = new Top1Toggle1Label(&gui->screenGUIs,select2Content, &label, &toggle1,&frontColor,&backColor,&frontColor,&backColor);          
+    virtual void buildHeaderAndFooter() override{
+      DEBUG_PRINT("\n buildHeaderAndFooter TwoSelectStrip");
+      if (renderError) topLabels = new Top1Toggle1Label(&gui->screenGUIs,select2Content, &stripRenderErrorLabel, &toggle1,&frontColor,&backColor,&frontColor,&backColor);          
+      else topLabels = new Top1Toggle1Label(&gui->screenGUIs,select2Content, &label, &toggle1,&frontColor,&backColor,&frontColor,&backColor);          
       gui->add(topLabels);     
     }
 
   protected:
+    Top1Toggle1Label* topLabels;
     uint8_t select2ID=1; 
     const String *select2Content;
     String select2PropertyAddress; 
@@ -816,7 +870,9 @@ class ThreeSelectStrip: public TwoSelectStrip{
       return skeleton->numberOfProperties;      
     }
 
-    virtual void buildHeaderAndFooter(){
+    virtual void buildHeaderAndFooter() override{
+      DEBUG_PRINT("\n buildHeaderAndFooter ThreeSelectStrip");
+      if (renderError) topLabels = new Top2Toggles(&gui->screenGUIs,&stripRenderErrorLabel, select3Content, &toggle1, &toggle2,&frontColor,&backColor );          
       topLabels = new Top2Toggles(&gui->screenGUIs,select2Content, select3Content, &toggle1, &toggle2,&frontColor,&backColor );          
       gui->add(topLabels);       
     }
@@ -882,22 +938,13 @@ class StripFactory{
 
 ///////////////////// BANKS MANAGEMENT ////////////////////////
 
-union bankUnion{
-  uint16_t value;
-  struct {
-    uint8_t window ;
-    uint8_t selector;   // which strips under focus in the 4x window
-  };
-};
-
-
 class Bank{  
   #define BANK_MAXWINDOW 3
   #define STRIP_PER_WINDOW 4
   #define BANK_MAX_STRIPS BANK_MAXWINDOW*STRIP_PER_WINDOW
 
   public:
-    bankUnion nav;
+    uint8_t selector; 
  
     //uint8_t numberOfStrips = 0;
     //uint8_t maxWindow = 0;
@@ -927,8 +974,7 @@ class Bank{
     }
 
     void resetStripNav(){
-      nav.selector = 1;
-      nav.window = 0;      
+      selector = 1;
       /*if (strips.size() > 0){   //bank is not empty
         // find the strip which has the lower index;
         for (uint8_t i=0;i<strips.size();i++) nav.selector = min(nav.selector,strips[i]->index);  
@@ -1035,19 +1081,13 @@ class Bank{
       if (id>strips.size()) return nullptr;
 
       //DEBUG_PRINT("\n  getStrip(%i)",id);
-      Strip* strip = nullptr;
       // retrieve strip at given position
       
-      for (uint8_t i=0;i<strips.size();i++){
-        //DEBUG_PRINT("\n\t\tStrip[%i]->index=%i versus %i",i,strips[i]->index, id);
-        if (strips[i]->index == id){
-          //DEBUG_PRINT(" MATCH");
-          strip = strips[i];
-          break;
-        }
+      for (const auto& strip : strips) {
+        if (strip->index == id) return strip;
       }
 
-      return strip;
+      return nullptr;
     }
 
     bool trash(Strip* strip){
@@ -1100,136 +1140,120 @@ class BankNavigator: public Widget{
   //#define BANK_NAME_SIZE TFT_WIDTH/15
   public:
 
-    BankNavigator(Bank* b/*, LinkedList<Widget*>* w*/, bool debug):Widget(&xPos, &yPos, &fC, &bC, debug){      
+    BankNavigator(Bank* b/*, LinkedList<Widget*>* w*/, bool debug = false):Widget(&xPos, &yPos, &fC, &bC, debug){      
       bank = b;
       //widgetList = w;
-      oldNav.value = bank->nav.value - 1; //this is to force first refresh
+      oldSelector = bank->selector - 1; //this is to force first refresh
       width = TFT_WIDTH/2; height = OVERLAY_ICON_SIZE;
     }
 
-    virtual bool refresh(bool force=false){
+    virtual bool refresh(bool force = false) {
       refreshed = force;
-      Widget::refresh(force);      
+      Widget::refresh(force);
 
-      if (bank->nav.value != oldNav.value || bank->strips.size() != oldNumberOfStrips || id != bank->name || refreshed){
-        refreshed = true;
+      if (bank == nullptr) return false;
 
-        oldNumberOfStrips = bank->strips.size();
-        id = bank->name;
-        oldNav.value = bank->nav.value;        
-        //if (debug) DEBUG_PRINT("\n\t bank <%s> nav changed to <%i/%i>",id.c_str(),bank->nav.selector,bank->nav.window);        
+      // Check if an update is needed
+      bool bankChanged = (bank->selector != oldSelector) || 
+                        (bank->strips.size() != oldNumberOfStrips) || 
+                        (id != bank->name) || refreshed;
 
-     
-        #define NAV_HEIGHT OVERLAY_ICON_SIZE
-        
-        #define WIN_WIDTH OVERLAY_ICON_SIZE*1.6
+      if (!bankChanged) return false;
 
-        #define YPADDING 1
-        #define XPADDING 2
+      refreshed = true;
+      oldNumberOfStrips = bank->strips.size();
+      id = bank->name;
+      oldSelector = bank->selector;
 
-        #define SPACE_BETWEEN_WIN 3
-        #define NAV_WIDTH (WIN_WIDTH*BANK_MAXWINDOW)+(SPACE_BETWEEN_WIN*BANK_MAXWINDOW)
-
-        #define CELL_WIDTH (WIN_WIDTH)/(STRIP_PER_WINDOW)
-        #define CELL_HEIGHT (NAV_HEIGHT)/(STRIP_PER_WINDOW)
-
-        #define CANVA_VS_BANKNAME_SPACE 2 // 2 pixels
-
-        uint16_t navFrameColor = GUI::luminance(GUI::gold,100);
-
-        Canva* canva = new Canva(&GUI::zero,&GUI::zero,NAV_WIDTH,NAV_HEIGHT,&navFrameColor,&GUI::defaultBcolor); // +2 = space between Canva and bankname
-        canva->refresh(true);
-
-        /*for (uint8_t i = 0; i<BANK_MAXWINDOW; i++){
-          canva->sprite->drawRect(i*SPACE_BETWEEN_WIN+WIN_WIDTH*i,0,WIN_WIDTH,NAV_HEIGHT,GUI::gold);
-        }*/
-
-        uint8_t focusedID = 0;
-       
-        for (uint8_t i = 0; i<bank->strips.size(); i++){
-          uint16_t stripCol = GUI::luminance(GUI::gold,100);
-          Strip* strip = bank->strips[i];
-          if (strip !=nullptr){
-            
-            uint8_t lumi = 100;            
-
-            if (strip->index == bank->nav.selector){
-              lumi = 255;            
-              focusedID = strip->index; // rememebr which strip index has the focus
-
-              //uniqueID->sprite->pushToSprite(canva->sprite,cellX+cellWidth/2,cellY+cellHeight/2);                  
-            }
-            
-            stripCol = GUI::luminance(colorMap[strip->colorID].bColor,lumi);            
-            uint16_t stripFrame = GUI::luminance(colorMap[strip->colorID].fColor,lumi);
-
-            uint8_t cellX = strip->x*CELL_WIDTH + (strip->win*WIN_WIDTH)+(SPACE_BETWEEN_WIN*strip->win);
-            uint8_t cellY = strip->y*CELL_HEIGHT;
-
-            // extraction de x et y dans size : 3x2
-            int index = strip->size.indexOf('x');
-
-            String xStr = strip->size.substring(0, index);
-            String yStr = strip->size.substring(index + 1);
-
-            int widgetWidth = xStr.toInt();
-            int widgetHeight = yStr.toInt();
-
-            uint8_t cellWidth = (widgetWidth*CELL_WIDTH)-XPADDING;
-            uint8_t cellHeight = (widgetHeight*CELL_HEIGHT)-YPADDING;
-
-            canva->sprite->fillRect(cellX+XPADDING,cellY+YPADDING,cellWidth,cellHeight,stripFrame);
-            canva->sprite->drawRect(cellX,cellY,cellWidth+XPADDING,cellHeight+YPADDING,stripCol);
-
-          }
-        }
-
-        
-        width = canva->width+CANVA_VS_BANKNAME_SPACE;        
-
-        //display strip unique ID
-        String id = String(focusedID);
-        Label* uniqueID = new Label(&id,Align::Center,&GUI::zero,&GUI::zero,NAV_HEIGHT,&GUI::white,&GUI::transparentColor);
-        uniqueID->refresh(true);
-        uniqueID->sprite->pushToSprite(canva->sprite,canva->width/2-NAV_HEIGHT/2,height/2);    
-        delete uniqueID;      
-
-
-        //bank name
-        Label* label = new Label(&bank->name,Align::Right,&GUI::zero,&GUI::zero,OVERLAY_ICON_SIZE*2,&fC,&bC,debug);
-        label->refresh(true);
-
-        width += label->width;
-        height = max(label->height,canva->height);
-        width = max(width,oldWidth);
-        oldWidth = width;
-
-        createSprite();  
-
-        canva->sprite->pushToSprite(sprite,0,2);
-        delete canva;
-
-        //label->sprite->pushToSprite(sprite,canva->width,-OVERLAY_ICON_SIZE/3);    
-        label->sprite->pushToSprite(sprite,canva->width+CANVA_VS_BANKNAME_SPACE,-OVERLAY_ICON_SIZE/5);    
-        delete label;           
-
+      if (debug) {
+          DEBUG_PRINT("\n\t Bank <%s> navigator changed to <%i>", id.c_str(), bank->selector);
       }
+
+      // Define UI sizes
+      constexpr uint16_t NAV_HEIGHT = OVERLAY_ICON_SIZE;
+      constexpr uint16_t WIN_WIDTH = OVERLAY_ICON_SIZE * 1.6;
+      constexpr uint8_t YPADDING = 1, XPADDING = 2;
+      constexpr uint8_t SPACE_BETWEEN_WIN = 3;
+      constexpr uint16_t NAV_WIDTH = (WIN_WIDTH * BANK_MAXWINDOW) + (SPACE_BETWEEN_WIN * BANK_MAXWINDOW);
+      constexpr uint8_t CELL_WIDTH = WIN_WIDTH / STRIP_PER_WINDOW;
+      constexpr uint8_t CELL_HEIGHT = NAV_HEIGHT / STRIP_PER_WINDOW;
+      #define CANVA_VS_BANKNAME_SPACE 2
+
+      uint16_t navFrameColor = GUI::luminance(GUI::gold, 100);
+      
+      // Create a canvas for the navigation UI
+      Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &navFrameColor, &GUI::defaultBcolor);
+      canva->refresh(true);
+
+      uint8_t focusedID = 0;
+
+      // Draw each strip on the navigation UI
+      for (uint8_t i = 0; i < bank->strips.size(); i++) {
+          Strip* strip = bank->strips[i];
+          if (strip == nullptr) continue;
+
+          uint8_t lumi = (strip->index == bank->selector) ? 255 : 100;
+          if (strip->index == bank->selector) focusedID = strip->index;
+
+          uint16_t stripCol = GUI::luminance(colorMap[strip->colorID].bColor, lumi);
+          uint16_t stripFrame = GUI::luminance(colorMap[strip->colorID].fColor, lumi);
+
+          // Calculate strip position
+          uint8_t cellX = (strip->x * CELL_WIDTH) + (strip->win * WIN_WIDTH) + (SPACE_BETWEEN_WIN * strip->win);
+          uint8_t cellY = strip->y * CELL_HEIGHT;
+
+          // Extract width & height from "3x2" style string
+          int index = strip->size.indexOf('x');
+          int widgetWidth = strip->size.substring(0, index).toInt();
+          int widgetHeight = strip->size.substring(index + 1).toInt();
+
+          uint8_t cellWidth = (widgetWidth * CELL_WIDTH) - XPADDING;
+          uint8_t cellHeight = (widgetHeight * CELL_HEIGHT) - YPADDING;
+
+          // Draw strip on the canvas
+          canva->sprite->fillRect(cellX + XPADDING, cellY + YPADDING, cellWidth, cellHeight, stripFrame);
+          canva->sprite->drawRect(cellX, cellY, cellWidth + XPADDING, cellHeight + YPADDING, stripCol);
+      }
+
+      // Adjust width
+      width = canva->width + CANVA_VS_BANKNAME_SPACE;
+
+      // Display focused strip ID
+      String idStr = String(focusedID);
+      Label* uniqueID = new Label(&idStr, Align::Center, &GUI::zero, &GUI::zero, NAV_HEIGHT, &GUI::white, &GUI::transparentColor);
+      uniqueID->refresh(true);
+      uniqueID->sprite->pushToSprite(canva->sprite, canva->width / 2 - NAV_HEIGHT / 2, height / 2);
+      delete uniqueID;
+
+      // Display bank name
+      Label* label = new Label(&bank->name, Align::Right, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, &fC, &bC, debug);
+      label->refresh(true);
+      width += label->width;
+      height = max(label->height, canva->height);
+      width = max(width, oldWidth);
+      oldWidth = width;
+
+      createSprite();
+      
+      // Push canvas and label to the main sprite
+      canva->sprite->pushToSprite(sprite, 0, 2);
+      label->sprite->pushToSprite(sprite, canva->width + CANVA_VS_BANKNAME_SPACE, -OVERLAY_ICON_SIZE / 5);
+
+      // Clean up dynamically allocated objects
+      delete canva;
+      delete label;
 
       return refreshed;
     }
-    
-    virtual void setText(const String* text){
 
-    }  
-
-    virtual int16_t getX(){
+        virtual int16_t getX(){
       return xPos;
     }
 
   protected:
     Bank* bank;
     //LinkedList<Widget*>* widgetList;
-    bankUnion oldNav;
+    uint8_t oldSelector=255;
     int8_t oldNumberOfStrips = 0;    
     uint16_t oldWidth=0;
 
@@ -1342,15 +1366,6 @@ class I18n : public JsonListFile{
 
 ///////////////////// MAIN APPLICATION CLASS ////////////////////////
 
-enum{
-  MENU_ICON_MIDDLE,
-  MENU_LABEL_TITLE,
-  CONFIG_TEXTAREA_MESSAGE,
-  BANK_SINGLEWIDGET,
-  CONFIG_CONNECTWEBAPP,
-  NUMBER_OF_WIDGETS
-};
-
 #define ADDRESS_SIMPLETEXT "/text/%s"
 #define ADDRESS_STRIPIDS  "/strip/id/%s"
 
@@ -1443,11 +1458,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     #define ICON_MAX_SIZE TFT_WIDTH/2
 
     const int16_t tenPixels = 10, midScreenHoriz = TFT_WIDTH/2, rightScreen = TFT_WIDTH, midScreenVertical = TFT_HEIGHT/2, bigWidgetMidY = midScreenVertical-WIDGET_BIG_WIDTH/2, iconMidY = midScreenVertical-ICON_MAX_SIZE/2 ;
-    int16_t iconRow2 = OVERLAY_ICON_SIZE*1.5;
+    const int16_t iconRow2 = OVERLAY_ICON_SIZE*1.5;
 
     uint16_t rainbowC;
-    AlteredColor rainbowColor = AlteredColor{.baseColor = TFT_WHITE, .value = &rainbowC};
-    Widget* widgets[NUMBER_OF_WIDGETS]; 
+    AlteredColor rainbowColor = AlteredColor{.baseColor = TFT_WHITE, .value = &rainbowC};    
 
     int16_t hquarter1xPos = TFT_HQUARTER-TFT_HQUARTER/2;
     int16_t hquarter2xPos = TFT_HQUARTER*2-TFT_HQUARTER/2;
@@ -1477,14 +1491,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     Menu* langMenu = nullptr;
     Menu* confMenu = nullptr;  
-    String topLabelItem=" ", vBatLabel; //menuTitle
+    String menuTopText=" ", vBatLabel; //menuTitle
     String menuItemIcon[3]={"","",""}; // left, mid, right
-    String bottomLabelTitle=" ";
+    String menuBottomLabel=" ";
 
     uint16_t menuActiveIconColor;
 
-    int16_t menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2, leftMenuIconXpos = midScreenHoriz-MENU_ICON_SIZE*1.4,rightMenuIconXpos = midScreenHoriz+MENU_ICON_SIZE*1.4;
-    int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE;
+    const int16_t menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2, leftMenuIconXpos = midScreenHoriz-MENU_ICON_SIZE*1.4,rightMenuIconXpos = midScreenHoriz+MENU_ICON_SIZE*1.4;
+    const int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE;
 
     #define TWOFRAMEICON 2
     String iconRolling[TWOFRAMEICON] = {ICON_ROLLING1,ICON_ROLLING2};
@@ -1644,8 +1658,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     void goToResetScreenAndSleep(String message){
       clearConfig();
-      topLabelItem = *lang.getString(message);
-      bottomLabelTitle = emptyString;
+      menuTopText = *lang.getString(message);
+      menuBottomLabel = emptyString;
       byeIcon = &iconReset; byeIconColor = &GUI::red;
       goSleepCountdownStart = millis();          
       screen.id = SCREEN_BYE; screen.state = STATE_BYE_GOSLEEP_MESSAGE;         //we could create a screen dedicated for reset         
@@ -1774,13 +1788,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       reset_menu_item = new MenuItem(resetMenuScreen,&reset_item_selected);                // to be removed
       shutdown_menu_item = new MenuItem(shutdownMenuString, &shutdown_menu_item_selected);
 
-      ms.get_root_menu().add_item(shutdown_menu_item);
+      
       ms.get_root_menu().add_item(back_menu_item);
       ms.get_root_menu().add_item(info_menu_item);
       ms.get_root_menu().add_item(config_menu_item);       
       ms.get_root_menu().add_item(tft_rotation_menu_item);       
       ms.get_root_menu().add_item(reset_menu_item);       
       ms.get_root_menu().add_menu(profile_menu_item);
+      ms.get_root_menu().add_item(shutdown_menu_item);
       profile_menu_item->add_item(back_menu_item);
       profile_menu_item->add_item(save_profile_menu_item);
       
@@ -1812,16 +1827,16 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         case RESET_STARTUP:
           // put reset code here
           goToResetScreenAndSleep("RESET");
-          enableWizard();
+          //enableWizard();
         break;
         case BATTERY_STARTUP:
-          topLabelItem = *lang.getString("Press >1s to startup"); bottomLabelTitle = emptyString;
+          menuTopText = *lang.getString("Press >1s to startup"); menuBottomLabel = emptyString;
           goSleepCountdownStart = hwm->bootTime;
           goToBigBatteryIconScreenAndSleep();         
         break;
         case NO_FS_STARTUP:
-          topLabelItem = *lang.getString("File System");
-          bottomLabelTitle = emptyString;
+          menuTopText = *lang.getString("File System");
+          menuBottomLabel = emptyString;
           byeIcon = &iconX;
           // as the FS is not ready, there is no icon to display and no fonts as well so it will be display by default font
           screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
@@ -1836,8 +1851,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           bootScreen();
 
           if (deserializeBanks(config.getString(C_BANKS)) == nullptr){
-            topLabelItem = *lang.getString("Bank creation");
-            bottomLabelTitle = emptyString;
+            menuTopText = *lang.getString("Bank creation");
+            menuBottomLabel = emptyString;
             byeIconColor = &GUI::red; byeIcon = &iconForbid;
             screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
             DEBUG_PRINT("\n\n\n*********************** COULD NOT CREATE BANK");
@@ -2439,8 +2454,8 @@ void setup() {
       if (0/*hwm->battery.refreshed*/){        
         setBatIcon();
         if (hwm->battery.vBat<VBAT_CRIT && hwm->battery.batteryState != BAT_CHARGING){
-          topLabelItem = *lang.getString("Low Battery");
-          bottomLabelTitle = emptyString;
+          menuTopText = *lang.getString("Low Battery");
+          menuBottomLabel = emptyString;
           goSleepCountdownStart = millis();
           goToBigBatteryIconScreenAndSleep();
         }          
@@ -2479,8 +2494,8 @@ void setup() {
         }
         //#ifdef DEBUG
           // DEBUG INDICATORS OVERLAY
-          gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::zero,TFT_WIDTH/16,&GUI::defaultFcolor,&GUI::defaultBcolor,false));    
-          gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::zero,TFT_WIDTH/16,&GUI::defaultFcolor,&GUI::defaultBcolor,false));              
+          gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::zero,TFT_WIDTH/16,&GUI::defaultFcolor,&GUI::defaultBcolor));    
+          gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::zero,TFT_WIDTH/16,&GUI::defaultFcolor,&GUI::defaultBcolor));              
         //#endif
 
         //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
@@ -2939,9 +2954,8 @@ void setup() {
     void menuSystemFullRefresh(){  
       //DEBUG_PRINT("\nmenuSystemFullRefresh");
       setRootMenuItems(&ms);
-      //widgets[MENU_ICON_MIDDLE].widget->setFcolor(glowingGoldColor.value); // restore color
       GUI::glowingGoldColor.value = &menuActiveIconColor;
-      widgets[CONFIG_TEXTAREA_MESSAGE]->setText(lang.getString(" ")); // empty message
+      menuTopText = *lang.getString(" "); // empty message
     }
 
     void setRootMenuItems(MenuSystem* m){
@@ -2959,7 +2973,7 @@ void setup() {
 
       //DEBUG_PRINT("\nsetRootMenuItems name:%s numItem:%i currentComponentName: %s, menuIcon:[%s]",menu->get_name(),numItem,menuString, menuItemIcon[1]);
 
-      bottomLabelTitle = *lang.getString(getNameFromString(menuString));
+      menuBottomLabel = *lang.getString(getNameFromString(menuString));
       if (numItem == 1){
           menuItemIcon[0] = " ";
           menuItemIcon[2] = " ";
@@ -3001,9 +3015,9 @@ void setup() {
     
       uint8_t selection = menu->get_current_component_num();    
       Bank* bank = banks.get(selection);      
-      //widgets[MENU_LABEL_TITLE]->setText(&bank->name); // restore title  
+
       if (bank != nullptr){
-        bottomLabelTitle = bank->name;
+        menuBottomLabel = bank->name;
         menuItemIcon[1] = bank->icon;
 
         if (selection == numItem-1){ // last item
@@ -3020,13 +3034,11 @@ void setup() {
           menuItemIcon[2] = banks.get(selection+1)->icon;
         }  
       }else{
-        bottomLabelTitle = *lang.getString("No bank");
+        menuBottomLabel = *lang.getString("No bank");
         menuItemIcon[1] = ICON_QUIT;        
         menuItemIcon[0] = " ";        
         menuItemIcon[2] = " ";        
-      }
-      
-
+      }      
     }
 
     void menuSwitchBankFullRefresh(){  
@@ -3034,7 +3046,7 @@ void setup() {
       setBankMenuItems();
       //widgets[MENU_ICON_MIDDLE].widget->setFcolor(glowingGoldColor.value); // restore color
       GUI::glowingGoldColor.value = &menuActiveIconColor;
-      widgets[CONFIG_TEXTAREA_MESSAGE]->setText(lang.getString(" ")); // empty message
+      menuTopText = *lang.getString(" "); // empty message
     }
 
     void switchBank(){
@@ -3101,16 +3113,16 @@ void setup() {
         }
 
         if (direction == hwm->buttons[RIGHTB]->getID()) {
-          if (bank->nav.selector == bank->strips.size()) bank->nav.selector = 1;
-          else bank->nav.selector++;
+          if (bank->selector == bank->strips.size()) bank->selector = 1;
+          else bank->selector++;
         } else if (direction == hwm->buttons[LEFTB]->getID()){
-          if (bank->nav.selector == 1) bank->nav.selector = bank->strips.size();
-          else bank->nav.selector--;
+          if (bank->selector == 1) bank->selector = bank->strips.size();
+          else bank->selector--;
         }
 
-        jumpToStrip(bank->nav.selector,bank->name);
+        jumpToStrip(bank->selector,bank->name);
 
-        //DEBUG_PRINT("\t scroll(%i/%i):",bank->nav.selector,bank->nav.window);
+        //DEBUG_PRINT("\t scroll(%i/%i):",bank->selector,bank->nav.window);
         
         return true;     
     }
@@ -3162,7 +3174,7 @@ void setup() {
     bool stripAction(uint8_t trigger) {    
       Bank* bank = banks.get(screen.state);
       if (bank == nullptr) return false;
-      else return bank->getStrip(bank->nav.selector)->actionCallback(trigger);      
+      else return bank->getStrip(bank->selector)->actionCallback(trigger);      
     }
 
     void stripChangeValue(uint8_t direction, unsigned long time, uint8_t trigger){
@@ -3170,39 +3182,36 @@ void setup() {
       Bank* bank = banks.get(screen.state);    
       if (bank == nullptr) return;
 
-      if (direction == hwm->buttons[RIGHTB]->getID()){ bank->getStrip(bank->nav.selector)->increaseCallBack(time, trigger);}      
-      else if (direction == hwm->buttons[LEFTB]->getID()){ bank->getStrip(bank->nav.selector)->decreaseCallback(time, trigger);}      
+      if (direction == hwm->buttons[RIGHTB]->getID()){ bank->getStrip(bank->selector)->increaseCallBack(time, trigger);}      
+      else if (direction == hwm->buttons[LEFTB]->getID()){ bank->getStrip(bank->selector)->decreaseCallback(time, trigger);}      
 
     }
 
-    bool jumpToStrip(uint8_t id, String bankName){
-      
-      bool success = false;
+    bool jumpToStrip(uint8_t id, const String& bankName) {
 
-      uint8_t bankIndex=0;
-      Bank* bank = getBank(bankName,&bankIndex);
+      // Get the bank
+      uint8_t bankIndex = 0;
+      Bank* bank = getBank(bankName, &bankIndex);
+      if (bank == nullptr) return false;  // Early exit if the bank is not found
 
-      if (bank != nullptr){
+      // Get the strip
+      Strip* strip = bank->getStrip(id);
+      if (strip == nullptr) return false;  // Early exit if the strip is not found
 
-        Strip* strip = bank->getStrip(id);
-        if (strip != nullptr){
-          //DEBUG_PRINT("\n ^^^^^^^^^jumpToStrip (%i,%s)",id,bankName.c_str());
-          Bank* bank = jumpToBank(bankName);              
-          bank->nav.selector = strip->index;
-          
-          uint8_t formerWindow = bank->nav.window;
-          bank->nav.window = strip->win;
-          // we only refresh if we changed the window or if we display a full screen strip
-          //if (formerWindow != bank->nav.window || bank->currentLayout == LAYOUT_ZOOM)  
-            screen.focus = screen.focus - 1; 
-          success = true;
-        }
+      // Jump to the bank (make sure the returned pointer is valid)
+      Bank* targetBank = jumpToBank(bankName);
+      if (targetBank == nullptr) return false;  
 
-      }    
-  
-      return success;
+      // Set the selector to the strip's index
+      targetBank->selector = strip->index;
 
+      // Adjust screen focus (avoid underflow)
+      screen.focus--;  
+
+      return true;
     }
+
+    
 
     Bank* jumpToBank(String bankName){
       uint8_t bankIndex;
@@ -3233,7 +3242,7 @@ void setup() {
         }
       }   
       // in case of reschuffle, GUI may try to render a strip which is not existing anymore or that has changed      
-      if (bank->getStrip(bank->nav.selector) == nullptr) bank->resetStripNav();      
+      if (bank->getStrip(bank->selector) == nullptr) bank->resetStripNav();      
       return success;
     }
 
@@ -3397,7 +3406,7 @@ void setup() {
           uint8_t y = jsonInput["param"]["position"]["y"];     
           Strip* stripToDelete = bank->getStrip(x,y,window);
           uint8_t indexToDelete = stripToDelete->index;
-          Strip* currentStrip = bank->getStrip(bank->nav.selector);
+          Strip* currentStrip = bank->getStrip(bank->selector);
           if (stripToDelete != nullptr){          
               if (bank->trash(stripToDelete)){   
                   updatePositions(bank,jsonInput["param"][C_POSITIONS]);              
@@ -3409,8 +3418,8 @@ void setup() {
                     bank->resetStripNav();
                   }else{
                     // since updatePositions has shifted the index, the selector points to a strip that is not the one which was preivously displayed, we restore it
-                    bank->nav.selector = currentStrip->index;                 
-                    bank->nav.window = currentStrip->win;
+                    bank->selector = currentStrip->index;                 
+                    //bank->nav.window = currentStrip->win;
                   }
                   screen.focus = screen.focus - 1; // force refresh 
               }else{
@@ -3561,15 +3570,18 @@ void setup() {
     }
 
 
-    Bank* getBank(String name, uint8_t* index){
-      for ( *index = 0;*index<banks.size();(*index)++){          
-        //DEBUG_PRINT("\nindex:%d=>name:%s",*index,banks.get(*index)->name.c_str());
-        if (banks.get(*index)->name == name){
-          //DEBUG_PRINT("\nfound bank: %s",name.c_str());
-          return banks.get(*index);
+    Bank* getBank(const String& name, uint8_t* index) {
+        if (banks.size()<1) return nullptr;  // Prevents accessing an empty list
+
+        for (uint8_t i = 0; i < banks.size(); i++) {  
+            Bank* bank = banks.get(i);
+            if (bank && bank->name == name) {  // Ensure bank is valid before using it
+                *index = i;
+                return bank;
+            }
         }
-      }
-      return nullptr;      
+        
+        return nullptr;  // Not found
     }
 
   private:

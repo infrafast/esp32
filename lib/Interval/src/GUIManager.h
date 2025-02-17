@@ -119,10 +119,13 @@ class GUIManager : public GenericComponent {
       GUI::tft->setSwapBytes(true);
       TJpgDec.setCallback(tft_output);        
       
+      labelOfr.setDebugLevel( OFR_INFO | OFR_ERROR);
+      iconOfr.setDebugLevel( OFR_INFO | OFR_ERROR);
+
       if (labelOfr.loadFont(TTF_FONT, sizeof(TTF_FONT))) { // this consumes 20992 bytes and take ~2ms
         if (debug) DEBUG_PRINT("\nLabel Initialise error"); 
       }
-
+      
       /*
       // Open the font file
       File fontFile = LittleFS.open("/webapp/interval.ttf", "r");
@@ -136,7 +139,10 @@ class GUIManager : public GenericComponent {
       fontFile.close();*/
 
       size_t dataSize = 0;
-      dataSize = readGzFileToBuffer("/webapp/interval.ttf.gz",&fontBuffer);
+
+      #define INTERVAL_FONT_PATH "/webapp/interval.ttf.gz"
+
+      dataSize = readGzFileToBuffer(INTERVAL_FONT_PATH,&fontBuffer); 
 
       if (dataSize > 0){ // uncompress succeed
         //DEBUG_PRINT("\ndataSize: %i, sizeof(buffer):%i sizeof(TTF_ICON):%i",dataSize,sizeof(fontBuffer),sizeof(TTF_ICON));
@@ -145,12 +151,14 @@ class GUIManager : public GenericComponent {
           if (debug) DEBUG_PRINT("\nIcon Initialise error with compressed font"); 
         }
       }else{
-        if (iconOfr.loadFont(TTF_FONT, sizeof(TTF_FONT))) { //  use the default font as icon
+        /*if (iconOfr.loadFont(TTF_FONT, sizeof(TTF_FONT))) { //  use the default font as icon
         //if (iconOfr.loadFont(TTF_ICON, sizeof(TTF_ICON))) {
           if (debug) DEBUG_PRINT("\nIcon Initialise error with default font"); 
-        }
+        }*/
+       iconOfr = labelOfr;
       }
 
+      
 
       //free(fontBuffer);
 
@@ -211,7 +219,6 @@ class GUIManager : public GenericComponent {
 
 
         if (widget->refresh(force)){
-
           refreshed = true;
           TFT_eSprite* sprite = widget->sprite;
           if (sprite != nullptr){
