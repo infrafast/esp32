@@ -492,6 +492,12 @@ class OSCMixerInterface: public MixerInterface {
 
     void dropParrallelAsyncQuery(){
       strcpy(OSCCommand,"");   
+
+      if (syncDataProgress() >= 100){
+        lastQueryTime = 0;        // do not wait and trigger immediate queryState if we are complete
+        return;
+      }
+
       for (const auto& dsName : dsNames){
         if (dsName->syncIndex < dsName->getSize()){ // then are buses complete ?                                         
           if (dsName->values[dsName->syncIndex].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.            
@@ -509,6 +515,7 @@ class OSCMixerInterface: public MixerInterface {
         }
       } 
     }
+
 
     // Envoi d'une commande générique    
     virtual bool sendCommand(String command, JsonDocument param){
@@ -613,7 +620,7 @@ class BehringerMixer : public OSCMixerInterface {
       if (OSCechoAttempt == 2) interfaceState = DISCONNECTED;     
       else if (interfaceState == SYNCING_DATA){
         if (syncDataProgress() >= 100) {
-          interfaceState = CONNECTED;          
+          interfaceState = CONNECTED;
         }
       }
     }
@@ -629,8 +636,10 @@ class BehringerMixer : public OSCMixerInterface {
     }
 
     void dropSequentialSyncQuery(){      
-      if (dsNameIndex >= dsNames.size()) return;
-
+      if (dsNameIndex >= dsNames.size()){ // we've synced it all
+        lastQueryTime = 0;        // do not wait and trigger immediate queryState
+        return;
+      }
       DataSetSynced* dsName = dsNames[dsNameIndex]; //sync in serial, next dsName
 
       if (dsName->syncIndex < dsName->getSize()){ // then are buses complete ?

@@ -33,6 +33,8 @@ void socketConnectionCallback(IWebSocket &ws);
 #define WIDGET2X2W (TFT_WIDTH/2)
 #define WIDGET2X2H (WIDGET4X4H/2)
 
+#define FOCUSYES 255
+#define FOCUSNO 150
 
 ///////////////////// SYSTEM PARAMETERS ////////////////////////
 #define S_PUSHDELAY         "pushDelay"
@@ -318,19 +320,17 @@ class StripSkeleton;
 #define LAYOUT_ZOOM     0b00000001
 #define LAYOUT_DETAILS  0b00000010
 
-enum{
-  SHAPE_FULL,
-  SHAPE_1X4,
-  SHAPE_4X1,
-  SHAPE_2X2
-};
+#define SHAPE4X4 "4x4"
+#define SHAPE4X1 "4x1"
+#define SHAPE1X4 "1x4"
+#define SHAPE2X2 "2x2"
 
 class Strip : public GenericComponent{  
   #define JSON_STRIP_PROPERTY_SIZE 100
   #define  JSON_STRIP_TEMPLATE_SIZE 300
   public:
     TFT_eSprite* sprite = nullptr;
-    
+    bool focus = false;
     // logical position
     uint8_t x, y, win, index;
     
@@ -356,7 +356,12 @@ class Strip : public GenericComponent{
 
     virtual bool refresh(bool force=false){
       frontColor = colorMap[colorID].fColor;
-      backColor = colorMap[colorID].bColor;      
+      backColor = colorMap[colorID].bColor;       
+      if (focus != oldFocus){
+        oldFocus = focus;
+        refreshed = true;
+        lumi = (focus?FOCUSYES:FOCUSNO);
+      }
       return refreshed;
     }
 
@@ -532,8 +537,10 @@ class Strip : public GenericComponent{
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;    
     
-    virtual bool buildWidgets(bool _focus, uint8_t layout = LAYOUT_DETAILS){
+    virtual bool buildWidgets(/*bool _focus,*/ uint8_t layout = LAYOUT_DETAILS){
       renderError = false;
+
+      refresh();
 
       if (x>3 || y>3){
         DEBUG_PRINT("\nstrip location out of range: %d:%d",x,y);
@@ -541,66 +548,44 @@ class Strip : public GenericComponent{
         return false;
       }
 
-      focus = _focus;
-      uint8_t shape;
+      //focus = _focus;
 
-      if (layout == LAYOUT_ZOOM || size == "4x4"){
+      if (layout == LAYOUT_ZOOM || size == SHAPE4X4){
         renderX = 0;
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);
-        shape = SHAPE_FULL;
       }
-      else if (size == "1x4"){
+      else if (size == SHAPE1X4){
         renderX = x * WIDGET1X4W;
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);        
-        shape = SHAPE_1X4;
       }
-      else if (size == "4x1"){
+      else if (size == SHAPE4X1){
         renderX = 0;
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET4X1H) ;        
-        shape = SHAPE_4X1;
       }
-      else if (size == "2x2"){
+      else if (size == SHAPE2X2){
         renderX = (x * WIDGET2X2W/2);
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
-        shape = SHAPE_2X2;
       }else{
         DEBUG_PRINT("\nunsupported strip size: %s",size.c_str());
         renderError = true;
         return false;
       }      
-
-      if (focus){
-        lumi = 255;
-        //Strip::render(shape);   // call default render that draw shape outline to highlight focus
-      }else{
-        lumi = 100;           // make colors darkest for non focused items
-      }        
-
-      render(shape);  // call virtual method
+   
+      render();  // call virtual method
       return true;
 
     }
 
     uint16_t focusColor;
 
-    virtual void render(uint8_t shape){
-      DEBUG_PRINT("\nOutlineFrame renderX: %d renderY: %d, shape:%s(%d)",renderX,renderY,size.c_str(),shape);
+    virtual void render(){
+      DEBUG_PRINT("\nOutlineFrame renderX: %d renderY: %d, shape:%s",renderX,renderY,size.c_str());
       focusColor = GUI::transparentColor;
       if (focus) focusColor = frontColor;
-      switch (shape){
-        case SHAPE_FULL:{
-          gui->add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &focusColor));  
-        }break;
-        case SHAPE_1X4:{
-          gui->add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &focusColor));
-        }break;
-        case SHAPE_2X2:{
-          gui->add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &focusColor));  
-        }break;
-        case SHAPE_4X1:{
-          gui->add(new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &focusColor));
-        }break;
-      }      
+      if (size == SHAPE4X4) gui->add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &focusColor));  
+      else if ( size == SHAPE1X4) gui->add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &focusColor));
+      else if (size == SHAPE2X2) gui->add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &focusColor));  
+      else if (size == SHAPE4X1) gui->add(new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &focusColor));
     } 
 
     virtual void buildHeaderAndFooter(){
@@ -619,11 +604,11 @@ class Strip : public GenericComponent{
     uint16_t frontColor, backColor;    
     unsigned long lastCall;     
     uint8_t layout = LAYOUT_DETAILS;
-    bool focus = false;
-    uint16_t lumi = 255;
     String stripRenderErrorLabel = "Strip render error";
     bool renderError;
     Label* defaultLabel = nullptr;
+    bool oldFocus = true;
+    uint8_t lumi = 255;
 };
 
 typedef Strip* (*StripBuilderCallback)(/*String values*/);
@@ -707,33 +692,31 @@ class TextStrip : public Strip{
 
     virtual bool actionCallback(uint8_t trigger){return true;}
 
-    virtual void render(uint8_t shape) override{
+    virtual void render() override{
 
       uint8_t fontSize;
-      switch (shape){
-        case SHAPE_FULL:{
-          renderX += WIDGET4X4W/2;
-          renderY += WIDGET4X4H/4;    
-          fontSize = WIDGET4X4W / text.length() * 3.3;
-        }break;
-        case SHAPE_1X4:{
-          renderX += WIDGET1X4W/2;
-          renderY += WIDGET1X4H/4;    
-          fontSize = WIDGET1X4W / text.length() * 3.3;
-        }break;
-        case SHAPE_2X2:{
-          renderX += WIDGET2X2W/2;
-          renderY += WIDGET2X2H/4;    
-          fontSize = WIDGET2X2W / text.length() * 3.3;
-        }break;
-        case SHAPE_4X1:{
-          renderX += WIDGET4X1W/2;
-          renderY += WIDGET4X1H/4;    
-          fontSize = WIDGET4X1W / text.length() * 3.3;
-        }break;
-      }  
+      if (size == SHAPE4X4){
+        renderX += WIDGET4X4W/2;
+        renderY += WIDGET4X4H/4;    
+        fontSize = WIDGET4X4W / text.length() * 3.3;
+      }
+      else if (size == SHAPE1X4){
+        renderX += WIDGET1X4W/2;
+        renderY += WIDGET1X4H/4;    
+        fontSize = WIDGET1X4W / text.length() * 3.3;
+      }
+      else if (size == SHAPE2X2){
+        renderX += WIDGET2X2W/2;
+        renderY += WIDGET2X2H/4;    
+        fontSize = WIDGET2X2W / text.length() * 3.3;
+      }
+      else if (size == SHAPE4X1){
+        renderX += WIDGET4X1W/2;
+        renderY += WIDGET4X1H/4;    
+        fontSize = WIDGET4X1W / text.length() * 3.3;
+      }
 
-      Label* label = new Label(&text, Align::Center,&renderX,&renderY,fontSize,&frontColor,&backColor,lumi);
+      Label* label = new Label(&text, Align::Center,&renderX,&renderY,fontSize,&frontColor,&backColor,&lumi);
       //widgetHandles.add(label);          
       gui->add(label);
     }
@@ -1140,7 +1123,7 @@ class BankNavigator: public Widget{
   //#define BANK_NAME_SIZE TFT_WIDTH/15
   public:
 
-    BankNavigator(Bank* b/*, LinkedList<Widget*>* w*/, bool debug = false):Widget(&xPos, &yPos, &fC, &bC, debug){      
+    BankNavigator(Bank* b/*, LinkedList<Widget*>* w*/, bool debug = false):Widget(&xPos, &yPos, &fC, &bC, lumi, debug){      
       bank = b;
       //widgetList = w;
       oldSelector = bank->selector - 1; //this is to force first refresh
@@ -1192,11 +1175,12 @@ class BankNavigator: public Widget{
           Strip* strip = bank->strips[i];
           if (strip == nullptr) continue;
 
-          uint8_t lumi = (strip->index == bank->selector) ? 255 : 100;
-          if (strip->index == bank->selector) focusedID = strip->index;
+          /*uint8_t lumi = (strip->index == bank->selector) ? 255 : 100;
+          if (strip->index == bank->selector) focusedID = strip->index;*/
+          if (strip->focus) focusedID = strip->index;
 
-          uint16_t stripCol = GUI::luminance(colorMap[strip->colorID].bColor, lumi);
-          uint16_t stripFrame = GUI::luminance(colorMap[strip->colorID].fColor, lumi);
+          uint16_t stripCol = GUI::luminance(colorMap[strip->colorID].bColor, strip->focus?FOCUSYES:FOCUSNO);
+          uint16_t stripFrame = GUI::luminance(colorMap[strip->colorID].fColor, strip->focus?FOCUSYES:FOCUSNO);
 
           // Calculate strip position
           uint8_t cellX = (strip->x * CELL_WIDTH) + (strip->win * WIN_WIDTH) + (SPACE_BETWEEN_WIN * strip->win);
@@ -1226,7 +1210,7 @@ class BankNavigator: public Widget{
       delete uniqueID;
 
       // Display bank name
-      Label* label = new Label(&bank->name, Align::Right, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, &fC, &bC, debug);
+      Label* label = new Label(&bank->name, Align::Right, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, &fC, &bC, lumi, debug);
       label->refresh(true);
       width += label->width;
       height = max(label->height, canva->height);
@@ -3206,8 +3190,11 @@ void setup() {
       Bank* targetBank = jumpToBank(bankName);
       if (targetBank == nullptr) return false;  
 
+      for (const auto& winstrip : bank->strips) winstrip->focus = false;
+
       // Set the selector to the strip's index
       targetBank->selector = strip->index;
+      strip->focus = true;
 
       // Adjust screen focus (avoid underflow)
       screen.focus--;  

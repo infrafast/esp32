@@ -85,7 +85,7 @@ class MyIcon : public Font{
   public:
     static OpenFontRender* ofr; 
     
-    MyIcon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, uint16_t _lumi=255, bool d=false):Font(v, a, posX, posY, s, fC , bC , _lumi, d){
+    MyIcon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint8_t* _lumi = &GUI::defaultLumi, bool d=false):Font(v, a, posX, posY, s, fC , bC , _lumi, d){
       id = "Icon"+String(*posX)+"x"+String(*posY)+"~"+*v;   
       //if (debug) DEBUG_PRINT("\n new %s",id);
     };
@@ -157,9 +157,9 @@ class OSCTestStrip : public TextStrip, public StripMixer{
       return true;
     }
 
-    virtual void render(uint8_t shape){
-      TextStrip::render(shape);
-      topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor,&GUI::defaultFcolor, &GUI::silver,lumi );          
+    virtual void render(){
+      TextStrip::render();
+      topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor,&GUI::defaultFcolor, &GUI::silver,&lumi);          
       gui->add(topLabels);
       DEBUG_PRINT("\nOSCTestStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY);      
     }
@@ -191,39 +191,38 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
       return refreshed;
     }
   
-    virtual void render(uint8_t shape) override{      
+    virtual void render() override{      
 
       uint16_t h = 0, w = 0;
 
-      switch (shape){
-        case SHAPE_FULL:{
-          h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
-          w = WIDGET4X4W;
-          renderY += h/2; 
-          gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, lumi));
-        }break;
-        case SHAPE_1X4:{
-          w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
-          h = WIDGET1X4H;
-          renderX += w/2;           
-          gui->add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, lumi));
-        }break;
-        case SHAPE_2X2:{
-          h = WIDGET2X2H/2;   // height of the bar is 2 time less big than the full height of the cell          
-          uint8_t widthOffset = WIDGET2X2H/10;
-          w = WIDGET2X2W-widthOffset;
-          gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, lumi));
-        }break;
-        case SHAPE_4X1:{
-          h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
-          w = WIDGET4X1W;
-          gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, lumi));
-        }break;
-      }      
+      if (size == SHAPE4X4){
+        h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
+        w = WIDGET4X4W;
+        renderY += h/2; 
+        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &lumi));
+      }
+      else if (size == SHAPE1X4){
+        w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
+        h = WIDGET1X4H;
+        renderX += w/2;           
+        gui->add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &lumi));
+      }
+      else if (size == SHAPE2X2){
+        h = WIDGET2X2H/2;   // height of the bar is 2 time less big than the full height of the cell          
+        uint8_t widthOffset = WIDGET2X2H/10;
+        w = WIDGET2X2W-widthOffset;
+        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &lumi));
+      }
+      else if (size == SHAPE4X1){
+        h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
+        w = WIDGET4X1W;
+        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &lumi));
+      }
+
       labelX = renderX+w/2;
       labelY = renderY+h;
 
-      gui->add(new Label(&value, Align::Center,&labelX,&labelY,h*1.5,&GUI::white,&GUI::defaultBcolor, lumi));
+      gui->add(new Label(&value, Align::Center,&labelX,&labelY,h*1.5,&GUI::white,&GUI::defaultBcolor, &lumi));
 
       DEBUG_PRINT("\nsendStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
 
@@ -675,7 +674,7 @@ void userBootScreen(){
 void modalScreen(const String* topText, const String* midLabel, const String* bottomLabel){
   gui.add(new TextArea(topText, TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   gui.add(new Label(midLabel, Align::Center,&app.midScreenHoriz, &belowIconText,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
-  gui.add(new Label(bottomLabel, Align::Center,&app.midScreenHoriz, &bottomText,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,150));    
+  gui.add(new Label(bottomLabel, Align::Center,&app.midScreenHoriz, &bottomText,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));    
 }
 
 void userBankScreenBuilder(int subScreen){  
@@ -710,12 +709,12 @@ void userBankScreenBuilder(int subScreen){
       }else if (interfaceState == SYNCING_SOFTWARE){
 
         gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));   
-        modalScreen(i18n.getString("offline"),i18n.getString(stateNames[interfaceState]),i18n.getString("searching"));  
+        modalScreen(&emptyString,i18n.getString(stateNames[interfaceState]),i18n.getString("please wait"));  
         gui.add (new ProgressBarH(&mixerServer.mixerInterface->syncSoftwareProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &aboveBottomText /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
 
         //gui.add(new Arc(&mixerServer.mixerInterface->syncSoftwareProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));        
       }else{                        
-        modalScreen(&emptyString,i18n.getString(stateNames[interfaceState]),&emptyString);  
+        modalScreen(&emptyString,i18n.getString(stateNames[interfaceState]),i18n.getString("please wait"));  
         if (interfaceState == SYNCING_DATA){
           
           gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));   
@@ -723,7 +722,17 @@ void userBankScreenBuilder(int subScreen){
 
           //gui.add(new Arc(&dataProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));
         }else{
-          if (mixerServer.mixerInterface->model == MIXING_STATION_MODEL) gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));
+          if (mixerServer.mixerInterface->model == MIXING_STATION_MODEL){
+
+            if (userConfig.getInt(MIXER_AUTOMODEL_KEY) != -1){
+              modalScreen(i18n.getString("Connecting mixing station to mixer"),i18n.getString(stateNames[interfaceState]),i18n.getString("Auto connect enabled"));            
+            }else{
+              modalScreen(i18n.getString("Manually connect mixing station to mixer"),i18n.getString(stateNames[interfaceState]),i18n.getString("Auto connect disabled"));            
+            }
+
+
+            gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));
+          }
           else gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));        
         }      
       }

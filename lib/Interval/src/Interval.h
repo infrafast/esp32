@@ -918,9 +918,9 @@ void bankOverlayBuilder(uint8_t BankIndex){
 //////////////////////////////////////////////////////////////
 
 void bankScreenBuilder(uint8_t subScreen){
-  GUI::cls();
   GUI::defaultBcolor = TFT_BGCOLOR;
   GUI::defaultFcolor = TFT_FCOLOR;
+  GUI::cls();
   app.userBankScreenBuilder(subScreen);
   if (app.disabledBankRendering == true) return;
 
@@ -938,16 +938,16 @@ void bankScreenBuilder(uint8_t subScreen){
 
     if (strip != nullptr){
       DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),strip->win, bank->selector,layout);
-      if (layout == LAYOUT_ZOOM){        
-        strip->refresh();
-        strip->buildWidgets(true,LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné et focus true
+      if (layout == LAYOUT_ZOOM){
+        //strip->refresh();
+        strip->buildWidgets(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
       }else{
         for (const auto& winstrip : bank->strips) {
           // affiche tous les strips de la fenetre courante
           if (winstrip->win == strip->win){            
-            winstrip->refresh();
-            bool focus = (winstrip->index == strip->index)?true:false;
-            winstrip->buildWidgets(focus);
+            //winstrip->refresh();
+            //bool focus = (winstrip->index == strip->index)?true:false;
+            winstrip->buildWidgets(/*focus*/);
           }
         }
       } 
