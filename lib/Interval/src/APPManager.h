@@ -33,9 +33,6 @@ void socketConnectionCallback(IWebSocket &ws);
 #define WIDGET2X2W (TFT_WIDTH/2)
 #define WIDGET2X2H (WIDGET4X4H/2)
 
-#define FOCUSYES 255
-#define FOCUSNO 150
-
 ///////////////////// SYSTEM PARAMETERS ////////////////////////
 #define S_PUSHDELAY         "pushDelay"
 #define S_DCLICREACTIVITY   "dClicReactivity"
@@ -107,6 +104,7 @@ enum{
   STATE_WIZARD_END_STEP5,
   STATE_UTILS_SEARCHING_CONNECTION,
   STATE_UTILS_INFO,
+  STATE_UTILS_BRIGHTNESS,
   STATE_UTILS_CONNECTCONFIGMEDIA,
   STATE_UTILS_CONNECTWEBAPP,
   STATE_UTILS_WEBAPPCONNECTED,
@@ -172,6 +170,7 @@ void tft_rotation_item_selected(MenuComponent* p_menu_component);
 void reset_item_selected(MenuComponent* p_menu_component);
 void shutdown_menu_item_selected(MenuComponent* p_menu_component);
 void menu_selected(MenuComponent* p_menu_component);
+void brightness_menu_item_selected(MenuComponent* p_menu_component);
 
 void handleConfigConnection();  // 
 
@@ -330,7 +329,15 @@ class Strip : public GenericComponent{
   #define  JSON_STRIP_TEMPLATE_SIZE 300
   public:
     TFT_eSprite* sprite = nullptr;
-    bool focus = false;
+
+    // flag to indicate if position is out of range
+    bool renderError;
+
+    bool toggle1 = false;
+    bool toggle2 = false;
+
+    uint16_t frontColor, backColor;    
+
     // logical position
     uint8_t x, y, win, index;
     
@@ -342,6 +349,8 @@ class Strip : public GenericComponent{
     uint8_t colorID=0; 
 
     GUIManager* gui;
+
+    float brightness = 1.0;
 
     Strip(StripSkeleton* s, GUIManager* g, bool debug=false):GenericComponent(debug){
       skeleton = s;
@@ -357,12 +366,17 @@ class Strip : public GenericComponent{
     virtual bool refresh(bool force=false){
       frontColor = colorMap[colorID].fColor;
       backColor = colorMap[colorID].bColor;       
-      if (focus != oldFocus){
-        oldFocus = focus;
-        refreshed = true;
-        lumi = (focus?FOCUSYES:FOCUSNO);
-      }
       return refreshed;
+    }
+
+    void focus(bool f=true){
+      if (f){
+        DEBUG_PRINT("\n%s got focus",getTopLabel()->c_str());
+        brightness = 1.0;
+      }else{
+        brightness = 0.6;
+        DEBUG_PRINT("\n%s lost focus",getTopLabel()->c_str());
+      }
     }
 
     bool deserialize(String values){
@@ -537,7 +551,7 @@ class Strip : public GenericComponent{
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;    
     
-    virtual bool buildWidgets(/*bool _focus,*/ uint8_t layout = LAYOUT_DETAILS){
+    virtual bool buildWidgets(uint8_t layout = LAYOUT_DETAILS){
       renderError = false;
 
       refresh();
@@ -547,8 +561,6 @@ class Strip : public GenericComponent{
         renderError = true;
         return false;
       }
-
-      //focus = _focus;
 
       if (layout == LAYOUT_ZOOM || size == SHAPE4X4){
         renderX = 0;
@@ -576,39 +588,25 @@ class Strip : public GenericComponent{
 
     }
 
-    uint16_t focusColor;
-
     virtual void render(){
       DEBUG_PRINT("\nOutlineFrame renderX: %d renderY: %d, shape:%s",renderX,renderY,size.c_str());
-      focusColor = GUI::transparentColor;
-      if (focus) focusColor = frontColor;
-      if (size == SHAPE4X4) gui->add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &focusColor));  
-      else if ( size == SHAPE1X4) gui->add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &focusColor));
-      else if (size == SHAPE2X2) gui->add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &focusColor));  
-      else if (size == SHAPE4X1) gui->add(new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &focusColor));
+      if (size == SHAPE4X4) gui->add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &frontColor,&brightness));  
+      else if ( size == SHAPE1X4) gui->add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &frontColor,&brightness));
+      else if (size == SHAPE2X2) gui->add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &frontColor,&brightness));  
+      else if (size == SHAPE4X1) gui->add(new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &frontColor,&brightness));
     } 
 
-    virtual void buildHeaderAndFooter(){
-      DEBUG_PRINT("\n buildHeaderAndFooter Strip");      
-      if (renderError) defaultLabel = new Label(&stripRenderErrorLabel, Align::Center,&GUI::center, &GUI::zero,(TOP2WIDGET_SIZE)*1.2,&frontColor,&backColor); 
-      else defaultLabel = new Label(&id, Align::Center,&GUI::center, &GUI::zero,(TOP2WIDGET_SIZE)*1.2,&frontColor,&backColor); 
-      gui->add(defaultLabel);     
-    }
-    
+    virtual const String* getTopLabel()=0;
+    virtual const String* getBottomLabel()=0;
 
     JsonArray properties;
     StripSkeleton* skeleton;
     //LinkedList<Widget*> widgetHandles = LinkedList<Widget*>();
     float value = 0.0, valueMin = 0, valueMax = 1;
   protected:
-    uint16_t frontColor, backColor;    
     unsigned long lastCall;     
     uint8_t layout = LAYOUT_DETAILS;
-    String stripRenderErrorLabel = "Strip render error";
-    bool renderError;
-    Label* defaultLabel = nullptr;
-    bool oldFocus = true;
-    uint8_t lumi = 255;
+    //Label* defaultLabel = nullptr;
 };
 
 typedef Strip* (*StripBuilderCallback)(/*String values*/);
@@ -716,14 +714,10 @@ class TextStrip : public Strip{
         fontSize = WIDGET4X1W / text.length() * 3.3;
       }
 
-      Label* label = new Label(&text, Align::Center,&renderX,&renderY,fontSize,&frontColor,&backColor,&lumi);
+      Label* label = new Label(&text, Align::Center,&renderX,&renderY,fontSize,&frontColor,&backColor,&brightness);
       //widgetHandles.add(label);          
       gui->add(label);
     }
-
-    virtual void buildHeaderAndFooter() override{
-      DEBUG_PRINT("\n buildHeaderAndFooter TextStrip : empty");      
-    };
 
     virtual void deserializeProperty(String property)  {  
       // property = /text/toto   
@@ -745,6 +739,9 @@ class TextStrip : public Strip{
       delete buf;
 
     }
+
+    virtual const String* getTopLabel(){return &id;}
+    virtual const String* getBottomLabel(){return &emptyString;}  
 
     virtual bool refresh(bool force=false){
       refreshed = force;
@@ -799,20 +796,15 @@ class TwoSelectStrip : public Strip{
     virtual uint8_t getNumberOfProperties(){
       return skeleton->numberOfProperties;      
     }
- 
-    virtual void buildHeaderAndFooter() override{
-      DEBUG_PRINT("\n buildHeaderAndFooter TwoSelectStrip");
-      if (renderError) topLabels = new Top1Toggle1Label(&gui->screenGUIs,select2Content, &stripRenderErrorLabel, &toggle1,&frontColor,&backColor,&frontColor,&backColor);          
-      else topLabels = new Top1Toggle1Label(&gui->screenGUIs,select2Content, &label, &toggle1,&frontColor,&backColor,&frontColor,&backColor);          
-      gui->add(topLabels);     
-    }
 
+    virtual const String* getTopLabel(){return &id;}
+    virtual const String* getBottomLabel(){return select2Content;}     
+ 
   protected:
     Top1Toggle1Label* topLabels;
     uint8_t select2ID=1; 
     const String *select2Content;
     String select2PropertyAddress; 
-    bool toggle1 = false;
     String label = "Gain";    
 };
 
@@ -853,19 +845,14 @@ class ThreeSelectStrip: public TwoSelectStrip{
       return skeleton->numberOfProperties;      
     }
 
-    virtual void buildHeaderAndFooter() override{
-      DEBUG_PRINT("\n buildHeaderAndFooter ThreeSelectStrip");
-      if (renderError) topLabels = new Top2Toggles(&gui->screenGUIs,&stripRenderErrorLabel, select3Content, &toggle1, &toggle2,&frontColor,&backColor );          
-      topLabels = new Top2Toggles(&gui->screenGUIs,select2Content, select3Content, &toggle1, &toggle2,&frontColor,&backColor );          
-      gui->add(topLabels);       
-    }
+    virtual const String* getTopLabel(){return select2Content;}
+    virtual const String* getBottomLabel(){return select3Content;}      
 
   protected:
     uint8_t select3ID=1; 
     const String *select3Content;
     String select3PropertyAddress;
     Top2Toggles* topLabels;  
-    bool toggle2 = false;
 };
 
 
@@ -1123,7 +1110,7 @@ class BankNavigator: public Widget{
   //#define BANK_NAME_SIZE TFT_WIDTH/15
   public:
 
-    BankNavigator(Bank* b/*, LinkedList<Widget*>* w*/, bool debug = false):Widget(&xPos, &yPos, &fC, &bC, lumi, debug){      
+    BankNavigator(Bank* b/*, LinkedList<Widget*>* w*/, bool debug = false):Widget(&xPos, &yPos, &fC, &bC, brightness, debug){      
       bank = b;
       //widgetList = w;
       oldSelector = bank->selector - 1; //this is to force first refresh
@@ -1168,19 +1155,13 @@ class BankNavigator: public Widget{
       Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &navFrameColor, &GUI::defaultBcolor);
       canva->refresh(true);
 
-      uint8_t focusedID = 0;
-
       // Draw each strip on the navigation UI
       for (uint8_t i = 0; i < bank->strips.size(); i++) {
           Strip* strip = bank->strips[i];
           if (strip == nullptr) continue;
 
-          /*uint8_t lumi = (strip->index == bank->selector) ? 255 : 100;
-          if (strip->index == bank->selector) focusedID = strip->index;*/
-          if (strip->focus) focusedID = strip->index;
-
-          uint16_t stripCol = GUI::luminance(colorMap[strip->colorID].bColor, strip->focus?FOCUSYES:FOCUSNO);
-          uint16_t stripFrame = GUI::luminance(colorMap[strip->colorID].fColor, strip->focus?FOCUSYES:FOCUSNO);
+          uint16_t stripCol = GUI::luminance(colorMap[strip->colorID].bColor, strip->brightness);
+          uint16_t stripFrame = GUI::luminance(colorMap[strip->colorID].fColor, strip->brightness);
 
           // Calculate strip position
           uint8_t cellX = (strip->x * CELL_WIDTH) + (strip->win * WIN_WIDTH) + (SPACE_BETWEEN_WIN * strip->win);
@@ -1203,14 +1184,14 @@ class BankNavigator: public Widget{
       width = canva->width + CANVA_VS_BANKNAME_SPACE;
 
       // Display focused strip ID
-      String idStr = String(focusedID);
+      String idStr = String(bank->selector);
       Label* uniqueID = new Label(&idStr, Align::Center, &GUI::zero, &GUI::zero, NAV_HEIGHT, &GUI::white, &GUI::transparentColor);
       uniqueID->refresh(true);
       uniqueID->sprite->pushToSprite(canva->sprite, canva->width / 2 - NAV_HEIGHT / 2, height / 2);
       delete uniqueID;
 
       // Display bank name
-      Label* label = new Label(&bank->name, Align::Right, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, &fC, &bC, lumi, debug);
+      Label* label = new Label(&bank->name, Align::Right, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, &fC, &bC, brightness, debug);
       label->refresh(true);
       width += label->width;
       height = max(label->height, canva->height);
@@ -1462,9 +1443,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
    
     int16_t hthird3xPos = TFT_HTHIRD*2+TFT_HQUARTER/2;
 
-    String leftIcon,rightIcon;
+    String leftIcon,rightIcon, brightIcon = ICON_BRIGHTNESS;
 
     bool disabledBankRendering = false;   // this is to stop rendering the bank
+
+    // header strip GUI properties
+    struct{
+      String topLabel;
+      bool topToggle;
+      uint16_t topFcolor;
+      uint16_t topBcolor;
+
+      String bottomLabel;
+      bool bottomToggle;
+    }headerStrip;
+   
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
     #define MENU_ICON_SIZE TFT_WIDTH/3
@@ -1499,7 +1492,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     const char* tftRotationMenuScreen{ICON_TFT_ROTATE":ROTATE"};
     const char* resetMenuScreen{ICON_RESET":RESET"};
     const char* shutdownMenuString{ICON_POWER":OFF"};
-    
+    const char* brightnessMenuString{ICON_BRIGHTNESS":BRIGHTNESS"};
 
     ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
     I18n lang = I18n();
@@ -1670,6 +1663,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         for (JsonPair kv : root) {
           //DEBUG_PRINT("\n%s = %s",kv.key().c_str(),kv.value().as<String>().c_str());          
           bank = new Bank(kv.key().c_str(),kv.value().as<String>(),&stripFactory);
+          bank->init();
           /*if (bank->strips.size()>0) banks.add(bank);
           else delete bank; // bank has no strips and is threfore invalid*/
           banks.add(bank);
@@ -1712,6 +1706,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       LittleFS.remove(SYSTEM_FILE_NAME);
       persistants.clear();
       persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);      
+      persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    //default brightness 
     }
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
@@ -1733,6 +1728,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       applySystemSettings();
       applyConfigSettings();
+
+      GUI::screenBrightness = persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
+      if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
+      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;
 
       hwm->init();
       gui->init();         
@@ -1773,6 +1772,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       tft_rotation_menu_item = new MenuItem(tftRotationMenuScreen,&tft_rotation_item_selected);
       reset_menu_item = new MenuItem(resetMenuScreen,&reset_item_selected);                // to be removed
       shutdown_menu_item = new MenuItem(shutdownMenuString, &shutdown_menu_item_selected);
+      brightness_menu_item = new MenuItem(brightnessMenuString, &brightness_menu_item_selected);
 
       
       ms.get_root_menu().add_item(back_menu_item);
@@ -1782,8 +1782,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       ms.get_root_menu().add_item(reset_menu_item);       
       ms.get_root_menu().add_menu(profile_menu_item);
       ms.get_root_menu().add_item(shutdown_menu_item);
+      ms.get_root_menu().add_item(brightness_menu_item);
       profile_menu_item->add_item(back_menu_item);
       profile_menu_item->add_item(save_profile_menu_item);
+
       
 
       hookLangToMenu();
@@ -1834,7 +1836,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           // perform all application initialization
           //DEBUG_PRINT("\n\n\n********");
 
-          bootScreen();
+          bootScreen();       
 
           if (deserializeBanks(config.getString(C_BANKS)) == nullptr){
             menuTopText = *lang.getString("Bank creation");
@@ -1843,7 +1845,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
             DEBUG_PRINT("\n\n\n*********************** COULD NOT CREATE BANK");
           }else{
-            resetToBankScreen();
+            goToBankScreen();
           }
         break;
       }
@@ -1937,6 +1939,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             case STATE_UTILS_WEBAPPCONNECTED:
               restoreScreen();
             break;
+            case STATE_UTILS_BRIGHTNESS:
+              handleClicBrightnessButton(buttonID);    
+            break;            
           }
         break;
         case SCREEN_BANK:
@@ -1974,6 +1979,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             case STATE_UTILS_WEBAPPCONNECTED:
               restoreScreen();
             break;
+            case STATE_UTILS_BRIGHTNESS:
+              handleClicBrightnessButton(buttonID);    
+            break;            
           }
         break;
         case SCREEN_BANK:
@@ -2039,6 +2047,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             case STATE_UTILS_WEBAPPCONNECTED:
               restoreScreen();
             break;
+            case STATE_UTILS_BRIGHTNESS:
+              // the screen is not refreshed during the HOLD workflow to avoid flickering, so we do it when we release the button
+              //saveBrightness();    // uncomment this one and comment the next line in case you want to manage hold            
+              handleClicBrightnessButton(buttonID);  
+            break;
           }
         break;
         case SCREEN_BANK:
@@ -2063,11 +2076,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
         case SCREEN_UTILS:
           switch(screen.state){
-            case STATE_UTILS_SEARCHING_CONNECTION:
-
-            break;
-            case STATE_UTILS_INFO:
-
+            case STATE_UTILS_BRIGHTNESS:
+              #define BRIGHTNESS_HOLD_INCREMENT 0.003
+              //changeBrightness(buttonID,BRIGHTNESS_HOLD_INCREMENT); // create too muchdrawback with the transparency management
             break;
           }
         break;
@@ -2091,6 +2102,32 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       else bankMenu->prev(true);
       menuSwitchBankFullRefresh();
     }   
+  }
+
+  void saveBrightness(){
+    screen.focus -= 1; // refresh screen
+    persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    
+  }
+
+  void handleClicBrightnessButton(uint8_t buttonID){
+    #define STEP_BRIGHTNESS_INCREMENT BRIGHTNESS_MAX/10
+    if (buttonID == hwm->buttons[MIDDLEB]->getID() || buttonID == hwm->onOff.getID()){
+      restoreMenu();
+    }else{
+      changeBrightness(buttonID,STEP_BRIGHTNESS_INCREMENT);
+      // we refresh screen and save after each single press
+      saveBrightness();
+    }      
+  }
+
+  void changeBrightness(uint8_t buttonID, float increment){
+    if (buttonID == hwm->buttons[LEFTB]->getID()){
+      if (GUI::screenBrightness > BRIGHTNESS_MIN) GUI::screenBrightness -= increment;
+      if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
+    }else if (buttonID == hwm->buttons[RIGHTB]->getID()){
+      if (GUI::screenBrightness < BRIGHTNESS_MAX) GUI::screenBrightness += increment;
+      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;
+    }    
   }
 
   void handleMenuButton(uint8_t buttonID){
@@ -2160,7 +2197,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO));        
     }
 
-    void resetToBankScreen(){
+    void goToBankScreen(){
       screen.id = persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);; //screen.id = SCREEN_BANK;        
       screen.state = persistants.getUChar(PERSISTANT_SCREEN_STATE,0);
       //screen.state is bank ID;
@@ -2169,7 +2206,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state); 
         //DEBUG_PRINT("\n\n\n*********************** RESETING TO BANK: %i",screen.state );                     
       }
-      oldScreen.value = screen.value - 1;      
+      oldScreen.value = screen.value - 1;
     }
 
     void refreshWiFiSignalIcon(){
@@ -2530,7 +2567,7 @@ void setup() {
               userWizardstepFlow();
             break;
             case STATE_WIZARD_END_STEP5:
-              resetToBankScreen();
+              goToBankScreen();
             break;  
           }
         break;
@@ -3176,6 +3213,10 @@ void setup() {
     }
 
     bool jumpToStrip(uint8_t id, const String& bankName) {
+      // get the current window and bank, before jumping to the strip
+      Bank* currentBank = banks.get(screen.state);        
+      Strip* currentStrip = currentBank->getStrip(currentBank->selector);      
+      uint8_t currentWindow = currentStrip->win;
 
       // Get the bank
       uint8_t bankIndex = 0;
@@ -3190,18 +3231,30 @@ void setup() {
       Bank* targetBank = jumpToBank(bankName);
       if (targetBank == nullptr) return false;  
 
-      for (const auto& winstrip : bank->strips) winstrip->focus = false;
-
-      // Set the selector to the strip's index
       targetBank->selector = strip->index;
-      strip->focus = true;
-
-      // Adjust screen focus (avoid underflow)
-      screen.focus--;  
+      // Set the selector to the strip's index
+      focus(strip,targetBank);
+      
+      // Adjust screen focus if we changed the window or the bank
+      if (currentBank != targetBank || currentWindow != strip->win) screen.focus--;  
 
       return true;
     }
 
+    void focus(Strip* strip, Bank* bank){
+
+      // give focus to the strip
+      for (const auto& winstrip : bank->strips) winstrip->focus(false);
+      strip->focus(true);    // full brightness
+
+      // update strip header
+      headerStrip.topLabel = *strip->getTopLabel(); 
+      headerStrip.bottomLabel = *strip->getBottomLabel();
+      headerStrip.topToggle = strip->toggle1;
+      headerStrip.bottomToggle = strip->toggle2;
+      headerStrip.topFcolor = strip->frontColor;
+      headerStrip.topBcolor = strip->backColor;      
+    }
     
 
     Bank* jumpToBank(String bankName){
@@ -3740,6 +3793,7 @@ void setup() {
     MenuItem* tft_rotation_menu_item;
     MenuItem* reset_menu_item;   
     MenuItem* shutdown_menu_item; 
+    MenuItem* brightness_menu_item; 
 
     void hookBankToMenu(){
       if (bankMenu != nullptr) delete bankMenu;

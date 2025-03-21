@@ -857,6 +857,14 @@ class Network : public HWComponent2State{
 
     uint16_t wiFiTimeout = 7000;
 
+    void setWifiPower(){
+      //#define WIFI_POWER WIFI_POWER_MINUS_1dBm // Set WiFi RF power output to lowest level
+      #define WIFI_POWER WIFI_POWER_8_5dBm
+      //#define WIFI_POWER WIFI_POWER_11dBm // Set WiFi RF power output to middle level
+      //#define WIFI_POWER WIFI_POWER_19_5dBm // Set WiFi RF power output to highest level      
+      WiFi.setTxPower(WIFI_POWER); // WiFi.setTxPower(WIFI_POWER_19_5dBm); // maximum power => https://github.com/G6EJD/ESP32-8266-Adjust-WiFi-RF-Power-Output/ 
+    }
+
     void setConnectTimeout() {
         // Plage définie entre 2000 ms et 8999 ms
         const uint16_t minTimeout = 2000;
@@ -1537,7 +1545,7 @@ class AccessPoint : public Network{
       id = "AccessPoint";
       media = WIFI_MEDIA;     
       SSID = *ssid+String(random(99)); // we create a different SSID each time to force the client (laptop) to see it as a new network and avoid asking to renew the DHCP lease, which oculd lead to failing getting an IP address.      
-      WiFi.setTxPower(WIFI_POWER_19_5dBm);       // highest power outpu
+      setWifiPower();
       AP = true;
     }
 
@@ -1580,7 +1588,8 @@ class AccessPoint : public Network{
       
       WiFi.softAP(SSID,"",WIFI_CHANNEL,VISIBLE,MAX_AP_CONNECTION);         
       //WiFi.softAP(SSID,"");     // doesnt fix the AP stability issue    
-      WiFi.setTxPower(WIFI_POWER_19_5dBm); // maximum power => https://github.com/G6EJD/ESP32-8266-Adjust-WiFi-RF-Power-Output/      
+      setWifiPower();      
+      //WiFi.setMinSecurity(WIFI_AUTH_WEP);      // https://www.esp32.com/viewtopic.php?t=32109 
       IP = WiFi.softAPIP();
       if (debug) DEBUG_PRINT("\nAccessPoint.init() softAPIP(%s) => %s",SSID.c_str(),IP.toString().c_str());        
     }

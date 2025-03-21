@@ -585,6 +585,7 @@ void xTaskBackground(void *pvParameters);
 #define PERSISTANT_SCREEN_STATE   "screenState"
 #define PERSISTANT_SCREEN_ID      "screenID"
 #define PERSISTANT_TFT_ROTATION   "rotation"
+#define PERSISTANT_BRIGHTNESS     "brightness"
 
 #include "HWManager.h"
 #include "GUIManager.h"
@@ -775,6 +776,14 @@ void shutdown_menu_item_selected(MenuComponent* p_menu_component) {
   goDeepSleep();
 }
 
+void brightness_menu_item_selected(MenuComponent* p_menu_component) {
+  /*if (GUI::screenBrightness == 1.0) GUI::screenBrightness = 0.5;
+  else GUI::screenBrightness = 1.0;
+  screen.focus = screen.focus - 1; // force redraw*/
+  screen.id = SCREEN_UTILS;
+  screen.state = STATE_UTILS_BRIGHTNESS;
+}
+
 void save_profile_item_selected(MenuComponent* p_menu_component) {
   DEBUG_PRINT("\nsave_profile_item_selected ");
 }
@@ -913,6 +922,8 @@ void bankOverlayBuilder(uint8_t BankIndex){
   }
 }
 
+
+
 //////////////////////////////////////////////////////////////
 ////                SCREENBUILDERS CALLBACKS           ///////
 //////////////////////////////////////////////////////////////
@@ -951,7 +962,14 @@ void bankScreenBuilder(uint8_t subScreen){
           }
         }
       } 
-      strip->buildHeaderAndFooter();                     
+
+      // header
+      Top2Toggles* header;
+      if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, app.lang.getString("Strip render error"), &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
+      else header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, &app.headerStrip.bottomLabel, &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
+      gui.add(header);
+
+      app.focus(strip,bank); // give focus to the strip
 
     }else{
       DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
@@ -1061,7 +1079,7 @@ void promptScreenBuiler(uint8_t id){}
 
 void addLeftRightIcons(){
     DEBUG_PRINT("addLeftRightIcons()");
-    GUI::tft->fillScreen(GUI::defaultBcolor);    
+    GUI::cls(GUI::defaultBcolor);  
     gui.add(new Icon(&app.leftIcon, Align::Right,&app.hquarter2xPos,&app.menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
     gui.add(new Icon(&app.rightIcon, Align::Left,&app.hquarter3xPos,&app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
     addTopandBottomMenuLabel();    
@@ -1096,30 +1114,40 @@ void buildNetworkScreen(){
   gui.add(new Label(&hwm.configMedia->SSID, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
 }
 
+int16_t brightYpos = app.menuIconYpos*1.2;
 
 void utilsScreenBuilder(uint8_t state){
   DEBUG_PRINT("\nutilsScreenBuilder(%d)",state);
+  setMenuColors();  // in case it's called directly from the wizard@startup
   switch (state) {
+    case STATE_UTILS_BRIGHTNESS:{
+      DEBUG_PRINT("\nSTATE_UTILS_BRIGHTNESS");
+      GUI::cls();
+      //gui.add(new ProgressBarH(&GUI::screenBrightness /*v*/, BRIGHTNESS_MIN /*min*/,BRIGHTNESS_MAX /*max*/, &GUI::zero /*x*/, &app.menuIconYpos /*y*/, TFT_WIDTH /*w*/, TFT_HEIGHT/6 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::gold /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
+      gui.add(new Label(app.lang.getString("BRIGHTNESS"), Align::Center,&app.midScreenHoriz, &GUI::six,MENU_TITLE_SIZE*0.8,&GUI::defaultFcolor,&GUI::defaultBcolor));            
+      gui.add(new Arc(&GUI::screenBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &app.midScreenHoriz, &app.midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
+      gui.add(new Icon(&app.brightIcon, Align::Center,&app.midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
+      gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%",100));            // alter = 100%
+    }break;
+    ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SEARCHING_CONNECTION:{
 
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_INFO:
-      setMenuColors();  // in case it's called directly from the wizard@startup
       DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());
-      GUI::tft->fillScreen(GUI::menuBackGroundColor);
-      app.menuTopText = *app.lang.getString("Info item");
-      gui.add(new Label(&app.menuTopText, Align::Center,&app.midScreenHoriz, &GUI::zero,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));
-      gui.add(new Label(&app.vBatLabel, Align::Center,&app.midScreenHoriz, &app.midScreenHoriz,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
+      GUI::cls(GUI::menuBackGroundColor);
+
+      gui.add(new TextArea(app.lang.getString("!\"#$%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&app.midScreenHoriz,&app.midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
+
+      gui.add(new Label(&app.vBatLabel, Align::Center,&app.midScreenHoriz, &app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
     break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_CONNECTCONFIGMEDIA:
-      setMenuColors();  // in case it's called directly from the wizard@startup
       buildNetworkScreen();
       DEBUG_PRINT("\nSTATE_UTILS_CONNECTCONFIGMEDIA: %s",app.menuTopText.c_str());
     break;
     case STATE_UTILS_CONNECTWEBAPP:
-      setMenuColors();  // in case it's called directly from the wizard@startup
       app.configIconGlowingRedColor.value = &GUI::unUsedColor;
       app.leftIconColor = GUI::menuActiveIconColor;
       addLeftRightIcons();  
@@ -1134,8 +1162,7 @@ void utilsScreenBuilder(uint8_t state){
       app.rightIcon = ICON_FOOTSWITCH;
       DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP: %s",app.menuTopText.c_str());
     break;
-    case STATE_UTILS_WEBAPPCONNECTED:   
-      setMenuColors();  // in case it's called directly from the wizard@startup
+    case STATE_UTILS_WEBAPPCONNECTED:         
       addLeftRightIcons();
       //gui.add(new Label(&app.configClientIP, Align::Left,&app.quarter1xPos, &app.belowMenuIcon,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));
       //gui.add(new Label(&hwm.configIP, Align::Right,&app.quarter4xPos, &app.belowMenuIcon,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      

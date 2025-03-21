@@ -18,9 +18,9 @@
   FTPServer ftp;
 #endif
 
-///////////////////////////////////////////////////////////////////
-/////////////////////                         /////////////////////
-/////////////////////    STRIP DEFINITIONS    /////////////////////
+//////////////////////////////////////////////////////////////////
+/////////////////////                         ////////////////////
+/////////////////////    STRIP DEFINITIONS    ////////////////////
 /////////////////////                         ////////////////////
 //////////////////////////////////////////////////////////////////
 #define ICON_SENDRETURN_STRIP "="
@@ -74,6 +74,7 @@ float mixerPendingBarWidth = 100.0;
 
 int8_t previousInterfaceState = DISCONNECTED;
 
+String dbUnit = "dB";
 
 ///////////////////////////////////////////////////////////////////
 /////////////////////                         /////////////////////
@@ -85,7 +86,7 @@ class MyIcon : public Font{
   public:
     static OpenFontRender* ofr; 
     
-    MyIcon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint8_t* _lumi = &GUI::defaultLumi, bool d=false):Font(v, a, posX, posY, s, fC , bC , _lumi, d){
+    MyIcon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Font(v, a, posX, posY, s, fC , bC , _brightness, d){
       id = "Icon"+String(*posX)+"x"+String(*posY)+"~"+*v;   
       //if (debug) DEBUG_PRINT("\n new %s",id);
     };
@@ -159,7 +160,7 @@ class OSCTestStrip : public TextStrip, public StripMixer{
 
     virtual void render(){
       TextStrip::render();
-      topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor,&GUI::defaultFcolor, &GUI::silver,&lumi);          
+      topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor,&GUI::defaultFcolor, &GUI::silver,&brightness);          
       gui->add(topLabels);
       DEBUG_PRINT("\nOSCTestStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY);      
     }
@@ -199,30 +200,31 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
         h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
         w = WIDGET4X4W;
         renderY += h/2; 
-        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &lumi));
+        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }
       else if (size == SHAPE1X4){
         w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
         h = WIDGET1X4H;
         renderX += w/2;           
-        gui->add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &lumi));
+        gui->add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }
       else if (size == SHAPE2X2){
         h = WIDGET2X2H/2;   // height of the bar is 2 time less big than the full height of the cell          
         uint8_t widthOffset = WIDGET2X2H/10;
         w = WIDGET2X2W-widthOffset;
-        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &lumi));
+        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+
       }
       else if (size == SHAPE4X1){
         h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
         w = WIDGET4X1W;
-        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &lumi));
+        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }
 
       labelX = renderX+w/2;
       labelY = renderY+h;
 
-      gui->add(new Label(&value, Align::Center,&labelX,&labelY,h*1.5,&GUI::white,&GUI::defaultBcolor, &lumi));
+      gui->add(new NumericLabel(&value,1, Align::Center,&labelX,&labelY,h*1.5,&GUI::white,&GUI::defaultBcolor, &brightness, "dB"));      
 
       DEBUG_PRINT("\nsendStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
 
@@ -237,11 +239,12 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
 };
 
 
-bool setChBusMute(bool mute,uint8_t chID, uint8_t busID){
+bool setChBusMute(bool mute,uint8_t chID, uint8_t busID){  
       JsonDocument command;
       command["ch"] = chID;
       command["bus"] = busID;
       command["on"] = !mute;
+      DEBUG_PRINT("\nsetChBusMute(%d,%d,%d)",mute,chID,busID);
       return mixerServer.mixerInterface->sendCommand("setChBusMute",command);
 }
 
@@ -295,6 +298,43 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       if (delta != 0.0) setChGain();
       return delta;
     }
+
+    virtual void render() override{      
+
+      uint16_t h = 0, w = 0;
+
+      if (size == SHAPE4X4){
+        h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
+        w = WIDGET4X4W;
+        renderY += h/2; 
+        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+      }
+      else if (size == SHAPE1X4){
+        w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
+        h = WIDGET1X4H;
+        renderX += w/2;           
+        gui->add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+      }
+      else if (size == SHAPE2X2){
+        w = WIDGET2X2W;   // width of the bar is 2 time less big than the full width of the cell
+        h = WIDGET2X2H;
+        renderX += w/2;   
+        renderY += h/2;      
+        RingMeter* ringMeter = new RingMeter(&value, valueMin, valueMax, 1, &renderX,&renderY, h/2, &dbUnit,&GUI::blue,&GUI::transparentColor);
+        gui->add(ringMeter);
+      }
+      else if (size == SHAPE4X1){
+        h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
+        w = WIDGET4X1W;
+        gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+      }     
+
+      DEBUG_PRINT("\nchGainStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
+
+      //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
+    }
+
+
 
     virtual float decreaseCallback(unsigned long time,uint8_t trigger){
       float delta = Strip::decreaseCallback(time,trigger);
@@ -855,7 +895,9 @@ void userBankScreenBuilder(int subScreen){
 //////////////////////////////////////////////////////////////////
 {
   app.refresh();
-  mixerServer.refresh();
+  
+  if (screen.id == SCREEN_BANK)
+   mixerServer.refresh();         //only refresh mixer, (including scanning and detection) if we are on the main screen
 
   static String  previousInterfaceSubState = "";
 
