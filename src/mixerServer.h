@@ -144,14 +144,14 @@ class MixerServer: public HWComponent2State{
       // Ouvrir le fichier JSON
       File file = LittleFS.open(INTERFACES_FILENAME, "r");
       if (!file) {
-        DEBUG_PRINT("\nImpossible d'ouvrir %s",INTERFACES_FILENAME);
+        //DEBUG_PRINT("\nImpossible d'ouvrir %s",INTERFACES_FILENAME);
       }
 
       // Lire le contenu du fichier dans un String
       DeserializationError error = deserializeJson(interfaceDoc, file);
 
       if (error) {
-        DEBUG_PRINT("\nErreur de désérialisation Interfaces: %s",error.f_str());
+        //DEBUG_PRINT("\nErreur de désérialisation Interfaces: %s",error.f_str());
       }
 
       file.close();    
@@ -162,7 +162,7 @@ class MixerServer: public HWComponent2State{
 
     // Déconnexion
     void disconnect() {
-      DEBUG_PRINT("\n[-------server state > DISCONNECTED -----]");      
+      //DEBUG_PRINT("\n[-------server state > DISCONNECTED -----]");      
       if (mixerInterface != nullptr){
         delete mixerInterface;
       }      
@@ -201,11 +201,11 @@ class MixerServer: public HWComponent2State{
       String configIP = *config->getString(SERVER_IP_KEY);
       if (!serverIP.fromString(configIP) || configIP=="") serverIP = IPAddress(0,0,0,0);  
 
-      DEBUG_PRINT("\n * * MIXER SERVER_IP_KEY = %s, serverIP = %s",configIP.c_str(),serverIP.toString().c_str());
+      //DEBUG_PRINT("\n * * MIXER SERVER_IP_KEY = %s, serverIP = %s",configIP.c_str(),serverIP.toString().c_str());
 
       // *************** autodetect:  **********************      
       if (discovery()){
-        DEBUG_PRINT(" - D I S C O V E R Y - ");
+        //DEBUG_PRINT(" - D I S C O V E R Y - ");
         
         serverIP = network->IP;      
         serverIP[3] = 255 ; // broadcast IP for Behringer and MS
@@ -213,15 +213,19 @@ class MixerServer: public HWComponent2State{
         msAPIPort = 8080;    
         msUDPPort = 3000;
 
-        if (!toggleBehringerMSTest) 
-          setBehringerTest();
+        if (!toggleBehringerMSTest){
+          setBehringerTest();          
+          //and then, test the next behringer port
+          if (behringerUDPPort == 10024) behringerUDPPort = 10023;
+          else behringerUDPPort = 10024;          
+        }                  
         else
           setMixingStationTest();
 
         toggleBehringerMSTest = !toggleBehringerMSTest;
 
       }else{
-        DEBUG_PRINT(" - U S E R   D E F I N E D - ");
+        //DEBUG_PRINT(" - U S E R   D E F I N E D - ");
         // *************** manual :  **********************        
         behringerUDPPort = config->getInt(SERVER_PORT_KEY); 
         msUDPPort = config->getInt(SERVER_PORT_KEY); 
@@ -240,14 +244,14 @@ class MixerServer: public HWComponent2State{
     }
 
     void testMS_REST_API(){
-      DEBUG_PRINT("\nTesting msREST IP:%s/%i ",serverIP.toString().c_str(),msAPIPort);      
+      //DEBUG_PRINT("\nTesting msREST IP:%s/%i ",serverIP.toString().c_str(),msAPIPort);      
       msHttpClientParam.host = serverIP;
       msHttpClientParam.port = msAPIPort; 
       network->asyncConnect(&msHttpClientParam);
     }
 
     void testMS_WS_API(){
-      DEBUG_PRINT("\nTesting msWS IP:%s/%i ",serverIP.toString().c_str(),msAPIPort);      
+      //DEBUG_PRINT("\nTesting msWS IP:%s/%i ",serverIP.toString().c_str(),msAPIPort);      
       if (network->clientSocketState() == WebSocketReadyState::CLOSED)
         network->clientSocketOpen(serverIP.toString().c_str(), msAPIPort, "/");
 
@@ -263,7 +267,7 @@ class MixerServer: public HWComponent2State{
     }
 
     void setMixingStationTest(){      
-      DEBUG_PRINT("\nsetMixingStationTest()");     
+      //DEBUG_PRINT("\nsetMixingStationTest()");     
       pingParam.data->expectedStr = OSC_MS_PRE OSC_MS_PING;
       pingParam.port = msUDPPort;
       testMS_REST_API();  //trigger async answer               
@@ -271,15 +275,13 @@ class MixerServer: public HWComponent2State{
     }
 
     void setBehringerTest(){    
-      DEBUG_PRINT("\nsetBehringerTest()");
+      //DEBUG_PRINT("\nsetBehringerTest()");
       pingParam.data->expectedStr = BEHRINGER_QUERY;
-      if (behringerUDPPort == 10024) behringerUDPPort = 10023;
-      else behringerUDPPort = 10024;
       pingParam.port = behringerUDPPort;          
     }
 
     void pingCallBack(bool _success, OSCValues* data, int _port){
-      DEBUG_PRINT("\npingCallBack %s:%d => %s",data->expectedStr,_port,_success?"OK":"failed");      
+      //DEBUG_PRINT("\npingCallBack %s:%d => %s",data->expectedStr,_port,_success?"OK":"failed");      
       lastDetectionAttemptTime = 0;   // don't wait next cycle      
       if(_success){
         // set the flags used by setBehringerTest() and testMS() to instantiate mixerinterface
@@ -287,17 +289,17 @@ class MixerServer: public HWComponent2State{
           behringerOnline = true;
           behringerUDPPort = _port;
         }else msOnline = true;        
-        DEBUG_PRINT("\nsetting flags: MS:%d BEHRINGER:%d",msOnline,behringerOnline);
+        //DEBUG_PRINT("\nsetting flags: MS:%d BEHRINGER:%d",msOnline,behringerOnline);
       }else{
         pingLatency = (pingLatency + 20) % 250;             
         pingParam.timeOut = pingLatency;        
-        DEBUG_PRINT("\nincreasing latency");
+        //DEBUG_PRINT("\nincreasing latency");
       }     
     }
 
     bool testBehringer2(){      
       
-      DEBUG_PRINT("\nTesting BehringerUDP IP:%s/%i",serverIP.toString().c_str(),behringerUDPPort);
+      //DEBUG_PRINT("\nTesting BehringerUDP IP:%s/%i",serverIP.toString().c_str(),behringerUDPPort);
       data.expectedStr = BEHRINGER_QUERY;
       //osc->setClient(serverIP,behringerUDPPort);
       if (osc->blockingPing(serverIP,behringerUDPPort,&data,pingLatency)){
@@ -313,7 +315,7 @@ class MixerServer: public HWComponent2State{
 
     void initInterface(const char* _name){
       String udpLogString="instantiate "+String(_name)+" interface";
-      DEBUG_PRINT("\n%s",udpLogString.c_str());
+      //DEBUG_PRINT("\n%s",udpLogString.c_str());
       state = CONNECTED;      
       LogUDP::sendLog(udpLogString.c_str(),hwm.network->udp);
       if (discovery()) serverIP = network->udp->remoteIP(); 
@@ -337,7 +339,7 @@ class MixerServer: public HWComponent2State{
       IPAddress remoteMixerIP;
       remoteMixerIP.fromString(data.sValue);
       if (serverIP[0] != remoteMixerIP[0]){
-        DEBUG_PRINT("\nRemoteMixer IP (%s)->(%s) differs from ServerIP (%s)",data.sValue,remoteMixerIP.toString().c_str(),serverIP.toString().c_str());
+        //DEBUG_PRINT("\nRemoteMixer IP (%s)->(%s) differs from ServerIP (%s)",data.sValue,remoteMixerIP.toString().c_str(),serverIP.toString().c_str());
         //serverIP = remoteMixerIP;          
       }           
 
@@ -373,7 +375,7 @@ class MixerServer: public HWComponent2State{
       JsonDocument input;    
       auto error = deserializeJson(input, message);
       if (error) {
-          DEBUG_PRINT("\nwsMixerServer OnMessageCallback parsing failed: %s",error.c_str()); 
+          //DEBUG_PRINT("\nwsMixerServer OnMessageCallback parsing failed: %s",error.c_str()); 
           input.clear();
           return;
       }
@@ -397,23 +399,23 @@ class MixerServer: public HWComponent2State{
 
     void processJsonData(const char* param){     
       
-      DEBUG_PRINT("\nServerProcessRESTcallback: %s",param);
+      //DEBUG_PRINT("\nServerProcessRESTcallback: %s",param);
       lastDetectionAttemptTime = 0;   // don't wait next cycle to create interface      
       JsonDocument doc;
       
       auto error = deserializeJson(doc, param);
       if (error) {
-          DEBUG_PRINT("\nServerProcessRESTcallback parsing failed: %s",error.c_str());
+          //DEBUG_PRINT("\nServerProcessRESTcallback parsing failed: %s",error.c_str());
           doc.clear();
           return;
       }
       uint8_t status = doc[API_STATUS];
 
       if (status == API_OK){
-        DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API is ON ----");
+        //DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API is ON ----");
         msOnline = true;  // do not set state = CONNECTED as this will be done by setmixer otherwise connect() will not trigger creation of mixing station
       }else{
-        DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API not responding ----");
+        //DEBUG_PRINT("\n\t\t\t\t\t\t ---- Mixing REST API not responding ----");
         msOnline = false;
       }
       doc.clear();

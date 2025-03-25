@@ -102,7 +102,9 @@ public:
       #ifdef DEBUG
         unsigned long timeOut = millis();
         Serial.begin(115200);
-        while(!Serial && millis()-timeOut<3000);  //we give 3 seconds to serial to initialize
+        Serial.setDebugOutput(true);
+        while(!Serial && millis()-timeOut<2000);  //we give 3 seconds to serial to initialize
+
       #endif    
 
       #ifdef USE_NETWORK
@@ -239,7 +241,7 @@ public:
       if (ap == nullptr){
         ap = new AccessPoint(apName, true); 
         hwComponents.add(ap);
-        if (debug) DEBUG_PRINT("\n setting the configMedia to ap");
+        //if (debug) DEBUG_PRINT("\n setting the configMedia to ap");
       }
       ap->init();
       configMedia = ap;

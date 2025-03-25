@@ -283,7 +283,7 @@ class OSCInterface{
 void OSCpingTask(void* parameter) {
   // Récupérer les paramètres passés à la tâche
   OSCPingTaskParameters* params = static_cast<OSCPingTaskParameters*>(parameter);
-  //OSC_DEBUG_PRINT("pingTask=>%s",params->ipAddress);
+  OSC_DEBUG_PRINT("pingTask=>%s:%i",params->ip.toString().c_str(),params->port);
   if (params->osc->blockingPing(params->ip,params->port,params->data,params->timeOut)) {
     params->callback(true, params->data,params->port);  // Appel du callback en cas de succès
   } else {

@@ -144,7 +144,7 @@ public:
     static AlteredColor glowingGoldColor;
 
     static const int16_t zero;
-    static const int16_t six;
+    static const int16_t three;
     static const int16_t center;
     static const int16_t y1;
 
@@ -279,7 +279,7 @@ class Widget : public GUI{
 
     Widget(const int16_t* xPos, const int16_t* yPos, const uint16_t* fC, const uint16_t* bC, const float* _brightness = &GUI::fullBrightness, bool d=false):brightness(_brightness),GUI(d){
       x = xPos; y = yPos; fColor = fC; bColor = bC;
-      id = "Widget"+String(*xPos)+"x"+String(*yPos); 
+      //if (debug) DEBUG_PRINT("\n new Widget(%i,%i,%i,%i,%.2f,%i)",*xPos, *yPos, *fC, *bC, *brightness, debug);
     }
 
     void setFcolor(const uint16_t* fC){
@@ -293,13 +293,13 @@ class Widget : public GUI{
     virtual bool refresh(bool force=false){
       refreshed = force;      
       if (oldX != *x || oldY != *y || oldfColor != *fColor || oldbColor != *bColor || oldBrightness != *brightness || refreshed){
-        if (debug){
+        /*if (debug){
           DEBUG_PRINT("\n%s.refreshed()",id.c_str());
           if (oldfColor != *fColor) DEBUG_PRINT("\tfColor %i=>%i",this->id.c_str(),oldfColor,*fColor);
           if (oldbColor != *bColor) DEBUG_PRINT("\tbColor %i=>%i",this->id.c_str(),oldbColor,*bColor);
           if (oldX != *x) DEBUG_PRINT("\tx %i=>%i",this->id.c_str(),oldX,*x);
           if (oldY != *y) DEBUG_PRINT("\ty %i=>%i",this->id.c_str(),oldY,*y);
-        }
+        }*/
         oldBrightness = *brightness;
         oldX=*x; oldY=*y;
         oldfColor = *fColor; oldbColor = *bColor;
@@ -321,7 +321,7 @@ class Widget : public GUI{
         sprite->createSprite(width,height);     
         if (color == TFT_TRANSPARENT) sprite->fillSprite(TFT_TRANSPARENT);
         else sprite->fillSprite(GUI::luminance(color,*brightness * GUI::screenBrightness * 255));            
-        if (debug){DEBUG_PRINT("\tsprite(%i,%i)",width,height);}
+        //if (debug){DEBUG_PRINT("\tsprite(%i,%i)",width,height);}
       }     
     }
 
@@ -406,7 +406,7 @@ class Font : public Widget{
 
       if(Widget::refresh(force) || *value != oldValue){       
         if (debug){
-          if (*value != oldValue) DEBUG_PRINT("\n%s changed value from '%s' to '%s'", this->id.c_str(), oldValue.c_str(), value->c_str());
+          //if (*value != oldValue) DEBUG_PRINT("\n%s changed value from '%s' to '%s'", this->id.c_str(), oldValue.c_str(), value->c_str());
         }
 
 
@@ -535,7 +535,7 @@ class TextArea : public Widget{
       if (*text != oldText || force){
 
         LineBreakInfo lbi = computeLineBreakInfo(*text, width);
-        if (debug) DEBUG_PRINT("\nlbi.lines:%i, lbi.maxWidth:%i, lbi.maxHeight:%i\n",lbi.lines,lbi.maxWidth,lbi.maxHeight);
+        //if (debug) DEBUG_PRINT("\nlbi.lines:%i, lbi.maxWidth:%i, lbi.maxHeight:%i\n",lbi.lines,lbi.maxWidth,lbi.maxHeight);
 
         std::vector<String> allWords = getWords(*text);
         //if (debug) for (auto &&word : allWords) DEBUG_PRINT("\n%s",word.c_str());
@@ -566,7 +566,7 @@ class TextArea : public Widget{
         createSprite();
 
         for (auto &&nextPhrase : phrases){
-          if (debug) DEBUG_PRINT("\n%s",nextPhrase.c_str());
+          //if (debug) DEBUG_PRINT("\n%s",nextPhrase.c_str());
           //tft.drawString(nextPhrase, 0, offsetY, FONT4);
 
           Label* label = new Label(&nextPhrase,phraseAlign,&GUI::zero,&GUI::zero,size,fColor,bColor,brightness,debug);
@@ -736,7 +736,7 @@ class NumericLabel : public Label{
           sprintf(buffer, "0%d", (int)*number * alter);
           convertedNumber = buffer;          
         }else convertedNumber = String((float)*number * alter,(unsigned int)decimal); // set precision
-        if (debug){DEBUG_PRINT("\n%s changed number from %.2f to %.2f", this->id.c_str(), oldNumber, *number);}
+        //if (debug){DEBUG_PRINT("\n%s changed number from %.2f to %.2f", this->id.c_str(), oldNumber, *number);}
         convertedNumber += unit;
 
         oldNumber = *number;
@@ -791,7 +791,7 @@ class AnimatedIcon : public Icon{
       refreshed = force;
 
       if (oldIconArray != iconArray){
-        if (debug){DEBUG_PRINT("\n%s changed value to <%s>", id.c_str(), iconArray[0].c_str());}
+        //if (debug){DEBUG_PRINT("\n%s changed value to <%s>", id.c_str(), iconArray[0].c_str());}
         refreshed = true;
         oldIconArray = iconArray;
       }      
@@ -801,7 +801,10 @@ class AnimatedIcon : public Icon{
       //Icon::setText(&iconArray[frame]);
       currentIcon = iconArray[frame];
       Icon::refresh(refreshed);    
-      if (refreshed){if (debug) DEBUG_PRINT("%s frame:%i",id.c_str(),frame);}    
+      if (refreshed){
+        //if (debug) DEBUG_PRINT("%s frame:%i",id.c_str(),frame);
+      }
+          
 
       switch (animateType){
         case ANIMATE_ONCE:
@@ -854,14 +857,15 @@ class FromToWidget : public Widget{
     }
   
     virtual bool refresh(bool force=false){ 
-      refreshed = force;
       sprite = nullptr;   // we set that as the GUIManager would need to know if we use a sprite or not, by default, no need.
 
       if (oldBrightness != *brightness){
+        //DEBUG_PRINT("\n%s BRIGHTNESS HAS CHANGED %.2f -> %.2f",id.c_str(),oldBrightness,*brightness);
         oldBrightness = *brightness ;
         force = true;   // we changed the brightness so we redraw the complete widget
-        DEBUG_PRINT("\n%s BRIGHTNESS HAS CHANGED",id.c_str());
       }
+      
+      refreshed = force;
 
       //Widget::refresh(force);
 
@@ -880,7 +884,7 @@ class FromToWidget : public Widget{
         refreshContent(true); //when the color change we redraw the complete arc
         oldfColor = *fColor;  
         refreshed = true;
-        if (true){DEBUG_PRINT("\n%s.refreshed color, new: %i",this->id.c_str(),*fColor);}
+        //if (true){DEBUG_PRINT("\n%s.refreshed color, new: %i",this->id.c_str(),*fColor);}
       }
 
       return refreshed;
@@ -924,14 +928,14 @@ class Arc : public FromToWidget{
 
         oldValue = *value;
         refreshed = true;
-        if (debug){DEBUG_PRINT("\n%s.refreshed value, new: %.2f",id.c_str(),*value);}
+        //if (debug){DEBUG_PRINT("\n%s.refreshed value, new: %.2f",id.c_str(),*value);}
       }
 
       if (to != from || force){
         refreshContent(force);  // or we may redrw the arc if its value change or it was forced to
         from = to;      
         refreshed = true;
-        if (debug){DEBUG_PRINT("\n%s.refreshed angle, new: %i",this->id.c_str(),to);}
+        //if (debug){DEBUG_PRINT("\n%s.refreshed angle, new: %i",this->id.c_str(),to);}
       }
       return refreshed;
     }
@@ -984,7 +988,7 @@ class RingMeter : public Arc{
         refreshUnitLabel();
         oldUnit = *unit;
         refreshed = true;
-        if (debug){DEBUG_PRINT("\n%s.refreshed unit, new: %s",this->id.c_str(),unit->c_str());}
+        //if (debug){DEBUG_PRINT("\n%s.refreshed unit, new: %s",this->id.c_str(),unit->c_str());}
       } 
       
       return refreshed;      
@@ -1488,7 +1492,7 @@ const uint16_t GUI::menuBackGroundColor = TFT_WHITE;
 uint16_t GUI::configMediaIconColor = TFT_RED;*/
 
 const int16_t GUI::zero = 0;
-const int16_t GUI::six = 6;
+const int16_t GUI::three = 3;
 const int16_t GUI::center = TFT_WIDTH/2;
 const int16_t GUI::y1 = TOP2WIDGET_SIZE+1;
 

@@ -24,13 +24,13 @@ using WSclientOnMessageCallback = std::function<void(const char*)>;
  ////                CLIENT SOCKET CALLBACKS                  ///////
 ////////////////////////////////////////////////////////////////////
 void defaultWSclientOnMessage(const char* message){
-  DEBUG_PRINT("\nWebsocketclient Message reçu : %s",message);
+  //DEBUG_PRINT("\nWebsocketclient Message reçu : %s",message);
 }
 
 WSclientOnMessageCallback userWSclientOnMessage = defaultWSclientOnMessage;
 
 void socketClientOnOpenCallback(IWebSocket &ws) {
-  DEBUG_PRINT("\nConnecté au serveur WebSocket !");
+  //DEBUG_PRINT("\nConnecté au serveur WebSocket !");
   /*const char message[]{ "Hello from Arduino client!" };
   ws.send(WebSocketDataType::TEXT, message, strlen(message));  */
 }
@@ -41,17 +41,17 @@ void socketClientOnMessageCallback(IWebSocket &ws, const WebSocketDataType dataT
       userWSclientOnMessage(message);
       break;
     case net::WebSocketDataType::BINARY:
-      DEBUG_PRINT("\nDonnées binaires reçues");
+      //DEBUG_PRINT("\nDonnées binaires reçues");
       break;
   }                     
 }
 
 void socketClientOnErrorCallback(WebSocketError error) {
-  DEBUG_PRINT("\nErreur WebSocket : %d",static_cast<int>(error));
+  //DEBUG_PRINT("\nErreur WebSocket : %d",static_cast<int>(error));
 }
 
 void socketClientOnClose(IWebSocket &ws, WebSocketCloseCode code, const char *reason,uint16_t length){
-  DEBUG_PRINT("\nWebSocket closed: %d %s",static_cast<int>(code),reason);
+  //DEBUG_PRINT("\nWebSocket closed: %d %s",static_cast<int>(code),reason);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -66,7 +66,7 @@ class HWComponent: public GenericComponent{
     }
 
     virtual void stop(){
-      DEBUG_PRINT("\n%s stop()",id.c_str());
+      //DEBUG_PRINT("\n%s stop()",id.c_str());
     }
 };
 
@@ -85,7 +85,7 @@ class HWComponent2State : public HWComponent{
       if (previousState != state || force){
         previousState = state;
         if (debug){
-          DEBUG_PRINT("\n%s changed state to: %i",id.c_str(),state);
+          //DEBUG_PRINT("\n%s changed state to: %i",id.c_str(),state);
         }
         refreshed = true;
       }
@@ -140,11 +140,11 @@ class AnalogIn : public HWComponent{
       
       if (deltaPercentage >= refreshPercentageThreshold || force){
         if (debug){
-          DEBUG_PRINT("\n%s (%d->%d)",id.c_str(),value,v);
+          //DEBUG_PRINT("\n%s (%d->%d)",id.c_str(),value,v);
         }
         value = v;        
         if (debug){
-          DEBUG_PRINT("\tchanged to: %u (%d>%d)",value,deltaPercentage,refreshPercentageThreshold);
+          //DEBUG_PRINT("\tchanged to: %u (%d>%d)",value,deltaPercentage,refreshPercentageThreshold);
         }
         refreshed = true;
         
@@ -241,7 +241,7 @@ class BatteryMonitor : public HWComponent{
         
         previousVBat = vBat;
         if (debug){
-          DEBUG_PRINT("\n%s changed to: %.3f readSum:%i averageReading:%i delta:%.3f",id.c_str(),vBat,readSum, averageReading,/*roundedDelta*/delta);          
+          //DEBUG_PRINT("\n%s changed to: %.3f readSum:%i averageReading:%i delta:%.3f",id.c_str(),vBat,readSum, averageReading,/*roundedDelta*/delta);          
         }        
         
         indicator = mapFloatToInt(vBat,VBAT_MIN,VBAT_MAX,0,BAT_MAX_LEVEL-1);
@@ -877,7 +877,7 @@ class Network : public HWComponent2State{
         if (wiFiTimeout < minTimeout) 
             wiFiTimeout = minTimeout;
 
-        DEBUG_PRINT("\nsetWiFiConnectTimeout(): %i",wiFiTimeout);
+        //DEBUG_PRINT("\nsetWiFiConnectTimeout(): %i",wiFiTimeout);
     }
 
     String serialize(){
@@ -921,15 +921,15 @@ class Network : public HWComponent2State{
       HWComponent2State::stop();
      
       if (WiFi.getMode() == WIFI_AP_STA){
-        if (debug) DEBUG_PRINT("\tStopping STA, AP only"); 
+        //if (debug) DEBUG_PRINT("\tStopping STA, AP only"); 
         WiFi.mode(WIFI_AP);  // not required f we consider disconnectWifi is about shuting down STA, so no need to 
       }else if (WiFi.getMode() == WIFI_STA){
-        if (debug) DEBUG_PRINT("\tWiFi off");
+        //if (debug) DEBUG_PRINT("\tWiFi off");
         WiFi.disconnect();
         WiFi.mode(WIFI_OFF);
       }else{
         // if we are in AP mode only, we do nothing
-         if (debug) DEBUG_PRINT("\tNo Change on WiFI, already turned OFF (AP only)");
+         //if (debug) DEBUG_PRINT("\tNo Change on WiFI, already turned OFF (AP only)");
       }
       delay(100);
       //esp_wifi_stop();
@@ -970,7 +970,7 @@ class WiFiEth : public Network{
     }
 
     void init(){
-      if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
+      //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
       tcpipInit();  // so ethernet can benefit from getting mac address and other low level function even if WiFi is not up      
       // if enabled is true it means wde want to use the ethernet shield, so we try to initialize if
       
@@ -988,13 +988,13 @@ class WiFiEth : public Network{
         // test if ethernet module is present and instantiate class accordingly
         Ethernet.begin(ethMac,100,100);
         if (Ethernet.hardwareStatus() == EthernetNoHardware){
-          if (debug) DEBUG_PRINT("\n%s !!! THERE IS NO ETHERNET HW !!!",id.c_str());
+          //if (debug) DEBUG_PRINT("\n%s !!! THERE IS NO ETHERNET HW !!!",id.c_str());
           ethEnabled = false;
         }else{
-          if (debug) DEBUG_PRINT("\n%s Using WiFi & Ethernet",id.c_str());
+          //if (debug) DEBUG_PRINT("\n%s Using WiFi & Ethernet",id.c_str());
         }
       }else{
-        if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
+        //if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
       }
       if (!ethEnabled){
         // power off the ethernet
@@ -1010,28 +1010,28 @@ class WiFiEth : public Network{
     }
 
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){
-      DEBUG_PRINT("\nclientSocketOpen(%s,%d,%s)",host,port,path);
+      //DEBUG_PRINT("\nclientSocketOpen(%s,%d,%s)",host,port,path);
      
       if (state != CONNECTED){
-        DEBUG_PRINT("\t failed, network not connected!");
+        //DEBUG_PRINT("\t failed, network not connected!");
         return false;
       } 
       if (media == CABLE_MEDIA){
         if (wsEthClient!= nullptr){
           if (!wsEthClient->open(host, port, path)){
-            DEBUG_PRINT("\t open wsEthClient failed!");
+            //DEBUG_PRINT("\t open wsEthClient failed!");
             return false;
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){
           if (!wsWiFiClient->open(host, port, path)){
-            DEBUG_PRINT("\t open wsWiFiClient failed!");
+            //DEBUG_PRINT("\t open wsWiFiClient failed!");
             return false;
           }
         }
       }
-      DEBUG_PRINT("\t success");
+      //DEBUG_PRINT("\t success");
       return true;
     }
 
@@ -1040,13 +1040,13 @@ class WiFiEth : public Network{
         if (wsEthClient!= nullptr){      
           if (wsEthClient->getReadyState() == WebSocketReadyState::OPEN){
             wsEthClient->send(WebSocketDataType::TEXT, message, strlen(message));
-            DEBUG_PRINT("\nwsEthClientSend(%s)",message);
+            //DEBUG_PRINT("\nwsEthClientSend(%s)",message);
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){      
           wsWiFiClient->send(WebSocketDataType::TEXT, message, strlen(message));
-          DEBUG_PRINT("\nwsWiFiClientSend(%s)",message);
+          //DEBUG_PRINT("\nwsWiFiClientSend(%s)",message);
         }
       }      
     }
@@ -1066,22 +1066,22 @@ class WiFiEth : public Network{
     
     
     virtual WebSocketReadyState clientSocketState(){
-      DEBUG_PRINT("\nWebSocketReadyState()");
+      //DEBUG_PRINT("\nWebSocketReadyState()");
       if (media == CABLE_MEDIA){
         if (wsEthClient!= nullptr) return wsEthClient->getReadyState();
       }else{
         if (wsWiFiClient!= nullptr) return wsWiFiClient->getReadyState();
       }
-      DEBUG_PRINT(": CLOSED");
+      //DEBUG_PRINT(": CLOSED");
       return WebSocketReadyState::CLOSED;      
     }
 
 
     virtual void setSSID(String ssid, String pwd){
       Network::setSSID(ssid,pwd);
-      DEBUG_PRINT("\nsetSSID(%s,%s)",ssid,pwd);                 
+      //DEBUG_PRINT("\nsetSSID(%s,%s)",ssid,pwd);                 
       if (media != CABLE_MEDIA){  // priority on Ethernet
-        DEBUG_PRINT("\n    !!!! Disconnecting WiFI !!!!",ssid,pwd);     
+        //DEBUG_PRINT("\n    !!!! Disconnecting WiFI !!!!",ssid,pwd);     
         stopWiFi();
         state = DISCONNECTED;       
         startWifi(ssid, pwd);
@@ -1102,7 +1102,7 @@ class WiFiEth : public Network{
       WiFi.setSleep(false); // Désactiver le mode veille Wi-Fi
       WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); // Reconfigurer DHCP    */
 
-      if (debug) DEBUG_PRINT("\nstartWifi(%s,%s)",SSID.c_str(),pwd.c_str());                
+      //if (debug) DEBUG_PRINT("\nstartWifi(%s,%s)",SSID.c_str(),pwd.c_str());                
       WiFi.begin(ssid,pwd);
       lastWiFiAttempt = millis();      
       _newWifiAttempt = false;      
@@ -1110,7 +1110,7 @@ class WiFiEth : public Network{
 
     void stopEthernet(){
       Network::stop();
-      if (debug) DEBUG_PRINT("\teth CSPin input");
+      //if (debug) DEBUG_PRINT("\teth CSPin input");
       pinMode(CSPin, INPUT);
       // 
       pinMode(CSPin, OUTPUT);
@@ -1168,7 +1168,7 @@ class WiFiEth : public Network{
                   disconnectWifi();
                   // we just connected ETH so we do everything related to ETH specialized object instanciation
                   IP = Ethernet.localIP();         
-                  if (debug) DEBUG_PRINT("\nEthernet.begin() => got IP:%s",IP.toString().c_str());  
+                  //if (debug) DEBUG_PRINT("\nEthernet.begin() => got IP:%s",IP.toString().c_str());  
                   if (client == NULL) client = new EthernetClient();
                   if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
                   if (udp == NULL) udp = new EthernetUDP;
@@ -1178,7 +1178,7 @@ class WiFiEth : public Network{
 
                 }
               }else{
-                if (debug) DEBUG_PRINT(".");
+                //if (debug) DEBUG_PRINT(".");
               }
           }
         }else{
@@ -1223,7 +1223,7 @@ class WiFiEth : public Network{
             if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(100)) == pdTRUE){
 
               IP = WiFi.localIP();
-              if (debug) DEBUG_PRINT("\nWifi.begin() => got IP: %s, %idb",IP.toString().c_str(),WiFi.RSSI());
+              //if (debug) DEBUG_PRINT("\nWifi.begin() => got IP: %s, %idb",IP.toString().c_str(),WiFi.RSSI());
               if (client == NULL) client = new WiFiClient();
               if (server == NULL){ server = new WiFiServer(80,3);}
               if (udp == NULL) udp = new WiFiUDP;
@@ -1278,7 +1278,7 @@ class WiFiEth : public Network{
 
       if (refreshed){
         if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(1000)) == pdTRUE){
-          if (debug) DEBUG_PRINT("\n%s changed state => cable:%i, media:%i",id.c_str(),cable,media);
+          //if (debug) DEBUG_PRINT("\n%s changed state => cable:%i, media:%i",id.c_str(),cable,media);
           // common instantiation to both Wifi and Ethernet goes here
           if (state == CONNECTED){
             // client has been instantiated before
@@ -1304,7 +1304,7 @@ class WiFiEth : public Network{
               SSID = WiFi.SSID();
               gateway = WiFi.gatewayIP();
               lastConnectedSSID = SSID;
-              DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
+              //DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
               unpauseWiFi();
             }else{
               // ETHERNET
@@ -1339,7 +1339,7 @@ class WiFiEth : public Network{
 
     void onInternetPing(bool online) {
         internet = online;
-        DEBUG_PRINT("\n\n\n\t\t\t * * * * PING %s * * * *",internet?"OK":"fail");
+        //DEBUG_PRINT("\n\n\n\t\t\t * * * * PING %s * * * *",internet?"OK":"fail");
         if (userInternetCallback !=nullptr) userInternetCallback(&internet);
     }
 
@@ -1361,20 +1361,20 @@ class WiFiEth : public Network{
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
-      DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
+      //DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
       if (clientParam->host[3] == 255){
-        DEBUG_PRINT("\t=>broadcast, stop.");  
+        //DEBUG_PRINT("\t=>broadcast, stop.");  
         return false;
       }
 
       if (clientParam->URL == ""){
-        DEBUG_PRINT("\t=>empty URL invalid, stop.");  
+        //DEBUG_PRINT("\t=>empty URL invalid, stop.");  
         return false;
       }
 
       // Si nous sommes déjà en train de tenter une connexion, on ne relance pas la tâche
       if (clientParam->isClientConnecting ) {
-        DEBUG_PRINT("\tconnection pending, no more attempt allowed, stop.");
+        //DEBUG_PRINT("\tconnection pending, no more attempt allowed, stop.");
         //clientParam->client->stop();
         //vTaskDelete(httpTaskHandle);
         //clientParam->taskHandle = nullptr;
@@ -1550,12 +1550,12 @@ class AccessPoint : public Network{
     }
 
     ~AccessPoint(){
-      if(debug) DEBUG_PRINT("\n~AccessPoint()");
+      //if(debug) DEBUG_PRINT("\n~AccessPoint()");
       WiFi.mode(WIFI_STA);        
       if (server != NULL){
-        DEBUG_PRINT("\nTRACE 22");
+        //DEBUG_PRINT("\nTRACE 22");
         delete server;
-        DEBUG_PRINT("\nTRACE 23");
+        //DEBUG_PRINT("\nTRACE 23");
       }
     }
 
@@ -1578,10 +1578,10 @@ class AccessPoint : public Network{
 
       #ifdef USE_NETWORK
         WiFi.mode(WIFI_AP_STA);        
-        if (debug) DEBUG_PRINT("\n WiFi.mode(WIFI_AP_STA)");        
+        //if (debug) DEBUG_PRINT("\n WiFi.mode(WIFI_AP_STA)");        
       #else
         WiFi.mode(WIFI_AP);
-        if (debug) DEBUG_PRINT("\n WiFi.mode(WIFI_AP)");
+        //if (debug) DEBUG_PRINT("\n WiFi.mode(WIFI_AP)");
       #endif     
       WiFi.setAutoConnect(false); WiFi.setAutoReconnect(false);
 
@@ -1591,7 +1591,7 @@ class AccessPoint : public Network{
       setWifiPower();      
       //WiFi.setMinSecurity(WIFI_AUTH_WEP);      // https://www.esp32.com/viewtopic.php?t=32109 
       IP = WiFi.softAPIP();
-      if (debug) DEBUG_PRINT("\nAccessPoint.init() softAPIP(%s) => %s",SSID.c_str(),IP.toString().c_str());        
+      //if (debug) DEBUG_PRINT("\nAccessPoint.init() softAPIP(%s) => %s",SSID.c_str(),IP.toString().c_str());        
     }
 
     bool refresh(bool force=false) {      
@@ -1605,11 +1605,11 @@ class AccessPoint : public Network{
 
       if (refreshed){
         if (state == CONNECTED){
-          if (debug) DEBUG_PRINT("\nCient connected to AP");
+          //if (debug) DEBUG_PRINT("\nCient connected to AP");
           if (server == NULL) server = new WiFiServer(80,1);         
           server->begin();
         }else{
-          if (debug) DEBUG_PRINT("\nCient disconnected from AP");
+          //if (debug) DEBUG_PRINT("\nCient disconnected from AP");
           if (server != NULL){if (debug) DEBUG_PRINT("\nDELETING SERVER");delete server; server  = NULL;} 
         }                
       }

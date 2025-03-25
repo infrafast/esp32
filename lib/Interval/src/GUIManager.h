@@ -120,11 +120,11 @@ class GUIManager : public GenericComponent {
       GUI::tft->setSwapBytes(true);
       TJpgDec.setCallback(tft_output);        
       
-      labelOfr.setDebugLevel( OFR_INFO | OFR_ERROR);
-      iconOfr.setDebugLevel( OFR_INFO | OFR_ERROR);
+      /*labelOfr.setDebugLevel( OFR_INFO | OFR_ERROR);
+      iconOfr.setDebugLevel( OFR_INFO | OFR_ERROR);*/
 
       if (labelOfr.loadFont(TTF_FONT, sizeof(TTF_FONT))) { // this consumes 20992 bytes and take ~2ms
-        if (debug) DEBUG_PRINT("\nLabel Initialise error"); 
+        DEBUG_PRINT("\nLabel Initialise error"); 
       }
       
       /*
@@ -148,8 +148,8 @@ class GUIManager : public GenericComponent {
       if (dataSize > 0){ // uncompress succeed
         //DEBUG_PRINT("\ndataSize: %i, sizeof(buffer):%i sizeof(TTF_ICON):%i",dataSize,sizeof(fontBuffer),sizeof(TTF_ICON));
         if (iconOfr.loadFont(fontBuffer.buffer, dataSize)) { // this consumes 20992 bytes and take ~2ms      
-        //if (iconOfr.loadFont(TTF_ICON, sizeof(TTF_ICON))) {
-          if (debug) DEBUG_PRINT("\nIcon Initialise error with compressed font"); 
+          //if (iconOfr.loadFont(TTF_ICON, sizeof(TTF_ICON))) {
+          DEBUG_PRINT("\nIcon Initialise error with compressed font"); 
         }
       }else{
         /*if (iconOfr.loadFont(TTF_FONT, sizeof(TTF_FONT))) { //  use the default font as icon
@@ -210,7 +210,7 @@ class GUIManager : public GenericComponent {
         Widget* widget = screenGUIs.get(widgetIndex);
         if (!widget){
           //we have to protect the GUI manager in case widget queue is empty
-          DEBUG_PRINT("\n!%i-no widget",widgetIndex);
+          //DEBUG_PRINT("\n!%i-no widget",widgetIndex);
           return false;
         }
 
@@ -249,9 +249,9 @@ class GUIManager : public GenericComponent {
 
       if (debug){
         if (roundTrip>RTRIP){
-          DEBUG_PRINT("\ncause TRIP" );
+          //DEBUG_PRINT("\ncause TRIP" );
         }else{
-          DEBUG_PRINT("\ncause SIZE");        
+          //DEBUG_PRINT("\ncause SIZE");        
         }
         //DEBUG_PRINT("\t\trtrip:%i , rloop:%i, windex:%i/%i",roundTrip,renderLoop,widgetIndex,screenGUIs.size());
       }

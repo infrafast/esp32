@@ -4,7 +4,7 @@
 "QUIT":"QUITTER",
 "File Error":"Erreur de fichier",
 "Connect":"Connectez votre PC/mobile au WiFi ci dessous ou branchez un cable ethernet à la pédale.",
-"Open browser":"Ouvrez un navigateur web a l'adresse ci dessous. Utilisez http:// et pas https://",
+"Open browser":"Ouvrez un navigateur web a l'adresse ci dessous. Attention à http (pas https)",
 "Connected":"Connecté",
 "Press button":"Vous avez déjà un navigateur connecté. Appuyez sur un bouton pour sortir.",
 "Press >1s to startup":"Appuyer >1s pour démarrer"

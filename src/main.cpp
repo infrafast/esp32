@@ -4,13 +4,14 @@
 //constexpr uint16_t kBufferMaxSize{512};
 
 #define USE_NETWORK
+#define DEBUG_OSC
+#define USE_FTP
+
 //#define TFT_BGCOLOR   TFT_DARKGREY
 //#define TFT_FCOLOR    TFT_SILVER
 
 #include "Interval.h"
 #include "mixerServer.h"
-
-#define USE_FTP
 
 #if defined(USE_FTP) && defined(USE_NETWORK)
   #include "ESP-FTP-Server-Lib.h"
@@ -162,7 +163,7 @@ class OSCTestStrip : public TextStrip, public StripMixer{
       TextStrip::render();
       topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor,&GUI::defaultFcolor, &GUI::silver,&brightness);          
       gui->add(topLabels);
-      DEBUG_PRINT("\nOSCTestStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY);      
+      //DEBUG_PRINT("\nOSCTestStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY);      
     }
 
   private:
@@ -226,7 +227,7 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
 
       gui->add(new NumericLabel(&value,1, Align::Center,&labelX,&labelY,h*1.5,&GUI::white,&GUI::defaultBcolor, &brightness, "dB"));      
 
-      DEBUG_PRINT("\nsendStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
+      //DEBUG_PRINT("\nsendStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
 
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
@@ -244,7 +245,7 @@ bool setChBusMute(bool mute,uint8_t chID, uint8_t busID){
       command["ch"] = chID;
       command["bus"] = busID;
       command["on"] = !mute;
-      DEBUG_PRINT("\nsetChBusMute(%d,%d,%d)",mute,chID,busID);
+      //DEBUG_PRINT("\nsetChBusMute(%d,%d,%d)",mute,chID,busID);
       return mixerServer.mixerInterface->sendCommand("setChBusMute",command);
 }
 
@@ -320,7 +321,7 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
         h = WIDGET2X2H;
         renderX += w/2;   
         renderY += h/2;      
-        RingMeter* ringMeter = new RingMeter(&value, valueMin, valueMax, 1, &renderX,&renderY, h/2, &dbUnit,&GUI::blue,&GUI::transparentColor);
+        RingMeter* ringMeter = new RingMeter(&value, valueMin, valueMax, 1, &renderX,&renderY, h/2, &dbUnit,&GUI::blue,&GUI::transparentColor,&brightness);
         gui->add(ringMeter);
       }
       else if (size == SHAPE4X1){
@@ -329,7 +330,7 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
         gui->add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }     
 
-      DEBUG_PRINT("\nchGainStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
+      //DEBUG_PRINT("\nchGainStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
 
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
@@ -474,7 +475,7 @@ String mixerDemoJsonString(){
 void QueryingDemoMixer(bool internet){
   demoIP = "";
   if (internet){
-    DEBUG_PRINT("\nQuerying demo mixer");    
+    //DEBUG_PRINT("\nQuerying demo mixer");    
     IPAddress demoServer(82,65,4,93);
     OSCInterface osc(hwm.network);
     //osc.setClient(demoServer,10023);
@@ -484,9 +485,9 @@ void QueryingDemoMixer(bool internet){
 
     if(osc.blockingPing(demoServer,10023,&data,hwm.network->WANlatency)){
         demoIP = "82.65.4.93";                // should be retrieved by an http request
-        DEBUG_PRINT("\tDemo Mixer responded");    
+        //DEBUG_PRINT("\tDemo Mixer responded");    
     }else{
-      DEBUG_PRINT("\tDemo Mixer didn't respond");    
+      //DEBUG_PRINT("\tDemo Mixer didn't respond");    
     }
   }
   String jsonString;
@@ -544,7 +545,7 @@ bool userHTMLJsonInput(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
     if (serverConnection == "offline"){
       mixerServer.offline = true;
       jsonAnswer->callback = RET_RELOAD_BANKS;  // when offline we reload the banks to adapt the number of channel to the selected mixer
-      jsonAnswer->value = "";      
+      jsonAnswer->value = "";     
     }else{
       mixerServer.offline = false;    // do not reload bank, this will be done if interface is connected 
       jsonAnswer->callback = RET_SAVEBUTTON;
@@ -585,13 +586,13 @@ String userPongCallback(){
 
 /////////////////////    NETWORK       /////////////////////
 void netChangeState(bool state){
-  DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);  
+  //DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);  
   // in case we were offline but footswitch connects a network, we give the possibility to connect again or offer user to confirm he wants to stay offline
   if (mixerServer.offline == true && hwm.network->state == CONNECTED) mixerServer.offline = false;  
 }
 
 void internetChangeState(bool internet){
-  DEBUG_PRINT("\n\n\n\t\t\t * * * * USER INTERNET CALLBACK %s * * * *",internet?"OK":"fail"); 
+  //DEBUG_PRINT("\n\n\n\t\t\t * * * * USER INTERNET CALLBACK %s * * * *",internet?"OK":"fail"); 
   // check updates
 
   // check remote instruction
@@ -605,31 +606,31 @@ void internetChangeState(bool internet){
 void networkEvent(WiFiEvent_t event){
   switch (event) {
     case ARDUINO_EVENT_WIFI_READY:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_READY");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_READY");
     break;
     case ARDUINO_EVENT_WIFI_STA_START:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_START");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_START");
     break;    
     case ARDUINO_EVENT_WIFI_STA_STOP:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_STOP");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_STOP");
     break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_CONNECTED");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_CONNECTED");
     break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_GOT_IP");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_GOT_IP");
     break;
     case ARDUINO_EVENT_WIFI_AP_STOP: //SYSTEM_EVENT_STA_STOP:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STOP");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STOP");
     break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: //SYSTEM_EVENT_STA_DISCONNECTED:
       DEBUG_PRINT("~");
     break;
     case ARDUINO_EVENT_WIFI_AP_START: //SYSTEM_EVENT_AP_START:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_START");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_START");
       break;
     case ARDUINO_EVENT_WIFI_AP_STACONNECTED: //SYSTEM_EVENT_AP_STACONNECTED:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STACONNECTED");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STACONNECTED");
       break;
     case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED: //SYSTEM_EVENT_AP_STADISCONNECTED:
       DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STADISCONNECTED");
@@ -637,28 +638,28 @@ void networkEvent(WiFiEvent_t event){
       break;
     case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED: //SYSTEM_EVENT_AP_STAIPASSIGNED:
       //hwm.ap->state = CONNECTED;
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED");
     break;
     case ARDUINO_EVENT_ETH_START:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_START");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_START");
     break;
     case ARDUINO_EVENT_ETH_STOP:
-      DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_ETH_STOP");
+      //DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_ETH_STOP");
     break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
-      DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_LOST_IP");
+      //DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_WIFI_STA_LOST_IP");
     break;
     case ARDUINO_EVENT_ETH_CONNECTED:
-      DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_ETH_CONNECTED");
+      //DEBUG_PRINT("\nEVENT-WIFI: ARDUINO_EVENT_ETH_CONNECTED");
     break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_DISCONNECTED");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_DISCONNECTED");
     break;
     case ARDUINO_EVENT_ETH_GOT_IP:
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_GOT_IP");
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: ARDUINO_EVENT_ETH_GOT_IP");
     break;
     default: 
-      DEBUG_PRINT("\n\t\t\tEVENT-WIFI: %i",event);
+      //DEBUG_PRINT("\n\t\t\tEVENT-WIFI: %i",event);
     break;
   }
 }
@@ -669,11 +670,12 @@ void eventHandling(EventDispatcher::Event* event){
       ButtonEvent* btnEvt = (ButtonEvent*)event->data;
       switch(btnEvt->id){
         case Button::BUTTON_SIMPLE_CLIC:
-          DEBUG_PRINT("\n\t\t *** EVENT_DIGITAL_BUTTON SIMPLE_CLIC");
-          if (screen.id == SCREEN_BANK && mixerServer.state == DISCONNECTED){
+          //DEBUG_PRINT("\n\t\t *** EVENT_DIGITAL_BUTTON SIMPLE_CLIC");
+          if (mixerServer.state == DISCONNECTED && ((screen.id == SCREEN_WIZARD && screen.state == STATE_WIZARD_USER_STEP4 ) || screen.id == SCREEN_BANK )){
+            //go offline
             mixerServer.offline = true;
             app.broadCast(getMixersState());
-          }
+          }          
         break;
       }
     }break;
@@ -693,15 +695,12 @@ void eventHandling(EventDispatcher::Event* event){
 }
 
 /////////////////////    GUI       /////////////////////
-void userWizardGUI(void){
-    //DEBUG_PRINT("\t User wizard");
-    GUI::cls();
-    gui.add(new Label(i18n.getString("searching"), Align::Center,&app.midScreenHoriz, &app.midScreenVertical,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));   
-}
-
 void userWizardStepFlow(){
-  //DEBUG_PRINT("\ndefaultWizardStepFlow(%i)"); 
-  if (mixerServer.state == true) app.gotoWizardEnd();
+  if (mixerServer.state == CONNECTED || mixerServer.offline == true ){
+    app.persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
+    app.restoreScreen();
+  }
+
 }
 
 void userBootScreen(){
@@ -717,15 +716,23 @@ void modalScreen(const String* topText, const String* midLabel, const String* bo
   gui.add(new Label(bottomLabel, Align::Center,&app.midScreenHoriz, &bottomText,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));    
 }
 
-void userBankScreenBuilder(int subScreen){  
-  DEBUG_PRINT("\n - - - - - - - userBankScreenBuilder - - - - -");
+void userCLS(){
+  GUI::defaultBcolor = TFT_BGCOLOR;
+  GUI::defaultFcolor = TFT_FCOLOR;
+  GUI::cls();
+}
+
+void userScreenBuilder(int screebID, int subScreen){  
+  //DEBUG_PRINT("\n - - - - - - - userScreenBuilder - - - - -");
 
   uint8_t interfaceState = mixerServer.mixerInterface->interfaceState;
 
   if (mixerServer.mixerInterface->interfaceSubState == "backgroundSync") app.rollingIcon(true);
 
-  if (hwm.network->state == DISCONNECTED && mixerServer.offline == false){
+  if (hwm.network->state == DISCONNECTED && mixerServer.offline == false){       
     app.disabledBankRendering = true;    
+
+    userCLS();
     
     gui.add(new Icon(&app.networkIcon,Align::Center,&app.midScreenHoriz, &netIconY,ICON_MAX_SIZE*0.9,&app.networkIconColorIdle,&GUI::defaultBcolor));    
     modalScreen(i18n.getString("Attempt"),&hwm.network->SSID,i18n.getString("offline"));
@@ -734,11 +741,12 @@ void userBankScreenBuilder(int subScreen){
   }else{
     if (interfaceState == CONNECTED || mixerServer.offline == true/*|| interfaceState == SYNCING_DATA*/){
       app.disabledBankRendering = false; // normal strips and bank display
+      app.persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
+      app.restoreScreen();      
     }else{
       app.disabledBankRendering = true;
 
-      GUI::defaultBcolor = TFT_BGCOLOR;
-      GUI::defaultFcolor = TFT_FCOLOR;
+      userCLS();
       
       if (mixerServer.state == DISCONNECTED){
 
@@ -767,7 +775,7 @@ void userBankScreenBuilder(int subScreen){
             if (userConfig.getInt(MIXER_AUTOMODEL_KEY) != -1){
               modalScreen(i18n.getString("Connecting mixing station to mixer"),i18n.getString(stateNames[interfaceState]),i18n.getString("Auto connect enabled"));            
             }else{
-              modalScreen(i18n.getString("Manually connect mixing station to mixer"),i18n.getString(stateNames[interfaceState]),i18n.getString("Auto connect disabled"));            
+              modalScreen(i18n.getString("Connect mixing station to mixer"),i18n.getString(stateNames[interfaceState]),i18n.getString("Auto connect disabled"));            
             }
 
 
@@ -827,12 +835,11 @@ void userBankScreenBuilder(int subScreen){
 
   app.userParseJsonInputCallback = userHTMLJsonInput;
   app.userJsonPongCallback = userPongCallback;    
-  app.userWizardScreenBuilder = userWizardGUI;
   app.userWizardstepFlow = userWizardStepFlow;
   app.bootScreen = userBootScreen;
-  app.userBankScreenBuilder = userBankScreenBuilder;
+  app.userScreenBuilder = userScreenBuilder;
 
-  app.init(&userConfig);
+  app.init(&userConfig);  
   userConfig.load("/userConf.conf",DEFAULT_USER_CONFIG);  
   mixerServer.init(&userConfig,hwm.network);
 
@@ -849,20 +856,21 @@ void userBankScreenBuilder(int subScreen){
   #endif
   
   String configIP = *userConfig.getString(SERVER_IP_KEY); 
-  DEBUG_PRINT("\n * * SERVER_IP_KEY = %s",configIP.c_str());
+  //DEBUG_PRINT("\n * * SERVER_IP_KEY = %s",configIP.c_str());
 
   size_t dataSize = 0;
-  myOfr.setDebugLevel( OFR_INFO | OFR_ERROR);
+  //myOfr.setDebugLevel( OFR_INFO | OFR_ERROR);
   dataSize = readGzFileToBuffer("/webapp/user.ttf.gz",&userFontBuffer);
   if (dataSize > 0){ // uncompress succeed
     if (myOfr.loadFont(userFontBuffer.buffer, dataSize)) { // this consumes 20992 bytes and take ~2ms      
-      DEBUG_PRINT("\nUser compressed font initialise error"); 
+      //DEBUG_PRINT("\nUser compressed font initialise error"); 
     }else{
       //DEBUG_PRINT("\nUser font loaded successfullly"); 
     }
   }
 
   String langFile = "/"+*app.system.getString(S_LANG,"ENGLISH");
+  langFile.toUpperCase();
   i18n.load(langFile+".i18n"); 
 
 /*  JsonDocument interfaceDoc;
@@ -883,9 +891,9 @@ void userBankScreenBuilder(int subScreen){
   }else{
     DEBUG_PRINT("\ndecompressed data ->  %s  <-\n",decompressedJson.buffer);
   }*/
-  DEBUG_PRINT("\n\n\n=====================================================================");
+  //DEBUG_PRINT("\n\n\n=====================================================================");
   DEBUG_PRINT("\n============================ SETUP END ==============================");
-  DEBUG_PRINT("\n=====================================================================\n\n"); 
+  //DEBUG_PRINT("\n=====================================================================\n\n");
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -896,7 +904,7 @@ void userBankScreenBuilder(int subScreen){
 {
   app.refresh();
   
-  if (screen.id == SCREEN_BANK)
+  if (screen.id == SCREEN_BANK || screen.id == SCREEN_WIZARD)
    mixerServer.refresh();         //only refresh mixer, (including scanning and detection) if we are on the main screen
 
   static String  previousInterfaceSubState = "";
@@ -908,7 +916,7 @@ void userBankScreenBuilder(int subScreen){
     if (mixerServer.refreshed){
       
     }else{
-      DEBUG_PRINT("\n*********************** INTERFACE CHANGED STATE FROM:%s TO: %s",stateNames[previousInterfaceState].c_str(),stateNames[interfaceState].c_str());
+      //DEBUG_PRINT("\n*********************** INTERFACE CHANGED STATE FROM:%s TO: %s",stateNames[previousInterfaceState].c_str(),stateNames[interfaceState].c_str());
     }
 
     previousInterfaceState = interfaceState;
@@ -936,7 +944,8 @@ void userBankScreenBuilder(int subScreen){
 
     app.broadCast(getMixersState());
 
-    if (screen.id == SCREEN_BANK) screen.focus = screen.focus - 1;    // rebuild GUI, will call userBuildScreen 
+    //if (screen.id == SCREEN_BANK || screen.id == SCREEN_WIZARD) 
+      screen.focus = screen.focus - 1;    // rebuild GUI, will call userBuildScreen 
   }
 
   if (mixerServer.mixerInterface->interfaceState == SYNCING_SOFTWARE){

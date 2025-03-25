@@ -101,7 +101,6 @@ enum{
   STATE_WIZARD_CONNECT_CONFIG_STEP2,
   STATE_WIZARD_CONNECT_NETWORK_STEP3,
   STATE_WIZARD_USER_STEP4,
-  STATE_WIZARD_END_STEP5,
   STATE_UTILS_SEARCHING_CONNECTION,
   STATE_UTILS_INFO,
   STATE_UTILS_BRIGHTNESS,
@@ -148,13 +147,13 @@ typedef bool (*ParseJsonInputCallback)(JsonDocument,JsonAnswer*);
 bool defaultParseJsonInputCallback(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
   String jsonInputString;
   serializeJson(jsonDoc, jsonInputString);
-  //DEBUG_PRINT("\ndefaultParseJsonInputCallback(%s)",jsonInputString.c_str());
   return false;
 }
 
 String defaultStringReturn(){return "";};
 void defaultVoidReturn(){};
 void defaultVoidInt(int i){};
+void defaultVoidDoubleInt(int i,int j){};
 void defaultVoidBool(bool state){}
 void defaultWizardScreenBuilder();
 void defaultWizardStepFlow();
@@ -193,7 +192,6 @@ class DataSet{
     String object;
 
     ~DataSet(){
-      //DEBUG_PRINT("\n\t~DataSet(%s)",address.c_str());
     }
 
     // Ensure dataProvider is valid before accessing it
@@ -216,7 +214,6 @@ class DataSet{
 
       String data;
       serializeJson(doc,data);
-      //DEBUG_PRINT("\n\n\tdataset->serialize: %s\n\n", data.c_str());
       return data;
     }     
 };
@@ -292,11 +289,8 @@ class DataRepository{
 
 
     void serialize(JsonArray* jsonDataSets){
-      //DEBUG_PRINT("\n<<<<<<<<<<<<< SERIALIZATION OF DATASETS FROM DataRepository, qty: %i >>>>>>>>>>>>>>>>>>>",dataSets.size() );
       for (uint8_t i=0;i<dataSets.size();i++){        
-        //DEBUG_PRINT("\ngetting next data set: ");
         DataSet* ds = dataSets[i];
-        //DEBUG_PRINT("name: %s size:%i address:%s",ds->dataProvider->name.c_str(),ds->size(),ds->address.c_str());
         jsonDataSets->add(ds->serialize());
       }
     }
@@ -360,7 +354,6 @@ class Strip : public GenericComponent{
     }    
 
     virtual ~Strip(){
-      DEBUG_PRINT("\n~Strip(): %s",id.c_str());
     }
 
     virtual bool refresh(bool force=false){
@@ -371,27 +364,21 @@ class Strip : public GenericComponent{
 
     void focus(bool f=true){
       if (f){
-        DEBUG_PRINT("\n%s got focus",getTopLabel()->c_str());
         brightness = 1.0;
       }else{
-        brightness = 0.6;
-        DEBUG_PRINT("\n%s lost focus",getTopLabel()->c_str());
+        brightness = 0.5;
       }
     }
 
     bool deserialize(String values){
       bool ret = false;
-      //DEBUG_PRINT("\n\t deserialize STRIP(%s)",values.c_str());
       uint8_t n = getNumberOfProperties();
-      //DEBUG_PRINT("\t getNumberOfProperties():%i",n);      
-      //DynamicJsonDocument jsonStrip(350+JSON_STRIP_PROPERTY_SIZE*n);          
       JsonDocument jsonStrip;
       DeserializationError error = deserializeJson(jsonStrip, values);
       if (error){
-        DEBUG_PRINT("\n\tStrip <%s> deserialization error:%s",id.c_str(),error.f_str());
+        
       }else{      
         id = jsonStrip[C_STRIPTYPE].as<String>();
-        //DEBUG_PRINT("\t<%s> properties:",id.c_str());   /////////////////// CONTINUE DEBUG
         // set index; 
         x = jsonStrip["position"][C_X].as<int>();
         y = jsonStrip["position"][C_Y].as<int>();
@@ -401,7 +388,6 @@ class Strip : public GenericComponent{
         colorID = jsonStrip[C_COLOR];//.as<int>();
         if (colorID>MAX_COLOR_ID-1) colorID = 0;
         icon = jsonStrip[C_ICON];//.as<unsigned char>();
-        //DEBUG_PRINT("\tselector=%i, colorID=%i, icon=%c",selector,colorID,icon);
         properties = jsonStrip[C_PROPERTIES];
         for (uint8_t i = 0; i< properties.size(); i++){
           deserializeProperty(properties[i].as<String>());
@@ -414,7 +400,6 @@ class Strip : public GenericComponent{
     };
 
     String serialize(){
-      //DEBUG_PRINT("\nserialize %s=>",id.c_str());
       
       JsonDocument doc;
       doc[C_STRIPTYPE] = id;  // this is a text
@@ -431,7 +416,7 @@ class Strip : public GenericComponent{
       serializeProperties();
       String data;
       serializeJson(doc, data);
-      //DEBUG_PRINT("%s",data.c_str());
+
       return data;
     }
 
@@ -481,8 +466,6 @@ class Strip : public GenericComponent{
 
       unsigned long delaySoFar = millis() - lastCall;
 
-      //DEBUG_PRINT("\nprogressiveDelay(%d) - %u/%u -",time, delaySoFar, waitBetween2update);          
-
       if (delaySoFar < waitBetween2update) return false;  
       lastCall = millis();
  
@@ -504,9 +487,7 @@ class Strip : public GenericComponent{
           float diff = valueMax - value;
           float percentageToTarget = map(diff,0,valueMax-valueMin,100,1)/2000.0;  // 3000 seems to be a good compromise between delay and precision, 2000 react quicker but skip some decimal
           increment = diff*percentageToTarget;          
-          //DEBUG_PRINT("\t => diff: %.3f, percentageToTarget: %.3f",diff, percentageToTarget);        
         }
-        //DEBUG_PRINT("\t value: %.3f, increment: %.4f, ",value,increment);
       } else increment = valueMax*0.05;
 
       return increment;
@@ -524,8 +505,6 @@ class Strip : public GenericComponent{
       if (value > valueMax) value = valueMax;
       //value = truncateToOneDecimal(value);
       
-      //DEBUG_PRINT("\nincreaseCallBack: %s, time:%s",String(value).c_str(),String(time).c_str());
-
       return delta;      
     }
 
@@ -541,8 +520,6 @@ class Strip : public GenericComponent{
 
       //value = truncateToOneDecimal(value);
 
-      //DEBUG_PRINT("\ndecreaseCallback: %.2f",value);
-
       return delta;      
     }
 
@@ -557,7 +534,6 @@ class Strip : public GenericComponent{
       refresh();
 
       if (x>3 || y>3){
-        DEBUG_PRINT("\nstrip location out of range: %d:%d",x,y);
         renderError = true;
         return false;
       }
@@ -578,7 +554,6 @@ class Strip : public GenericComponent{
         renderX = (x * WIDGET2X2W/2);
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
       }else{
-        DEBUG_PRINT("\nunsupported strip size: %s",size.c_str());
         renderError = true;
         return false;
       }      
@@ -589,7 +564,6 @@ class Strip : public GenericComponent{
     }
 
     virtual void render(){
-      DEBUG_PRINT("\nOutlineFrame renderX: %d renderY: %d, shape:%s",renderX,renderY,size.c_str());
       if (size == SHAPE4X4) gui->add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &frontColor,&brightness));  
       else if ( size == SHAPE1X4) gui->add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &frontColor,&brightness));
       else if (size == SHAPE2X2) gui->add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &frontColor,&brightness));  
@@ -666,7 +640,6 @@ class StripSkeleton{
       }
       String data;
       serializeJson(jsonDocStripSkeleton, data);
-     // DEBUG_PRINT("\nskeleton->serialize: %s",data.c_str());
       return data;
     }
 
@@ -724,15 +697,13 @@ class TextStrip : public Strip{
       // textProperty = /text/%s
       // value = toto
       char buffer[50];
-      //DEBUG_PRINT("\n deserializeProperty %%%%%%%%%%%%%% %s %s", property.c_str(), textPropertyAddress.c_str());
+
       if (sscanf(property.c_str(), textPropertyAddress.c_str(), buffer) == 1){
         text = String(buffer);
-        //DEBUG_PRINT("\t MATCH %s",text.c_str());
       }           
     }
 
     virtual void serializeProperties(){
-      //DEBUG_PRINT("\n serializeProperties %%%%%%%%%%%%%% %s %s", text.c_str(), textPropertyAddress.c_str());
       char* buf = (char*)malloc(textPropertyAddress.length()*sizeof(char*));
       sprintf(buf,textPropertyAddress.c_str(),text.c_str());
       properties.add(String(buf));
@@ -789,7 +760,6 @@ class TwoSelectStrip : public Strip{
 
     void deserializeProperty(String property){
       if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
-        //DEBUG_PRINT("\t%s=%i",select2PropertyAddress.c_str(), select2ID);      
       }    
     }  
 
@@ -836,7 +806,6 @@ class ThreeSelectStrip: public TwoSelectStrip{
     void deserializeProperty(String property){
       TwoSelectStrip::deserializeProperty(property);
       if (sscanf(property.c_str(), select3PropertyAddress.c_str(), &select3ID)){
-        //DEBUG_PRINT("\t%s=%i",select3PropertyAddress.c_str(), select3ID);      
       }  
 
     }  
@@ -872,7 +841,6 @@ class StripFactory{
       Strip* strip = nullptr;
       StripSkeleton* skel = getStripSkeleton(stripID);
       if (skel != nullptr) strip = skel->constructor(/*values*/);
-      //DEBUG_PRINT("\nbuild(%s)",stripID.c_str());     
       return strip;
     }
 
@@ -893,12 +861,9 @@ class StripFactory{
 
   private:
     StripSkeleton* getStripSkeleton(String stripID){
-      //DEBUG_PRINT("\ngetStripSkeleton(%s)",stripID.c_str());
       for (uint8_t i=0;i<stripSkeletonRepo.size();i++){
         StripSkeleton* s = stripSkeletonRepo.get(i);        
-        //DEBUG_PRINT("==%s?",s->stripID.c_str());
         if (stripID == s->stripID){
-          //DEBUG_PRINT(": MATCH!");
           return s;
         } 
       }
@@ -914,7 +879,8 @@ class Bank{
   #define BANK_MAX_STRIPS BANK_MAXWINDOW*STRIP_PER_WINDOW
 
   public:
-    uint8_t selector; 
+    uint8_t selector=1; 
+    uint8_t oldSelector=0;
  
     //uint8_t numberOfStrips = 0;
     //uint8_t maxWindow = 0;
@@ -937,7 +903,6 @@ class Bank{
     }
 
     ~Bank(){
-      //DEBUG_PRINT("\n~Bank: %s",name.c_str());
       for (uint8_t i=0; i<strips.size(); i++){
         if (strips[i] != nullptr ) delete strips[i];
       }      
@@ -953,20 +918,16 @@ class Bank{
     }
 
     void init(){
-      //DEBUG_PRINT("\t%s->init()",name.c_str());
       //set stripIndex to the first available strip
       resetStripNav();
-      //DEBUG_PRINT("\n¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨¨-------___________ %s selector:%i, window: %i",name.c_str(),nav.selector,nav.window);
     }
 
     /*uint8_t getMaxWindow(){
       //determine how many strips are in use ... means if there are free strip,in between (value nullptr) we skip but as soon as we found one not 0 we set it to the current index
       uint8_t numberOfBusyStrip = 0;
-      DEBUG_PRINT("\n%s numberOfBusySlot=",name.c_str());
       for (uint8_t i = 0; i < BANK_MAX_STRIPS; i++) {
         if (strips[i] != nullptr) {
           numberOfBusyStrip = i;
-          DEBUG_PRINT(" %i",numberOfBusyStrip);
         }
       }
       uint8_t newMaxWindow = numberOfBusyStrip / STRIP_PER_WINDOW + 1;
@@ -979,15 +940,14 @@ class Bank{
       JsonDocument bank;
       DeserializationError error = deserializeJson(bank, value);
       if (error){
-        DEBUG_PRINT("\nBank <%s> deserialization error:%s",name.c_str(), error.f_str());
+
       }else{
-        //DEBUG_PRINT("\n\nbank <%s>:<%s>",name.c_str(),value.c_str());
 
         possibleLayout = bank[C_POSSIBLELAYOUT];
         currentLayout = bank[C_CURRENTLAYOUT];
         icon = bank[C_ICON].as<unsigned char>();
         
-        //DEBUG_PRINT("\npossible layout:%i, currentLayout:%i, icon:%c",possibleLayout,currentLayout,icon);
+
         JsonArray stripArray = bank[C_STRIPS];
         for (int i=0; i<stripArray.size() && i<BANK_MAX_STRIPS; i++){        
           JsonObject jsonStrip = stripArray[i];        
@@ -1015,7 +975,6 @@ class Bank{
         String jsonStripString;
         serializeJson(jsonStrip, jsonStripString);                 
         if (strip->deserialize(jsonStripString)){
-          //DEBUG_PRINT("\n\t\taddStrip=============>%s",jsonStripString.c_str());
           strips.push_back(strip);
         }  
       }
@@ -1030,14 +989,14 @@ class Bank{
     }*/
 
     Strip* getStrip(uint8_t x, uint8_t y, uint8_t window){
-      //DEBUG_PRINT("\n  getStrip(%i,%i,%i)",x,y,window);
+
       Strip* strip = nullptr;
       // retrieve strip at given position
       uint8_t i = 0;
       while (i<strips.size()){
-        //DEBUG_PRINT("\n\t\tStrip[%i]->x=%i ->y:%i ->win=%i",i,strips[i]->x,strips[i]->y,strips[i]->win);
+
         if (strips[i]->x == x && strips[i]->y == y && strips[i]->win == window){
-          //DEBUG_PRINT(" MATCH");
+
           strip = strips[i];
           break;
         }
@@ -1050,7 +1009,6 @@ class Bank{
 
       if (id>strips.size()) return nullptr;
 
-      //DEBUG_PRINT("\n  getStrip(%i)",id);
       // retrieve strip at given position
       
       for (const auto& strip : strips) {
@@ -1064,7 +1022,7 @@ class Bank{
       bool success = false;
       for (uint8_t i=0;i<strips.size();i++){
         if (strips[i] == strip){
-          DEBUG_PRINT("\n!!!!TRASHSTRIP(%i,%i,win:%i)",strip->x,strip->y,strip->win);
+
           //strips.remove(i);
           strips.erase(std::remove(strips.begin(), strips.end(), strip), strips.end());          
           delete strip;
@@ -1078,7 +1036,6 @@ class Bank{
     String serialize(){
       //DynamicJsonDocument doc(JSON_STRIP_TEMPLATE_SIZE*BANK_MAX_STRIPS);   
       JsonDocument doc;
-      //DEBUG_PRINT("\nserialize %s=>",name.c_str());
 
       doc[C_POSSIBLELAYOUT] = possibleLayout;
       doc[C_CURRENTLAYOUT] = currentLayout;
@@ -1094,7 +1051,7 @@ class Bank{
       String data;
       serializeJson(doc, data);
       removeJsonQuote(&data);
-      //DEBUG_PRINT("\n\tbank->serialze: <%s>\n",data.c_str());
+
       return data;
     }
 
@@ -1115,6 +1072,8 @@ class BankNavigator: public Widget{
       //widgetList = w;
       oldSelector = bank->selector - 1; //this is to force first refresh
       width = TFT_WIDTH/2; height = OVERLAY_ICON_SIZE;
+      id = "BankNavigator"+String(xPos)+"x"+String(yPos); 
+
     }
 
     virtual bool refresh(bool force = false) {
@@ -1136,17 +1095,18 @@ class BankNavigator: public Widget{
       oldSelector = bank->selector;
 
       if (debug) {
-          DEBUG_PRINT("\n\t Bank <%s> navigator changed to <%i>", id.c_str(), bank->selector);
+
       }
 
       // Define UI sizes
-      constexpr uint16_t NAV_HEIGHT = OVERLAY_ICON_SIZE;
-      constexpr uint16_t WIN_WIDTH = OVERLAY_ICON_SIZE * 1.6;
-      constexpr uint8_t YPADDING = 1, XPADDING = 2;
-      constexpr uint8_t SPACE_BETWEEN_WIN = 3;
-      constexpr uint16_t NAV_WIDTH = (WIN_WIDTH * BANK_MAXWINDOW) + (SPACE_BETWEEN_WIN * BANK_MAXWINDOW);
-      constexpr uint8_t CELL_WIDTH = WIN_WIDTH / STRIP_PER_WINDOW;
-      constexpr uint8_t CELL_HEIGHT = NAV_HEIGHT / STRIP_PER_WINDOW;
+      #define NAV_HEIGHT OVERLAY_ICON_SIZE
+      #define WIN_WIDTH OVERLAY_ICON_SIZE * 1.6
+      #define YPADDING 1
+      #define XPADDING 2
+      #define SPACE_BETWEEN_WIN  3
+      #define NAV_WIDTH (WIN_WIDTH * BANK_MAXWINDOW) + (SPACE_BETWEEN_WIN * BANK_MAXWINDOW)
+      #define CELL_WIDTH WIN_WIDTH / STRIP_PER_WINDOW
+      #define CELL_HEIGHT NAV_HEIGHT / STRIP_PER_WINDOW
       #define CANVA_VS_BANKNAME_SPACE 2
 
       uint16_t navFrameColor = GUI::luminance(GUI::gold, 100);
@@ -1156,29 +1116,7 @@ class BankNavigator: public Widget{
       canva->refresh(true);
 
       // Draw each strip on the navigation UI
-      for (uint8_t i = 0; i < bank->strips.size(); i++) {
-          Strip* strip = bank->strips[i];
-          if (strip == nullptr) continue;
-
-          uint16_t stripCol = GUI::luminance(colorMap[strip->colorID].bColor, strip->brightness);
-          uint16_t stripFrame = GUI::luminance(colorMap[strip->colorID].fColor, strip->brightness);
-
-          // Calculate strip position
-          uint8_t cellX = (strip->x * CELL_WIDTH) + (strip->win * WIN_WIDTH) + (SPACE_BETWEEN_WIN * strip->win);
-          uint8_t cellY = strip->y * CELL_HEIGHT;
-
-          // Extract width & height from "3x2" style string
-          int index = strip->size.indexOf('x');
-          int widgetWidth = strip->size.substring(0, index).toInt();
-          int widgetHeight = strip->size.substring(index + 1).toInt();
-
-          uint8_t cellWidth = (widgetWidth * CELL_WIDTH) - XPADDING;
-          uint8_t cellHeight = (widgetHeight * CELL_HEIGHT) - YPADDING;
-
-          // Draw strip on the canvas
-          canva->sprite->fillRect(cellX + XPADDING, cellY + YPADDING, cellWidth, cellHeight, stripFrame);
-          canva->sprite->drawRect(cellX, cellY, cellWidth + XPADDING, cellHeight + YPADDING, stripCol);
-      }
+      //drawStripMap(canva);
 
       // Adjust width
       width = canva->width + CANVA_VS_BANKNAME_SPACE;
@@ -1215,6 +1153,29 @@ class BankNavigator: public Widget{
       return xPos;
     }
 
+    void drawStripMap(Canva* canva){
+      for (uint8_t i = 0; i < bank->strips.size(); i++) {
+        Strip* strip = bank->strips[i];
+        if (strip == nullptr) continue;
+
+        // Calculate strip position
+        uint8_t cellX = (strip->x * CELL_WIDTH) + (strip->win * WIN_WIDTH) + (SPACE_BETWEEN_WIN * strip->win);
+        uint8_t cellY = strip->y * CELL_HEIGHT;
+
+        // Extract width & height from "3x2" style string
+        int index = strip->size.indexOf('x');
+        int widgetWidth = strip->size.substring(0, index).toInt();
+        int widgetHeight = strip->size.substring(index + 1).toInt();
+
+        uint8_t cellWidth = (widgetWidth * CELL_WIDTH) - XPADDING;
+        uint8_t cellHeight = (widgetHeight * CELL_HEIGHT) - YPADDING;
+
+        // Draw strip on the canvas
+        canva->sprite->fillRect(cellX + XPADDING, cellY + YPADDING, cellWidth, cellHeight, GUI::luminance(colorMap[strip->colorID].fColor, strip->brightness * GUI::screenBrightness * 255));
+        canva->sprite->drawRect(cellX, cellY, cellWidth + XPADDING, cellHeight + YPADDING,  GUI::luminance(colorMap[strip->colorID].bColor, strip->brightness * GUI::screenBrightness * 255));
+      }      
+    }
+
   protected:
     Bank* bank;
     //LinkedList<Widget*>* widgetList;
@@ -1237,12 +1198,12 @@ class JsonListFile : public JsonList{
       JsonListFile():JsonList(){};
 
       bool load(String f,String defaultValues=""){
-        //DEBUG_PRINT("\nload(%s,<%s>) ",f.c_str(),defaultValues.c_str());
+
         // We first clean up existing values
         /*while (keyValues.size()>0){
-          //DEBUG_PRINT("\nremaining to unstack: %i",gui->screenGUIs.size());
+
           KeyValue* kv = keyValues.shift();
-          //DEBUG_PRINT("\nobject: %s ",widget->id.c_str());
+
           delete(kv);
         }*/
         bool success = false;
@@ -1255,7 +1216,7 @@ class JsonListFile : public JsonList{
         JsonDocument doc;
 
         if (!LittleFS.exists(filename)){
-          DEBUG_PRINT("\nfile: %s invalid, skipping by using default parameters",filename.c_str());          
+
         }else{
           File file = LittleFS.open(filename);
           DeserializationError error = deserializeJson(doc, file);      
@@ -1263,10 +1224,10 @@ class JsonListFile : public JsonList{
             jsonToKeyValues(&doc);
             success = true;
           }else{
-            DEBUG_PRINT("\nJson error %s:%s",error.c_str(),filename.c_str());
+
           }
           doc.shrinkToFit();   
-          DEBUG_PRINT("\nloaded %s", filename.c_str());     
+
         }
         return success;      
       }
@@ -1279,14 +1240,14 @@ class JsonListFile : public JsonList{
 
         File file = LittleFS.open(filename, FILE_WRITE);
         if(!file){
-            DEBUG_PRINT("\nfailed to open %s for writing",filename.c_str());
+
             success = false;
         }
         if(!file.print(s)){
-            DEBUG_PRINT("\n %s write fail",filename.c_str());
+
             success = false;
         }else{
-          //DEBUG_PRINT("\n saved: %s",s.c_str());
+
         }
         file.close();  
         return success;
@@ -1317,13 +1278,13 @@ class I18n : public JsonListFile{
       int8_t index;
       index = getIndex(String(name));
       if (index < 0) {
-        //DEBUG_PRINT("\ntoken: %s do not exist, creating it.",name.c_str());
+
         addValue(name,name);  // if it doesnt exist we create it in the list
         return getString(name);
       } else {
         
         KeyValue* kv = keyValues.get(index);  
-        //DEBUG_PRINT("\ntoken: %s = %s",name.c_str(),kv->value.c_str());      
+
         return &kv->value;
       }
     };
@@ -1367,13 +1328,13 @@ class Shortcuts{
       *buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":\"dropdown\"}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":\"dropdown\"},{\"/macro/name/%s\":\"dropdown\"}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":\"freetext\"}]}]";
 
       removeJsonQuote(buffer);
-      //DEBUG_PRINT("\n\nSERIALIZE JsonList AFTER\t\t%s",buffer->c_str());
+
     }    
 };
 
 
 class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher{
-  public:    
+  public:   
 
     Event evt;
 
@@ -1382,10 +1343,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     ///////////////////// USER CALLBACKS ////////////////////////////////////////////////////
     ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;    
     ReturnStringCallback userJsonPongCallback = defaultStringReturn;
-    VoidCallback userWizardScreenBuilder = defaultWizardScreenBuilder;
     VoidCallback userWizardstepFlow = defaultWizardStepFlow;
     VoidCallback bootScreen = defaultBootScreen;
-    VoidIntCallback userBankScreenBuilder = defaultVoidInt;
+    VoidDoubleIntCallback userScreenBuilder = defaultVoidDoubleInt;
 
     ///////////////////// STRIPS & BANKS CONTAINERS AND DEFINITION ////////////////////////
     LinkedList<Bank*> banks = LinkedList<Bank*>(); 
@@ -1566,7 +1526,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         {
           uint8_t vBatIconIndex = hwm->battery.indicator;
           batIcon = batteryIcons[vBatIconIndex];      
-          //if (debug) DEBUG_PRINT("\nIcon index: %i icon:%s",vBatIconIndex,batIcon.c_str());
+
           if (vBatIconIndex == 0 && hwm->battery.vBat < VBAT_WARNING) batIconColor = TFT_RED; 
         }break;
         case BAT_CHECKING:
@@ -1617,7 +1577,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           networkIconColorIdle = GUI::green;
         }else{
           networkIconGlowingRedColor.value = &networkIconColorIdle;
-          //DEBUG_PRINT("\n setNetworkIcon ********************************");
+
           if (hwm->network->ethEnabled && hwm->network->WiFiEnabled && hwm->network->getLink() == LinkOFF) networkIcon = ICON_MIXETHWIFI; // both WiFi and ETh are up but there is no cable on, we don't know who will connect first
           else if ((hwm->network->ethEnabled && !hwm->network->WiFiEnabled) || (hwm->network->getLink() == LinkON)) networkIcon = ICON_ETH;  //case when we bootSprite for a DHCP lease or have no WiFi enabled
           else if (!hwm->network->ethEnabled && hwm->network->WiFiEnabled) networkIcon = ICON_WIFI_STRENGTH_3; 
@@ -1628,11 +1588,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         networkIcon = emptyString;
       #endif
 
-    }
-
-    void gotoWizardEnd(){
-      screen.id = SCREEN_WIZARD; screen.state = STATE_WIZARD_END_STEP5;
-      persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
     }
 
     void goToResetScreenAndSleep(String message){
@@ -1657,11 +1612,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       
       DeserializationError error = deserializeJson(jsonBanks, *bankJsonString);
       if (error){
-        DEBUG_PRINT("\nBank deserialization error:%s",error.f_str());
+
       }else{              
         JsonObject root = jsonBanks.as<JsonObject>();      
         for (JsonPair kv : root) {
-          //DEBUG_PRINT("\n%s = %s",kv.key().c_str(),kv.value().as<String>().c_str());          
+
           bank = new Bank(kv.key().c_str(),kv.value().as<String>(),&stripFactory);
           bank->init();
           /*if (bank->strips.size()>0) banks.add(bank);
@@ -1680,9 +1635,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       // this function applies all settings from the system conf file
       wiFiList.deserialize(*system.getString(S_SSID));
       hwm->setWiFi(&wiFiList,*system.getString(S_LAST_USED_SSID));
-      //DEBUG_PRINT("\n*system.getString(S_LAST_USED_SSID): %s",system.getString(S_LAST_USED_SSID)->c_str());
+
       hwm->setButtonReactivity(system.getInt(S_PUSHDELAY),system.getInt(S_DCLICREACTIVITY));     
-      //DEBUG_PRINT("\nS_PUSHDELAY: %s",String(system.getInt(S_PUSHDELAY)).c_str());
+
       String langFile = "/"+*system.getString(S_LANG,"ENGLISH");
       langFile.toUpperCase();
       lang.load(langFile+".lang"); 
@@ -1711,10 +1666,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
 
+    bool initBanks(){
+      if (deserializeBanks(config.getString(C_BANKS)) == nullptr){
+        menuTopText = *lang.getString("Bank creation");
+        menuBottomLabel = emptyString;
+        byeIconColor = &GUI::red; byeIcon = &iconForbid;
+        screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
+        return false;
+      }
+      return true;
+    }
+
     void init(Config* userCf){
       userConfig = userCf;
       init();
-    }
+    }    
 
     void init(){
       GenericComponent::init();
@@ -1722,7 +1688,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       LittleFS.begin();
 
       persistants.begin("interval", false);
-      DEBUG_PRINT("\npersistants.begin()");
+      
 
       system.load(SYSTEM_FILE_NAME,defaultSysConf);  
 
@@ -1811,11 +1777,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       // BY DEFAULT, WE DO NOT STARTUP, ONLY DISPLAY BATTERY LEVEL AND SWITCH OFF                 
 
+      bool wizard = false;
+
       switch(hwm->startupState){
         case RESET_STARTUP:
           // put reset code here
           goToResetScreenAndSleep("RESET");
-          //enableWizard();
         break;
         case BATTERY_STARTUP:
           menuTopText = *lang.getString("Press >1s to startup"); menuBottomLabel = emptyString;
@@ -1829,24 +1796,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           // as the FS is not ready, there is no icon to display and no fonts as well so it will be display by default font
           screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
         break;
-        case WIZARD_STARTUP:
-          enableWizard();
+        case WIZARD_STARTUP:          
+          persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_WIZARD);
+          persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_LANG_STEP1);
           // no break, we continue normal startup
         case NORMAL_STARTUP:
           // perform all application initialization
-          //DEBUG_PRINT("\n\n\n********");
-
-          bootScreen();       
-
-          if (deserializeBanks(config.getString(C_BANKS)) == nullptr){
-            menuTopText = *lang.getString("Bank creation");
-            menuBottomLabel = emptyString;
-            byeIconColor = &GUI::red; byeIcon = &iconForbid;
-            screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
-            DEBUG_PRINT("\n\n\n*********************** COULD NOT CREATE BANK");
-          }else{
-            goToBankScreen();
-          }
+          bootScreen();                
+          // we init banks and then go to banks or resume wizard
+          if (initBanks()) restoreScreen();
         break;
       }
     }
@@ -2146,7 +2104,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // at the moment, this is hard coded
     if (buttonID == hwm->buttons[MIDDLEB]->getID()){
       if (!stripAction(Button::BUTTON_SIMPLE_CLIC)){
-        DEBUG_PRINT("\nAction failed!!!");
+        
         // code if execution fails: example: popup a message with the error
       }
     }
@@ -2197,16 +2155,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO));        
     }
 
-    void goToBankScreen(){
-      screen.id = persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);; //screen.id = SCREEN_BANK;        
+    void gotoBankScreen(){
+      screen.id = SCREEN_BANK;
       screen.state = persistants.getUChar(PERSISTANT_SCREEN_STATE,0);
       //screen.state is bank ID;
-      if (screen.id == SCREEN_BANK && screen.state > banks.size()-1){
-        screen.state = 0; // prevents branching a bank which is not existing anymore
-        persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state); 
-        //DEBUG_PRINT("\n\n\n*********************** RESETING TO BANK: %i",screen.state );                     
-      }
-      oldScreen.value = screen.value - 1;
+      if (screen.state > banks.size()-1) screen.state = 0; // prevents branching a bank which is not existing anymore
+/*      persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state); 
+      persistants.putUChar(PERSISTANT_SCREEN_ID,screen.id);             
+      oldScreen.value = screen.value - 1;*/
     }
 
     void refreshWiFiSignalIcon(){
@@ -2229,7 +2185,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         DeserializationError error = deserializeJson(jsonBank, stringBank);
         jsonBank.shrinkToFit();
         if (error){
-          DEBUG_PRINT("\nBank <%s> deserialization error:%s",bank->name.c_str(),error.f_str());
+          
           return "{}";
         }else{
           bankDoc[bank->name] = jsonBank;
@@ -2283,7 +2239,7 @@ void setup() {
 
     void serialize(String* returnedJsonStringData){
       // this build the full serialization of the application
-      //DEBUG_PRINT("\nserialize full config");
+      
       JsonDocument doc;      
       String tempJsonString;
 
@@ -2312,7 +2268,10 @@ void setup() {
 
     void restoreScreen(){
       screen.id = persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
-      screen.state = persistants.getUChar(PERSISTANT_SCREEN_STATE,0);    
+      screen.state = persistants.getUChar(PERSISTANT_SCREEN_STATE,0);  
+      // prevents wrong branching
+      if (screen.id == SCREEN_BANK && screen.state > banks.size()-1) screen.state = 0; 
+      if (screen.id == SCREEN_WIZARD && screen.state > STATE_WIZARD_USER_STEP4) screen.state = STATE_WIZARD_LANG_STEP1;       
     }
 
     void restoreMenu(){
@@ -2376,20 +2335,20 @@ void setup() {
             if (configMedia->media == CABLE_MEDIA){
               EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                                            
               if (newEthClient.connected()) {
-                ets_printf("\n\tEth ---> ");
+                //ets_printf("\n\tEth ---> ");
                 webServer->process(&newEthClient);
                 newEthClient.stop();              
-                ets_printf(" STOP");
+                //ets_printf(" STOP");
               }             
             }else{
               WiFiClient newWiFiClient = ((WiFiServer *)configMedia->server)->available();
               bool stop = false;
               if (newWiFiClient.connected()) {
                 taskYIELD();
-                ets_printf("\n\tWiFi ---> ");
+                //ets_printf("\n\tWiFi ---> ");
                 webServer->process(&newWiFiClient);
                 newWiFiClient.stop();              
-                ets_printf(" STOP");
+                //ets_printf(" STOP");
               }   
             }
 
@@ -2399,6 +2358,17 @@ void setup() {
         }
         xSemaphoreGive(configMedia->networkBusy);  
       }    
+    }
+
+    void jumpToMenu(const char* menuTitle){
+      // we branch to the lang menu
+      ms.reset();             
+      for (int i = 0; i < ms.get_root_menu().get_num_components(); ++i) {
+        const MenuComponent* m = ms.get_current_menu()->get_current_component();
+        if (strcmp(menuTitle,m->get_name())!=0) ms.next();
+        else{ms.select();break;}
+      }                       
+      restoreMenu();         
     }
 
     bool refresh(bool force=false){
@@ -2515,11 +2485,11 @@ void setup() {
             break;
           }
         }
-        //#ifdef DEBUG
+        #ifdef DEBUG
           // DEBUG INDICATORS OVERLAY
-          gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::six,15,&GUI::defaultFcolor,&GUI::defaultBcolor));    
-          gui->add(new Label(&heapSize,Align::Left,&GUI::six,&GUI::zero,15,&GUI::defaultFcolor,&GUI::defaultBcolor));              
-        //#endif
+          gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::three,16,&GUI::defaultFcolor,&GUI::defaultBcolor));    
+          gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::three,16,&GUI::defaultFcolor,&GUI::defaultBcolor));              
+        #endif
 
         //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
         if (gui->transparency) gui->clearScreenBuffer();
@@ -2540,14 +2510,7 @@ void setup() {
         case SCREEN_WIZARD:
           switch (screen.state){
             case STATE_WIZARD_LANG_STEP1:{
-              // we branch to the lang menu
-              ms.reset();             
-              for (int i = 0; i < ms.get_root_menu().get_num_components(); ++i) {
-                const MenuComponent* m = ms.get_current_menu()->get_current_component();
-                if (strcmp(langMenuString,m->get_name())!=0) ms.next();
-                else{ms.select();break;}
-              }                       
-              restoreMenu();
+              jumpToMenu(langMenuString);   // jump to the lang menu
               screen.state = STATE_WIZARD_CONNECT_CONFIG_STEP2;
               persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);    
               persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_CONFIG_STEP2);    
@@ -2566,9 +2529,6 @@ void setup() {
               if (hwm->network->state == DISCONNECTED) screen.state = STATE_WIZARD_CONNECT_NETWORK_STEP3;
               userWizardstepFlow();
             break;
-            case STATE_WIZARD_END_STEP5:
-              goToBankScreen();
-            break;  
           }
         break;
         case SCREEN_UTILS:
@@ -2698,8 +2658,7 @@ void setup() {
       if (hwm->configMedia != nullptr){
         if (hwm->configMedia->state == CONNECTED){
           if (webServer == nullptr){          
-            //start webserver
-            if (webServer != nullptr) delete webServer;
+            //start webserver            
             webServer = new Application();
             //webServer->setTimeout(1000);
             // inventory zipped file
@@ -2888,7 +2847,7 @@ void setup() {
 
         bool fileCheckedYet = false;
 
-        ets_printf("\tFS Exist1\t");
+        //ets_printf("\tFS Exist1\t");
         if (LittleFS.exists("/webapp"+String(path)+".gz")){
           path = path+".gz";
           fileCheckedYet = true;
@@ -2904,7 +2863,7 @@ void setup() {
         String fullPath = "/webapp"+String(path);   
 
         if (!fileCheckedYet){
-          ets_printf("\tFS Exist2\t");
+          //ets_printf("\tFS Exist2\t");
           if (!LittleFS.exists(fullPath)){
             res.sendStatus(404);   //send(404, "text/plain", "Not found");    
             res.set("Content-Type", "text/html");
@@ -2925,7 +2884,7 @@ void setup() {
         uint32_t free = ESP.getFreeHeap();
 
         //if (debug) DEBUG_PRINT("\t\t\t\t REAL EXTENSION: \t\t\tt%s \t\t\tMIME:%s",filenameRealExtension.c_str(),mimeType.c_str());
-        ets_printf("\t\t<%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        
+        //ets_printf("\t\t<%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        
         res.set("Content-Type", mimeType.c_str());
 
         /*byte buffer[33] = "Access-Control-Allow-Origin: *\r\n";
@@ -3137,6 +3096,8 @@ void setup() {
           return false; 
         }
 
+        bank->oldSelector = bank->selector;
+
         if (direction == hwm->buttons[RIGHTB]->getID()) {
           if (bank->selector == bank->strips.size()) bank->selector = 1;
           else bank->selector++;
@@ -3214,29 +3175,33 @@ void setup() {
 
     bool jumpToStrip(uint8_t id, const String& bankName) {
       // get the current window and bank, before jumping to the strip
+      int8_t previousWindow = -1 ;
       Bank* currentBank = banks.get(screen.state);        
-      Strip* currentStrip = currentBank->getStrip(currentBank->selector);      
-      uint8_t currentWindow = currentStrip->win;
-
-      // Get the bank
-      uint8_t bankIndex = 0;
-      Bank* bank = getBank(bankName, &bankIndex);
-      if (bank == nullptr) return false;  // Early exit if the bank is not found
-
-      // Get the strip
-      Strip* strip = bank->getStrip(id);
-      if (strip == nullptr) return false;  // Early exit if the strip is not found
+      if (currentBank != nullptr){
+        Strip* previousStrip = currentBank->getStrip(currentBank->oldSelector);
+        if (previousStrip != nullptr) previousWindow = previousStrip->win;
+      }
+      
 
       // Jump to the bank (make sure the returned pointer is valid)
       Bank* targetBank = jumpToBank(bankName);
       if (targetBank == nullptr) return false;  
 
-      targetBank->selector = strip->index;
+      // Get the destination strip
+      Strip* strip = targetBank->getStrip(id);
+      if (strip == nullptr) return false;  // Early exit if the strip is not found
       // Set the selector to the strip's index
+      targetBank->selector = strip->index;
       focus(strip,targetBank);
+ 
+      // Force screen redraw if we changed the window or the bank
+      //DEBUG_PRINT("\n WINDOW previous=%d current=%d",previousWindow, strip->win);      
+      if (previousWindow != strip->win || currentBank != targetBank){
+        screen.focus = screen.focus - 1; // force refresh 
+        //DEBUG_PRINT("\nFORCE REFRESH!!!!!");
+      }
+
       
-      // Adjust screen focus if we changed the window or the bank
-      if (currentBank != targetBank || currentWindow != strip->win) screen.focus--;  
 
       return true;
     }
@@ -3258,8 +3223,10 @@ void setup() {
     
 
     Bank* jumpToBank(String bankName){
-      uint8_t bankIndex;
+      uint8_t bankIndex = 0;
       Bank* bank = getBank(bankName,&bankIndex);
+      if (bank == nullptr) return nullptr;  // Early exit if the bank is not found
+
       screen.id = SCREEN_BANK;
       screen.state = bankIndex;   
       //DEBUG_PRINT("\njumpToBank =>%s,%d",bank->name.c_str(),bankIndex);
@@ -3522,8 +3489,9 @@ void setup() {
 
             //DEBUG_PRINT("\nDELETE CURRENT BANK");
 
-            if (banks.size()>0) jumpToBank(banks.get(0)->name);  // go to first bank in case we delete the current displayed or we are showing menu switch
-            else{
+            if (banks.size()>0){
+              jumpToBank(banks.get(0)->name);  // go to first bank in case we delete the current displayed or we are showing menu switch
+            }else{
               //DEBUG_PRINT("\nLAST BANK WAS TRASHED");
               
             }
@@ -3678,7 +3646,7 @@ void setup() {
       // Allouer dynamiquement de la mémoire pour stocker les données
       name = new (std::nothrow) char[MAX_COMMAND_SIZE]; // +1 pour le caractère null
       if (!name) {
-          DEBUG_PRINT("\n\n\t httpPost: Memory allocation failed.\n\n");
+          
           res.sendStatus(500); // Internal Server Error
           res.print("{\"error\":\"Memory allocation failed\"}");
           res.end();
@@ -3697,7 +3665,7 @@ void setup() {
         
         // Vérification de débordement et de validité
         if (strlen(name) >= MAX_COMMAND_SIZE || strlen(options) >= OPTION_SIZE) {
-            DEBUG_PRINT("Erreur : Paramètres trop longs !");
+            
             res.sendStatus(500); // Internal Server Error
             res.print("{\"error\": \"Parameters too long\"}");
             continue; // Ignorer cette itération
@@ -3778,11 +3746,6 @@ void setup() {
         file = root.openNextFile();
         yield();
       }
-    }
-
-    void enableWizard(){
-      persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_WIZARD);
-      persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_LANG_STEP1);      
     }
 
     MenuItem* back_menu_item;

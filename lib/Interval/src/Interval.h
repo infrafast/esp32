@@ -24,6 +24,7 @@
 
 typedef void (*VoidCallback)();
 typedef void (*VoidIntCallback)(int);
+typedef void (*VoidDoubleIntCallback)(int,int);
 typedef String (*ReturnStringCallback)();
 typedef std::function<void(bool*)> StdFunctionCallbackVoidBool; 
 
@@ -44,7 +45,7 @@ public:
       udp->beginPacket("82.65.4.93", 514);
       udp->write(buffer, len);
       udp->endPacket();    
-      DEBUG_PRINT("\nlog:%s",buffer);
+      //DEBUG_PRINT("\nlog:%s",buffer);
     }
   }
 };
@@ -64,14 +65,14 @@ class GenericComponent{
 
     virtual ~GenericComponent(){
       if (debug){
-        DEBUG_PRINT("\n~%s()",id.c_str());
+        //DEBUG_PRINT("\n~%s()",id.c_str());
       }
     }
 
     virtual bool refresh(bool force=false) = 0;  
     
     virtual void init(){
-      if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
+      //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
     }
 
 };
@@ -229,14 +230,14 @@ size_t writeBufferToGzFile(String filename, const char* data){
   File fout = LittleFS.open(filename, "w");
   if(!fout)
   {
-    DEBUG_PRINT("\nUnable to create output file, halting");
+    //DEBUG_PRINT("\nUnable to create output file, halting");
     return 0;
   }
   LZPacker::setProgressCallBack( gzCallback );
   size_t len = strlen(data);
   size_t outputSize = LZPacker::compress( (uint8_t*)data, len, &fout );
   //size_t fileSize = fout.position();
-  DEBUG_PRINT("\nCompressed %d input bytes to %u raw bytes in file%s\n", len, outputSize, filename.c_str());
+  //DEBUG_PRINT("\nCompressed %d input bytes to %u raw bytes in file%s\n", len, outputSize, filename.c_str());
   fout.close();
   return outputSize;
 }
@@ -250,10 +251,9 @@ size_t bufferToGz(String* buf, ByteBuffer* dest){
   // deflate!
   size_t outputSize = LZPacker::compress( (uint8_t*)data, len, dest );
   //size_t fileSize = fout.position();
-  Serial.printf("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
+  //Serial.printf("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
   return outputSize;
 }
-
 
 /*
 size_t writeBufferToGzFile(String filename, String* buf){
@@ -334,7 +334,7 @@ size_t readGzFileToBuffer(String filename, ByteBuffer* _buffer) {
 
   File gzFile = LittleFS.open(filename, "r");
   if (!gzFile) {
-    DEBUG_PRINT("\nErreur : Fichier non trouvé: %s", filename.c_str());
+    //DEBUG_PRINT("\nErreur : Fichier non trouvé: %s", filename.c_str());
     return 0;
   }
 
@@ -357,7 +357,7 @@ size_t readGzFileToBuffer(String filename, ByteBuffer* _buffer) {
   // Décompresser le fichier
   if( !gzUnpacker.gzStreamExpander(&gzFile, gzFile.size())){
   //if (!gzExpander.expand(&gzUnpacker, gzFile)) {
-    DEBUG_PRINT("\nErreur : Décompression échouée");
+    //DEBUG_PRINT("\nErreur : Décompression échouée");
     gzFile.close();
     return 0;
   }
@@ -475,7 +475,7 @@ class JsonList{
       error = deserializeJson(doc,kvPair );
       if (!error) jsonToKeyValues(&doc);
       else{
-        DEBUG_PRINT("\t => %s",error.c_str());
+        //DEBUG_PRINT("\t => %s",error.c_str());
       }  
     }
 
@@ -610,16 +610,16 @@ void goDeepSleep(){
   // best one : https://forum.arduino.cc/t/mosfet-as-a-power-switch-for-low-power-consumption/882239/6
   // and https://arduino.stackexchange.com/questions/43986/is-there-a-way-to-power-off-external-devices-during-deep-sleep
   // open question: reset the devices ? when back, it will take time to power them on again, how to sync it with the class creation, etc... ?
-  DEBUG_PRINT("\ngoDeepSleep");
+  //DEBUG_PRINT("\ngoDeepSleep");
   hwm.setPowerRail(OFF);    
 
   while (hwm.onOff.state == ON_OFF_TRIGGER) hwm.onOff.refresh(); //wait button to be released
 
   #ifndef PROD
-    DEBUG_PRINT(" LOOP");
+    //DEBUG_PRINT(" LOOP");
     while(1);
   #else
-    DEBUG_PRINT(" SHUTTING DOWN");
+    //DEBUG_PRINT(" SHUTTING DOWN");
   #endif
 
   esp_sleep_enable_ext0_wakeup(ONOFF_PIN,ON_OFF_TRIGGER); //1 = High, 0 = Low  s3    
@@ -767,7 +767,7 @@ String db="dB",ms="ms";*/
 //////////////////////////////////////////////////////////////
 
 void back_menu_item_selected(MenuComponent* p_menu_component) {
-  DEBUG_PRINT("\nback_menu_item_selected: ");
+  //DEBUG_PRINT("\nback_menu_item_selected: ");
   if (!app.ms.back()) app.restoreScreen();    
   else app.menuSystemFullRefresh();
 }
@@ -785,7 +785,7 @@ void brightness_menu_item_selected(MenuComponent* p_menu_component) {
 }
 
 void save_profile_item_selected(MenuComponent* p_menu_component) {
-  DEBUG_PRINT("\nsave_profile_item_selected ");
+  //DEBUG_PRINT("\nsave_profile_item_selected ");
 }
 
 void tft_rotation_item_selected(MenuComponent* p_menu_component) {
@@ -801,13 +801,13 @@ void reset_item_selected(MenuComponent* p_menu_component){
 }
 
 void info_item_selected(MenuComponent* p_menu_component) {  
-  DEBUG_PRINT("\ninfo item selected: id:%i",p_menu_component->get_name());
+  //DEBUG_PRINT("\ninfo item selected: id:%i",p_menu_component->get_name());
   screen.id = SCREEN_UTILS;
   screen.state = STATE_UTILS_INFO;
 }
 
 void handleConfigConnection(){
-  DEBUG_PRINT("\nhandleConfigConnection");
+  //DEBUG_PRINT("\nhandleConfigConnection");
   // socket is opened between footswitch and browser, hence we indicate the connection is made
   if (app.webAppConnected){
       screen.id = SCREEN_UTILS;
@@ -844,13 +844,11 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
   // process the semantic return and update the menu title accordingly if it was loaded or not
   if (app.lang.load("/"+langName+".lang")){
     app.system.setValue(S_LANG,langName);
-    app.menuActiveIconColor = TFT_GREEN;
-    GUI::glowingGoldColor.value = &GUI::unUsedColor;
+    /*app.menuActiveIconColor = TFT_GREEN;
+    GUI::glowingGoldColor.value = &GUI::unUsedColor;*/
     app.system.save();
     app.restoreScreen();    // return to the caller
-    //app.setWidgetText(MENU_ICON_MIDDLE].widget->setFcolor(&GUI::green);
   }else{
-    //app.setWidgetText(MENU_ICON_MIDDLE].widget->setFcolor(&GUI::red);
     app.menuActiveIconColor = TFT_RED;
     GUI::glowingGoldColor.value = &GUI::unUsedColor;
     app.menuTopText = *app.lang.getString("File Error");
@@ -858,7 +856,7 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
 }
 
 void switchToBank_item_selected(MenuComponent* p_menu_component){
-  DEBUG_PRINT("\n%s",p_menu_component->get_name());
+  //DEBUG_PRINT("\n%s",p_menu_component->get_name());
   screen.id = SCREEN_BANK;
   screen.state = 0;
   for (; screen.state < app.banks.size(); screen.state++){
@@ -867,7 +865,7 @@ void switchToBank_item_selected(MenuComponent* p_menu_component){
 }
 
 void menu_selected(MenuComponent* p_menu_component){
-  DEBUG_PRINT("\n\t\t ====> MENU %s SELECTED <====",p_menu_component->get_name());
+  //DEBUG_PRINT("\n\t\t ====> MENU %s SELECTED <====",p_menu_component->get_name());
   
   if (strcmp(p_menu_component->get_name(),app.langMenuString) == 0){
     // this doesn't work as the app.ms selected scrool the item above LANG and not LANG itself since the menuSelected action is not complete yet (we are inside)
@@ -887,7 +885,9 @@ void menu_selected(MenuComponent* p_menu_component){
 ////                OVERLAYS CALLBACKS                 ///////
 //////////////////////////////////////////////////////////////
 
-void voidOverlay(uint8_t id){DEBUG_PRINT("\nvoidOverlay()");}
+void voidOverlay(uint8_t id){
+//  DEBUG_PRINT("\nvoidOverlay()");
+}
 
 
 void baseOverLayBuilder(uint8_t id){
@@ -907,18 +907,14 @@ void bankOverlayBuilder(uint8_t BankIndex){
   
   baseOverLayBuilder(BankIndex);
   return;
-  #define PROGRESSBAR_HEIGHT 5
-  //GUI::tft->fillRect(0,TFT_HEIGHT-OVERLAY_ICON_SIZE-PROGRESSBAR_HEIGHT-1,TFT_WIDTH,PROGRESSBAR_HEIGHT,TFT_CYAN);
-  /*Arc* arc = new Arc(&testV, 0.0,100.0, &app.midScreenHoriz,&app.midScreenVertical, TFT_HEIGHT/2-10,&GUI::gold,&GUI::transparentColor);
-  gui.add(arc);*/
 
   Bank* bank = app.banks.get(BankIndex);
   if (bank != nullptr){
-    //DEBUG_PRINT("\n\n\n---------------------------------\n\n bankOverlayBuilder %s\n\n ---------------------------------",bank->name.c_str());
+    //DEBUG_PRINT("\n\n\n--------------------------------- bankOverlayBuilder %s ---------------------------------\n\n ",bank->name.c_str());
     BankNavigator* navBar = new BankNavigator(bank,true);   
     gui.add(navBar);
   }else{
-    DEBUG_PRINT("\nbankOverlayBuilder NULL BANK");
+    //DEBUG_PRINT("\nbankOverlayBuilder NULL BANK");
   }
 }
 
@@ -928,18 +924,20 @@ void bankOverlayBuilder(uint8_t BankIndex){
 ////                SCREENBUILDERS CALLBACKS           ///////
 //////////////////////////////////////////////////////////////
 
-void bankScreenBuilder(uint8_t subScreen){
+void bankScreenBuilder(uint8_t subScreen){  
+  app.userScreenBuilder(SCREEN_BANK,subScreen);
+
+  if (app.disabledBankRendering == true) return;
+
   GUI::defaultBcolor = TFT_BGCOLOR;
   GUI::defaultFcolor = TFT_FCOLOR;
   GUI::cls();
-  app.userBankScreenBuilder(subScreen);
-  if (app.disabledBankRendering == true) return;
 
-  app.persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
-  app.persistants.putUChar(PERSISTANT_SCREEN_STATE,subScreen);
+  /*app.,SCREEN_BANK);
+  app.persistants.putUChar(PERSISTANT_SCREEN_STATE,subScreen);*/
     
   Bank* bank = app.banks.get(subScreen);
-  DEBUG_PRINT("\n\n\n---------------------------------bankScreenBuilder ");
+  //DEBUG_PRINT("\n\n\n---------------------------------bankScreenBuilder ");
 
   if (bank != nullptr){
 
@@ -948,7 +946,7 @@ void bankScreenBuilder(uint8_t subScreen){
     Strip* strip = bank->getStrip(bank->selector);
 
     if (strip != nullptr){
-      DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),strip->win, bank->selector,layout);
+      //DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),strip->win, bank->selector,layout);
       if (layout == LAYOUT_ZOOM){
         //strip->refresh();
         strip->buildWidgets(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
@@ -972,15 +970,15 @@ void bankScreenBuilder(uint8_t subScreen){
       app.focus(strip,bank); // give focus to the strip
 
     }else{
-      DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
+      //DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
       gui.add(new TextArea(app.lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
     }
   }else{
-      DEBUG_PRINT("\nNO BANK");
+      //DEBUG_PRINT("\nNO BANK");
       gui.add(new TextArea(app.lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   }
   
-  DEBUG_PRINT("\n--------------X-----------------");
+  //DEBUG_PRINT("\n--------------X-----------------");
 }
 
 void addTopandBottomMenuLabel(){
@@ -1004,21 +1002,21 @@ void setMenuColors(){
 }
 
 void menuScreenBuilder(uint8_t subScreen){
-  DEBUG_PRINT("\nmenuScreenBuilder()");  
+  //DEBUG_PRINT("\nmenuScreenBuilder()");  
   setMenuColors();
   addMenuWidgets();
   //LogUDP::sendLog("menuScreenBuilder",hwm.network->udp);
 }
 
 void bankSwitchScreenBuilder(uint8_t id){
-  DEBUG_PRINT("\nbankSwitchScreenBuilder()");  
+  //DEBUG_PRINT("\nbankSwitchScreenBuilder()");  
   GUI::defaultBcolor = TFT_BGCOLOR;
   GUI::defaultFcolor = GUI::gold;
   addMenuWidgets();
 }
 
 void defaultWizardScreenBuilder(){
-    DEBUG_PRINT("\ndefaultWizardScreenBuilder");
+    //DEBUG_PRINT("\ndefaultWizardScreenBuilder");
     GUI::cls();
     app.menuBottomLabel = "DEFAULT WIZARD";
     app.menuTopText = "PRESS A BUTTON";
@@ -1026,8 +1024,11 @@ void defaultWizardScreenBuilder(){
 }
 
 void defaultWizardStepFlow(){
-  DEBUG_PRINT("\ndefaultWizardStepFlow(%i)");
-  if (app.getButtonState(MIDDLEB)) app.gotoWizardEnd();  
+  //DEBUG_PRINT("\ndefaultWizardStepFlow(%i)");
+  if (app.getButtonState(MIDDLEB)){
+    app.persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
+    app.restoreScreen();
+  } 
 }
 
 void defaultBootScreen(){
@@ -1038,25 +1039,22 @@ void defaultBootScreen(){
 }
 
 void wizardScreenBuilder(uint8_t subScreen){
-  DEBUG_PRINT("\nwizardScreenBuilder(%d)",subScreen);
+  //DEBUG_PRINT("\nwizardScreenBuilder(%d)",subScreen);
   switch(subScreen){
     case STATE_WIZARD_LANG_STEP1:
       // nothin specific => select lang
-      DEBUG_PRINT("\tVOID GUI",subScreen);
+      //DEBUG_PRINT("\tVOID GUI",subScreen);
     break;
     case STATE_WIZARD_CONNECT_CONFIG_STEP2:
       // nothing specific => connect config is done by utility screen set within handleConfigConnection() 
-      DEBUG_PRINT("\tVOID GUI",subScreen);
+      //DEBUG_PRINT("\tVOID GUI",subScreen);
     break;      
     case STATE_WIZARD_CONNECT_NETWORK_STEP3:
       GUI::cls();
       gui.add(new Label(app.lang.getString("Waiting network"), Align::Center,&app.midScreenHoriz, &app.midScreenVertical,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));   
     break;    
     case STATE_WIZARD_USER_STEP4:
-      app.userWizardScreenBuilder();
-    break;
-    case STATE_WIZARD_END_STEP5:
-      
+      app.userScreenBuilder(SCREEN_WIZARD, STATE_WIZARD_USER_STEP4);
     break;
   }
 }
@@ -1078,7 +1076,7 @@ void promptScreenBuiler(uint8_t id){}
 
 
 void addLeftRightIcons(){
-    DEBUG_PRINT("addLeftRightIcons()");
+    //DEBUG_PRINT("addLeftRightIcons()");
     GUI::cls(GUI::defaultBcolor);  
     gui.add(new Icon(&app.leftIcon, Align::Right,&app.hquarter2xPos,&app.menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
     gui.add(new Icon(&app.rightIcon, Align::Left,&app.hquarter3xPos,&app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
@@ -1117,14 +1115,14 @@ void buildNetworkScreen(){
 int16_t brightYpos = app.menuIconYpos*1.2;
 
 void utilsScreenBuilder(uint8_t state){
-  DEBUG_PRINT("\nutilsScreenBuilder(%d)",state);
+  //DEBUG_PRINT("\nutilsScreenBuilder(%d)",state);
   setMenuColors();  // in case it's called directly from the wizard@startup
   switch (state) {
     case STATE_UTILS_BRIGHTNESS:{
-      DEBUG_PRINT("\nSTATE_UTILS_BRIGHTNESS");
+      //DEBUG_PRINT("\nSTATE_UTILS_BRIGHTNESS");
       GUI::cls();
       //gui.add(new ProgressBarH(&GUI::screenBrightness /*v*/, BRIGHTNESS_MIN /*min*/,BRIGHTNESS_MAX /*max*/, &GUI::zero /*x*/, &app.menuIconYpos /*y*/, TFT_WIDTH /*w*/, TFT_HEIGHT/6 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::gold /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
-      gui.add(new Label(app.lang.getString("BRIGHTNESS"), Align::Center,&app.midScreenHoriz, &GUI::six,MENU_TITLE_SIZE*0.8,&GUI::defaultFcolor,&GUI::defaultBcolor));            
+      gui.add(new Label(app.lang.getString("BRIGHTNESS"), Align::Center,&app.midScreenHoriz, &GUI::three,MENU_TITLE_SIZE*0.8,&GUI::defaultFcolor,&GUI::defaultBcolor));            
       gui.add(new Arc(&GUI::screenBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &app.midScreenHoriz, &app.midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
       gui.add(new Icon(&app.brightIcon, Align::Center,&app.midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
       gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%",100));            // alter = 100%
@@ -1135,7 +1133,7 @@ void utilsScreenBuilder(uint8_t state){
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_INFO:
-      DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());
+      //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());
       GUI::cls(GUI::menuBackGroundColor);
 
       gui.add(new TextArea(app.lang.getString("!\"#$%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&app.midScreenHoriz,&app.midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
@@ -1145,7 +1143,7 @@ void utilsScreenBuilder(uint8_t state){
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_CONNECTCONFIGMEDIA:
       buildNetworkScreen();
-      DEBUG_PRINT("\nSTATE_UTILS_CONNECTCONFIGMEDIA: %s",app.menuTopText.c_str());
+      //DEBUG_PRINT("\nSTATE_UTILS_CONNECTCONFIGMEDIA: %s",app.menuTopText.c_str());
     break;
     case STATE_UTILS_CONNECTWEBAPP:
       app.configIconGlowingRedColor.value = &GUI::unUsedColor;
@@ -1160,7 +1158,7 @@ void utilsScreenBuilder(uint8_t state){
 
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
-      DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP: %s",app.menuTopText.c_str());
+      //DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP: %s",app.menuTopText.c_str());
     break;
     case STATE_UTILS_WEBAPPCONNECTED:         
       addLeftRightIcons();
@@ -1175,7 +1173,7 @@ void utilsScreenBuilder(uint8_t state){
 
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
-      DEBUG_PRINT("\nSTATE_UTILS_WEBAPPCONNECTED: %s",app.menuTopText.c_str());      
+      //DEBUG_PRINT("\nSTATE_UTILS_WEBAPPCONNECTED: %s",app.menuTopText.c_str());      
     break;
     ////////////////////////////////////////////////////////////////////////////////
   }
@@ -1193,14 +1191,14 @@ void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, con
       //DEBUG_PRINT("\n\t\t socketsend=><%s>",response.c_str());                 
     break;
     case net::WebSocketDataType::BINARY:
-      DEBUG_PRINT("\nReceived binary");
+      //DEBUG_PRINT("\nReceived binary");
     break;
   }
   ws.send(dataType, response.c_str(), response.length());
 }
 
 void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *reason, uint16_t length) {
-  DEBUG_PRINT("\n\t!!! socketCloseCallback=>code:%i length:%i\n",code,length);
+  //DEBUG_PRINT("\n\t!!! socketCloseCallback=>code:%i length:%i\n",code,length);
   app.webAppConnected = false;
   hwm.configMedia->refreshed = true;    // this is to trigger app manager to refresh the screen showing how to connect.
 }
@@ -1212,14 +1210,14 @@ void socketConnectionCallback(IWebSocket &ws) {
 
   const auto protocol = ws.getProtocol();
   if (protocol) {
-    DEBUG_PRINT("\nProtocol: %i",protocol);
+    //DEBUG_PRINT("\nProtocol: %i",protocol);
   }
 
   ws.onMessage(socketMessageCallback);
   ws.onClose(socketCloseCallback);
 
   app.configClientIP = ws.getRemoteIP().toString();
-  DEBUG_PRINT("\nNew websocket client IP: %s",app.configClientIP.c_str());
+  //DEBUG_PRINT("\nNew websocket client IP: %s",app.configClientIP.c_str());
 
   // any message to be send straigth after connexion was established would be put here.
   //app.broadCast(app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivityConfig\"}"));  // inform webclient               could be done via ws.send as well  

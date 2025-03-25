@@ -217,7 +217,7 @@ class MixerInterface{
       if (_model == "") model = MIXING_STATION_MODEL;
       else model = _model;          
 
-      DEBUG_PRINT("\nnew MixerInterface(%s)",model.c_str());
+      //DEBUG_PRINT("\nnew MixerInterface(%s)",model.c_str());
 
       dataRepository = dr;
 
@@ -258,16 +258,16 @@ class MixerInterface{
       String interfaceFileNameGz = INTERFACES_FILENAME+String(".gz");      
       dataSize = readGzFileToBuffer(interfaceFileNameGz.c_str(),&decompressedJson);
       if (dataSize == 0){ // uncompress failed
-        DEBUG_PRINT("\nFailed to decompress JSON interface file %s, using non compressed file",INTERFACES_FILENAME);
+        //DEBUG_PRINT("\nFailed to decompress JSON interface file %s, using non compressed file",INTERFACES_FILENAME);
         File file = LittleFS.open(INTERFACES_FILENAME,"r");
         if (!file) {
-            DEBUG_PRINT("\nFailed to open JSON interface file");
+            //DEBUG_PRINT("\nFailed to open JSON interface file");
             file.close(); // Fermer le fichier
             return;
         }else{
           auto error = deserializeJson(*interfaceDoc, file);
           if (error) {
-              DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());             
+              //DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());             
               file.close(); // Fermer le fichier
               return;
           }
@@ -277,7 +277,7 @@ class MixerInterface{
         // Désérialiser les données JSON
         auto error = deserializeJson(*interfaceDoc, decompressedJson.buffer);
         if (error) {
-            DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());
+            //DEBUG_PRINT("\nJSON interface parsing failed: %s",error.c_str());
             return;
         }        
       }      
@@ -297,7 +297,7 @@ class MixerInterface{
     String getAdjacentValueByKeyFromRootArray(JsonVariant& doc, String root, String key, String keyValue, String adjacent, String defaultValue="") {  // key = "model" , adjacent = "size"
         // Vérifier si le document contient une clé "consoles"
         if (!doc[root].is<JsonArray>()) {
-            DEBUG_PRINT("\nRoot '%s' not found or not an array in JSON",root.c_str());
+            //DEBUG_PRINT("\nRoot '%s' not found or not an array in JSON",root.c_str());
             return defaultValue;
         }
 
@@ -312,13 +312,13 @@ class MixerInterface{
                     //DEBUG_PRINT("\n%s:%s = %s",keyValue.c_str(),adjacent.c_str(),s.c_str());
                     return s;
                 } else {
-                    DEBUG_PRINT("\nadjacent:%s   not found.",adjacent.c_str());
+                    //DEBUG_PRINT("\nadjacent:%s   not found.",adjacent.c_str());
                     return defaultValue;
                 }
             }
         }
 
-        DEBUG_PRINT("\n<%s>=<%s> not found, returning default %s = %s",keyValue.c_str(),key.c_str(),adjacent.c_str(),defaultValue.c_str());
+        //DEBUG_PRINT("\n<%s>=<%s> not found, returning default %s = %s",keyValue.c_str(),key.c_str(),adjacent.c_str(),defaultValue.c_str());
         return defaultValue;
     }
 
@@ -339,12 +339,12 @@ class MixerInterface{
             //DEBUG_PRINT("\nValeur modifiée avec succès !");
             return;
           } else {
-            DEBUG_PRINT("\nClé non trouvée !");
+            //DEBUG_PRINT("\nClé non trouvée !");
             return;
           }
         }
       }
-      DEBUG_PRINT("\nModèle non trouvé !");
+      //DEBUG_PRINT("\nModèle non trouvé !");
     }
 
 
@@ -402,7 +402,7 @@ class OSCMixerInterface: public MixerInterface {
     uint16_t latency;
 
     OSCMixerInterface(DataRepository* dr,String m, OSCInterface* _osc): osc(_osc), MixerInterface(dr,m){
-      DEBUG_PRINT("\nnew OSCMixerInterface(%s %s,%d)",model.c_str(),osc->ip.toString().c_str(),osc->port);
+      //DEBUG_PRINT("\nnew OSCMixerInterface(%s %s,%d)",model.c_str(),osc->ip.toString().c_str(),osc->port);
       delayBetween2SyncFrames = osc->latency*dsNames.size()*2;      
     }
 
@@ -466,14 +466,14 @@ class OSCMixerInterface: public MixerInterface {
       // this is the specific part that uses scanf to extract the value => we have to know in advance that we want ot retrieve an int.
       int index = 0;
       if (!sscanf(val.addressStr, ds->pattern.c_str(), &index) == 1){
-        DEBUG_PRINT("\nparse %s failed",ds->pattern.c_str());
+        //DEBUG_PRINT("\nparse %s failed",ds->pattern.c_str());
       }
       //DEBUG_PRINT("\nUpdate index %d - offset(%d) = ",index,ds->offset);      
       ////////////////////////////////////
       index = index - ds->offset;
       if (index<0) index = 0;
       if (index>=ds->getSize()){
-        DEBUG_PRINT("\tNO DS IMPLEMENTED FOR THIS INDEX");
+        //DEBUG_PRINT("\tNO DS IMPLEMENTED FOR THIS INDEX");
         return false;
       }
       //DEBUG_PRINT("%d",index);
@@ -556,13 +556,13 @@ class MixerOfflineInterface: public MixerInterface {
   public:
 
     MixerOfflineInterface(DataRepository* dr,String m): MixerInterface(dr,m){
-      DEBUG_PRINT("\n\nNew MixerOfflineInterface(<%s>)\n\n",model.c_str());
+      //DEBUG_PRINT("\n\nNew MixerOfflineInterface(<%s>)\n\n",model.c_str());
       name="Offline";
       interfaceState = DISCONNECTED;
     }
 
     virtual ~MixerOfflineInterface(){
-      DEBUG_PRINT("\n~MixerOfflineInterface()");   
+      //DEBUG_PRINT("\n~MixerOfflineInterface()");   
     }
 
     virtual bool update(){
@@ -603,7 +603,7 @@ class BehringerMixer : public OSCMixerInterface {
   public:
 
     BehringerMixer(DataRepository* dr,String model,OSCInterface* _osc): OSCMixerInterface(dr,model,_osc){
-      DEBUG_PRINT("\n\nNew BehringerMixer(<%s>)\n\n",model.c_str());
+      //DEBUG_PRINT("\n\nNew BehringerMixer(<%s>)\n\n",model.c_str());
       name="MusicTribe";
       echoCommand = BEHRINGER_PING;
       restartMonitorCommand = OSC_BEHRINGER_REMOTE;
@@ -613,7 +613,7 @@ class BehringerMixer : public OSCMixerInterface {
     }
 
     virtual ~BehringerMixer(){
-      DEBUG_PRINT("\n~BehringerMixer()");   
+      //DEBUG_PRINT("\n~BehringerMixer()");   
     }
 
     virtual void queryState(){
@@ -626,7 +626,7 @@ class BehringerMixer : public OSCMixerInterface {
     }
 
     virtual void connect(Config* conf){
-      DEBUG_PRINT("\nConnected to %s",name.c_str());
+      //DEBUG_PRINT("\nConnected to %s",name.c_str());
     }
 
     virtual void disconnect(){}
@@ -704,7 +704,7 @@ class BehringerMixer : public OSCMixerInterface {
       }
       else{
         success = false;
-        DEBUG_PRINT("/n%s unsupported command: %s",name.c_str(),command.c_str());
+        //DEBUG_PRINT("/n%s unsupported command: %s",name.c_str(),command.c_str());
       }
       return success;
     }
@@ -793,7 +793,7 @@ class MixingStation : public OSCMixerInterface {
 
     MixingStation(DataRepository* dr, OSCInterface* osc,uint16_t _port): ms_API_port(_port), OSCMixerInterface(dr,MIXING_STATION_MODEL, osc){      
       
-      DEBUG_PRINT("\n\nNew MixingStation()\n\n");   
+      //DEBUG_PRINT("\n\nNew MixingStation()\n\n");   
       name="undef";                    // to be replaced by the outcome of a REST query 
       echoCommand = OSC_MS_PRE OSC_MS_PING;
       restartMonitorCommand = OSC_MS_REMOTE;
@@ -825,7 +825,7 @@ class MixingStation : public OSCMixerInterface {
 
     virtual ~MixingStation(){
       disconnect();
-      DEBUG_PRINT("\n~MixingStation()");   
+      //DEBUG_PRINT("\n~MixingStation()");   
     }
 
     virtual uint8_t state(){
@@ -872,7 +872,7 @@ class MixingStation : public OSCMixerInterface {
       JsonDocument input;    
       auto error = deserializeJson(input, message);
       if (error) {
-          DEBUG_PRINT("\nwsMixerInterface OnMessageCallback parsing failed: %s",error.c_str()); 
+          //DEBUG_PRINT("\nwsMixerInterface OnMessageCallback parsing failed: %s",error.c_str()); 
           input.clear();
           return;
       }
@@ -901,12 +901,12 @@ class MixingStation : public OSCMixerInterface {
           "body": {}
         }
       */
-      DEBUG_PRINT("\nprocessJsonData(%s...)",param);
+      //DEBUG_PRINT("\nprocessJsonData(%s...)",param);
       
       JsonDocument doc;    
       auto error = deserializeJson(doc, param);
       if (error) {
-          DEBUG_PRINT("\nprocessJsonData parsing failed: %s",error.c_str()); 
+          //DEBUG_PRINT("\nprocessJsonData parsing failed: %s",error.c_str()); 
           doc.clear();
           return;
       }
@@ -975,13 +975,13 @@ class MixingStation : public OSCMixerInterface {
           API_Mixer_State = data["topState"].as<String>();
           interfaceSubState = data["state"].as<String>();
           syncSoftwareProgress = data["progress"].as<int>();
-          DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API STATE %s %d% ----", API_Mixer_State.c_str(), (int)syncSoftwareProgress);
+          //DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API STATE %s %d% ----", API_Mixer_State.c_str(), (int)syncSoftwareProgress);
           //syncSoftwareProgress = syncSoftwareProgress * 1.1; // we fill the gap due to the latency of http checks
           if (syncSoftwareProgress > 100) syncSoftwareProgress = 100; 
           if (interfaceState == SYNCING_SOFTWARE) lastQueryTime = 0; // speed up the call to ping with no delay in between
         }else{
           API_Mixer_State = "offline";
-          DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! REST API Offline !!!----");          
+          //DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! REST API Offline !!!----");          
         }
       }
       
@@ -1006,7 +1006,7 @@ class MixingStation : public OSCMixerInterface {
 
           // Accéder au tableau "consoles"
           if (!data[CONSOLE_KEY].is<JsonArray>()) {
-                DEBUG_PRINT("\n '%s' not found or not an array in JSON",CONSOLE_KEY);
+                //DEBUG_PRINT("\n '%s' not found or not an array in JSON",CONSOLE_KEY);
                 return;
             }
           JsonArray consoles = data[CONSOLE_KEY];      
@@ -1019,9 +1019,9 @@ class MixingStation : public OSCMixerInterface {
           }
           // save the file
           if (serialize(interfaceDoc)){
-            DEBUG_PRINT("\nmixingstation serialized correctly");
+            //DEBUG_PRINT("\nmixingstation serialized correctly");
           }else{
-            DEBUG_PRINT("\nmixingstation serialized failed");
+            //DEBUG_PRINT("\nmixingstation serialized failed");
           }
           setSynced(origin);
           lastQueryTime = 0; // speed up the call to ping with no delay in between          
@@ -1073,7 +1073,7 @@ class MixingStation : public OSCMixerInterface {
 
       else {
 
-          DEBUG_PRINT("\n\t%s",doc.as<String>().c_str());
+          //DEBUG_PRINT("\n\t%s",doc.as<String>().c_str());
 
       }
 
@@ -1082,7 +1082,7 @@ class MixingStation : public OSCMixerInterface {
     }
 
     void setConnectFailed(){
-        DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! COMMAND FAILED !!!----");                          
+        //DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! COMMAND FAILED !!!----");                          
         interfaceState = CONNECTFAILED;
     }
 
@@ -1109,7 +1109,7 @@ class MixingStation : public OSCMixerInterface {
     }
 
     void resetSyncData(){
-      DEBUG_PRINT("\n\n\n\n\t\t\t\t\t\t!!! RESET SYNC DATA !!!\n\n\n\n\n");
+      //DEBUG_PRINT("\n\n\n\n\t\t\t\t\t\t!!! RESET SYNC DATA !!!\n\n\n\n\n");
       APIsyncIndex = 0;
       for (auto&sync : mixerAPISync) sync.synced = false;  
       for (const auto& dsName : dsNames) dsName->syncIndex = 0;
@@ -1181,10 +1181,10 @@ class MixingStation : public OSCMixerInterface {
                 modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, FXRET_SIZE_KEY, fxRetNames->getSize());
                 modifyAdjacentKeyValueIntOfRootArray(interfaceDoc, INTERFACE_KEY, MODEL_KEY, model, MAIN_SIZE_KEY, mainNames->getSize());
                 if (serialize(interfaceDoc)>0){                //save the properties into interfaces.json file                              
-                  DEBUG_PRINT("\nmixing station properties saved into interface file");
+                  //DEBUG_PRINT("\nmixing station properties saved into interface file");
                   serialized = true;
                 }else{
-                  DEBUG_PRINT("\nError savingmixing station properties into interface file");
+                  //DEBUG_PRINT("\nError savingmixing station properties into interface file");
                 }
               }
             }
@@ -1235,15 +1235,15 @@ class MixingStation : public OSCMixerInterface {
 
     virtual void disconnect(){
       interfaceState = DISCONNECTED;     // no REST API and no OSC
-      DEBUG_PRINT("\nWaiting semaphore release in disconnect()");
+      //DEBUG_PRINT("\nWaiting semaphore release in disconnect()");
       if (xSemaphoreTake(msRESTAPIClient.mutex, portMAX_DELAY)) { // Prendre le mutex
         
-          DEBUG_PRINT("\ndeleting task");
+          //DEBUG_PRINT("\ndeleting task");
           //vTaskDelete(msRESTAPIClient.taskHandle); // Supprimer la tâche
           //msRESTAPIClient.taskHandle = NULL;       // Mettre à jour le pointeur
           if (msRESTAPIClient.client != NULL) msRESTAPIClient.client->stop();
           osc->network->clientSocketClose();
-          DEBUG_PRINT("\nnetwork client stoppped");
+          //DEBUG_PRINT("\nnetwork client stoppped");
           //msRESTAPIClient.taskHandle  = nullptr;
         
         xSemaphoreGive(msRESTAPIClient.mutex); // Relâcher le mutex
@@ -1269,7 +1269,7 @@ class MixingStation : public OSCMixerInterface {
         if (osc->network->asyncConnect(&msRESTAPIClient)){
           syncSoftwareProgress = 0.0; 
           API_Mixer_State = "connecting";
-          DEBUG_PRINT("\nCONNECT MS TO %s\n", config->getString(MIXER_AUTOIP_KEY)->c_str());      
+          //DEBUG_PRINT("\nCONNECT MS TO %s\n", config->getString(MIXER_AUTOIP_KEY)->c_str());      
           LogUDP::sendLog("AUTO CONNECT MS",hwm.network->udp);
           lastQueryTime = 0; // try the next one straight with no delay
         }
@@ -1318,7 +1318,7 @@ class MixingStation : public OSCMixerInterface {
 
       bool success;
       if (state() == DISCONNECTED) {
-        DEBUG_PRINT("\nNon connecté a Mixing Station");
+        //DEBUG_PRINT("\nNon connecté a Mixing Station");
         return false;
       }else success = OSCMixerInterface::sendCommand(command, param);
       if (success) return true; // command has been consummed
@@ -1345,7 +1345,7 @@ class MixingStation : public OSCMixerInterface {
       // the routing is performed based on the offset which tells which one is the target
       int index = 0;
       if (!sscanf(val.addressStr, ds->pattern.c_str(), &index) == 1){
-        DEBUG_PRINT("\nparse %s failed",ds->pattern.c_str());
+        //DEBUG_PRINT("\nparse %s failed",ds->pattern.c_str());
       }
 
       for (const auto& dsName : dsNames) {          
