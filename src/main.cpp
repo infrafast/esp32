@@ -4,7 +4,7 @@
 //constexpr uint16_t kBufferMaxSize{512};
 
 #define USE_NETWORK
-#define DEBUG_OSC
+//#define DEBUG_OSC
 #define USE_FTP
 
 //#define TFT_BGCOLOR   TFT_DARKGREY
@@ -225,7 +225,7 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
       labelX = renderX+w/2;
       labelY = renderY+h;
 
-      gui->add(new NumericLabel(&value,1, Align::Center,&labelX,&labelY,h*1.5,&GUI::white,&GUI::defaultBcolor, &brightness, "dB"));      
+      //gui->add(new NumericLabel(&value,1, Align::Center,&labelX,&labelY,h*1.5,&GUI::white,&GUI::defaultBcolor, &brightness, "dB"));      
 
       //DEBUG_PRINT("\nsendStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
 

@@ -144,6 +144,7 @@ public:
     static AlteredColor glowingGoldColor;
 
     static const int16_t zero;
+    static const int16_t un;
     static const int16_t three;
     static const int16_t center;
     static const int16_t y1;
@@ -337,8 +338,8 @@ class Widget : public GUI{
   private:    
 
   protected:    
-    const uint16_t *fColor, *bColor;
-    const int16_t *x,*y;
+    const uint16_t *fColor = nullptr, *bColor = nullptr;
+    const int16_t *x = nullptr ,*y = nullptr;
     int16_t oldX=-1,oldY=-1;
     uint16_t oldfColor, oldbColor;
 };
@@ -1282,10 +1283,10 @@ class ProgressBarV : public VerticalBar{
 
     virtual bool refreshLogic(bool force=false){ 
       refreshed = force;
-      VerticalBar::refreshLogic(refreshed);
       if (oldValue != *value){
         to = height - mapFloatToInt(*value,minValue,maxValue,0,height);    
         //DEBUG_PRINT("\tFrom: %d To: %i",from, to) ;        
+        VerticalBar::refreshLogic(refreshed);        
         oldValue = *value;
       }
       return refreshed;
@@ -1388,7 +1389,7 @@ class Top2Toggles : public CompositeWidget {
       topString = topLabel; bottomString = bottomLabel; fColor2 = fC2;
       topBool = topReverse; bottomBool = bottomReverse; bColor2 =bC2;
        
-      topToggle = new Toggle(topString,&GUI::zero,&GUI::zero,TOP2WIDGET_SIZE,topBool,fColor,bColor, brightness, debug);        
+      topToggle = new Toggle(topString,&GUI::zero,&GUI::un,TOP2WIDGET_SIZE,topBool,fColor,bColor, brightness, debug);        
       bottomToggle = new Toggle(bottomString,&GUI::zero,&GUI::y1,TOP2WIDGET_SIZE,bottomBool,fColor2, bColor2, brightness, debug);        
       
       guiList->add(topToggle);
@@ -1412,7 +1413,7 @@ class Top1Toggle1Label : public CompositeWidget {
       topString = topS; bottomString = bottomS; fColor2 = fC2;
       topBool = topReverse; bColor2 =bC2;
        
-      topToggle = new Toggle(topString,&GUI::zero,&GUI::zero,TOP2WIDGET_SIZE,topBool,fColor,bColor,  brightness, debug);        
+      topToggle = new Toggle(topString,&GUI::zero,&GUI::un,TOP2WIDGET_SIZE,topBool,fColor,bColor,  brightness, debug);        
       bottomLabel = new Label(bottomString, Align::Center,&GUI::center, &GUI::y1,(TOP2WIDGET_SIZE)*1.2,fC2,bC2,brightness, debug);        
 
       guiList->add(topToggle);
@@ -1492,6 +1493,7 @@ const uint16_t GUI::menuBackGroundColor = TFT_WHITE;
 uint16_t GUI::configMediaIconColor = TFT_RED;*/
 
 const int16_t GUI::zero = 0;
+const int16_t GUI::un = 1;
 const int16_t GUI::three = 3;
 const int16_t GUI::center = TFT_WIDTH/2;
 const int16_t GUI::y1 = TOP2WIDGET_SIZE+1;

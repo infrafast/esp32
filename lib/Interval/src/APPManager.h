@@ -1067,7 +1067,7 @@ class BankNavigator: public Widget{
   //#define BANK_NAME_SIZE TFT_WIDTH/15
   public:
 
-    BankNavigator(Bank* b/*, LinkedList<Widget*>* w*/, bool debug = false):Widget(&xPos, &yPos, &fC, &bC, brightness, debug){      
+    BankNavigator(Bank* b/*, LinkedList<Widget*>* w*/, bool debug = false):Widget(&xPos, &yPos, &fC, &bC, &GUI::fullBrightness, debug){      
       bank = b;
       //widgetList = w;
       oldSelector = bank->selector - 1; //this is to force first refresh
@@ -1112,21 +1112,17 @@ class BankNavigator: public Widget{
       uint16_t navFrameColor = GUI::luminance(GUI::gold, 100);
       
       // Create a canvas for the navigation UI
-      Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &navFrameColor, &GUI::defaultBcolor);
+      Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &GUI::defaultBcolor, &GUI::defaultBcolor);
       canva->refresh(true);
 
       // Draw each strip on the navigation UI
-      //drawStripMap(canva);
+      drawStripMap(canva);
 
       // Adjust width
       width = canva->width + CANVA_VS_BANKNAME_SPACE;
 
       // Display focused strip ID
-      String idStr = String(bank->selector);
-      Label* uniqueID = new Label(&idStr, Align::Center, &GUI::zero, &GUI::zero, NAV_HEIGHT, &GUI::white, &GUI::transparentColor);
-      uniqueID->refresh(true);
-      uniqueID->sprite->pushToSprite(canva->sprite, canva->width / 2 - NAV_HEIGHT / 2, height / 2);
-      delete uniqueID;
+      //drawStripID(canva);
 
       // Display bank name
       Label* label = new Label(&bank->name, Align::Right, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, &fC, &bC, brightness, debug);
@@ -1149,7 +1145,7 @@ class BankNavigator: public Widget{
       return refreshed;
     }
 
-        virtual int16_t getX(){
+    virtual int16_t getX(){
       return xPos;
     }
 
@@ -1174,6 +1170,14 @@ class BankNavigator: public Widget{
         canva->sprite->fillRect(cellX + XPADDING, cellY + YPADDING, cellWidth, cellHeight, GUI::luminance(colorMap[strip->colorID].fColor, strip->brightness * GUI::screenBrightness * 255));
         canva->sprite->drawRect(cellX, cellY, cellWidth + XPADDING, cellHeight + YPADDING,  GUI::luminance(colorMap[strip->colorID].bColor, strip->brightness * GUI::screenBrightness * 255));
       }      
+    }
+
+    void drawStripID(Canva* canva){
+      String idStr = String(bank->selector);
+      Label* uniqueID = new Label(&idStr, Align::Center, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, &GUI::white,&GUI::defaultBcolor);
+      uniqueID->refresh(true);
+      uniqueID->sprite->pushToSprite(canva->sprite, canva->width / 2 - NAV_HEIGHT / 2, -5);
+      delete uniqueID;
     }
 
   protected:
@@ -2109,8 +2113,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
     else{
-      Bank* bank = banks.get(screen.state);
-      stripScroll(buttonID,bank);
+      stripScroll(buttonID);
     }
   }
 
@@ -2153,16 +2156,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         }
       }  
       GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO));        
-    }
-
-    void gotoBankScreen(){
-      screen.id = SCREEN_BANK;
-      screen.state = persistants.getUChar(PERSISTANT_SCREEN_STATE,0);
-      //screen.state is bank ID;
-      if (screen.state > banks.size()-1) screen.state = 0; // prevents branching a bank which is not existing anymore
-/*      persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state); 
-      persistants.putUChar(PERSISTANT_SCREEN_ID,screen.id);             
-      oldScreen.value = screen.value - 1;*/
     }
 
     void refreshWiFiSignalIcon(){
@@ -3090,7 +3083,10 @@ void setup() {
     //  APPLICATION & WORKFLOW MANAGEMENT METHODS
 
     ///////////////////////////////////////////////////////////////////////
-    bool stripScroll(uint8_t direction, Bank* bank) {
+    bool stripScroll(uint8_t direction) {
+        
+        Bank* bank = banks.get(screen.state);
+        
         if (bank->strips.size()<=1){
           //DEBUG_PRINT("\n stripscroll: only one strip,exit");
           return false; 
@@ -3174,34 +3170,32 @@ void setup() {
     }
 
     bool jumpToStrip(uint8_t id, const String& bankName) {
+
       // get the current window and bank, before jumping to the strip
       int8_t previousWindow = -1 ;
       Bank* currentBank = banks.get(screen.state);        
       if (currentBank != nullptr){
         Strip* previousStrip = currentBank->getStrip(currentBank->oldSelector);
         if (previousStrip != nullptr) previousWindow = previousStrip->win;
-      }
-      
-
+      }      
       // Jump to the bank (make sure the returned pointer is valid)
       Bank* targetBank = jumpToBank(bankName);
-      if (targetBank == nullptr) return false;  
+      if (targetBank == nullptr) return false;
 
       // Get the destination strip
       Strip* strip = targetBank->getStrip(id);
       if (strip == nullptr) return false;  // Early exit if the strip is not found
       // Set the selector to the strip's index
       targetBank->selector = strip->index;
+      //highlight strip
       focus(strip,targetBank);
- 
+
       // Force screen redraw if we changed the window or the bank
       //DEBUG_PRINT("\n WINDOW previous=%d current=%d",previousWindow, strip->win);      
       if (previousWindow != strip->win || currentBank != targetBank){
         screen.focus = screen.focus - 1; // force refresh 
         //DEBUG_PRINT("\nFORCE REFRESH!!!!!");
       }
-
-      
 
       return true;
     }
@@ -3227,9 +3221,10 @@ void setup() {
       Bank* bank = getBank(bankName,&bankIndex);
       if (bank == nullptr) return nullptr;  // Early exit if the bank is not found
 
-      screen.id = SCREEN_BANK;
-      screen.state = bankIndex;   
-      //DEBUG_PRINT("\njumpToBank =>%s,%d",bank->name.c_str(),bankIndex);
+      persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
+      persistants.putUChar(PERSISTANT_SCREEN_STATE,bankIndex);
+      restoreScreen();      
+      
       return bank;        
     }
 

@@ -857,11 +857,7 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
 
 void switchToBank_item_selected(MenuComponent* p_menu_component){
   //DEBUG_PRINT("\n%s",p_menu_component->get_name());
-  screen.id = SCREEN_BANK;
-  screen.state = 0;
-  for (; screen.state < app.banks.size(); screen.state++){
-    if (app.banks.get(screen.state)->name == p_menu_component->get_name()) break;
-  }
+  app.jumpToBank(p_menu_component->get_name());
 }
 
 void menu_selected(MenuComponent* p_menu_component){
@@ -906,7 +902,7 @@ float testV = 76;
 void bankOverlayBuilder(uint8_t BankIndex){
   
   baseOverLayBuilder(BankIndex);
-  return;
+  //return;
 
   Bank* bank = app.banks.get(BankIndex);
   if (bank != nullptr){
