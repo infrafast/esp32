@@ -5,7 +5,7 @@
 
 #define USE_NETWORK
 //#define DEBUG_OSC
-#define USE_FTP
+//#define USE_FTP
 
 //#define TFT_BGCOLOR   TFT_DARKGREY
 //#define TFT_FCOLOR    TFT_SILVER
@@ -63,7 +63,7 @@ OpenFontRender myOfr = OpenFontRender();
 
 I18n i18n = I18n();
 
-int16_t netIconY = (TFT_HEIGHT/2)-(ICON_MAX_SIZE/2.3), bottomText = TFT_HEIGHT-OVERLAY_ICON_SIZE-(CONFIG_TEXTAREA_MESSAGE_SIZE/2), belowIconText = bottomText-CONFIG_TEXTAREA_MESSAGE_SIZE, aboveBottomText = bottomText-7;
+int16_t netIconY = (TFT_HEIGHT/2)-(ICON_MAX_SIZE/2.3), bottomText = netIconY+ICON_MAX_SIZE, belowIconText = bottomText-CONFIG_TEXTAREA_MESSAGE_SIZE, aboveBottomText = bottomText-7;
 
 //float tV = 95.0;
 int16_t mixerY = TFT_HEIGHT - 120;
@@ -771,14 +771,11 @@ void userScreenBuilder(int screebID, int subScreen){
           //gui.add(new Arc(&dataProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));
         }else{
           if (mixerServer.mixerInterface->model == MIXING_STATION_MODEL){
-
             if (userConfig.getInt(MIXER_AUTOMODEL_KEY) != -1){
               modalScreen(i18n.getString("Connecting mixing station to mixer"),i18n.getString(stateNames[interfaceState]),i18n.getString("Auto connect enabled"));            
             }else{
               modalScreen(i18n.getString("Connect mixing station to mixer"),i18n.getString(stateNames[interfaceState]),i18n.getString("Auto connect disabled"));            
             }
-
-
             gui.add(new MyIcon(&iconMS,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));
           }
           else gui.add(new MyIcon(&iconMixer,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE*.9,&iconMixerColor,&GUI::defaultBcolor));        
@@ -787,7 +784,6 @@ void userScreenBuilder(int screebID, int subScreen){
     }
   }
 }
-
 
 ///////////////////////  USER CONFIG   ////////////////////////////////////////
 #define DEFAULT_USER_CONFIG "{\

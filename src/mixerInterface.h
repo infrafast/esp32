@@ -776,7 +776,7 @@ class MixingStation : public OSCMixerInterface {
       public:
         String APIcall ="";
         bool synced = false;
-        SyncInfo(String s1, bool s2=false):APIcall(s1),synced(s2){}
+        SyncInfo(String apiCall, bool forceSynced=false):APIcall(apiCall),synced(forceSynced){}
     };
     
     bool serialized = false;
@@ -824,7 +824,7 @@ class MixingStation : public OSCMixerInterface {
 
 
     virtual ~MixingStation(){
-      disconnect();
+      //disconnect();
       //DEBUG_PRINT("\n~MixingStation()");   
     }
 

@@ -902,7 +902,9 @@ float testV = 76;
 void bankOverlayBuilder(uint8_t BankIndex){
   
   baseOverLayBuilder(BankIndex);
-  //return;
+  
+  //we do not display the bankNavigator if user deactivate the bank screen display
+  if (app.disabledBankRendering == true) return;
 
   Bank* bank = app.banks.get(BankIndex);
   if (bank != nullptr){
@@ -1121,7 +1123,7 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new Label(app.lang.getString("BRIGHTNESS"), Align::Center,&app.midScreenHoriz, &GUI::three,MENU_TITLE_SIZE*0.8,&GUI::defaultFcolor,&GUI::defaultBcolor));            
       gui.add(new Arc(&GUI::screenBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &app.midScreenHoriz, &app.midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
       gui.add(new Icon(&app.brightIcon, Align::Center,&app.midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
-      gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%",100));            // alter = 100%
+      gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SEARCHING_CONNECTION:{
@@ -1132,7 +1134,7 @@ void utilsScreenBuilder(uint8_t state){
       //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());
       GUI::cls(GUI::menuBackGroundColor);
 
-      gui.add(new TextArea(app.lang.getString("!\"#$%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&app.midScreenHoriz,&app.midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new TextArea(app.lang.getString("!\"#$%%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&app.midScreenHoriz,&app.midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
       gui.add(new Label(&app.vBatLabel, Align::Center,&app.midScreenHoriz, &app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
     break;

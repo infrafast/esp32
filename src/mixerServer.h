@@ -161,9 +161,10 @@ class MixerServer: public HWComponent2State{
     }
 
     // Déconnexion
-    void disconnect() {
+    void disconnect() {      
       //DEBUG_PRINT("\n[-------server state > DISCONNECTED -----]");      
       if (mixerInterface != nullptr){
+        mixerInterface->disconnect();
         delete mixerInterface;
       }      
       state = DISCONNECTED;

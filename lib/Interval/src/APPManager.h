@@ -3570,8 +3570,22 @@ void setup() {
       for (int i = 0; i < numberOfNetworks && i<MAX_NUMBER_OF_NETWORK_TO_REPORT; i++) {
         //DEBUG_PRINT("\nNetwork name: %s",WiFi.SSID(i).c_str());
         scannedWifi.add(WiFi.SSID(i));
+
+        String ssid = WiFi.SSID(i);         // Nom du réseau (SSID)
+        int32_t rssi = WiFi.RSSI(i);        // Puissance du signal (RSSI)
+        int32_t channel = WiFi.channel(i);  // Canal utilisé
+        bool isEncrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+  
+        // Affichage des infos du réseau
+        DEBUG_PRINT("\nRéseau #%d :", i + 1);
+        DEBUG_PRINT("\n\tSSID\t\t\t\t: %s", ssid.c_str());
+        DEBUG_PRINT("\n\tRSSI\t\t\t\t: %d dBm", rssi);
+        DEBUG_PRINT("\n\tCanal\t\t\t\t: %d", channel);
+        DEBUG_PRINT("\n\tSécurisé\t\t\t\t: %s\n", isEncrypted ? "Oui" : "Non");
+
       }     
       String data;
+      WiFi.scanDelete();
       serializeJson(doc,data);
       broadCast(data);
     }
