@@ -33,7 +33,6 @@ class MixerServer: public HWComponent2State{
     bool behringerOnline = false;
     bool offline = false, previousOffline = false;
 
-
     String name;
     Config* config;
     MixerInterface *mixerInterface;  // Pointeur vers l'interface abstraite (HAL)  
@@ -85,7 +84,7 @@ class MixerServer: public HWComponent2State{
         refreshed = true;
       }
 
-      if (offline) return refreshed; // do not try to connect if offline parameter is set to truem, we just stop here
+      if (offline) return refreshed; // do not try to connect if offline parameter is set to true, we just stop here
 
       if (network->state == CONNECTED){                
                
@@ -174,6 +173,36 @@ class MixerServer: public HWComponent2State{
       mixerInterface->init();
       name = *app.lang.getString("searching");
     }
+
+    //////////////////////////////////////////////////////////
+    //////////////////// ALL COMMANDS ////////////////////////    
+    //////////////////////////////////////////////////////////
+    /*bool setChBusMute(bool mute,uint8_t chID, uint8_t busID){  
+      JsonDocument command;
+      command["ch"] = chID;
+      command["bus"] = busID;
+      command["on"] = !mute;
+      return mixerInterface->sendCommand("setChBusMute",command);
+    }
+
+    bool getChMute(uint8_t chID){
+      JsonDocument command;
+      command["ch"] = chID;
+      return mixerInterface->sendCommand("getChMute",command);
+    }
+
+    bool getBusMute(uint8_t busID){
+      JsonDocument command;
+      command["bus"] = busID;
+      return mixerInterface->sendCommand("getBusMute",command);
+    }
+
+    bool getChValue(uint8_t chID){
+      JsonDocument command;
+      command["ch"] = chID;
+      return mixerInterface->sendCommand("getChValue",command);
+    }*/
+
 
   private:    
     uint16_t pingLatency = 0;

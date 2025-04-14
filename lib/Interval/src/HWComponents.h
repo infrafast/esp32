@@ -1017,7 +1017,7 @@ class WiFiEth : public Network{
     }
 
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){
-      DEBUG_PRINT("\nclientSocketOpen(%s,%d,%s)",host,port,path);
+      //DEBUG_PRINT("\nclientSocketOpen(%s,%d,%s)",host,port,path);
      
       if (state != CONNECTED){
         DEBUG_PRINT("\t failed, network not connected!");
@@ -1026,19 +1026,19 @@ class WiFiEth : public Network{
       if (media == CABLE_MEDIA){
         if (wsEthClient!= nullptr){
           if (!wsEthClient->open(host, port, path)){
-            DEBUG_PRINT("\t open wsEthClient failed!");
+            //DEBUG_PRINT("\t open wsEthClient failed!");
             return false;
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){
           if (!wsWiFiClient->open(host, port, path)){
-            DEBUG_PRINT("\t open wsWiFiClient failed!");
+            //DEBUG_PRINT("\t open wsWiFiClient failed!");
             return false;
           }
         }
       }
-      DEBUG_PRINT("\t success");
+      //DEBUG_PRINT("\t success");
       return true;
     }
 
@@ -1047,13 +1047,13 @@ class WiFiEth : public Network{
         if (wsEthClient!= nullptr){      
           if (wsEthClient->getReadyState() == WebSocketReadyState::OPEN){
             wsEthClient->send(WebSocketDataType::TEXT, message, strlen(message));
-            DEBUG_PRINT("\nwsEthClientSend(%s)",message);
+            //DEBUG_PRINT("\nwsEthClientSend(%s)",message);
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){      
           wsWiFiClient->send(WebSocketDataType::TEXT, message, strlen(message));
-          DEBUG_PRINT("\nwsWiFiClientSend(%s)",message);
+          //DEBUG_PRINT("\nwsWiFiClientSend(%s)",message);
         }
       }      
     }
@@ -1073,13 +1073,13 @@ class WiFiEth : public Network{
     
     
     virtual WebSocketReadyState clientSocketState(){
-      DEBUG_PRINT("\nWebSocketReadyState()");
+      //DEBUG_PRINT("\nWebSocketReadyState()");
       if (media == CABLE_MEDIA){
         if (wsEthClient!= nullptr) return wsEthClient->getReadyState();
       }else{
         if (wsWiFiClient!= nullptr) return wsWiFiClient->getReadyState();
       }
-      DEBUG_PRINT(": CLOSED");
+      //DEBUG_PRINT(": CLOSED");
       return WebSocketReadyState::CLOSED;      
     }
 
@@ -1132,9 +1132,6 @@ class WiFiEth : public Network{
       stopWiFi();     
       stopEthernet();
     }
-
-
-
 
     bool refresh(bool force=false) {
       
@@ -1368,7 +1365,7 @@ class WiFiEth : public Network{
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
-      DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
+      //DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
       if (clientParam->host[3] == 255){
         DEBUG_PRINT("\t=>broadcast, stop.");  
         return false;
@@ -1381,7 +1378,7 @@ class WiFiEth : public Network{
 
       // Si nous sommes déjà en train de tenter une connexion, on ne relance pas la tâche
       if (clientParam->isClientConnecting ) {
-        DEBUG_PRINT("\tconnection pending, no more attempt allowed, stop.");
+        //DEBUG_PRINT("\tconnection pending, no more attempt allowed, stop.");
         //clientParam->client->stop();
         //vTaskDelete(httpTaskHandle);
         //clientParam->taskHandle = nullptr;

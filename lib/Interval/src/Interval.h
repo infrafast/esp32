@@ -947,25 +947,27 @@ void bankScreenBuilder(uint8_t subScreen){
       //DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),strip->win, bank->selector,layout);
       if (layout == LAYOUT_ZOOM){
         //strip->refresh();
-        strip->buildWidgets(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
+        strip->build(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
       }else{
         for (const auto& winstrip : bank->strips) {
           // affiche tous les strips de la fenetre courante
           if (winstrip->win == strip->win){            
             //winstrip->refresh();
             //bool focus = (winstrip->index == strip->index)?true:false;
-            winstrip->buildWidgets(/*focus*/);
+            winstrip->build(/*focus*/);
           }
         }
       } 
+      app.focus(strip,bank); // give focus to the strip
 
       // header
       Top2Toggles* header;
-      if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, app.lang.getString("Strip render error"), &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
-      else header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, &app.headerStrip.bottomLabel, &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
-      gui.add(header);
+      /*if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, app.lang.getString("Strip render error"), &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
+      else header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, &app.headerStrip.bottomLabel, &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          */      
+      if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,app.focusedStrip->getTopLabel(), app.lang.getString("Strip render error"), &app.focusedStrip->toggle1,&app.focusedStrip->toggle2,&app.focusedStrip->frontColor,&app.focusedStrip->backColor);          
+      else header = new Top2Toggles(&gui.screenGUIs,app.focusedStrip->getTopLabel(), app.focusedStrip->getBottomLabel(), &app.focusedStrip->toggle1,&app.focusedStrip->toggle2,&app.focusedStrip->frontColor,&app.focusedStrip->backColor);          
 
-      app.focus(strip,bank); // give focus to the strip
+      gui.add(header);
 
     }else{
       //DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");

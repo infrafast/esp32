@@ -28,6 +28,7 @@ struct OSCValues{
     char        TypeStr;
     char        addressStr[OSC_MAX_LEN];
     const char* expectedStr;
+    bool        incoming = false;      // this is to indicate if someone has consummed the received data
 };
 
 typedef std::function<void(bool, OSCValues*, int)> OSCPingCallback; 
@@ -65,7 +66,7 @@ class OSCInterface{
         }
         
         bool sendOSCMessage(OSCMessage *msg, const IPAddress _ip, const int _port){           
-            OSC_DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString(),_port);
+            OSC_DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString().c_str(),_port);
             if (network->udp == NULL){
                 OSC_DEBUG_PRINT(":null UDP",msg->getAddress());
                 return false;
@@ -101,17 +102,19 @@ class OSCInterface{
 
         boolean OSCReadIn(OSCValues* data) {
             
-            if (network->udp == NULL){
-                //OSC_DEBUG_PRINT("\n<<OSCReadIn : null UDP");
-                return false;                
-            } 
-
             data->iValue = -1;
             data->fValue = -0.1;
             strcpy(data->addressStr,"");
             strcpy(data->sValue,"");
             strcpy(data->sValue1,"");
             strcpy(data->sValue2,"");
+            data->incoming = false; // data are fresh and not yet consummed
+            
+
+            if (network->udp == NULL){
+                //OSC_DEBUG_PRINT("\n<<OSCReadIn : null UDP");
+                return false;                
+            } 
 
             // Check if packet was received
             int size = network->udp->parsePacket();
@@ -141,6 +144,8 @@ class OSCInterface{
                 if (latency<10) latency = 10;
                 OSC_DEBUG_PRINT("[%dms], ",latency);
             } */         
+
+            data->incoming = true;
 
             if (msg.isInt(0)){
                 data->iValue = msg.getInt(0);    // integer
@@ -226,15 +231,12 @@ class OSCInterface{
             return false;
         }
 
-        bool matchPattern(String pattern, const String& input) {
-            
-            OSC_DEBUG_PRINT("\nmatchPattern");
+        static bool matchPattern(String pattern, const String& input) {
 
             pattern.replace("%02d", "*");
             pattern.replace("%d", "*");
+            pattern.replace("%i", "*");
             pattern.replace("%s", "*");
-
-            OSC_DEBUG_PRINT("(%s,%s)",pattern.c_str(),input.c_str());
 
             int pLen = pattern.length();
             int iLen = input.length();
@@ -269,6 +271,8 @@ class OSCInterface{
             while (p < pLen && pattern[p] == '*') {
                 p++;
             }
+            
+            OSC_DEBUG_PRINT("\nmatchPattern(%s,%s)",pattern.c_str(),input.c_str());
 
             OSC_DEBUG_PRINT(": %s",p == pLen?"true":"false");
             return p == pLen; // Vrai si tout le pattern est traité

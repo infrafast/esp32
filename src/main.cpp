@@ -1,3 +1,5 @@
+// review how BehringerMixerInterfaces uses idStart to match a processed oscframe in feed() as it seems extractID adds a value that it shouldnt to the index
+
 // debugging https://docs.platformio.org/en/stable/tutorials/espressif32/arduino_debugging_unit_testing.html
 
 // make sure to change config.hpp of mWebsocket 
@@ -42,6 +44,9 @@
 /////////////////////    GLOBAL VARIABLES     /////////////////////
 /////////////////////                         ////////////////////
 //////////////////////////////////////////////////////////////////
+String  previousInterfaceSubState = "";
+uint8_t interfaceState = DISCONNECTED;
+
 String demoIP = "";
 uint16_t demoPort=10023;
 
@@ -102,8 +107,24 @@ class StripMixer{
   public:
     StripMixer(MixerServer* ms) : mixerServer(ms){}
 
+    bool extract2AddressIDs(const char* address,const char* pattern, int id1Start, int id2Start){
+      // this method is called when we have to decompose the address to get ids according to a provided pattern
+      // upon reception of an OSC frame
+      if (sscanf(address, pattern,&id1,&id2) != 2) return false;
+
+      if (id1Start == 0) id1 += 1;    // we have to make ID consistent, they should all start at 1
+      if (id2Start == 0) id2 += 1;    // so if they starts at 0 we force them +1
+
+      else return true;
+    }
+
   protected:
     MixerServer* mixerServer;
+    int id1=0, id2=0; // these are the values extracted from the address
+    // example
+    // /fxrtn/03/mix/06/on
+    // v1 = 03
+    // v2 = 06
 };
 
 
@@ -152,11 +173,11 @@ class OSCTestStrip : public TextStrip, public StripMixer{
     
     virtual bool actionCallback(uint8_t trigger){
       JsonDocument command;
+      command["address"] = "testMixingOSC";
       command["msg"] = message;
       command["ip"] = text;
       command["port"] = port;
-      return mixerServer->mixerInterface->sendCommand("testMixingOSC",command);      
-      return true;
+      return mixerServer->mixerInterface->parse(command);  
     }
 
     virtual void render(){
@@ -240,15 +261,6 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
 };
 
 
-bool setChBusMute(bool mute,uint8_t chID, uint8_t busID){  
-      JsonDocument command;
-      command["ch"] = chID;
-      command["bus"] = busID;
-      command["on"] = !mute;
-      //DEBUG_PRINT("\nsetChBusMute(%d,%d,%d)",mute,chID,busID);
-      return mixerServer.mixerInterface->sendCommand("setChBusMute",command);
-}
-
 class Ch2BusStrip : public SendStrip{
   #define STRIP_CH2BUS "ch2bus"
 
@@ -264,7 +276,9 @@ class Ch2BusStrip : public SendStrip{
       //mute/unmute
       //DEBUG_PRINT("\nCh2BusStrip actionCallback");
       toggle1 = !toggle1;
-      return setChBusMute(toggle1,select2ID,select3ID);     
+      //return mixerServer->setChBusMute(toggle1,select2ID,select3ID);     
+      mixerServer->mixerInterface->setChBusMute(toggle1,select2ID,select3ID);     
+      return true;
 
     }
 
@@ -274,8 +288,38 @@ class Ch2BusStrip : public SendStrip{
       // this code should only be called if select2ID != oldSelect2ID
       //...
       // put then the code specific here to treatment, for the value treatment like OSC frame to read the value
+      // get the values
+      mixerServer->mixerInterface->getChBusMute(select2ID,select3ID);
+      mixerServer->mixerInterface->getBusMute(select3ID);     
+      mixerServer->mixerInterface->getChBusValue(select2ID,select3ID);
+
+
       return refreshed;
     }
+
+    void feed(void *parameter) {
+      OSCValues *oscValues = static_cast<OSCValues *>(parameter);      
+      DEBUG_PRINT("\nfeeding %d-%s(%s) with %s",index, getTopLabel()->c_str(), id.c_str(), oscValues->addressStr);
+
+      OSCMixerInterface* interface = (OSCMixerInterface*)mixerServer->mixerInterface;
+
+      if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSMUTE],oscValues->addressStr)){
+        
+      }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSVALUE],oscValues->addressStr)){        
+        if(extract2AddressIDs(oscValues->addressStr,interface->addresses[ADDR_CHBUSVALUE].c_str(),interface->chNames->idStart,interface->busNames->idStart)){         
+          DEBUG_PRINT("\n id1:%d(%d) id2:%d(%d)",id1,select2ID,id2,select3ID);
+          if (id1 == select2ID && id2 == select3ID){  // +1 because dropdown value start at 0 while OSC id starts at 1
+            value = oscValues->fValue;
+            DEBUG_PRINT("\t value: %.2f",value);
+          }
+        }        
+      }else if (OSCInterface::matchPattern(interface->addresses[ADDR_BUSMUTE],oscValues->addressStr)){
+
+      }
+
+    }
+
+
 };
 
 #define CHGAINDB_MIN  -12
@@ -343,11 +387,8 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       return delta;
     }
 
-    bool setChGain(){
-      JsonDocument param;
-      param["ch"] = select2ID;
-      param["value"] = value;
-      return mixerServer->mixerInterface->sendCommand("setChGain",param);      
+    void setChGain(){
+      mixerServer->mixerInterface->setChGain(select2ID, value);      
     }
 
     virtual bool actionCallback(uint8_t trigger){
@@ -381,6 +422,12 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       DEBUG_PRINT("\t INC: %.3f", increment);      
       return increment;
     }*/
+
+    void feed(void *parameter) {
+      OSCValues *oscValues = static_cast<OSCValues *>(parameter);      
+      DEBUG_PRINT("\nfeeding %d-%s with %s",index, getTopLabel()->c_str(), oscValues->addressStr);
+    }
+
 
   private:
     String unitString = "dB";
@@ -892,20 +939,62 @@ void userScreenBuilder(int screebID, int subScreen){
   //DEBUG_PRINT("\n=====================================================================\n\n");
 }
 
-///////////////////////////////////////////////////////////////////
-/////////////////////                         /////////////////////
-                          void loop()
-/////////////////////                         ////////////////////
-//////////////////////////////////////////////////////////////////
-{
-  app.refresh();
+//////////////////////////////////////////////////////////////////////////////
+
+void processInterfaceSync(){
+  if (mixerServer.mixerInterface->interfaceState == SYNCING_SOFTWARE){
+    static uint8_t previousProgress = 254;
+    app.rollingIcon(true);
+    uint8_t progress = mixerServer.mixerInterface->syncSoftwareProgress;
+    if (progress<100 && previousProgress!=progress){
+      previousProgress = progress;
+      app.broadCast("{\"syncProgress\":"+String(progress)+"}");
+    }
+  }else if (mixerServer.mixerInterface->interfaceState == SYNCING_DATA ){
+    static uint8_t previousDataProgress = 254;
+    app.rollingIcon(true);
+    dataProgress = mixerServer.mixerInterface->syncDataProgress();
+    if (dataProgress<100 && previousDataProgress!=dataProgress){
+      previousDataProgress = dataProgress;
+      app.broadCast("{\"syncProgress\":"+String(dataProgress)+"}");
+    }
+  }
+
+  if (previousInterfaceSubState != mixerServer.mixerInterface->interfaceSubState){
+    previousInterfaceSubState = mixerServer.mixerInterface->interfaceSubState;
+    if (mixerServer.mixerInterface->interfaceSubState == "backgroundSync") app.rollingIcon(true);
+    else app.rollingIcon(false);
+  }  
+}
+
+
+void processIncomingData(){
+  if (interfaceState == CONNECTED){
+    OSCMixerInterface* interface = (OSCMixerInterface*)mixerServer.mixerInterface;
+    OSCValues* data = &interface->data;
+    if (data->incoming == true){
+      Bank* bank = app.banks.get(screen.state);   
+      if (bank != nullptr){         
+        if (app.focusedStrip != nullptr){
+          if (bank->currentLayout == LAYOUT_ZOOM){
+            app.focusedStrip->feed(data);    // traite uniquement le strip avec focus
+          }else{
+            for (const auto& winstrip : bank->strips) {
+              // traite tous les strips de la fenetre courante
+              if (winstrip->win == app.focusedStrip->win) winstrip->feed(data);
+            }
+          } 
+        }
+      } 
+    }
+  }
+}
+
+void processMixerState(){
+  // do not refresh mixer if we are not in main screen or wizard, this
+  mixerServer.refresh();         
   
-  if (screen.id == SCREEN_BANK || screen.id == SCREEN_WIZARD)
-   mixerServer.refresh();         //only refresh mixer, (including scanning and detection) if we are on the main screen
-
-  static String  previousInterfaceSubState = "";
-
-  uint8_t interfaceState = mixerServer.mixerInterface->interfaceState;
+  interfaceState = mixerServer.mixerInterface->interfaceState;
 
   if (interfaceState != previousInterfaceState || mixerServer.refreshed || hwm.network->refreshed ){   
     
@@ -942,30 +1031,23 @@ void userScreenBuilder(int screebID, int subScreen){
 
     //if (screen.id == SCREEN_BANK || screen.id == SCREEN_WIZARD) 
       screen.focus = screen.focus - 1;    // rebuild GUI, will call userBuildScreen 
-  }
+  }  
 
-  if (mixerServer.mixerInterface->interfaceState == SYNCING_SOFTWARE){
-    static uint8_t previousProgress = 254;
-    app.rollingIcon(true);
-    uint8_t progress = mixerServer.mixerInterface->syncSoftwareProgress;
-    if (progress<100 && previousProgress!=progress){
-      previousProgress = progress;
-      app.broadCast("{\"syncProgress\":"+String(progress)+"}");
-    }
-  }else if (mixerServer.mixerInterface->interfaceState == SYNCING_DATA ){
-    static uint8_t previousDataProgress = 254;
-    app.rollingIcon(true);
-    dataProgress = mixerServer.mixerInterface->syncDataProgress();
-    if (dataProgress<100 && previousDataProgress!=dataProgress){
-      previousDataProgress = dataProgress;
-      app.broadCast("{\"syncProgress\":"+String(dataProgress)+"}");
-    }
-  }
+  processInterfaceSync();
+  
+  processIncomingData();  
+}
 
-  if (previousInterfaceSubState != mixerServer.mixerInterface->interfaceSubState){
-    previousInterfaceSubState = mixerServer.mixerInterface->interfaceSubState;
-    if (mixerServer.mixerInterface->interfaceSubState == "backgroundSync") app.rollingIcon(true);
-    else app.rollingIcon(false);
+///////////////////////////////////////////////////////////////////
+/////////////////////                         /////////////////////
+                          void loop()
+/////////////////////                         ////////////////////
+//////////////////////////////////////////////////////////////////
+{
+  app.refresh();
+
+  if (screen.id == SCREEN_BANK || screen.id == SCREEN_WIZARD){  
+    processMixerState();
   }
 
   #if defined(USE_FTP) && defined(USE_NETWORK)

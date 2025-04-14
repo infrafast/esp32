@@ -528,7 +528,7 @@ class Strip : public GenericComponent{
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;    
     
-    virtual bool buildWidgets(uint8_t layout = LAYOUT_DETAILS){
+    virtual bool build(uint8_t layout = LAYOUT_DETAILS){
       renderError = false;
 
       refresh();
@@ -572,6 +572,8 @@ class Strip : public GenericComponent{
 
     virtual const String* getTopLabel()=0;
     virtual const String* getBottomLabel()=0;
+    
+    virtual void feed(void *parameter) = 0;
 
     JsonArray properties;
     StripSkeleton* skeleton;
@@ -691,6 +693,11 @@ class TextStrip : public Strip{
       //widgetHandles.add(label);          
       gui->add(label);
     }
+
+    void feed(void *parameter) {
+      DEBUG_PRINT("\nfeeding %d-%s with *values",index,getTopLabel()->c_str());
+    }
+
 
     virtual void deserializeProperty(String property)  {  
       // property = /text/toto   
@@ -1410,18 +1417,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     String leftIcon,rightIcon, brightIcon = ICON_BRIGHTNESS;
 
     bool disabledBankRendering = false;   // this is to stop rendering the bank
-
-    // header strip GUI properties
-    struct{
-      String topLabel;
-      bool topToggle;
-      uint16_t topFcolor;
-      uint16_t topBcolor;
-
-      String bottomLabel;
-      bool bottomToggle;
-    }headerStrip;
-   
+  
+    Strip* focusedStrip = nullptr;
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
     #define MENU_ICON_SIZE TFT_WIDTH/3
@@ -3201,20 +3198,11 @@ void setup() {
     }
 
     void focus(Strip* strip, Bank* bank){
-
       // give focus to the strip
       for (const auto& winstrip : bank->strips) winstrip->focus(false);
       strip->focus(true);    // full brightness
-
-      // update strip header
-      headerStrip.topLabel = *strip->getTopLabel(); 
-      headerStrip.bottomLabel = *strip->getBottomLabel();
-      headerStrip.topToggle = strip->toggle1;
-      headerStrip.bottomToggle = strip->toggle2;
-      headerStrip.topFcolor = strip->frontColor;
-      headerStrip.topBcolor = strip->backColor;      
+      focusedStrip = strip;
     }
-    
 
     Bank* jumpToBank(String bankName){
       uint8_t bankIndex = 0;
@@ -3393,6 +3381,7 @@ void setup() {
             // put the focus on the strip
             uint8_t selector = strip->index;
             jumpToStrip(selector,bank->name);    //jsonAnswer should be : {"restoreStrip":{"bank":"BANK j3","strip":{"type":"text","selector":"7","x":"3","y":"0","size":"1x4","color":3,"icon":"Z","properties":["/text/"]}}}         
+            screen.focus = screen.focus - 1;    // force refresh as jumpToStrip only refresh if you change window or bank, but here we may update a strip which is the currently displayed one
             jsonAnswer.callback = RET_SAVEBUTTON;
             jsonAnswer.value = "1";  
           }else{
