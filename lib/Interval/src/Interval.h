@@ -962,10 +962,10 @@ void bankScreenBuilder(uint8_t subScreen){
 
       // header
       Top2Toggles* header;
-      /*if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, app.lang.getString("Strip render error"), &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
-      else header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, &app.headerStrip.bottomLabel, &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          */      
-      if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,app.focusedStrip->getTopLabel(), app.lang.getString("Strip render error"), &app.focusedStrip->toggle1,&app.focusedStrip->toggle2,&app.focusedStrip->frontColor,&app.focusedStrip->backColor);          
-      else header = new Top2Toggles(&gui.screenGUIs,app.focusedStrip->getTopLabel(), app.focusedStrip->getBottomLabel(), &app.focusedStrip->toggle1,&app.focusedStrip->toggle2,&app.focusedStrip->frontColor,&app.focusedStrip->backColor);          
+      if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, app.lang.getString("Strip render error"), &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
+      else header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, &app.headerStrip.bottomLabel, &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
+      /*if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,app.focusedStrip->getTopLabel(), app.lang.getString("Strip render error"), &app.focusedStrip->toggle1,&app.focusedStrip->toggle2,&app.focusedStrip->frontColor,&app.focusedStrip->backColor);          
+      else header = new Top2Toggles(&gui.screenGUIs,app.focusedStrip->getTopLabel(), app.focusedStrip->getBottomLabel(), &app.focusedStrip->toggle1,&app.focusedStrip->toggle2,&app.focusedStrip->frontColor,&app.focusedStrip->backColor);          */
 
       gui.add(header);
 

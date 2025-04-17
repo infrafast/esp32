@@ -472,7 +472,7 @@ class Strip : public GenericComponent{
       return true;    
     }
 
-    /*virtual float increaseCallBack(unsigned long time) = 0;
+    /*virtual float increaseCallback(unsigned long time) = 0;
     virtual float decreaseCallback(unsigned long time) = 0;
     virtual float getIncrement(unsigned long time)=0;*/
 
@@ -493,7 +493,7 @@ class Strip : public GenericComponent{
       return increment;
     }    
 
-    virtual float increaseCallBack(unsigned long time,uint8_t trigger){  
+    virtual float increaseCallback(unsigned long time,uint8_t trigger){  
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC          
       
       if (!Strip::progressiveDelay(time,trigger)) return 0.0;
@@ -695,7 +695,7 @@ class TextStrip : public Strip{
     }
 
     void feed(void *parameter) {
-      DEBUG_PRINT("\nfeeding %d-%s with *values",index,getTopLabel()->c_str());
+      //DEBUG_PRINT("\nfeeding %d-%s with *values",index,getTopLabel()->c_str());
     }
 
 
@@ -731,7 +731,7 @@ class TextStrip : public Strip{
       return skeleton->numberOfProperties;      
     }
 
-    virtual float increaseCallBack(unsigned long time,uint8_t trigger){return true;}
+    virtual float increaseCallback(unsigned long time,uint8_t trigger){return true;}
     virtual float decreaseCallback(unsigned long time,uint8_t trigger){return true;}
     virtual float getIncrement(unsigned long time){return 0.0;}
 
@@ -1419,6 +1419,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     bool disabledBankRendering = false;   // this is to stop rendering the bank
   
     Strip* focusedStrip = nullptr;
+
+    struct{
+      bool topToggle;
+      String topLabel;
+      bool bottomToggle;
+      String bottomLabel;
+      uint16_t topFcolor;
+      uint16_t topBcolor;
+    }headerStrip;
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
     #define MENU_ICON_SIZE TFT_WIDTH/3
@@ -3161,7 +3170,7 @@ void setup() {
       Bank* bank = banks.get(screen.state);    
       if (bank == nullptr) return;
 
-      if (direction == hwm->buttons[RIGHTB]->getID()){ bank->getStrip(bank->selector)->increaseCallBack(time, trigger);}      
+      if (direction == hwm->buttons[RIGHTB]->getID()){ bank->getStrip(bank->selector)->increaseCallback(time, trigger);}      
       else if (direction == hwm->buttons[LEFTB]->getID()){ bank->getStrip(bank->selector)->decreaseCallback(time, trigger);}      
 
     }
@@ -3202,6 +3211,15 @@ void setup() {
       for (const auto& winstrip : bank->strips) winstrip->focus(false);
       strip->focus(true);    // full brightness
       focusedStrip = strip;
+
+      // next we refresh the header accordingly
+      headerStrip.topToggle = focusedStrip->toggle1;
+      headerStrip.topLabel = *focusedStrip->getTopLabel();
+      headerStrip.topFcolor = focusedStrip->frontColor;
+
+      headerStrip.bottomToggle = focusedStrip->toggle2;
+      headerStrip.bottomLabel = *focusedStrip->getBottomLabel();
+      headerStrip.topBcolor = focusedStrip->backColor;
     }
 
     Bank* jumpToBank(String bankName){

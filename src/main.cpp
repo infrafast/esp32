@@ -6,7 +6,7 @@
 //constexpr uint16_t kBufferMaxSize{512};
 
 #define USE_NETWORK
-//#define DEBUG_OSC
+#define DEBUG_OSC
 //#define USE_FTP
 
 //#define TFT_BGCOLOR   TFT_DARKGREY
@@ -30,14 +30,14 @@
 #define ICON_CHGAIN_STRIP     "5"
 
 
-#define STRIP_XAIR_GROUP "xair"
-#define STRIP_UTILS_GROUP "utils"
+#define STRIP_XAIR_GROUP    "xair"
+#define STRIP_UTILS_GROUP   "utils"
 
-#define ADDRESS_MACRONAME "/macro/name/%s"
-#define ADDRESS_ACTION    "/action/%s"
-#define ADDRESS_IP  "/ip/%s"
-#define ADDRESS_PORT "/port/%s"
-#define ADDRESS_MESSAGE "/message/%s"
+#define ADDRESS_MACRONAME   "/macro/name/%s"
+#define ADDRESS_ACTION      "/action/%s"
+#define ADDRESS_IP          "/ip/%s"
+#define ADDRESS_PORT        "/port/%s"
+#define ADDRESS_MESSAGE     "/message/%s"
 
 ///////////////////////////////////////////////////////////////////
 /////////////////////                         /////////////////////
@@ -107,15 +107,19 @@ class StripMixer{
   public:
     StripMixer(MixerServer* ms) : mixerServer(ms){}
 
-    bool extract2AddressIDs(const char* address,const char* pattern, int id1Start, int id2Start){
-      // this method is called when we have to decompose the address to get ids according to a provided pattern
+    bool match2AddressIDtoDropDownID(const char* address,const char* pattern, int idStart){
+      // this method is called when we have to decompose the ids embedded into an address according to a provided pattern
       // upon reception of an OSC frame
       if (sscanf(address, pattern,&id1,&id2) != 2) return false;
 
-      if (id1Start == 0) id1 += 1;    // we have to make ID consistent, they should all start at 1
-      if (id2Start == 0) id2 += 1;    // so if they starts at 0 we force them +1
+      if (idStart == 0){ id1 += 1; id2 += 1;}    // we have to make ID consistent, they should all start at 1
 
-      else return true;
+      return true;
+    }
+
+    uint8_t dropDownIDtoInterfaceID(uint8_t id){
+      // this return the value starting either at 0 or one depending on the mixerInterface (mixing station starts at 0 so drop downvalue would need to be decreased by 1)
+      return id-(1-mixerServer->mixerInterface->idStart);
     }
 
   protected:
@@ -173,11 +177,11 @@ class OSCTestStrip : public TextStrip, public StripMixer{
     
     virtual bool actionCallback(uint8_t trigger){
       JsonDocument command;
-      command["address"] = "testMixingOSC";
-      command["msg"] = message;
-      command["ip"] = text;
-      command["port"] = port;
-      return mixerServer->mixerInterface->parse(command);  
+      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_TESTOSC;
+      command[(uint8_t)EXEC_MESSAGE] = message;
+      command[(uint8_t)EXEC_IP] = text;
+      command[(uint8_t)EXEC_PORT] = port;
+      return mixerServer->mixerInterface->execute(command);  
     }
 
     virtual void render(){
@@ -268,17 +272,20 @@ class Ch2BusStrip : public SendStrip{
 
     Ch2BusStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):SendStrip(s,g,ms,debug){      
       unitString = "dB";
-      valueMin = 0; valueMax = 100;
+      //valueMin = 0; valueMax = 1;
     }
 
     virtual bool actionCallback(uint8_t trigger){
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
       //DEBUG_PRINT("\nCh2BusStrip actionCallback");
-      toggle1 = !toggle1;
-      //return mixerServer->setChBusMute(toggle1,select2ID,select3ID);     
-      mixerServer->mixerInterface->setChBusMute(toggle1,select2ID,select3ID);     
-      return true;
+      toggle1 = !toggle1; 
+
+      JsonDocument command;      
+      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)ADDR_CHBUSMUTE;
+      command[(uint8_t)EXEC_CHID] = select2ID;
+      command[(uint8_t)EXEC_BUSID] = select3ID;
+      return mixerServer->mixerInterface->execute(command);        
 
     }
 
@@ -289,28 +296,40 @@ class Ch2BusStrip : public SendStrip{
       //...
       // put then the code specific here to treatment, for the value treatment like OSC frame to read the value
       // get the values
-      mixerServer->mixerInterface->getChBusMute(select2ID,select3ID);
-      mixerServer->mixerInterface->getBusMute(select3ID);     
-      mixerServer->mixerInterface->getChBusValue(select2ID,select3ID);
+      JsonDocument command;
 
+      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_GETADDRESSVALUE;
+      command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
+      command[(uint8_t)EXEC_BUSID] = dropDownIDtoInterfaceID(select3ID);
+
+      command[(uint8_t)EXEC_ADDRESS] = ADDR_CHBUSMUTE;
+      mixerServer->mixerInterface->execute(command);
+
+      command[(uint8_t)EXEC_ADDRESS] = ADDR_BUSMUTE;
+      mixerServer->mixerInterface->execute(command);
+
+      command[(uint8_t)EXEC_ADDRESS] = ADDR_CHBUSVALUE;
+      mixerServer->mixerInterface->execute(command);      
 
       return refreshed;
     }
 
     void feed(void *parameter) {
+      // this method implements the behaviour of the strip when receiving 
+      // he will process certain frame and ignore others
       OSCValues *oscValues = static_cast<OSCValues *>(parameter);      
-      DEBUG_PRINT("\nfeeding %d-%s(%s) with %s",index, getTopLabel()->c_str(), id.c_str(), oscValues->addressStr);
+      //DEBUG_PRINT("\nfeeding %d-%s(%s) with %s",index, getTopLabel()->c_str(), id.c_str(), oscValues->addressStr);
 
       OSCMixerInterface* interface = (OSCMixerInterface*)mixerServer->mixerInterface;
 
       if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSMUTE],oscValues->addressStr)){
         
       }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSVALUE],oscValues->addressStr)){        
-        if(extract2AddressIDs(oscValues->addressStr,interface->addresses[ADDR_CHBUSVALUE].c_str(),interface->chNames->idStart,interface->busNames->idStart)){         
-          DEBUG_PRINT("\n id1:%d(%d) id2:%d(%d)",id1,select2ID,id2,select3ID);
+        if(match2AddressIDtoDropDownID(oscValues->addressStr,interface->addresses[ADDR_CHBUSVALUE].c_str(),interface->idStart)){         
+          //DEBUG_PRINT("\n id1:%d(%d) id2:%d(%d)",id1,select2ID,id2,select3ID);
           if (id1 == select2ID && id2 == select3ID){  // +1 because dropdown value start at 0 while OSC id starts at 1
             value = oscValues->fValue;
-            DEBUG_PRINT("\t value: %.2f",value);
+            //DEBUG_PRINT("\t value: %.2f",value);
           }
         }        
       }else if (OSCInterface::matchPattern(interface->addresses[ADDR_BUSMUTE],oscValues->addressStr)){
@@ -318,6 +337,28 @@ class Ch2BusStrip : public SendStrip{
       }
 
     }
+
+    virtual float increaseCallback(unsigned long time,uint8_t trigger){
+      float delta = Strip::increaseCallback(time,trigger);
+      if (delta != 0.0) setChBusLevel();
+      return delta;
+    }    
+
+    virtual float decreaseCallback(unsigned long time,uint8_t trigger){
+      float delta = Strip::decreaseCallback(time,trigger);
+      if (delta != 0.0) setChBusLevel();
+      return delta;
+    }      
+
+    void setChBusLevel(){
+      JsonDocument command;
+      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_SETADDRESSVALUE;
+      command[(uint8_t)EXEC_ADDRESS] = ADDR_CHBUSVALUE;
+      command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
+      command[(uint8_t)EXEC_BUSID] = dropDownIDtoInterfaceID(select3ID);
+      command[(uint8_t)EXEC_FLOATVAL] = value;
+      mixerServer->mixerInterface->execute(command);
+    }    
 
 
 };
@@ -337,12 +378,6 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
     }
 
     ~ChGainStrip(){};
-
-    virtual float increaseCallBack(unsigned long time,uint8_t trigger){
-      float delta = Strip::increaseCallBack(time,trigger);
-      if (delta != 0.0) setChGain();
-      return delta;
-    }
 
     virtual void render() override{      
 
@@ -379,7 +414,11 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
 
-
+    virtual float increaseCallback(unsigned long time,uint8_t trigger){
+      float delta = Strip::increaseCallback(time,trigger);
+      if (delta != 0.0) setChGain();
+      return delta;
+    }
 
     virtual float decreaseCallback(unsigned long time,uint8_t trigger){
       float delta = Strip::decreaseCallback(time,trigger);
@@ -388,7 +427,13 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
     }
 
     void setChGain(){
-      mixerServer->mixerInterface->setChGain(select2ID, value);      
+      JsonDocument command;
+      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_SETADDRESSVALUE;
+      command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
+      command[(uint8_t)EXEC_FLOATVAL] = value;
+
+      command[(uint8_t)EXEC_ADDRESS] = ADDR_CHGAIN;
+      mixerServer->mixerInterface->execute(command);
     }
 
     virtual bool actionCallback(uint8_t trigger){
@@ -425,7 +470,7 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
 
     void feed(void *parameter) {
       OSCValues *oscValues = static_cast<OSCValues *>(parameter);      
-      DEBUG_PRINT("\nfeeding %d-%s with %s",index, getTopLabel()->c_str(), oscValues->addressStr);
+      //DEBUG_PRINT("\nfeeding %d-%s with %s",index, getTopLabel()->c_str(), oscValues->addressStr);
     }
 
 
@@ -979,9 +1024,9 @@ void processIncomingData(){
           if (bank->currentLayout == LAYOUT_ZOOM){
             app.focusedStrip->feed(data);    // traite uniquement le strip avec focus
           }else{
-            for (const auto& winstrip : bank->strips) {
+            for (const auto& strip : bank->strips) {
               // traite tous les strips de la fenetre courante
-              if (winstrip->win == app.focusedStrip->win) winstrip->feed(data);
+              if (strip->win == app.focusedStrip->win) strip->feed(data);
             }
           } 
         }
