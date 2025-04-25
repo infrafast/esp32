@@ -91,13 +91,13 @@ class OSCInterface{
         void SendInt2OSC(const char* address, int val){            
             OSCMessage msg(address);
             msg.add(val);
-            if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%d",address, val);          
+            if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%i",val);          
         }
 
         void SendFloat2OSC(const char* address, float val){    
             OSCMessage msg(address);
             msg.add(val);
-            if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%.2f",address, val);         
+            if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%.2f",val);         
         }        
 
         boolean OSCReadIn(OSCValues* data) {

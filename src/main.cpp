@@ -1,4 +1,4 @@
-// review how BehringerMixerInterfaces uses idStart to match a processed oscframe in feed() as it seems extractID adds a value that it shouldnt to the index
+// the stripHeader class which is added in interval buildModuleScreen crashes probably because of lack of proper initialisation of its internal strip*
 
 // debugging https://docs.platformio.org/en/stable/tutorials/espressif32/arduino_debugging_unit_testing.html
 
@@ -6,7 +6,7 @@
 //constexpr uint16_t kBufferMaxSize{512};
 
 #define USE_NETWORK
-#define DEBUG_OSC
+//#define DEBUG_OSC
 //#define USE_FTP
 
 //#define TFT_BGCOLOR   TFT_DARKGREY
@@ -107,13 +107,17 @@ class StripMixer{
   public:
     StripMixer(MixerServer* ms) : mixerServer(ms){}
 
-    bool match2AddressIDtoDropDownID(const char* address,const char* pattern, int idStart){
+    bool match2AddressIDtoDropDownID(const char* address,const char* pattern){
       // this method is called when we have to decompose the ids embedded into an address according to a provided pattern
       // upon reception of an OSC frame
       if (sscanf(address, pattern,&id1,&id2) != 2) return false;
+      if (mixerServer->mixerInterface->idStart == 0){ id1 += 1; id2 += 1;}    // we have to make ID consistent, they should all start at 1
+      return true;
+    }
 
-      if (idStart == 0){ id1 += 1; id2 += 1;}    // we have to make ID consistent, they should all start at 1
-
+    bool match1AddressIDtoDropDownID(const char* address,const char* pattern){
+      if (sscanf(address, pattern,&id1) != 1) return false;
+      if (mixerServer->mixerInterface->idStart == 0){ id1 += 1;}    // we have to make ID consistent, they should all start at 1
       return true;
     }
 
@@ -130,7 +134,6 @@ class StripMixer{
     // v1 = 03
     // v2 = 06
 };
-
 
 class OSCTestStrip : public TextStrip, public StripMixer{
   #define STRIP_OSCTEST "oscTest"
@@ -187,7 +190,7 @@ class OSCTestStrip : public TextStrip, public StripMixer{
     virtual void render(){
       TextStrip::render();
       topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor,&GUI::defaultFcolor, &GUI::silver,&brightness);          
-      gui->add(topLabels);
+      //gui->add(topLabels);
       //DEBUG_PRINT("\nOSCTestStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY);      
     }
 
@@ -282,9 +285,11 @@ class Ch2BusStrip : public SendStrip{
       toggle1 = !toggle1; 
 
       JsonDocument command;      
-      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)ADDR_CHBUSMUTE;
-      command[(uint8_t)EXEC_CHID] = select2ID;
-      command[(uint8_t)EXEC_BUSID] = select3ID;
+      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_SETADDRESSVALUE;
+      command[(uint8_t)EXEC_ADDRESS] = (uint8_t)ADDR_CHBUSMUTE;
+      command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
+      command[(uint8_t)EXEC_BUSID] = dropDownIDtoInterfaceID(select3ID);
+      command[(uint8_t)EXEC_BVAL] = toggle1;
       return mixerServer->mixerInterface->execute(command);        
 
     }
@@ -298,6 +303,8 @@ class Ch2BusStrip : public SendStrip{
       // get the values
       JsonDocument command;
 
+
+      // retrieve initial state of the strip
       command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_GETADDRESSVALUE;
       command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
       command[(uint8_t)EXEC_BUSID] = dropDownIDtoInterfaceID(select3ID);
@@ -321,13 +328,23 @@ class Ch2BusStrip : public SendStrip{
       //DEBUG_PRINT("\nfeeding %d-%s(%s) with %s",index, getTopLabel()->c_str(), id.c_str(), oscValues->addressStr);
 
       OSCMixerInterface* interface = (OSCMixerInterface*)mixerServer->mixerInterface;
-
-      if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSMUTE],oscValues->addressStr)){
-        
+      
+      if (OSCInterface::matchPattern(interface->addresses[ADDR_BUSMUTE],oscValues->addressStr)){
+        if(match1AddressIDtoDropDownID(oscValues->addressStr,interface->addresses[ADDR_BUSMUTE].c_str())){ 
+          if (id1 == select3ID){  // retrieved ID match the select3ID which is the bus
+            toggle2 = oscValues->iValue;
+          }
+        }
+      }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSMUTE],oscValues->addressStr)){
+        if(match2AddressIDtoDropDownID(oscValues->addressStr,interface->addresses[ADDR_CHBUSMUTE].c_str())){ 
+          if (id1 == select2ID && id2 == select3ID){  
+            toggle1 = oscValues->iValue;
+          }
+        }
       }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSVALUE],oscValues->addressStr)){        
-        if(match2AddressIDtoDropDownID(oscValues->addressStr,interface->addresses[ADDR_CHBUSVALUE].c_str(),interface->idStart)){         
+        if(match2AddressIDtoDropDownID(oscValues->addressStr,interface->addresses[ADDR_CHBUSVALUE].c_str())){         
           //DEBUG_PRINT("\n id1:%d(%d) id2:%d(%d)",id1,select2ID,id2,select3ID);
-          if (id1 == select2ID && id2 == select3ID){  // +1 because dropdown value start at 0 while OSC id starts at 1
+          if (id1 == select2ID && id2 == select3ID){  
             value = oscValues->fValue;
             //DEBUG_PRINT("\t value: %.2f",value);
           }
@@ -351,7 +368,7 @@ class Ch2BusStrip : public SendStrip{
     }      
 
     void setChBusLevel(){
-      JsonDocument command;
+      JsonDocument command;      
       command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_SETADDRESSVALUE;
       command[(uint8_t)EXEC_ADDRESS] = ADDR_CHBUSVALUE;
       command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
@@ -1023,6 +1040,7 @@ void processIncomingData(){
         if (app.focusedStrip != nullptr){
           if (bank->currentLayout == LAYOUT_ZOOM){
             app.focusedStrip->feed(data);    // traite uniquement le strip avec focus
+            //app.stripHeader->refresh();
           }else{
             for (const auto& strip : bank->strips) {
               // traite tous les strips de la fenetre courante

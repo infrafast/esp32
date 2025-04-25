@@ -1377,6 +1377,7 @@ class CompositeWidget: public Widget{
     CompositeWidget(LinkedList<Widget*>* g, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool debug=false):Widget(&GUI::zero,&GUI::zero,fC,bC,_brightness,debug){
       guiList = g;
     }
+      
   protected:
     LinkedList<Widget*>* guiList;
 };
@@ -1395,6 +1396,7 @@ class Top2Toggles : public CompositeWidget {
       guiList->add(topToggle);
       guiList->add(bottomToggle);         
     }    
+ 
 
   private:
     const String *topString, *bottomString; 

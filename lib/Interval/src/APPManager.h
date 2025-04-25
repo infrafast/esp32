@@ -831,7 +831,6 @@ class ThreeSelectStrip: public TwoSelectStrip{
     Top2Toggles* topLabels;  
 };
 
-
 class StripFactory{
   public:
     LinkedList <StripSkeleton*> stripSkeletonRepo = LinkedList<StripSkeleton*>();
@@ -1301,7 +1300,57 @@ class I18n : public JsonListFile{
     };
 };
 
-///////////////////// MAIN APPLICATION CLASS ////////////////////////
+class StripHeaderGUI: public Top2Toggles{
+  public:
+
+    StripHeaderGUI(LinkedList<Widget*>* guiList, I18n* i18n, bool debug=false):lang(i18n),Top2Toggles(guiList,&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&topFcolor, &topBcolor , &GUI::defaultFcolor, &GUI::silver,&GUI::fullBrightness,debug){}
+
+    virtual bool refresh(bool force=false){
+      refreshed = Top2Toggles::refresh(force);  
+           
+      if (oldStrip != strip || strip->refreshed || refreshed){
+        oldStrip = strip;
+        setValues();
+        refreshed = true;
+      }
+
+      return refreshed;
+    }
+
+    void setStrip(Strip* s) {
+      if (strip != s) {
+        strip = s;
+        refresh(); // mettra à jour automatiquement
+      }
+    }    
+
+  private:
+    Strip* strip = nullptr;
+    Strip* oldStrip = nullptr; 
+
+    I18n* lang = nullptr;
+
+    String topLabel = "";
+    bool topReverse = false;    
+    uint16_t topFcolor = GUI::defaultFcolor;
+    uint16_t topBcolor = GUI::defaultBcolor;
+        
+    String bottomLabel;
+    bool bottomReverse;
+
+    void setValues(){            
+      DEBUG_PRINT("\n setValues()");
+      topReverse = strip->toggle1;      
+      if (strip->renderError) topLabel = *lang->getString("Strip render error");
+      else topLabel = *strip->getTopLabel();
+      topFcolor = strip->frontColor;
+  
+      bottomReverse = strip->toggle2;
+      bottomLabel = *strip->getBottomLabel();
+      topBcolor = strip->backColor;      
+    }    
+};
+
 
 #define ADDRESS_SIMPLETEXT "/text/%s"
 #define ADDRESS_STRIPIDS  "/strip/id/%s"
@@ -1343,6 +1392,7 @@ class Shortcuts{
     }    
 };
 
+///////////////////// MAIN APPLICATION CLASS ////////////////////////
 
 class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher{
   public:   
@@ -1419,15 +1469,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     bool disabledBankRendering = false;   // this is to stop rendering the bank
   
     Strip* focusedStrip = nullptr;
-
-    struct{
-      bool topToggle;
-      String topLabel;
-      bool bottomToggle;
-      String bottomLabel;
-      uint16_t topFcolor;
-      uint16_t topBcolor;
-    }headerStrip;
+    StripHeaderGUI* stripHeader = nullptr;
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
     #define MENU_ICON_SIZE TFT_WIDTH/3
@@ -1761,8 +1803,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       ms.get_root_menu().add_item(brightness_menu_item);
       profile_menu_item->add_item(back_menu_item);
       profile_menu_item->add_item(save_profile_menu_item);
-
-      
 
       hookLangToMenu();
       
@@ -3210,16 +3250,8 @@ void setup() {
       // give focus to the strip
       for (const auto& winstrip : bank->strips) winstrip->focus(false);
       strip->focus(true);    // full brightness
-      focusedStrip = strip;
-
-      // next we refresh the header accordingly
-      headerStrip.topToggle = focusedStrip->toggle1;
-      headerStrip.topLabel = *focusedStrip->getTopLabel();
-      headerStrip.topFcolor = focusedStrip->frontColor;
-
-      headerStrip.bottomToggle = focusedStrip->toggle2;
-      headerStrip.bottomLabel = *focusedStrip->getBottomLabel();
-      headerStrip.topBcolor = focusedStrip->backColor;
+      focusedStrip = strip;    
+      if (stripHeader != nullptr) stripHeader->setStrip(focusedStrip);
     }
 
     Bank* jumpToBank(String bankName){

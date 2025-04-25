@@ -42,15 +42,24 @@ enum {
 };
 
 enum{
-  EXEC_INSTRUCTION,
-  EXEC_ADDRESS,
-  EXEC_CHID,
-  EXEC_BUSID,
-  EXEC_FLOATVAL,
-  EXEC_BVAL,  
-  EXEC_MESSAGE,
-  EXEC_IP,
-  EXEC_PORT
+  EXEC_INSTRUCTION,       
+  
+  EXEC_P0,                    /* first parameter*/
+    EXEC_ADDRESS=EXEC_P0,
+    EXEC_MESSAGE=EXEC_P0,
+  
+  EXEC_P1,                    /* second parameter*/
+    EXEC_CHID=EXEC_P1,
+    EXEC_IP=EXEC_P1,
+  
+  EXEC_P2,                    
+    EXEC_BUSID=EXEC_P2,
+    EXEC_PORT=EXEC_P2,
+    
+  EXEC_P3,
+    EXEC_FLOATVAL=EXEC_P3,
+    EXEC_BVAL=EXEC_P3,  
+
 };
 
 /***************************************************************/
@@ -583,6 +592,10 @@ class OSCMixerInterface: public MixerInterface {
     }
 
     virtual bool execute(JsonDocument param){
+      String s;      
+      serializeJson(param, s);
+      DEBUG_PRINT("\nexecute %s",s.c_str());
+
       bool success = true;
       
       uint8_t instruction = param[EXEC_INSTRUCTION];
@@ -622,6 +635,7 @@ class OSCMixerInterface: public MixerInterface {
           else success = false;       
         break;
         default:
+          DEBUG_PRINT("\t interface instruction invalid");
           success = false;
         break;
       }
@@ -723,7 +737,7 @@ class BehringerMixer : public OSCMixerInterface {
       // addresses definition ===> this could be moved into parseInterfaceProtocol      
       //common
       addresses[ADDR_CHBUSVALUE] =  "/ch/%02d/mix/%02d/level";
-      addresses[ADDR_BUSMUTE] =     "/ch/%02d/mix/on";
+      addresses[ADDR_BUSMUTE] =     "/bus/%02d/mix/on";
       //specific to X32
       if (model == "X32"){
         addresses[ADDR_CHBUSMUTE] =   "/ch/%02d/mix/%02d/on";

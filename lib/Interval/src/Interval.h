@@ -958,17 +958,9 @@ void bankScreenBuilder(uint8_t subScreen){
           }
         }
       } 
+      app.stripHeader = new StripHeaderGUI(&gui.screenGUIs, &app.lang);      
       app.focus(strip,bank); // give focus to the strip
-
-      // header
-      Top2Toggles* header;
-      if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, app.lang.getString("Strip render error"), &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
-      else header = new Top2Toggles(&gui.screenGUIs,&app.headerStrip.topLabel, &app.headerStrip.bottomLabel, &app.headerStrip.topToggle,&app.headerStrip.bottomToggle,&app.headerStrip.topFcolor,&app.headerStrip.topBcolor);          
-      /*if (strip->renderError) header = new Top2Toggles(&gui.screenGUIs,app.focusedStrip->getTopLabel(), app.lang.getString("Strip render error"), &app.focusedStrip->toggle1,&app.focusedStrip->toggle2,&app.focusedStrip->frontColor,&app.focusedStrip->backColor);          
-      else header = new Top2Toggles(&gui.screenGUIs,app.focusedStrip->getTopLabel(), app.focusedStrip->getBottomLabel(), &app.focusedStrip->toggle1,&app.focusedStrip->toggle2,&app.focusedStrip->frontColor,&app.focusedStrip->backColor);          */
-
-      gui.add(header);
-
+      
     }else{
       //DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
       gui.add(new TextArea(app.lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
