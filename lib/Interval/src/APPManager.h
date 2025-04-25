@@ -1472,7 +1472,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     bool disabledBankRendering = false;   // this is to stop rendering the bank
   
     Strip* focusedStrip = nullptr;
-    StripHeaderGUI* stripHeader = nullptr;
+    //StripHeaderGUI* stripHeader = nullptr;
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
     #define MENU_ICON_SIZE TFT_WIDTH/3
@@ -3255,7 +3255,7 @@ void setup() {
       for (const auto& winstrip : bank->strips) winstrip->focus(false);
       strip->focus(true);    // full brightness
       focusedStrip = strip;    
-      if (stripHeader != nullptr) stripHeader->setStrip(focusedStrip);
+      //if (stripHeader != nullptr) stripHeader->setStrip(focusedStrip);
     }
 
     Bank* jumpToBank(String bankName){

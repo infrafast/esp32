@@ -959,8 +959,8 @@ void bankScreenBuilder(uint8_t subScreen){
         }
       } 
       
-      app.stripHeader = new StripHeaderGUI(strip,&app.lang);      
-      gui.add(app.stripHeader);      
+      /*app.stripHeader = new StripHeaderGUI(strip,&app.lang);      
+      gui.add(app.stripHeader);*/
 
       app.focus(strip,bank); // give focus to the strip
       
