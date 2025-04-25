@@ -6,7 +6,7 @@
 //constexpr uint16_t kBufferMaxSize{512};
 
 #define USE_NETWORK
-//#define DEBUG_OSC
+#define DEBUG_OSC
 //#define USE_FTP
 
 //#define TFT_BGCOLOR   TFT_DARKGREY
@@ -187,24 +187,24 @@ class OSCTestStrip : public TextStrip, public StripMixer{
       return mixerServer->mixerInterface->execute(command);  
     }
 
+    
     virtual void render(){
+      //any surcharge here
       TextStrip::render();
-      topLabels = new Top2Toggles(&gui->screenGUIs,&message, &portString, &on, &on,&frontColor,&backColor,&GUI::defaultFcolor, &GUI::silver,&brightness);          
-      //gui->add(topLabels);
-      //DEBUG_PRINT("\nOSCTestStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY);      
     }
+
+    virtual const String* getTopLabel(){return &message;}
+    virtual const String* getBottomLabel(){return &portString;}      
 
   private:
     bool on = false;
 
     String portPropertyAddress;
     String msgPropertyAddress;
-
-    Top2Toggles* topLabels;
-    
-    int port; String portString;
+   
+    int port=0; String portString="port";
     IPAddress ip;
-    String message;
+    String message="message";
 };
 
 class SendStrip : public ThreeSelectStrip, public StripMixer{
@@ -1040,10 +1040,9 @@ void processIncomingData(){
         if (app.focusedStrip != nullptr){
           if (bank->currentLayout == LAYOUT_ZOOM){
             app.focusedStrip->feed(data);    // traite uniquement le strip avec focus
-            //app.stripHeader->refresh();
           }else{
             for (const auto& strip : bank->strips) {
-              // traite tous les strips de la fenetre courante
+              // traite tous les strips de la fenetre courante, c'esta dire ceux ayant la meme fenetre que le strip ayant le focus
               if (strip->win == app.focusedStrip->win) strip->feed(data);
             }
           } 

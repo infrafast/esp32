@@ -1303,16 +1303,20 @@ class I18n : public JsonListFile{
 class StripHeaderGUI: public Top2Toggles{
   public:
 
-    StripHeaderGUI(LinkedList<Widget*>* guiList, I18n* i18n, bool debug=false):lang(i18n),Top2Toggles(guiList,&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&topFcolor, &topBcolor , &GUI::defaultFcolor, &GUI::silver,&GUI::fullBrightness,debug){}
+    StripHeaderGUI(Strip* s,I18n* i18n, bool debug=false):lang(i18n),strip(s),Top2Toggles(&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&topFcolor, &topBcolor , &GUI::defaultFcolor, &GUI::silver,&GUI::fullBrightness,debug){}
+    //StripHeaderGUI(Strip* s,I18n* i18n, bool debug=false):lang(i18n),strip(s),Top2Toggles(&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&GUI::red, &GUI::green , &GUI::blue, &GUI::yellow,&GUI::fullBrightness,debug){}
 
-    virtual bool refresh(bool force=false){
-      refreshed = Top2Toggles::refresh(force);  
+    virtual bool refresh(bool force=false){    
+      
+      if (strip == nullptr) return refreshed;
            
-      if (oldStrip != strip || strip->refreshed || refreshed){
+      if (oldStrip != strip || strip->refreshed || force){
         oldStrip = strip;
         setValues();
         refreshed = true;
       }
+
+      Top2Toggles::refresh(force);
 
       return refreshed;
     }
@@ -1320,7 +1324,6 @@ class StripHeaderGUI: public Top2Toggles{
     void setStrip(Strip* s) {
       if (strip != s) {
         strip = s;
-        refresh(); // mettra à jour automatiquement
       }
     }    
 
@@ -1335,11 +1338,11 @@ class StripHeaderGUI: public Top2Toggles{
     uint16_t topFcolor = GUI::defaultFcolor;
     uint16_t topBcolor = GUI::defaultBcolor;
         
-    String bottomLabel;
-    bool bottomReverse;
+    String bottomLabel = "";
+    bool bottomReverse = false;
 
     void setValues(){            
-      DEBUG_PRINT("\n setValues()");
+      //DEBUG_PRINT("\n setValues()");
       topReverse = strip->toggle1;      
       if (strip->renderError) topLabel = *lang->getString("Strip render error");
       else topLabel = *strip->getTopLabel();
@@ -3231,6 +3234,7 @@ void setup() {
       // Get the destination strip
       Strip* strip = targetBank->getStrip(id);
       if (strip == nullptr) return false;  // Early exit if the strip is not found
+
       // Set the selector to the strip's index
       targetBank->selector = strip->index;
       //highlight strip

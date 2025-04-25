@@ -488,7 +488,9 @@ class Font : public Widget{
 class Label : public Font{
   public:
       static OpenFontRender* ofr; 
-      Label(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Font(v, a, posX, posY, s, fC , bC ,_brightness, d){};
+      Label(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Font(v, a, posX, posY, s, fC , bC ,_brightness, d){
+        id = "Label";
+      };
 
   protected:
       virtual OpenFontRender* getOfr(){return ofr;}      
@@ -1052,10 +1054,12 @@ class Toggle : public Widget{
     const bool* revert;
 
     Toggle(const String* v, const int16_t* posX, const int16_t* posY, uint8_t h, const bool* p, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness, bool d=true):Widget(posX, posY, fC, bC, _brightness,d){
+      width = TFT_WIDTH;
       height = h;
       revert = p;
       oldRevert = !*revert;
       text = v;
+      id = "Toggle";
     }
 
     virtual bool refresh(bool force=false){
@@ -1063,6 +1067,8 @@ class Toggle : public Widget{
       if (refreshed || oldRevert != *revert || oldText != *text){
 
         uint16_t fillColor, textColor;
+
+        if (debug) DEBUG_PRINT("\n%s refreshed(%s,%d) force:%i",id.c_str(),*text, *revert,force);
 
         if(*revert) {
           //DEBUG_PRINT("\nFlip");
@@ -1074,7 +1080,7 @@ class Toggle : public Widget{
           textColor    = *fColor;
         }
 
-        width = TFT_WIDTH;
+        
 
         createSprite(GUI::defaultBcolor);        
 
@@ -1374,17 +1380,41 @@ class PendingBar : public HorizontalBar{
 
 class CompositeWidget: public Widget{
   public:
-    CompositeWidget(LinkedList<Widget*>* g, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool debug=false):Widget(&GUI::zero,&GUI::zero,fC,bC,_brightness,debug){
-      guiList = g;
+    CompositeWidget(const int16_t *x, const int16_t* y, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool debug=false):Widget(x,y,fC,bC,_brightness,debug){}
+
+    ~CompositeWidget(){
+      while (guiList.size()>0){
+        //DEBUG_PRINT("\nremaining to unstack: %i",gui->screenGUIs.size());
+        Widget* widget = guiList.shift();
+        //DEBUG_PRINT("\nobject: %s ",widget->id.c_str());
+        delete(widget);
+        widget = nullptr;
+      }      
     }
-      
+
+    virtual bool refresh(bool force=false){
+      //push all composite sprite to the main sprite
+      //refreshed = force;    
+      for (uint8_t i=0;i<guiList.size();i++){
+        Widget* widget =  guiList.get(i);                
+        if (widget->refresh(force)){
+          createSprite(GUI::transparentColor); 
+          refreshed = true;
+          widget->sprite->pushToSprite(sprite,widget->getX(),widget->getY(),GUI::transparentColor);
+          delete widget->sprite;
+          widget->sprite = nullptr;
+        }
+      }      
+      return refreshed; 
+    }  
+              
   protected:
-    LinkedList<Widget*>* guiList;
+    LinkedList<Widget*> guiList;
 };
 
 class Top2Toggles : public CompositeWidget {
   public:
-    Top2Toggles(LinkedList<Widget*>* guiList, const String* topLabel, const String* bottomLabel, const bool* topReverse = &GUI::off, const bool* bottomReverse = &GUI::off, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint16_t *fC2 = &GUI::defaultFcolor, const uint16_t *bC2 = &GUI::silver, const float* _brightness = &GUI::fullBrightness,bool debug=false) : CompositeWidget(guiList, fC, bC, _brightness,debug){
+    Top2Toggles(const String* topLabel, const String* bottomLabel, const bool* topReverse = &GUI::off, const bool* bottomReverse = &GUI::off, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint16_t *fC2 = &GUI::defaultFcolor, const uint16_t *bC2 = &GUI::silver, const float* _brightness = &GUI::fullBrightness,bool debug=false) : CompositeWidget(&GUI::zero,&GUI::zero,fC, bC, _brightness,debug){
       id = "Top2Toggles";
 
       topString = topLabel; bottomString = bottomLabel; fColor2 = fC2;
@@ -1393,8 +1423,12 @@ class Top2Toggles : public CompositeWidget {
       topToggle = new Toggle(topString,&GUI::zero,&GUI::un,TOP2WIDGET_SIZE,topBool,fColor,bColor, brightness, debug);        
       bottomToggle = new Toggle(bottomString,&GUI::zero,&GUI::y1,TOP2WIDGET_SIZE,bottomBool,fColor2, bColor2, brightness, debug);        
       
-      guiList->add(topToggle);
-      guiList->add(bottomToggle);         
+      guiList.add(topToggle);
+      guiList.add(bottomToggle);         
+
+      width = max(topToggle->width,bottomToggle->width);    // WIDTH = LARGEST WIDGET
+      height = topToggle->height + bottomToggle->height;    // HEIGHT = SUM OF ALL WIDGET HEIGHT
+
     }    
  
 
@@ -1409,7 +1443,7 @@ class Top2Toggles : public CompositeWidget {
 
 class Top1Toggle1Label : public CompositeWidget {  
   public:
-    Top1Toggle1Label(LinkedList<Widget*>* guiList, const String* topS, const String* bottomS, const bool* topReverse = &GUI::off, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint16_t *fC2 = &GUI::defaultFcolor, const uint16_t *bC2 = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool debug=false) : CompositeWidget(guiList, fC, bC, _brightness,debug){
+    Top1Toggle1Label(const String* topS, const String* bottomS, const bool* topReverse = &GUI::off, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint16_t *fC2 = &GUI::defaultFcolor, const uint16_t *bC2 = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool debug=false) : CompositeWidget(&GUI::zero,&GUI::zero,fC, bC, _brightness,debug){
       id = "Top1Toggle1Label";
 
       topString = topS; bottomString = bottomS; fColor2 = fC2;
@@ -1418,8 +1452,11 @@ class Top1Toggle1Label : public CompositeWidget {
       topToggle = new Toggle(topString,&GUI::zero,&GUI::un,TOP2WIDGET_SIZE,topBool,fColor,bColor,  brightness, debug);        
       bottomLabel = new Label(bottomString, Align::Center,&GUI::center, &GUI::y1,(TOP2WIDGET_SIZE)*1.2,fC2,bC2,brightness, debug);        
 
-      guiList->add(topToggle);
-      guiList->add(bottomLabel);         
+      width = max(topToggle->width,bottomLabel->width);
+      height = topToggle->height+(TOP2WIDGET_SIZE)*1.2; // BE CAREFUL !! /!\ /!\ /!\ The lqbel height is determined zhen rendering; hence we DO AN APPROXIMANTE BASED ON THE REQUESTED FONT SIZE BUT THIS MAY NOT BE THE FINAL RIGHT HEIGHT
+
+      guiList.add(topToggle);
+      guiList.add(bottomLabel);         
     }    
 
   private:

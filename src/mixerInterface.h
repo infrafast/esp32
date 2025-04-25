@@ -592,9 +592,9 @@ class OSCMixerInterface: public MixerInterface {
     }
 
     virtual bool execute(JsonDocument param){
-      String s;      
+      /*String s;      
       serializeJson(param, s);
-      DEBUG_PRINT("\nexecute %s",s.c_str());
+      DEBUG_PRINT("\nexecute %s",s.c_str());*/
 
       bool success = true;
       

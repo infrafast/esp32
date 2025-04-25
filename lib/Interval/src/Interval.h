@@ -958,8 +958,12 @@ void bankScreenBuilder(uint8_t subScreen){
           }
         }
       } 
-      app.stripHeader = new StripHeaderGUI(&gui.screenGUIs, &app.lang);      
+      
+      app.stripHeader = new StripHeaderGUI(strip,&app.lang);      
+      gui.add(app.stripHeader);      
+
       app.focus(strip,bank); // give focus to the strip
+      
       
     }else{
       //DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
