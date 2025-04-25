@@ -188,9 +188,9 @@ class OSCTestStrip : public TextStrip, public StripMixer{
     }
 
     
-    virtual void render(){
+    virtual void composeWidgets(){
       //any surcharge here
-      TextStrip::render();
+      TextStrip::composeWidgets();
     }
 
     virtual const String* getTopLabel(){return &message;}
@@ -214,14 +214,8 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
     }
 
     ~SendStrip(){};
-  
-    virtual bool refresh(bool force=false){
-      refreshed = force;
-      ThreeSelectStrip::refresh(force);
-      return refreshed;
-    }
-  
-    virtual void render() override{      
+   
+    virtual void composeWidgets() override{      
 
       uint16_t h = 0, w = 0;
 
@@ -294,9 +288,8 @@ class Ch2BusStrip : public SendStrip{
 
     }
 
-    virtual bool refresh(bool force=false){
-      refreshed = force;
-      SendStrip::refresh(force);
+    virtual void render(uint8_t layout = LAYOUT_DETAILS){
+      SendStrip::render(layout);
       // this code should only be called if select2ID != oldSelect2ID
       //...
       // put then the code specific here to treatment, for the value treatment like OSC frame to read the value
@@ -304,7 +297,7 @@ class Ch2BusStrip : public SendStrip{
       JsonDocument command;
 
 
-      // retrieve initial state of the strip
+      // send command to query initial state of the strip
       command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_GETADDRESSVALUE;
       command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
       command[(uint8_t)EXEC_BUSID] = dropDownIDtoInterfaceID(select3ID);
@@ -318,10 +311,10 @@ class Ch2BusStrip : public SendStrip{
       command[(uint8_t)EXEC_ADDRESS] = ADDR_CHBUSVALUE;
       mixerServer->mixerInterface->execute(command);      
 
-      return refreshed;
     }
 
     void feed(void *parameter) {
+      updated = false;
       // this method implements the behaviour of the strip when receiving 
       // he will process certain frame and ignore others
       OSCValues *oscValues = static_cast<OSCValues *>(parameter);      
@@ -333,12 +326,14 @@ class Ch2BusStrip : public SendStrip{
         if(match1AddressIDtoDropDownID(oscValues->addressStr,interface->addresses[ADDR_BUSMUTE].c_str())){ 
           if (id1 == select3ID){  // retrieved ID match the select3ID which is the bus
             toggle2 = oscValues->iValue;
+            updated = true;
           }
         }
       }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSMUTE],oscValues->addressStr)){
         if(match2AddressIDtoDropDownID(oscValues->addressStr,interface->addresses[ADDR_CHBUSMUTE].c_str())){ 
           if (id1 == select2ID && id2 == select3ID){  
             toggle1 = oscValues->iValue;
+            updated = true;
           }
         }
       }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSVALUE],oscValues->addressStr)){        
@@ -346,12 +341,13 @@ class Ch2BusStrip : public SendStrip{
           //DEBUG_PRINT("\n id1:%d(%d) id2:%d(%d)",id1,select2ID,id2,select3ID);
           if (id1 == select2ID && id2 == select3ID){  
             value = oscValues->fValue;
+            updated = true;
             //DEBUG_PRINT("\t value: %.2f",value);
           }
         }        
-      }else if (OSCInterface::matchPattern(interface->addresses[ADDR_BUSMUTE],oscValues->addressStr)){
+      }/*else if (OSCInterface::matchPattern(interface->addresses[ADDR_BUSMUTE],oscValues->addressStr)){
 
-      }
+      }*/
 
     }
 
@@ -396,7 +392,7 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
 
     ~ChGainStrip(){};
 
-    virtual void render() override{      
+    virtual void composeWidgets() override{      
 
       uint16_t h = 0, w = 0;
 
@@ -471,12 +467,6 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       return true;
     }
        
-    virtual bool refresh(bool force=false){
-      refreshed = force;
-      TwoSelectStrip::refresh(force);
-      return refreshed;
-    };    
-
     /*virtual float getIncrement(unsigned long time){                  
       if (!Strip::progressiveDelay(time)) return true;
       float increment = 1;      

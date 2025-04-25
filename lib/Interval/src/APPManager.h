@@ -318,7 +318,7 @@ class StripSkeleton;
 #define SHAPE1X4 "1x4"
 #define SHAPE2X2 "2x2"
 
-class Strip : public GenericComponent{  
+class Strip {  
   #define JSON_STRIP_PROPERTY_SIZE 100
   #define  JSON_STRIP_TEMPLATE_SIZE 300
   public:
@@ -330,7 +330,11 @@ class Strip : public GenericComponent{
     bool toggle1 = false;
     bool toggle2 = false;
 
+    bool updated = false;
+
     uint16_t frontColor, backColor;    
+
+    String type="undef";
 
     // logical position
     uint8_t x, y, win, index;
@@ -346,7 +350,7 @@ class Strip : public GenericComponent{
 
     float brightness = 1.0;
 
-    Strip(StripSkeleton* s, GUIManager* g, bool debug=false):GenericComponent(debug){
+    Strip(StripSkeleton* s, GUIManager* g){
       skeleton = s;
       gui = g;
       value = (valueMax-valueMin)/2;
@@ -354,12 +358,6 @@ class Strip : public GenericComponent{
     }    
 
     virtual ~Strip(){
-    }
-
-    virtual bool refresh(bool force=false){
-      frontColor = colorMap[colorID].fColor;
-      backColor = colorMap[colorID].bColor;       
-      return refreshed;
     }
 
     void focus(bool f=true){
@@ -378,7 +376,7 @@ class Strip : public GenericComponent{
       if (error){
         
       }else{      
-        id = jsonStrip[C_STRIPTYPE].as<String>();
+        type = jsonStrip[C_STRIPTYPE].as<String>();
         // set index; 
         x = jsonStrip["position"][C_X].as<int>();
         y = jsonStrip["position"][C_Y].as<int>();
@@ -402,7 +400,7 @@ class Strip : public GenericComponent{
     String serialize(){
       
       JsonDocument doc;
-      doc[C_STRIPTYPE] = id;  // this is a text
+      doc[C_STRIPTYPE] = type;  // this is a text
       doc[C_COLOR] = colorID;
       doc[C_ICON] = icon;
       doc[C_SIZE] = size;
@@ -419,31 +417,6 @@ class Strip : public GenericComponent{
 
       return data;
     }
-
-    /*virtual void wipeWidgets(){
-      DEBUG_PRINT("\nwipe %s, number of widgets:%i",id.c_str(),widgetHandles.size());
-      int16_t xMin=TFT_WIDTH, xMax=0, yMin=TFT_HEIGHT, yMax=0;
-
-      while (widgetHandles.size()>0){          
-          
-          Widget* widget = widgetHandles.shift();
-          
-          if (widget->getX()<xMin) xMin = widget->getX();
-          if (widget->getX()+widget->width > xMax) xMax = widget->getX()+widget->width;
-          if (widget->getY()<yMin) yMin = widget->getY();
-          if (widget->getY()+widget->height > yMax) yMax = widget->getY()+widget->height;      
-
-          //DEBUG_PRINT("\tcls %s  (%i,%i,h:%i,w:%i)  minMax=>(%i,%i,w:%i,h:%i)",widget->id.c_str(),widget->getX(),widget->getY(),widget->width,widget->height,xMin,xMax-xMin,yMin,yMax-yMin);
-
-          GUI::tft->fillRect(xMin,yMin,xMax-xMin,yMax-yMin,GUI::defaultBcolor);
-
-          //DEBUG_PRINT("\nremove gui->remove(%s) before:%i",widget->id.c_str(),gui->screenGUIs.size());
-          gui->remove(widget);          
-          delete(widget);       
-          //DEBUG_PRINT("\tafter:%i",gui->screenGUIs.size());        
-
-      }
-    }*/
 
     virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
       
@@ -528,14 +501,15 @@ class Strip : public GenericComponent{
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;    
     
-    virtual bool build(uint8_t layout = LAYOUT_DETAILS){
+    virtual void render(uint8_t layout = LAYOUT_DETAILS){
       renderError = false;
 
-      refresh();
+      frontColor = colorMap[colorID].fColor;
+      backColor = colorMap[colorID].bColor;       
 
       if (x>3 || y>3){
         renderError = true;
-        return false;
+        return;
       }
 
       if (layout == LAYOUT_ZOOM || size == SHAPE4X4){
@@ -555,15 +529,13 @@ class Strip : public GenericComponent{
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
       }else{
         renderError = true;
-        return false;
+        return;
       }      
    
-      render();  // call virtual method
-      return true;
-
+      composeWidgets();  // call virtual method
     }
 
-    virtual void render(){
+    virtual void composeWidgets(){
       if (size == SHAPE4X4) gui->add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &frontColor,&brightness));  
       else if ( size == SHAPE1X4) gui->add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &frontColor,&brightness));
       else if (size == SHAPE2X2) gui->add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &frontColor,&brightness));  
@@ -658,14 +630,14 @@ class TextStrip : public Strip{
   
   public:  
         
-    TextStrip(StripSkeleton* s,GUIManager* g,bool debug=false):Strip(s,g,debug){
+    TextStrip(StripSkeleton* s,GUIManager* g,bool debug=false):Strip(s,g){
       //icon = ICON_TEXT_STRIP;
       textPropertyAddress = s->dataSetAddresses.get(0);
     }
 
     virtual bool actionCallback(uint8_t trigger){return true;}
 
-    virtual void render() override{
+    virtual void composeWidgets() override{
 
       uint8_t fontSize;
       if (size == SHAPE4X4){
@@ -694,11 +666,6 @@ class TextStrip : public Strip{
       gui->add(label);
     }
 
-    void feed(void *parameter) {
-      //DEBUG_PRINT("\nfeeding %d-%s with *values",index,getTopLabel()->c_str());
-    }
-
-
     virtual void deserializeProperty(String property)  {  
       // property = /text/toto   
       // textProperty = /text/%s
@@ -718,18 +685,14 @@ class TextStrip : public Strip{
 
     }
 
-    virtual const String* getTopLabel(){return &id;}
+    virtual const String* getTopLabel(){return &type;}
     virtual const String* getBottomLabel(){return &emptyString;}  
-
-    virtual bool refresh(bool force=false){
-      refreshed = force;
-      Strip::refresh(force);
-      return refreshed;
-    };
 
     virtual uint8_t getNumberOfProperties(){
       return skeleton->numberOfProperties;      
     }
+
+    virtual void feed(void *parameter){}
 
     virtual float increaseCallback(unsigned long time,uint8_t trigger){return true;}
     virtual float decreaseCallback(unsigned long time,uint8_t trigger){return true;}
@@ -744,7 +707,7 @@ class TextStrip : public Strip{
 class TwoSelectStrip : public Strip{
 
   public: 
-    TwoSelectStrip(StripSkeleton* s,GUIManager* g, bool debug=false):Strip(s,g,debug){
+    TwoSelectStrip(StripSkeleton* s,GUIManager* g, bool debug=false):Strip(s,g){
       select2PropertyAddress = s->dataSetAddresses.get(0);
       select2Content = skeleton->getValuePtr(select2PropertyAddress,select2ID-1);
     }
@@ -757,12 +720,10 @@ class TwoSelectStrip : public Strip{
 
     }
 
-    virtual bool refresh(bool force=false){
-      refreshed = force;
-      Strip::refresh(force);
+    virtual void render(uint8_t layout = LAYOUT_DETAILS){
       select2Content = skeleton->getValuePtr(select2PropertyAddress,select2ID-1);
-      return refreshed;
-    }
+      Strip::render(layout);
+    }    
 
 
     void deserializeProperty(String property){
@@ -774,7 +735,7 @@ class TwoSelectStrip : public Strip{
       return skeleton->numberOfProperties;      
     }
 
-    virtual const String* getTopLabel(){return &id;}
+    virtual const String* getTopLabel(){return &type;}
     virtual const String* getBottomLabel(){return select2Content;}     
  
   protected:
@@ -803,12 +764,11 @@ class ThreeSelectStrip: public TwoSelectStrip{
 
     }
 
-    virtual bool refresh(bool force=false){
-      refreshed = force;
-      TwoSelectStrip::refresh(force);
-      select3Content = skeleton->getValuePtr(select3PropertyAddress,select3ID-1); //select2Content = skeleton->getValuePtr(select2PropertyAddress,select2ID-1);
-      return refreshed;
-    }
+    virtual void render(uint8_t layout = LAYOUT_DETAILS){
+      select3Content = skeleton->getValuePtr(select3PropertyAddress,select3ID-1); 
+      TwoSelectStrip::render(layout);
+    }    
+    
 
     void deserializeProperty(String property){
       TwoSelectStrip::deserializeProperty(property);
@@ -1300,17 +1260,18 @@ class I18n : public JsonListFile{
     };
 };
 
-class StripHeaderGUI: public Top2Toggles{
+class StripHeaderWidget: public Top2Toggles{
   public:
 
-    StripHeaderGUI(Strip* s,I18n* i18n, bool debug=false):lang(i18n),strip(s),Top2Toggles(&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&topFcolor, &topBcolor , &GUI::defaultFcolor, &GUI::silver,&GUI::fullBrightness,debug){}
-    //StripHeaderGUI(Strip* s,I18n* i18n, bool debug=false):lang(i18n),strip(s),Top2Toggles(&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&GUI::red, &GUI::green , &GUI::blue, &GUI::yellow,&GUI::fullBrightness,debug){}
+    StripHeaderWidget(Strip* s,I18n* i18n, bool debug=false):lang(i18n),strip(s),Top2Toggles(&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&topFcolor, &topBcolor , &GUI::defaultFcolor, &GUI::silver,&GUI::fullBrightness,debug){}
+    //StripHeaderWidget(Strip* s,I18n* i18n, bool debug=false):lang(i18n),strip(s),Top2Toggles(&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&GUI::red, &GUI::green , &GUI::blue, &GUI::yellow,&GUI::fullBrightness,debug){}
 
     virtual bool refresh(bool force=false){    
       
       if (strip == nullptr) return refreshed;
            
-      if (oldStrip != strip || strip->refreshed || force){
+      if (oldStrip != strip || strip->updated || force){
+        strip->updated = false; // we acknowledge the strip change
         oldStrip = strip;
         setValues();
         refreshed = true;
@@ -1342,7 +1303,7 @@ class StripHeaderGUI: public Top2Toggles{
     bool bottomReverse = false;
 
     void setValues(){            
-      //DEBUG_PRINT("\n setValues()");
+      DEBUG_PRINT("\n setValues()");
       topReverse = strip->toggle1;      
       if (strip->renderError) topLabel = *lang->getString("Strip render error");
       else topLabel = *strip->getTopLabel();
@@ -1472,7 +1433,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     bool disabledBankRendering = false;   // this is to stop rendering the bank
   
     Strip* focusedStrip = nullptr;
-    //StripHeaderGUI* stripHeader = nullptr;
+    StripHeaderWidget* stripHeader = nullptr;
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
     #define MENU_ICON_SIZE TFT_WIDTH/3
@@ -3255,7 +3216,7 @@ void setup() {
       for (const auto& winstrip : bank->strips) winstrip->focus(false);
       strip->focus(true);    // full brightness
       focusedStrip = strip;    
-      //if (stripHeader != nullptr) stripHeader->setStrip(focusedStrip);
+      if (stripHeader != nullptr) stripHeader->setStrip(focusedStrip);
     }
 
     Bank* jumpToBank(String bankName){

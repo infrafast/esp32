@@ -947,20 +947,20 @@ void bankScreenBuilder(uint8_t subScreen){
       //DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),strip->win, bank->selector,layout);
       if (layout == LAYOUT_ZOOM){
         //strip->refresh();
-        strip->build(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
+        strip->render(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
       }else{
         for (const auto& winstrip : bank->strips) {
           // affiche tous les strips de la fenetre courante
           if (winstrip->win == strip->win){            
             //winstrip->refresh();
             //bool focus = (winstrip->index == strip->index)?true:false;
-            winstrip->build(/*focus*/);
+            winstrip->render(/*focus*/);
           }
         }
       } 
       
-      /*app.stripHeader = new StripHeaderGUI(strip,&app.lang);      
-      gui.add(app.stripHeader);*/
+      app.stripHeader = new StripHeaderWidget(strip,&app.lang);      
+      gui.add(app.stripHeader);      
 
       app.focus(strip,bank); // give focus to the strip
       

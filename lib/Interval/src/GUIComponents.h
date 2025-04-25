@@ -1070,7 +1070,7 @@ class Toggle : public Widget{
 
         if (debug) DEBUG_PRINT("\n%s refreshed(%s,%d) force:%i",id.c_str(),*text, *revert,force);
 
-        if(*revert) {
+        if(*revert == false) {
           //DEBUG_PRINT("\nFlip");
           fillColor    = TFT_RED;
           textColor    = TFT_WHITE;
@@ -1427,8 +1427,8 @@ class Top2Toggles : public CompositeWidget {
       guiList.add(bottomToggle);         
 
       width = max(topToggle->width,bottomToggle->width);    // WIDTH = LARGEST WIDGET
-      height = topToggle->height + bottomToggle->height;    // HEIGHT = SUM OF ALL WIDGET HEIGHT
-
+      height = topToggle->height + bottomToggle->height + 1;    // HEIGHT = SUM OF ALL WIDGET HEIGHT + 1 pixel in between
+ 
     }    
  
 
