@@ -1,8 +1,0 @@
-﻿BasedOnStyle: LLVM
-AllowShortLambdasOnASingleLine: None
-AllowShortIfStatementsOnASingleLine: WithoutElse
-AlignAfterOpenBracket: AlwaysBreak
-TabWidth: 2
-ConstructorInitializerIndentWidth: 2
-SortIncludes: false
-IndentPPDirectives: AfterHash

@@ -6,7 +6,7 @@
 //constexpr uint16_t kBufferMaxSize{512};
 
 #define USE_NETWORK
-#define DEBUG_OSC
+//#define DEBUG_OSC
 //#define USE_FTP
 
 //#define TFT_BGCOLOR   TFT_DARKGREY
@@ -896,6 +896,12 @@ void userScreenBuilder(int screebID, int subScreen){
   \"" MIXER_AUTOIP_KEY "\":\"192.168.0.1\"\
 }"
 
+/*void noteOn(int cmd, int pitch, int velocity) {
+  Serial.write(cmd);
+  Serial.write(pitch);
+  Serial.write(velocity);
+}*/
+
 ///////////////////////////////////////////////////////////////////
 /////////////////////                         /////////////////////
                           void setup()
@@ -989,6 +995,15 @@ void userScreenBuilder(int screebID, int subScreen){
   //DEBUG_PRINT("\n\n\n=====================================================================");
   DEBUG_PRINT("\n============================ SETUP END ==============================");
   //DEBUG_PRINT("\n=====================================================================\n\n");
+
+  /*for (int note = 0x1E; note < 0x5A; note++) {
+    noteOn(0x90, note, 0x45);
+    delay(1000);
+    noteOn(0x90, note, 0x00);
+    delay(1000);
+  }*/
+
+
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1089,6 +1104,8 @@ void processMixerState(){
   
   processIncomingData();  
 }
+
+
 
 ///////////////////////////////////////////////////////////////////
 /////////////////////                         /////////////////////
