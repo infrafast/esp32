@@ -15,6 +15,8 @@
 #include "Interval.h"
 #include "mixerServer.h"
 
+#include <Arduino.h>
+
 #if defined(USE_FTP) && defined(USE_NETWORK)
   #include "ESP-FTP-Server-Lib.h"
   #include "FTPFilesystem.h"
@@ -261,7 +263,6 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
 
 };
 
-
 class Ch2BusStrip : public SendStrip{
   #define STRIP_CH2BUS "ch2bus"
 
@@ -275,8 +276,22 @@ class Ch2BusStrip : public SendStrip{
     virtual bool actionCallback(uint8_t trigger){
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
-      //DEBUG_PRINT("\nCh2BusStrip actionCallback");
+      DEBUG_PRINT("\nCh2BusStrip actionCallback");
       toggle1 = !toggle1; 
+      
+      //const MIDIAddress noteAddress {MIDI_Notes::C[4], Channel_1};
+      // Send Note On for current position at full velocity (127) on channel 1.
+      //MIDI_NOTE_ON(noteAddress, 127);
+      MIDI_USB_NOTE_ON(90, 127);
+      MIDI_RTP_ETH.sendNoteOn(40, 55, 1);
+
+      //hwm.network->RTPmidi.sendNoteOn(60, 100, 1);  // C4
+      delay(200);
+      // Send Note Off for previous note.
+      MIDI_USB_NOTE_OFF(90);
+      MIDI_RTP_ETH.sendNoteOff(40, 55, 1);
+ 
+      //hwm.network->RTPmidi.sendNoteOn(60, 0, 1);  // C4
 
       JsonDocument command;      
       command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_SETADDRESSVALUE;
@@ -768,7 +783,7 @@ void eventHandling(EventDispatcher::Event* event){
     case EventDispatcher::EVENT_DIGITAL_BUTTON:{
       ButtonEvent* btnEvt = (ButtonEvent*)event->data;
       switch(btnEvt->id){
-        case Button::BUTTON_SIMPLE_CLIC:
+        case Interval::Button::BUTTON_SIMPLE_CLIC:
           //DEBUG_PRINT("\n\t\t *** EVENT_DIGITAL_BUTTON SIMPLE_CLIC");
           if (mixerServer.state == DISCONNECTED && ((screen.id == SCREEN_WIZARD && screen.state == STATE_WIZARD_USER_STEP4 ) || screen.id == SCREEN_BANK )){
             //go offline
@@ -896,16 +911,40 @@ void userScreenBuilder(int screebID, int subScreen){
   \"" MIXER_AUTOIP_KEY "\":\"192.168.0.1\"\
 }"
 
-/*void noteOn(int cmd, int pitch, int velocity) {
-  Serial.write(cmd);
-  Serial.write(pitch);
-  Serial.write(velocity);
-}*/
+void handleNoteOn(byte channel, byte pitch, byte velocity)
+{
+// Log when a note is pressed.
+Serial.print("Note on: channel = ");
+Serial.print(channel);
+
+Serial.print(" pitch = ");
+Serial.print(pitch);
+
+Serial.print(" velocity = ");
+Serial.println(velocity);
+}
+
+void handleNoteOff(byte channel, byte pitch, byte velocity)
+{
+// Log when a note is released.
+Serial.print("Note off: channel = ");
+Serial.print(channel);
+
+Serial.print(" pitch = ");
+Serial.print(pitch);
+
+Serial.print(" velocity = ");
+Serial.println(velocity);
+}
+
+
 
 ///////////////////////////////////////////////////////////////////
 /////////////////////                         /////////////////////
+/////////////////////                         /////////////////////
                           void setup()
 /////////////////////                         ////////////////////
+/////////////////////                         /////////////////////
 //////////////////////////////////////////////////////////////////
 {
 
@@ -992,18 +1031,11 @@ void userScreenBuilder(int screebID, int subScreen){
   }else{
     DEBUG_PRINT("\ndecompressed data ->  %s  <-\n",decompressedJson.buffer);
   }*/
+
+  
   //DEBUG_PRINT("\n\n\n=====================================================================");
   DEBUG_PRINT("\n============================ SETUP END ==============================");
   //DEBUG_PRINT("\n=====================================================================\n\n");
-
-  /*for (int note = 0x1E; note < 0x5A; note++) {
-    noteOn(0x90, note, 0x45);
-    delay(1000);
-    noteOn(0x90, note, 0x00);
-    delay(1000);
-  }*/
-
-
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1040,7 +1072,7 @@ void processIncomingData(){
     OSCMixerInterface* interface = (OSCMixerInterface*)mixerServer.mixerInterface;
     OSCValues* data = &interface->data;
     if (data->incoming == true){
-      Bank* bank = app.banks.get(screen.state);   
+      Interval::Bank* bank = app.banks.get(screen.state);   
       if (bank != nullptr){         
         if (app.focusedStrip != nullptr){
           if (bank->currentLayout == LAYOUT_ZOOM){
@@ -1109,16 +1141,18 @@ void processMixerState(){
 
 ///////////////////////////////////////////////////////////////////
 /////////////////////                         /////////////////////
+/////////////////////                         /////////////////////
                           void loop()
 /////////////////////                         ////////////////////
+/////////////////////                         /////////////////////
 //////////////////////////////////////////////////////////////////
 {
   app.refresh();
-
+  
   if (screen.id == SCREEN_BANK || screen.id == SCREEN_WIZARD){  
     processMixerState();
   }
-
+  if (hwm.network->state == CONNECTED) MIDI_RTP_ETH.read();
   #if defined(USE_FTP) && defined(USE_NETWORK)
     ftp.handle();
   #endif

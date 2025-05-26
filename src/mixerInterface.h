@@ -2,7 +2,7 @@
 #define MixerInterface_h
 
 #include <Arduino.h>
-#include "oscInterface.h"
+#include "Interfaces.h"
 #include <ArduinoJson.h>
 #include <vector>
 #ifndef DEBUG_PRINT 
