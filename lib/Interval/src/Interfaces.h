@@ -1,5 +1,5 @@
-#ifndef OSCINTERFACE_h
-#define OSCINTERFACE_h
+#ifndef DEVICEINTERFACES_h
+#define DEVICEINTERFACES_h
 
 #include <Arduino.h>
 
@@ -16,6 +16,11 @@
   #define OSC_DEBUG_PRINT(...) 
 #endif
 
+
+#define EXEC_OSC "osc"
+#define EXEC_ADDRESS "address"
+#define EXEC_VALUE "value"
+
 ///////////////////// DEVICE I/O CAPTURE ////////////////////////
 enum{
     NO_CAPTURE,
@@ -24,18 +29,24 @@ enum{
     CAPTURE_INOUT
 };
 
+class Config;
+
 class DeviceInterface{
     public:
         String name;
         uint8_t recordMode = CAPTURE_IN;
 
         DeviceInterface(String, uint8_t);
-        bool execute(JsonObject& data);
+        bool execute(const JsonObject& data);
         bool read(JsonObject& data);
 
+        virtual void connect(Config* conf)=0;
+        virtual void disconnect()=0;           
+
     private:
-        virtual bool parseOut(JsonObject& data) = 0;
+        virtual bool parseOut(const JsonObject& data) = 0;
         virtual bool parseIn(JsonObject& data) = 0;  
+     
 };
 
 enum{
@@ -53,7 +64,7 @@ struct CaptureDescriptor{
 class DeviceInterfaceCapture{
   public:
     
-    void record(JsonObject& data, String& name){
+    void record(const JsonObject& data, String& name){
         // first we parse all interfaces to see if we find one that match the name    
         for (const auto& descriptor : descriptors){
             if (descriptor.interface->name == name){
@@ -102,7 +113,10 @@ DeviceInterface::DeviceInterface(String _name, uint8_t _mode):name(_name),record
     }
 }
 
-bool DeviceInterface::execute(JsonObject& data){
+bool DeviceInterface::execute(const JsonObject& data){
+    /*String s;      
+    serializeJson(data, s);
+    DEBUG_PRINT("\nexecute %s",s.c_str());*/
     if (recordMode == CAPTURE_OUT) interfaceCapture.record(data,name);
     return parseOut(data);
 };
@@ -170,8 +184,41 @@ class OSCInterface: public DeviceInterface{
             latency = network->LANlatency;
         }
 
-        virtual bool parseOut(JsonObject& data){};
-        virtual bool parseIn(JsonObject& data){}; 
+        virtual bool parseOut(const JsonObject& command){
+            bool success = true;
+
+            String s;
+            serializeJson(command, s);
+            DEBUG_PRINT("\n%s parseOut %s",name.c_str(),s.c_str());
+
+            // {key: value}§
+            // {"/bus/03/config/name": «laurent»}
+            // {"/ch.3.mix.sends.2.on" :1 }
+            JsonPair kv = *command.begin();  // pointeur sur l’unique entrée
+
+            const char* address = kv.key().c_str(); // ex: "osc"
+            JsonVariant val = kv.value().as<JsonVariant>(); // ex: {"address": "...", "value": ...}
+            
+            if (val.isNull()) {
+                // no value
+                SendCmd2OSC(address);
+            } else if (val.is<int>()) {
+                SendInt2OSC(address,val.as<int>());
+            }else if (val.is<float>()) {
+                SendFloat2OSC(address,val.as<float>());
+            } else if (0 /*BLOB, etc...*/) {
+                /*Serial.println("Type : bool");
+                bool v = val.as<bool>();*/
+            } else {
+                success = false;
+            }
+            return success;
+        }
+
+        virtual bool parseIn(JsonObject& data){return false;}
+        
+        virtual void connect(Config* conf){}
+        virtual void disconnect(){}
    
         void setClient(const IPAddress defaultIP, const int defaultPort){
             ip = defaultIP;

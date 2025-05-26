@@ -515,7 +515,10 @@ class Strip {
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;    
     
+    virtual void update(uint8_t layout = LAYOUT_DETAILS) = 0;
+
     virtual void render(uint8_t layout = LAYOUT_DETAILS){
+      update();
       renderError = false;
 
       frontColor = colorMap[colorID].fColor;
@@ -680,6 +683,9 @@ class TextStrip : public Strip{
       gui->add(label);
     }
 
+    virtual void update(uint8_t layout = LAYOUT_DETAILS){
+    }
+
     virtual void deserializeProperty(String property)  {  
       // property = /text/toto   
       // textProperty = /text/%s
@@ -698,6 +704,8 @@ class TextStrip : public Strip{
       delete buf;
 
     }
+
+
 
     virtual const String* getTopLabel(){return &type;}
     virtual const String* getBottomLabel(){return &emptyString;}  

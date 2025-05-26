@@ -24,6 +24,11 @@
 // https://mixingstation.app/tasks/T5194
 
 
+#define EXEC_TESTOSC "testosc"
+#define EXEC_FRAME "oscframe"
+#define EXEC_IP "ip"
+#define EXEC_PORT "port"
+
 /********************************************************************/
 /*********************** INTERFACE ADDRESS INDEXES ******************/
 /********************************************************************/
@@ -39,27 +44,6 @@ enum {
   INSTR_TESTOSC,
   INSTR_SETADDRESSVALUE,
   INSTR_GETADDRESSVALUE,
-};
-
-enum{
-  EXEC_INSTRUCTION,       
-  
-  EXEC_P0,                    /* first parameter*/
-    EXEC_ADDRESS=EXEC_P0,
-    EXEC_MESSAGE=EXEC_P0,
-  
-  EXEC_P1,                    /* second parameter*/
-    EXEC_CHID=EXEC_P1,
-    EXEC_IP=EXEC_P1,
-  
-  EXEC_P2,                    
-    EXEC_BUSID=EXEC_P2,
-    EXEC_PORT=EXEC_P2,
-    
-  EXEC_P3,
-    EXEC_FLOATVAL=EXEC_P3,
-    EXEC_BVAL=EXEC_P3,  
-
 };
 
 /***************************************************************/
@@ -231,11 +215,12 @@ class DataSetSynced: public StaticDataSet{
 
 
 // Classe abstraite pour implémenter les commandes et la gestion de connexion spécifique à chaque table de mixage
-class MixerInterface{
+class MixerInterface: public DeviceInterface{
   public:
     String model;
     DataRepository* dataRepository = nullptr;
-    String name="abstract";
+    String addresses[ADDR_MAX];
+
     uint8_t interfaceState = DISCONNECTED;
     String interfaceSubState = "";
 
@@ -253,7 +238,7 @@ class MixerInterface{
     DataSetSynced* fxRetNames;
     DataSetSynced* mainNames;
 
-    MixerInterface(DataRepository* dr,String _model){  
+    MixerInterface(DataRepository* dr,String _model, uint8_t _capture = CAPTURE_OUT):DeviceInterface(_model,_capture){  
       if (_model == "") model = MIXING_STATION_MODEL;
       else model = _model;          
 
@@ -421,10 +406,7 @@ class MixerInterface{
     }
 */
 
-    virtual void connect(Config* conf)=0;
-    virtual void disconnect()=0;
     virtual uint8_t syncDataProgress()=0;
-    virtual bool execute(JsonDocument param) = 0;
 
   protected:
     //uint16_t chSize=1,busSize=1;    
@@ -440,14 +422,17 @@ class OSCMixerInterface: public MixerInterface {
     String OSCprotocol="";
     OSCValues data;
     uint16_t latency;
-    String addresses[ADDR_MAX];
 
     OSCMixerInterface(DataRepository* dr,String _model, OSCInterface* _osc): osc(_osc), MixerInterface(dr,_model){
       //DEBUG_PRINT("\nnew OSCMixerInterface(%s %s,%d)",model.c_str(),osc->ip.toString().c_str(),osc->port);
       delayBetween2SyncFrames = osc->latency*dsNames.size()*2;      
     }
 
+    virtual bool parseIn(JsonObject& data){return false;}  
+
     virtual void syncDataSet()=0;
+
+    virtual bool requiresEcho() = 0; // used to inform if the mixer need an echo after sending a command, this is the case for X32
 
     virtual uint8_t syncDataProgress(){
       uint16_t totalToSync = 0;
@@ -562,84 +547,53 @@ class OSCMixerInterface: public MixerInterface {
 
 
 
-    bool forgeCommandString(JsonDocument param ){
-      // this method generate the OSC frame based  on the template and IDs transmitted as parameter
-      bool success = true;
-      // retrive the most common parameters which is usually ID of channel and buses
-      uint8_t chID = param[EXEC_CHID]; 
-      uint8_t busID = param[EXEC_BUSID]; //busNames->idStart
-      
-      
+    virtual bool parseOut(const JsonObject& command){
+      String s;      
+      serializeJson(command, s);
+      DEBUG_PRINT("\n%s parseOut %s",name.c_str(),s.c_str());
 
-      uint8_t address = param[EXEC_ADDRESS];
-
-      switch(address){
-        case ADDR_BUSMUTE:
-          sprintf(formattedCommandString, addresses[address].c_str(), busID);
-        break;
-        case ADDR_CHBUSVALUE:
-        case ADDR_CHBUSMUTE:
-          sprintf(formattedCommandString, addresses[address].c_str(), chID, busID);                              
-        break;
-        case ADDR_CHGAIN:
-          sprintf(formattedCommandString, addresses[ADDR_CHGAIN].c_str(), chID);                     
-        break;
-        default:
-          success = false;
-        break;                                
-      }
-      return success;
-    }
-
-    virtual bool execute(JsonDocument param){
+      // param ressemble a : {"osc":{"address":"/ch/03/level/05/","value": 0.5 }}
+      // ou {"instruction":{data}}
       /*String s;      
       serializeJson(param, s);
       DEBUG_PRINT("\nexecute %s",s.c_str());*/
-
+      
       bool success = true;
       
-      uint8_t instruction = param[EXEC_INSTRUCTION];
-      uint8_t address = param[EXEC_ADDRESS];      
+      JsonPair kv = *command.begin();  // pointeur sur l’unique entrée
 
-      switch(instruction){
-        case INSTR_TESTOSC:{
-          String msg = param[EXEC_MESSAGE];
-          IPAddress ip;
-          ip.fromString(param[EXEC_IP].as<String>());
-          int port = param[EXEC_PORT];
-        }break;
-        case INSTR_SETADDRESSVALUE:
-          if (forgeCommandString(param)){
-            switch(address){
-              case ADDR_CHBUSMUTE:
-              case ADDR_BUSMUTE:
-              {
-                bool bVal = param[EXEC_BVAL];
-                osc->SendInt2OSC(formattedCommandString,bVal);
-              }
-              break;
-              case ADDR_CHBUSVALUE:
-              case ADDR_CHGAIN:
-              {
-                float fVal = param[EXEC_FLOATVAL];
-                osc->SendFloat2OSC(formattedCommandString,fVal); 
-              }
-              break;
-            }
-            osc->SendCmd2OSC(formattedCommandString); // feedback : 1) to readback value and ensure that it has been changed 2) to propagate the value change to be feed to other strips
-          }else success = false;
+      const char* instruction = kv.key().c_str(); // ex: "osc"
+      JsonObject data = kv.value().as<JsonObject>(); // ex: {"address": "...", "value": ...}
+      
+      if (strcmp(EXEC_OSC,instruction) == 0){
+        
+        // {"/ch/03/level/05/": 0.5 }
+        JsonDocument doc;
+        String address = command[EXEC_OSC][EXEC_ADDRESS];
+        JsonVariant value = command[EXEC_OSC][EXEC_VALUE]; // value could be null => it's a get address and not set address, that's why we use varian and not Stirg otherwise String would be filled with "null"
+        // doc["/ch/03/level/05/"] = 0.5;              
+        doc[address] = value;				
+        osc->execute(doc.as<JsonObject>());
 
-        break;
-        case INSTR_GETADDRESSVALUE:
-          if (forgeCommandString(param)) osc->SendCmd2OSC(formattedCommandString);
-          else success = false;       
-        break;
-        default:
-          DEBUG_PRINT("\t interface instruction invalid");
-          success = false;
-        break;
-      }
+        //Xair automatically echo the command but not X/M
+        //we use the parse and not execute to get the echo to avoid that it is recorded twice by the InterfaceCapture
+        if (!value.isNull() && requiresEcho())  {        
+          JsonDocument echo;
+          echo[address] = nullptr;
+          osc->parseOut(echo.as<JsonObject>());
+        }
 
+
+
+
+      }else if (instruction == EXEC_TESTOSC){
+
+
+      }else if (instruction == "WHATEVER"){
+
+
+      }else success = false;
+      
       return success;
 
     }     
@@ -670,6 +624,7 @@ class MixerOfflineInterface: public MixerInterface {
       //DEBUG_PRINT("\n\nNew MixerOfflineInterface(<%s>)\n\n",model.c_str());
       name="Offline";
       interfaceState = DISCONNECTED;
+      for (uint8_t i=0;i<ADDR_MAX-1;i++) addresses[i] = "address"+String(i);
     }
 
     virtual ~MixerOfflineInterface(){
@@ -683,6 +638,9 @@ class MixerOfflineInterface: public MixerInterface {
     virtual void connect(Config* conf){
       // do nothing
     }
+
+    virtual bool parseOut(const JsonObject& data){return false;}
+    virtual bool parseIn(JsonObject& data){return false;}  
 
     virtual uint8_t syncDataProgress(){return 0;}
 
@@ -701,10 +659,6 @@ class MixerOfflineInterface: public MixerInterface {
       //DEBUG_PRINT("\n\n\n\tAPPEL DERIVE OFFLINE");
       MixerInterface::parseInterfaceProtocol(doc);
     }
-
-    virtual bool execute(JsonDocument param){
-      return false;
-    }  
 
     // commands
     virtual void setChGain(uint8_t chID, float value){};
@@ -747,6 +701,11 @@ class BehringerMixer : public OSCMixerInterface {
         addresses[ADDR_CHGAIN] =   "/headamp/%02d/gain";
       }
 
+    }
+
+    virtual bool requiresEcho(){
+      if (model == "XR12" || model == "XR16" || model == "XR18") return false;
+      else return true;
     }
 
     virtual ~BehringerMixer(){
@@ -923,6 +882,11 @@ class MixingStation : public OSCMixerInterface {
       //disconnect();
       //DEBUG_PRINT("\n~MixingStation()");   
     }
+
+    virtual bool requiresEcho(){
+      return true;    //mixing station must echo any command with value which is sent to feedback the interface that it has been correctly processed
+    }
+
 
     virtual uint8_t state(){
       return interfaceState;

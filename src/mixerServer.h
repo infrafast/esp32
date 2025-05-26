@@ -174,37 +174,7 @@ class MixerServer: public HWComponent2State{
       name = *app.lang.getString("searching");
     }
 
-    //////////////////////////////////////////////////////////
-    //////////////////// ALL COMMANDS ////////////////////////    
-    //////////////////////////////////////////////////////////
-    /*bool setChBusMute(bool mute,uint8_t chID, uint8_t busID){  
-      JsonDocument command;
-      command["ch"] = chID;
-      command["bus"] = busID;
-      command["on"] = !mute;
-      return mixerInterface->sendCommand("setChBusMute",command);
-    }
-
-    bool getChMute(uint8_t chID){
-      JsonDocument command;
-      command["ch"] = chID;
-      return mixerInterface->sendCommand("getChMute",command);
-    }
-
-    bool getBusMute(uint8_t busID){
-      JsonDocument command;
-      command["bus"] = busID;
-      return mixerInterface->sendCommand("getBusMute",command);
-    }
-
-    bool getChValue(uint8_t chID){
-      JsonDocument command;
-      command["ch"] = chID;
-      return mixerInterface->sendCommand("getChValue",command);
-    }*/
-
-
-  private:    
+   private:    
     uint16_t pingLatency = 0;
 
     unsigned long lastDetectionAttemptTime = 0;

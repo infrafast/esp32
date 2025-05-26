@@ -6,7 +6,7 @@
 //constexpr uint16_t kBufferMaxSize{512};
 
 #define USE_NETWORK
-//#define DEBUG_OSC
+#define DEBUG_OSC
 //#define USE_FTP
 
 //#define TFT_BGCOLOR   TFT_DARKGREY
@@ -107,7 +107,10 @@ OpenFontRender* MyIcon::ofr = &myOfr;
 
 class StripMixer{
   public:
-    StripMixer(MixerServer* ms) : mixerServer(ms){}
+    MixerServer* mixerServer = nullptr;
+
+    StripMixer(MixerServer* ms):mixerServer(ms){
+    }
 
     bool match2AddressIDtoDropDownID(const char* address,const char* pattern){
       // this method is called when we have to decompose the ids embedded into an address according to a provided pattern
@@ -129,7 +132,6 @@ class StripMixer{
     }
 
   protected:
-    MixerServer* mixerServer;
     int id1=0, id2=0; // these are the values extracted from the address
     // example
     // /fxrtn/03/mix/06/on
@@ -141,7 +143,7 @@ class OSCTestStrip : public TextStrip, public StripMixer{
   #define STRIP_OSCTEST "oscTest"
   public:
 
-    OSCTestStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):TextStrip(s,g, debug),StripMixer(ms){
+    OSCTestStrip(StripSkeleton* s,GUIManager* g,MixerServer* _mi,bool debug=false):TextStrip(s,g, debug),StripMixer(_mi){
       portPropertyAddress = s->dataSetAddresses.get(1);
       msgPropertyAddress =  s->dataSetAddresses.get(2);
       message = *app.lang.getString("undefined");
@@ -166,6 +168,10 @@ class OSCTestStrip : public TextStrip, public StripMixer{
       }     
     }
 
+    virtual void update(uint8_t layout = LAYOUT_DETAILS){
+      DEBUG_PRINT("\nupdate %s",type.c_str());
+    }
+
     virtual void serializeProperties(){
       TextStrip::serializeProperties();
       
@@ -181,11 +187,15 @@ class OSCTestStrip : public TextStrip, public StripMixer{
     }
     
     virtual bool actionCallback(uint8_t trigger){
-      JsonDocument command;
-      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_TESTOSC;
-      command[(uint8_t)EXEC_MESSAGE] = message;
-      command[(uint8_t)EXEC_IP] = text;
-      command[(uint8_t)EXEC_PORT] = port;
+      JsonDocument doc;
+
+      JsonObject command = doc.to<JsonObject>();
+
+      JsonObject osc = command[EXEC_TESTOSC].to<JsonObject>();
+      osc[EXEC_FRAME] = message;
+      osc[EXEC_IP] = text;
+      osc[EXEC_PORT] = port;
+
       return mixerServer->mixerInterface->execute(command);  
     }
 
@@ -212,7 +222,7 @@ class OSCTestStrip : public TextStrip, public StripMixer{
 class SendStrip : public ThreeSelectStrip, public StripMixer{
   public:
 
-    SendStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):ThreeSelectStrip(s,g, debug),StripMixer(ms){
+    SendStrip(StripSkeleton* s,GUIManager* g,MixerServer* _mi,bool debug=false):ThreeSelectStrip(s,g, debug),StripMixer(_mi){
     }
 
     ~SendStrip(){};
@@ -268,7 +278,7 @@ class Ch2BusStrip : public SendStrip{
 
   public:
 
-    Ch2BusStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):SendStrip(s,g,ms,debug){      
+    Ch2BusStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):SendStrip(s,g,mi,debug){      
       unitString = "dB";
       //valueMin = 0; valueMax = 1;
     }
@@ -293,38 +303,55 @@ class Ch2BusStrip : public SendStrip{
  
       //hwm.network->RTPmidi.sendNoteOn(60, 0, 1);  // C4
 
-      JsonDocument command;      
-      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_SETADDRESSVALUE;
-      command[(uint8_t)EXEC_ADDRESS] = (uint8_t)ADDR_CHBUSMUTE;
-      command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
-      command[(uint8_t)EXEC_BUSID] = dropDownIDtoInterfaceID(select3ID);
-      command[(uint8_t)EXEC_BVAL] = toggle1;
-      return mixerServer->mixerInterface->execute(command);        
+      char formattedCommandString[50];
+      String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHBUSMUTE];
+      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
+      uint8_t busID = dropDownIDtoInterfaceID(select3ID);  
+      sprintf(formattedCommandString,addressTemplate.c_str(),chID,busID);
+
+      JsonDocument command;
+      JsonObject osc = command[EXEC_OSC].to<JsonObject>();
+
+      osc[EXEC_ADDRESS] = formattedCommandString ;
+      osc[EXEC_VALUE] = toggle1?1:0;
+
+      return mixerServer->mixerInterface->execute(command.as<JsonObject>());        
 
     }
 
-    virtual void render(uint8_t layout = LAYOUT_DETAILS){
-      SendStrip::render(layout);
+    virtual void update(uint8_t layout = LAYOUT_DETAILS){
+      DEBUG_PRINT("\nupdate %s",type.c_str());
       // this code should only be called if select2ID != oldSelect2ID
       //...
       // put then the code specific here to treatment, for the value treatment like OSC frame to read the value
       // get the values
-      JsonDocument command;
+
+      char formattedCommandString[50];
+      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
+      uint8_t busID = dropDownIDtoInterfaceID(select3ID);  
+      // we query levels and mute state to update the strip
+
+      JsonDocument command;      
+      JsonObject osc = command[EXEC_OSC].to<JsonObject>();
+
+      JsonDocument doc;
 
 
-      // send command to query initial state of the strip
-      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_GETADDRESSVALUE;
-      command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
-      command[(uint8_t)EXEC_BUSID] = dropDownIDtoInterfaceID(select3ID);
 
-      command[(uint8_t)EXEC_ADDRESS] = ADDR_CHBUSMUTE;
-      mixerServer->mixerInterface->execute(command);
+      String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHBUSMUTE];
+      sprintf(formattedCommandString, addressTemplate.c_str(), chID, busID);
+      osc[EXEC_ADDRESS] = formattedCommandString ;
+      mixerServer->mixerInterface->execute(command.as<JsonObject>());    
 
-      command[(uint8_t)EXEC_ADDRESS] = ADDR_BUSMUTE;
-      mixerServer->mixerInterface->execute(command);
+      addressTemplate = mixerServer->mixerInterface->addresses[ADDR_BUSMUTE];
+      sprintf(formattedCommandString, addressTemplate.c_str(), busID);
+      osc[EXEC_ADDRESS] = formattedCommandString ;
+      mixerServer->mixerInterface->execute(command.as<JsonObject>());
 
-      command[(uint8_t)EXEC_ADDRESS] = ADDR_CHBUSVALUE;
-      mixerServer->mixerInterface->execute(command);      
+      addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHBUSVALUE];
+      sprintf(formattedCommandString, addressTemplate.c_str(), chID, busID);
+      osc[EXEC_ADDRESS] = formattedCommandString ;      
+      mixerServer->mixerInterface->execute(command.as<JsonObject>());
 
     }
 
@@ -333,7 +360,7 @@ class Ch2BusStrip : public SendStrip{
       // this method implements the behaviour of the strip when receiving 
       // he will process certain frame and ignore others
       OSCValues *oscValues = static_cast<OSCValues *>(parameter);      
-      //DEBUG_PRINT("\nfeeding %d-%s(%s) with %s",index, getTopLabel()->c_str(), id.c_str(), oscValues->addressStr);
+      //DEBUG_PRINT("\nfeeding %d-%s(%s) with %s",index, getTopLabel()->c_str(), type.c_str(), oscValues->addressStr);
 
       OSCMixerInterface* interface = (OSCMixerInterface*)mixerServer->mixerInterface;
       
@@ -379,13 +406,20 @@ class Ch2BusStrip : public SendStrip{
     }      
 
     void setChBusLevel(){
-      JsonDocument command;      
-      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_SETADDRESSVALUE;
-      command[(uint8_t)EXEC_ADDRESS] = ADDR_CHBUSVALUE;
-      command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
-      command[(uint8_t)EXEC_BUSID] = dropDownIDtoInterfaceID(select3ID);
-      command[(uint8_t)EXEC_FLOATVAL] = value;
-      mixerServer->mixerInterface->execute(command);
+
+      char formattedCommandString[50];
+      String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHBUSVALUE];
+      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
+      uint8_t busID = dropDownIDtoInterfaceID(select3ID);  
+      sprintf(formattedCommandString,addressTemplate.c_str(),chID,busID);
+
+      JsonDocument command;
+      JsonObject osc = command[EXEC_OSC].to<JsonObject>();
+
+      osc[EXEC_ADDRESS] = formattedCommandString ;
+      osc[EXEC_VALUE] = value;
+
+      mixerServer->mixerInterface->execute(command.as<JsonObject>());    
     }    
 
 
@@ -397,7 +431,7 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
   #define STRIP_CHGAIN "chGain"
 
   public:
-    ChGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* ms,bool debug=false):TwoSelectStrip(s,g,debug),StripMixer(ms){
+    ChGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):TwoSelectStrip(s,g,debug),StripMixer(mi){
       valueMin = CHGAINDB_MIN;
       valueMax = CHGAINDB_MAX;
       value = (valueMin + valueMax)/2;
@@ -442,6 +476,10 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
 
+    virtual void update(uint8_t layout = LAYOUT_DETAILS){
+      DEBUG_PRINT("\nupdate %s",type.c_str());
+    }
+
     virtual float increaseCallback(unsigned long time,uint8_t trigger){
       float delta = Strip::increaseCallback(time,trigger);
       if (delta != 0.0) setChGain();
@@ -455,13 +493,18 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
     }
 
     void setChGain(){
-      JsonDocument command;
-      command[(uint8_t)EXEC_INSTRUCTION] = (uint8_t)INSTR_SETADDRESSVALUE;
-      command[(uint8_t)EXEC_CHID] = dropDownIDtoInterfaceID(select2ID);
-      command[(uint8_t)EXEC_FLOATVAL] = value;
+      char formattedCommandString[50];
+      String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHGAIN];
+      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
+      sprintf(formattedCommandString,addressTemplate.c_str(),chID);
 
-      command[(uint8_t)EXEC_ADDRESS] = ADDR_CHGAIN;
-      mixerServer->mixerInterface->execute(command);
+      JsonDocument command;
+      JsonObject osc = command[EXEC_OSC].to<JsonObject>();
+
+      osc[EXEC_ADDRESS] = formattedCommandString ;
+      osc[EXEC_VALUE] = value;
+
+      mixerServer->mixerInterface->execute(command.as<JsonObject>());  
     }
 
     virtual bool actionCallback(uint8_t trigger){
@@ -874,7 +917,7 @@ void userScreenBuilder(int screebID, int subScreen){
         modalScreen(&emptyString,i18n.getString(stateNames[interfaceState]),i18n.getString("please wait"));  
         gui.add (new ProgressBarH(&mixerServer.mixerInterface->syncSoftwareProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &aboveBottomText /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
 
-        //gui.add(new Arc(&mixerServer.mixerInterface->syncSoftwareProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));        
+        //gui.add(new Arc(&mixerServer.mixerServer->mixerInterface->syncSoftwareProgress, 0.0, 100.0, &app.midScreenHoriz, &mixerY, 100, &GUI::green, &GUI::transparentColor,50));        
       }else{                        
         modalScreen(&emptyString,i18n.getString(stateNames[interfaceState]),i18n.getString("please wait"));  
         if (interfaceState == SYNCING_DATA){
