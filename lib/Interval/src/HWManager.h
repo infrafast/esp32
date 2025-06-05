@@ -268,14 +268,7 @@ public:
       wakeUp(500); // you have to press button for more than 500ms to wake up, otherwise we do not start.    
       setPowerRail(ON);        
 
-      #ifdef DEBUG
-        //DEBUG is enabled so we don't use MIDI USB, the USB C is used for Serial printf debug
-        Serial.begin(115200);
-        /*unsigned long start = millis();
-        while (!Serial && (millis() - start < 2000)) {
-          delay(1); // petite pause pour éviter de monopoliser la CPU
-        } */       
-      #endif
+
 
       MIDI_USB_BEGIN;
       
