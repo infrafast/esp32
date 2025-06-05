@@ -7,5 +7,14 @@
 "Open browser":"Ouvrez un navigateur web a l'adresse ci dessous. Attention à http (pas https)",
 "Connected":"Connecté",
 "Press button":"Vous avez déjà un navigateur connecté. Appuyez sur un bouton pour sortir.",
-"Press >1s to startup":"Appuyer >1s pour démarrer"
+"Press >1s to startup":"Appuyer >1s pour démarrer",
+"Attempt":"Tentative de connexion WiFi (ou branchez cable ethernet)",
+"disconnected":"déconnecté",
+"connected":"connecté",
+"idle":"attente connexion",
+"connecting":"connexion",
+"searching":"recherche",
+"connect failed":"échec connexion",
+"trying":"tentative",
+"offline":"appui court on/off = hors connexion"
 }

@@ -70,7 +70,7 @@ void socketConnectionCallback(IWebSocket &ws);
 #define C_COLOR             "color"
 
 ///////////////////// VOLATILE PARAMETERS ///////////////////////
-#define V_USE_NETWORK       "myNetworkIP"
+//#define V_USE_NETWORK       "myNetworkIP"
 
 // C to C++ class function wrapper
 void commonFileServerWrapper(Request &req, Response &res);  
@@ -153,12 +153,19 @@ struct JsonAnswer{
   String value = String(true);
 };
 
-typedef bool (*ParseJsonInputCallback)(JsonDocument,JsonAnswer*);
+/*
+struct JsonUserEvent{
+  JsonDocument jsonInput;
+  JsonAnswer& jsonAnswer;
+};
+*/
+
+typedef bool (*ParseJsonInputCallback)(JsonObject&,JsonAnswer*);
 //typedef void (*NetworkChangeStateCallback)(bool state);
 
-bool defaultParseJsonInputCallback(JsonDocument jsonDoc,JsonAnswer* jsonAnswer){
+bool defaultParseJsonInputCallback(JsonObject& jsonObject,JsonAnswer* jsonAnswer){
   String jsonInputString;
-  serializeJson(jsonDoc, jsonInputString);
+  serializeJson(jsonObject, jsonInputString);
   return false;
 }
 
@@ -332,6 +339,23 @@ class StripSkeleton;
 #define SHAPE1X4 "1x4"
 #define SHAPE2X2 "2x2"
 
+enum {
+  STRIP_DISCONNECTED,
+  STRIP_PENDING,
+  STRIP_CONNECTING,
+  STRIP_ONLINE,
+  STRIP_UNDEF_STATE,
+};
+
+float oneHundedFloat = 100.0;
+
+struct StripState{
+  uint8_t code = STRIP_DISCONNECTED;
+  const String* stateLabel = &emptyString;
+  const String* subStateLabel = &emptyString;
+  float progress = 0;
+};
+
 class Strip {  
   #define JSON_STRIP_PROPERTY_SIZE 100
   #define  JSON_STRIP_TEMPLATE_SIZE 300
@@ -373,6 +397,17 @@ class Strip {
 
     virtual ~Strip(){
     }
+
+    StripState state;
+    
+    virtual uint8_t getNumberOfProperties()=0;
+    virtual bool actionCallback(uint8_t trigger)=0;
+    virtual void serializeProperties()=0;
+    virtual void deserializeProperty(String s)=0;        
+    virtual void queryState() = 0;  // // this code is called when entering a strip to get its initial state (values, etc...)
+    virtual const String* getTopLabel()=0;
+    virtual const String* getBottomLabel()=0;       
+    virtual bool update(JsonObject& data) = 0;
 
     void focus(bool f=true){
       if (f){
@@ -510,15 +545,8 @@ class Strip {
       return delta;      
     }
 
-    virtual uint8_t getNumberOfProperties()=0;
-    virtual bool actionCallback(uint8_t trigger)=0;
-    virtual void serializeProperties()=0;
-    virtual void deserializeProperty(String s)=0;    
-    
-    virtual void update(uint8_t layout = LAYOUT_DETAILS) = 0;
-
-    virtual void render(uint8_t layout = LAYOUT_DETAILS){
-      update();
+    virtual void pushToGUI(uint8_t layout = LAYOUT_DETAILS){
+      queryState();
       renderError = false;
 
       frontColor = colorMap[colorID].fColor;
@@ -558,11 +586,6 @@ class Strip {
       else if (size == SHAPE2X2) gui->add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &frontColor,&brightness));  
       else if (size == SHAPE4X1) gui->add(new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &frontColor,&brightness));
     } 
-
-    virtual const String* getTopLabel()=0;
-    virtual const String* getBottomLabel()=0;
-    
-    virtual void feed(void *parameter) = 0;
 
     JsonArray properties;
     StripSkeleton* skeleton;
@@ -650,6 +673,12 @@ class TextStrip : public Strip{
     TextStrip(StripSkeleton* s,GUIManager* g,bool debug=false):Strip(s,g){
       //icon = ICON_TEXT_STRIP;
       textPropertyAddress = s->dataSetAddresses.get(0);
+      state.code = STRIP_ONLINE;
+    }
+
+    virtual bool update(JsonObject& data) {     
+      // IMPLEMENTS CODE TO PROCESS DATA HERE
+      return false;
     }
 
     virtual bool actionCallback(uint8_t trigger){return true;}
@@ -683,7 +712,7 @@ class TextStrip : public Strip{
       gui->add(label);
     }
 
-    virtual void update(uint8_t layout = LAYOUT_DETAILS){
+    virtual void queryState(){
     }
 
     virtual void deserializeProperty(String property)  {  
@@ -714,8 +743,6 @@ class TextStrip : public Strip{
       return skeleton->numberOfProperties;      
     }
 
-    virtual void feed(void *parameter){}
-
     virtual float increaseCallback(unsigned long time,uint8_t trigger){return true;}
     virtual float decreaseCallback(unsigned long time,uint8_t trigger){return true;}
     virtual float getIncrement(unsigned long time){return 0.0;}
@@ -742,9 +769,9 @@ class TwoSelectStrip : public Strip{
 
     }
 
-    virtual void render(uint8_t layout = LAYOUT_DETAILS){
+    virtual void pushToGUI(uint8_t layout = LAYOUT_DETAILS){
       select2Content = skeleton->getValuePtr(select2PropertyAddress,select2ID-1);
-      Strip::render(layout);
+      Strip::pushToGUI(layout);
     }    
 
 
@@ -786,9 +813,9 @@ class ThreeSelectStrip: public TwoSelectStrip{
 
     }
 
-    virtual void render(uint8_t layout = LAYOUT_DETAILS){
+    virtual void pushToGUI(uint8_t layout = LAYOUT_DETAILS){
       select3Content = skeleton->getValuePtr(select3PropertyAddress,select3ID-1); 
-      TwoSelectStrip::render(layout);
+      TwoSelectStrip::pushToGUI(layout);
     }    
     
 
@@ -1188,7 +1215,7 @@ class BankNavigator: public Widget{
 
 class JsonListFile : public JsonList{
   public:
-      String filename;
+      String filename="voidconf.conf";
 
       JsonListFile():JsonList(){};
 
@@ -1478,7 +1505,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     uint16_t menuActiveIconColor;
 
     const int16_t menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2, leftMenuIconXpos = midScreenHoriz-MENU_ICON_SIZE*1.4,rightMenuIconXpos = midScreenHoriz+MENU_ICON_SIZE*1.4;
-    const int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE;
+    const int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE; 
 
     #define TWOFRAMEICON 2
     String iconRolling[TWOFRAMEICON] = {ICON_ROLLING1,ICON_ROLLING2};
@@ -1497,11 +1524,19 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
     I18n lang = I18n();
-    Config config = Config();
+    I18n userLang = I18n();
+    
+    Config bankCfg = Config();
     Config system = Config();
-    Config* userConfig = nullptr;
+    Config userConfig;
+    
     Preferences persistants;
     Shortcuts shortcuts;
+
+    ///////////////// INTERFACES ///////////////////
+    //OSCInterface osc;
+
+    ////////////////////////////////////////////////
 
     unsigned long goSleepCountdownStart;
 
@@ -1683,22 +1718,27 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       String langFile = "/"+*system.getString(S_LANG,"ENGLISH");
       langFile.toUpperCase();
+
       lang.load(langFile+".lang"); 
+      userLang.load(langFile+".i18n"); 
+
+
     }
 
-    #define DEFAULT_CONFIG_FILE_NAME "/default.conf"
+    #define DEFAULT_CONFIG_FILE_NAME "default"
 
-    void applyConfigSettings(){
-      // this function applies all settings from the user conf file
+    void loadConfig(){
+      // this function applies all settings from the banks and user conf file
       String profileFile = "/"+*system.getString(S_CONFIG_FILE,DEFAULT_CONFIG_FILE_NAME);
-      config.load(profileFile,defaultUserConf);  
+      bankCfg.load(profileFile+".conf",defaultBanksConf);  
+      userConfig.load(profileFile+".user",defaultUserConf);            
     }  
 
     #define SYSTEM_FILE_NAME "/settings.sys"
     void clearConfig(){
       // add a callback usere function userClearConfig()
       // delete all config files here, add the code to iterate FS on *.conf
-      if (userConfig != nullptr) LittleFS.remove(userConfig->filename);
+      LittleFS.remove(userConfig.filename);
       LittleFS.remove(DEFAULT_CONFIG_FILE_NAME);
       // delete system settings
       LittleFS.remove(SYSTEM_FILE_NAME);
@@ -1710,7 +1750,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
 
     bool initBanks(){
-      if (deserializeBanks(config.getString(C_BANKS)) == nullptr){
+      if (deserializeBanks(bankCfg.getString(C_BANKS)) == nullptr){
         menuTopText = *lang.getString("IntervalBank creation");
         menuBottomLabel = emptyString;
         byeIconColor = &GUI::red; byeIcon = &iconForbid;
@@ -1718,48 +1758,62 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         return false;
       }
       return true;
-    }
+    }   
 
-    void init(Config* userCf){
-      userConfig = userCf;
-      init();
-    }    
+    void init(String _defaultUserConf="{}"){     
+      defaultUserConf = _defaultUserConf;
+      #ifdef DEBUG
+        //DEBUG is enabled so we don't use MIDI USB, the USB C is used for Serial printf debug
+        Serial.begin(115200);
+        /*unsigned long start = millis();
+        while (!Serial && (millis() - start < 1000)) {
+          delay(1); // petite pause pour éviter de monopoliser la CPU
+        }*/
+      #else
+        Serial.setDebugOutput(false);             
+      #endif
 
-    void init(){
       GenericComponent::init();
 
       LittleFS.begin();
 
-      persistants.begin("interval", false);
-      
+      persistants.begin("interval", false);      
 
       system.load(SYSTEM_FILE_NAME,defaultSysConf);  
-
       applySystemSettings();
-      applyConfigSettings();
 
-      GUI::screenBrightness = persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
-      if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
-      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;
+      loadConfig();      
 
-      hwm->init();
-      gui->init();         
-      
-      setScreenAndButtonRotation();
-      //GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,1)); 
-
-      if (debug){
-        /*String s;
+      #ifdef DEBUG
+        String s;
         system.serialize(&s);
-        DEBUG_PRINT("\n\n serialization of system:\n%s",s.c_str());
+        DEBUG_PRINT("\n\n system:\t%s [...]",s.substring(0,200).c_str());
         s="";
-        config.serialize(&s);
-        DEBUG_PRINT("\n\n serialization of config:\n%s",s.c_str());
+        bankCfg.serialize(&s);
+        DEBUG_PRINT("\n\n bankCfg:\t%s [...]",s.substring(0,200).c_str());
+        s="";
+        userConfig.serialize(&s);
+        DEBUG_PRINT("\n\n userConfig:\t%s [...]>",s.substring(0,200).c_str());        
         s="";
         lang.serialize(&s);
-        DEBUG_PRINT("\n\n serialization of langfile:\n%s",s.c_str());        
-        //DEBUG_PRINT("\nexample of langfile token: Connect:%s",lang.getString("Connect")->c_str());        */
-      }
+        DEBUG_PRINT("\n\n langfile:\t%s [...]",s.substring(0,200).c_str());        
+        DEBUG_PRINT("\nexample of langfile token: Connect:<%s>",lang.getString("Connect")->c_str());        
+        s="";
+        userLang.serialize(&s);
+        DEBUG_PRINT("\n\n userLang:\t%s [...]",s.substring(0,200).c_str());                
+      #endif
+
+      hwm->init();
+      
+      GUI::screenBrightness = persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
+      if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
+      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;      
+
+      gui->init();         
+      
+
+      setScreenAndButtonRotation();
+      //GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,1)); 
 
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
             
@@ -2104,7 +2158,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   }
 
   void saveBrightness(){
-    screen.focus -= 1; // refresh screen
+    triggerRedraw();
     persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    
   }
 
@@ -2286,10 +2340,10 @@ void setup() {
       dataRepository.serialize(&ds);         
 
       tempJsonString = serializeBanks();      
-      config.setValue(C_BANKS,tempJsonString);
+      bankCfg.setValue(C_BANKS,tempJsonString);
 
       tempJsonString = "";
-      config.serialize(&tempJsonString);
+      bankCfg.serialize(&tempJsonString);
       doc["config"]=tempJsonString;
           
       serializeJson(doc, *returnedJsonStringData);  
@@ -2302,6 +2356,11 @@ void setup() {
       // prevents wrong branching
       if (screen.id == SCREEN_BANK && screen.state > banks.size()-1) screen.state = 0; 
       if (screen.id == SCREEN_WIZARD && screen.state > STATE_WIZARD_USER_STEP4) screen.state = STATE_WIZARD_LANG_STEP1;       
+      // branch the first available strip 
+      if (focusedStrip == nullptr && screen.id == SCREEN_BANK){
+        IntervalBank* bank = banks.get(screen.state);                
+        focusedStrip = bank->strips[0];
+      }
     }
 
     void restoreMenu(){
@@ -2551,10 +2610,17 @@ void setup() {
       restoreMenu();         
     }
 
+    void triggerRedraw(){
+      // this forces the GUI to be rebuild at next refresh
+      DEBUG_PRINT("\ntriggerRedraw()");
+      screen.focus = screen.focus - 1;      
+    }
+
     bool refresh(bool force=false){
       yield();
       
       refreshed = force;
+
 
       //------------------
       //
@@ -2633,6 +2699,64 @@ void setup() {
           goToBigBatteryIconScreenAndSleep();
         }          
       }
+
+      //------------------
+      //
+      // MANAGE INTERFACE
+      //
+      //------------------
+
+      for (const auto& descriptor : interfaceRepo.descriptors){
+        
+        DeviceInterface* interface = descriptor.interface;
+
+        JsonDocument doc;
+        JsonObject input = doc.to<JsonObject>();
+
+        if (interface->monitor(input)) broadCast(interface->serialize());
+        doc.shrinkToFit();
+        
+        //
+
+        // we only have a currenntStrip valid when current screen is a bank
+        if (screen.id == SCREEN_BANK){
+          Interval::Bank* bank = banks.get(screen.state);          
+          if (bank != nullptr){         
+            if (focusedStrip != nullptr){
+              if (bank->currentLayout == LAYOUT_ZOOM){
+                if (focusedStrip->update(input))  triggerRedraw();;    // traite le strip avec focus/ full screen donc full update
+              }else{
+                for (const auto& strip : bank->strips) {
+                  // traite tous les strips de la fenetre courante, c'esta dire ceux ayant la meme fenetre que le strip ayant le focus
+                  if (strip->win == focusedStrip->win)
+                    if (strip->update(input))  triggerRedraw();;
+                }
+              } 
+            }
+          }   
+        }                      
+      }
+
+  /*if (mixerServer.mixerInterface->interfaceState == CONNECTED){
+    OSCMixerInterface* interface = (OSCMixerInterface*)mixerServer.mixerInterface;
+    OSCValues* data = &interface->data;
+    if (data->incoming == true){
+      Interval::Bank* bank = app.banks.get(screen.state);   
+      if (bank != nullptr){         
+        if (app.focusedStrip != nullptr){
+          if (bank->currentLayout == LAYOUT_ZOOM){
+            app.focusedStrip->update(data);    // traite uniquement le strip avec focus
+          }else{
+            for (const auto& strip : bank->strips) {
+              // traite tous les strips de la fenetre courante, c'esta dire ceux ayant la meme fenetre que le strip ayant le focus
+              if (strip->win == app.focusedStrip->win) strip->update(data);
+            }
+          } 
+        }
+      } 
+    }
+  }*/
+
 
 
       //------------------
@@ -2858,8 +2982,8 @@ void setup() {
             //webTaskhandle(WEB_START);
 
             /* Initialize mDNS => doesnt work for ethernet so we give up and keep IP address
-            if (debug) DEBUG_PRINT("\nstarting mdns: %s",config.getString(S_AP_NAME)->c_str());
-            if (!MDNS.begin(*config.getString(S_AP_NAME))) {   // Set the hostname to "esp32.local"
+            if (debug) DEBUG_PRINT("\nstarting mdns: %s",bankCfg.getString(S_AP_NAME)->c_str());
+            if (!MDNS.begin(*bankCfg.getString(S_AP_NAME))) {   // Set the hostname to "esp32.local"
               if (debug) DEBUG_PRINT("Error setting up MDNS responder!");
             } */                       
           }
@@ -3381,7 +3505,7 @@ void setup() {
       // Force screen redraw if we changed the window or the bank
       //DEBUG_PRINT("\n WINDOW previous=%d current=%d",previousWindow, strip->win);      
       if (previousWindow != strip->win || currentBank != targetBank){
-        screen.focus = screen.focus - 1; // force refresh 
+        triggerRedraw(); // force refresh 
         //DEBUG_PRINT("\nFORCE REFRESH!!!!!");
       }
 
@@ -3476,6 +3600,7 @@ void setup() {
           getCommonConfig(doc);
           serializeJson(doc, jsonAnswer.value);  
           removeJsonQuote(&jsonAnswer.value);
+          doc.shrinkToFit();
         }else if (param == "connectivityConfig"){
           jsonAnswer.value = getConnectivityState();
         }else if (param == "configBanks"){
@@ -3489,7 +3614,7 @@ void setup() {
 
           serializeJson(doc,jsonAnswer.value);
           removeJsonQuote(&jsonAnswer.value); 
-
+          doc.shrinkToFit();
         }else jsonAnswer.callback = RET_UNDEFINEDCALLBACK;
 
 
@@ -3507,8 +3632,8 @@ void setup() {
             system.save();
           }
         }else if (section == "config"){
-          success = config.setValue(id,value);
-          if (success) applyConfigSettings();
+          success = bankCfg.setValue(id,value);
+          if (success) loadConfig();
         }
         if (success){
           jsonAnswer.callback = RET_SAVEBUTTON;
@@ -3573,7 +3698,7 @@ void setup() {
             // put the focus on the strip
             uint8_t selector = strip->index;
             jumpToStrip(selector,bank->name);    //jsonAnswer should be : {"restoreStrip":{"bank":"BANK j3","strip":{"type":"text","selector":"7","x":"3","y":"0","size":"1x4","color":3,"icon":"Z","properties":["/text/"]}}}         
-            screen.focus = screen.focus - 1;    // force refresh as jumpToStrip only refresh if you change window or bank, but here we may update a strip which is the currently displayed one
+            triggerRedraw();    // force refresh as jumpToStrip only refresh if you change window or bank, but here we may update a strip which is the currently displayed one
             jsonAnswer.callback = RET_SAVEBUTTON;
             jsonAnswer.value = "1";  
           }else{
@@ -3608,7 +3733,7 @@ void setup() {
                     bank->selector = currentStrip->index;                 
                     //bank->nav.window = currentStrip->win;
                   }
-                  screen.focus = screen.focus - 1; // force refresh 
+                  triggerRedraw(); // force refresh 
               }else{
                    jsonAnswer.value=*lang.getString(ERRDEL_STRIP_MSG); 
               }
@@ -3625,9 +3750,7 @@ void setup() {
         uint8_t bankIndex;
         IntervalBank* bank = getBank(jsonInput["param"]["bank"],&bankIndex);
         jsonAnswer.callback = RET_COMMANDERROR;
-        if (bank != nullptr){                     
-          
-          
+        if (bank != nullptr){                                         
           /*uint8_t x = jsonInput["param"]["x1"];
           uint8_t y = jsonInput["param"]["y1"]; 
           uint8_t window = jsonInput["param"][C_WIN];
@@ -3643,7 +3766,7 @@ void setup() {
             updatePositions(bank,jsonInput["param"][C_POSITIONS]);  
             jsonAnswer.callback = RET_SAVEBUTTON;
             jsonAnswer.value = "1";              
-            screen.focus = screen.focus - 1; // force refresh            
+            triggerRedraw(); // force refresh            
           }else{
             jsonAnswer.value=*lang.getString(BAD_STRIP_MSG);
           }
@@ -3677,7 +3800,7 @@ void setup() {
           hookBankToMenu();   // rebuild the bank switch menu
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value = "1";            
-          screen.focus = screen.focus - 1; // force refresh           
+          triggerRedraw(); // force refresh           
         }else{
           jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
         }
@@ -3703,14 +3826,14 @@ void setup() {
           bank->name = newName;
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value = "1";
-           screen.focus = screen.focus - 1; // force refresh the bank screen or the bank switch
+           triggerRedraw(); // force refresh the bank screen or the bank switch
         }else jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
       }else if (command == "save"){     
         String fullConfig;
         serialize(&fullConfig);
-        bool ret = config.save();
+        bool ret = bankCfg.save();
         ret &=  system.save();   
-        if (userConfig != nullptr) ret &= userConfig->save();   
+        userConfig.save();   
         if (ret){
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value = "0";  
@@ -3720,9 +3843,22 @@ void setup() {
         }      
       }else{
         //DEBUG_PRINT("\n\t\t\t\t\tCalling userParseJsonInputCallback...");
-        if (!userParseJsonInputCallback(jsonInput,&jsonAnswer)){
-          jsonAnswer.callback = RET_UNDEFINEDCALLBACK;
-          jsonAnswer.value = jsonInput.as<String>();
+        JsonObject j = jsonInput.to<JsonObject>();
+        if (!userParseJsonInputCallback(j,&jsonAnswer)){
+
+          /*JsonUserEvent je;
+          je.jsonAnswer = &jsonAnswer;
+          je.jsonInput = jsonInput;
+
+          evt.type = EVENT_PARSE_JSONINPUT;
+          evt.data = &je;
+
+          if (!fireEvent(&evt)){*/
+            jsonAnswer.callback = RET_UNDEFINEDCALLBACK;
+            jsonAnswer.value = jsonInput.as<String>();
+          //}
+      
+      
         }
       }
 
@@ -3735,6 +3871,7 @@ void setup() {
       removeJsonQuote(&jsonString);
 
       //DEBUG_PRINT("\nbuildJsonOuput: %s",jsonString.c_str());
+      jsonOutput.shrinkToFit();
       return jsonString;
 
     }    
@@ -3768,6 +3905,7 @@ void setup() {
       String data;
       WiFi.scanDelete();
       serializeJson(doc,data);
+      doc.shrinkToFit();
       broadCast(data);
     }
 
@@ -3799,7 +3937,7 @@ void setup() {
     //"\""+String(S_CONFIGNAMES)+"\":[\"anto\",\"thomas\",\"laurent\"]\","
       "\""+String(S_PUSHDELAY)+"\":\"852\","
       "\""+String(S_DCLICREACTIVITY)+"\":\"251\","
-      "\""+String(S_CONFIG_FILE)+"\":\"default.conf\"," 
+      "\""+String(S_CONFIG_FILE)+"\":\""DEFAULT_CONFIG_FILE_NAME"\"," 
       "\""+String(S_AP_NAME)+"\":\"footswitch\","
       "\""+String(S_LAST_USED_SSID)+"\":\"intervalmix1\","
       "\""+String(S_LANG)+"\":\"francais\","
@@ -3809,7 +3947,8 @@ void setup() {
       "\""+String(S_SHORTCUTS)+"\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
     "}";
 
-    String defaultUserConf = "{\"banks\":{\"bank1\":{\"possibleLayout\":0,\"currentLayout\":0,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":1,\"icon\":5,\"size\":\"2x2\",\"position\":{\"x\":1,\"y\":1,\"id\":3,\"win\":2},\"properties\":[\"/text/change-me\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"2x2\",\"position\":{\"x\":1,\"y\":1,\"id\":2,\"win\":1},\"properties\":[\"/text/hello\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"2x2\",\"position\":{\"x\":1,\"y\":1,\"id\":1,\"win\":0},\"properties\":[\"/text/world\"]}]}}}";
+    String defaultBanksConf = "{\"banks\":{\"bank1\":{\"possibleLayout\":0,\"currentLayout\":0,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":1,\"icon\":5,\"size\":\"2x2\",\"position\":{\"x\":1,\"y\":1,\"id\":3,\"win\":2},\"properties\":[\"/text/change-me\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"2x2\",\"position\":{\"x\":1,\"y\":1,\"id\":2,\"win\":1},\"properties\":[\"/text/hello\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"2x2\",\"position\":{\"x\":1,\"y\":1,\"id\":1,\"win\":0},\"properties\":[\"/text/world\"]}]}}}";
+    String defaultUserConf = "{}";
 
     ScreenUnion oldScreen;    
 

@@ -88,7 +88,7 @@ class HWComponent2State : public HWComponent{
       if (previousState != state || force){
         previousState = state;
         if (debug){
-          //DEBUG_PRINT("\n%s changed state to: %i",id.c_str(),state);
+          DEBUG_PRINT("\n%s changed state to: %i",id.c_str(),state);
         }
         refreshed = true;
       }
@@ -937,8 +937,10 @@ class Network : public HWComponent2State{
         WiFi.mode(WIFI_AP);  // not required f we consider disconnectWifi is about shuting down STA, so no need to 
       }else if (WiFi.getMode() == WIFI_STA){
         //if (debug) DEBUG_PRINT("\tWiFi off");
-        WiFi.disconnect();
-        WiFi.mode(WIFI_OFF);
+        if (WiFi.isConnected()) {
+          WiFi.disconnect(true);
+          WiFi.mode(WIFI_OFF);
+        }
       }else{
         // if we are in AP mode only, we do nothing
          //if (debug) DEBUG_PRINT("\tNo Change on WiFI, already turned OFF (AP only)");
@@ -1022,7 +1024,7 @@ class WiFiEth : public Network{
     }
 
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){
-      //DEBUG_PRINT("\nclientSocketOpen(%s,%d,%s)",host,port,path);
+      DEBUG_PRINT("\nclientSocketOpen(%s,%d,%s)",host,port,path);
      
       if (state != CONNECTED){
         DEBUG_PRINT("\t failed, network not connected!");
@@ -1031,14 +1033,14 @@ class WiFiEth : public Network{
       if (media == CABLE_MEDIA){
         if (wsEthClient!= nullptr){
           if (!wsEthClient->open(host, port, path)){
-            //DEBUG_PRINT("\t open wsEthClient failed!");
+            DEBUG_PRINT("\t open wsEthClient failed!");
             return false;
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){
           if (!wsWiFiClient->open(host, port, path)){
-            //DEBUG_PRINT("\t open wsWiFiClient failed!");
+            DEBUG_PRINT("\t open wsWiFiClient failed!");
             return false;
           }
         }
@@ -1371,7 +1373,7 @@ class WiFiEth : public Network{
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
-      //DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
+      DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
       if (clientParam->host[3] == 255){
         DEBUG_PRINT("\t=>broadcast, stop.");  
         return false;
@@ -1384,7 +1386,7 @@ class WiFiEth : public Network{
 
       // Si nous sommes déjà en train de tenter une connexion, on ne relance pas la tâche
       if (clientParam->isClientConnecting ) {
-        //DEBUG_PRINT("\tconnection pending, no more attempt allowed, stop.");
+        DEBUG_PRINT("\tconnection pending, no more attempt allowed, stop.");
         //clientParam->client->stop();
         //vTaskDelete(httpTaskHandle);
         //clientParam->taskHandle = nullptr;

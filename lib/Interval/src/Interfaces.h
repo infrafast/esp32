@@ -17,6 +17,10 @@
 #endif
 
 
+#define INTERFACE_NAME "name"
+#define INTERFACE_KEY "interface"
+#define INTERFACE_PROGRESS "progress"
+
 #define EXEC_OSC "osc"
 #define EXEC_ADDRESS "address"
 #define EXEC_VALUE "value"
@@ -29,19 +33,26 @@ enum{
     CAPTURE_INOUT
 };
 
-class Config;
 
 class DeviceInterface{
     public:
-        String name;
-        uint8_t recordMode = CAPTURE_IN;
+        String name="noname";
+        uint8_t recordMode = NO_CAPTURE;
+        uint8_t interfaceState = DISCONNECTED, oldInterfaceState = interfaceState ;        
+        bool changedState = false;
 
         DeviceInterface(String, uint8_t);
-        bool execute(const JsonObject& data);
-        bool read(JsonObject& data);
+        ~DeviceInterface();
+        
+        String serialize();
 
-        virtual void connect(Config* conf)=0;
+        bool execute(const JsonObject& data);
+        bool monitor(JsonObject& data);
+
+        virtual uint8_t progress()=0;
+        virtual void connect()=0;
         virtual void disconnect()=0;           
+        
 
     private:
         virtual bool parseOut(const JsonObject& data) = 0;
@@ -61,15 +72,28 @@ struct CaptureDescriptor{
     File file;
 };
 
-class DeviceInterfaceCapture{
+class InterfaceRepository{
   public:
-    
-    void record(const JsonObject& data, String& name){
+   
+    void record(const JsonObject& data){
         // first we parse all interfaces to see if we find one that match the name    
         for (const auto& descriptor : descriptors){
-            if (descriptor.interface->name == name){
-                if (descriptor.state == CAPTURE_RECORD){
-                    // file.add(data);
+            String interfaceName = data[INTERFACE_NAME];
+            if (descriptor.interface->name == interfaceName){
+                if (descriptor.state == CAPTURE_RECORD){                                        
+                    // record all data, except data[INTERFACE_NAME] to avoid storing too much data
+                    data.remove(interfaceName);
+                    // open file if not existing
+                    if (!descriptor.file) {
+                        // Ouvrir en mode "append"
+                        /*descriptor.file = LittleFS.open(, "w");
+
+                        if (!descriptor.file) {
+                            DEBUG_PRINT("Erreur à l'ouverture du fichier en append.");
+                        } else {
+                            DEBUG_PRINT("Fichier ouvert en mode append.");
+                        }*/
+                    }                    
                 }
             }
         }
@@ -101,66 +125,73 @@ class DeviceInterfaceCapture{
         descriptors.push_back(cd);
     }
 
-    private:
-        std::vector<CaptureDescriptor> descriptors;
+    void remove(DeviceInterface* device) {
+        for (auto it = descriptors.begin(); it != descriptors.end(); ++it) {
+            if (it->interface == device) {
+                descriptors.erase(it);
+                break; // On s’arrête après la première occurrence
+            }
+        }
+    }
+
+    
+    std::vector<CaptureDescriptor> descriptors;
+
 };
 
-DeviceInterfaceCapture interfaceCapture;
+InterfaceRepository interfaceRepo;
 
-DeviceInterface::DeviceInterface(String _name, uint8_t _mode):name(_name),recordMode(_mode){
-    if (recordMode != NO_CAPTURE){
-        interfaceCapture.registerInterface(this);
-    }
+DeviceInterface::DeviceInterface(String _name, uint8_t _mode = NO_CAPTURE):name(_name),recordMode(_mode){
+    interfaceRepo.registerInterface(this);
+}
+
+DeviceInterface::~DeviceInterface(){
+    interfaceRepo.remove(this);
+}
+
+String DeviceInterface::serialize(){
+    JsonDocument doc;
+    doc[INTERFACE_KEY][INTERFACE_NAME] = name;
+    doc[INTERFACE_KEY]["interfaceState"] = interfaceState;
+    doc[INTERFACE_KEY][INTERFACE_PROGRESS] = progress();
+
+    doc.shrinkToFit();
 }
 
 bool DeviceInterface::execute(const JsonObject& data){
     /*String s;      
     serializeJson(data, s);
     DEBUG_PRINT("\nexecute %s",s.c_str());*/
-    if (recordMode == CAPTURE_OUT) interfaceCapture.record(data,name);
+    if (recordMode == CAPTURE_OUT) interfaceRepo.record(data);
     return parseOut(data);
 };
 
-bool DeviceInterface::read(JsonObject& data){
-    // do we have data ?
-    bool ret = parseIn(data);
-    if (ret){
+bool DeviceInterface::monitor(JsonObject& data){
+    changedState = false;
+    // do we have data ?        
+    if (parseIn(data)){
+        data[INTERFACE_NAME] = name;        
         // if yes, is this interface supposed to record data coming in  ?
-        if (recordMode == CAPTURE_IN) interfaceCapture.record(data,name);
+        if (recordMode == CAPTURE_IN) interfaceRepo.record(data);
     }
-    return ret;            
+
+    if (interfaceState != oldInterfaceState){
+        changedState = true;
+        oldInterfaceState = interfaceState;
+    }
+
+    return changedState;            
 }
-
-
-
-
-
-
-
-
-
 
 ///////////////////// DATA STRUCTURES ////////////////////////
 
-struct OSCValues{   
-    #define OSC_MAX_LEN 128
-    uint16_t    bSize = 20, oldbSize = bSize ;
-    uint8_t *   bValue;
-    int         iValue            = -1;           // values returned by the mixer
-    float       fValue          = -0.1;
-    char        sValue[OSC_MAX_LEN]; char sValue2[OSC_MAX_LEN]; char sValue1[OSC_MAX_LEN];
-    char        TypeStr;
-    char        addressStr[OSC_MAX_LEN];
-    const char* expectedStr;
-    bool        incoming = false;      // this is to indicate if someone has consummed the received data
-};
-
-typedef std::function<void(bool, OSCValues*, int)> OSCPingCallback; 
+typedef std::function<void(bool, int)> OSCPingCallback;    // ping success true/false, port
 
 class OSCInterface;
 
 struct OSCPingTaskParameters {
-  OSCValues* data;
+  String address;
+  JsonObject data;
   IPAddress ip;
   int port;
   bool isPinging = false;
@@ -176,12 +207,19 @@ class OSCInterface: public DeviceInterface{
         IPAddress ip;
         int port;
         uint16_t latency = 49;      // default reasonnable latency
-        Network* network;
-        unsigned long RXtimerStart = 0;
-        String name  = "OSC1";
+        unsigned long RXtimerStart = 0;        
         
-        OSCInterface(Network* _net):network(_net),DeviceInterface(name,CAPTURE_INOUT){
-            latency = network->LANlatency;
+        char buffer[64];
+
+        OSCInterface(String name, uint8_t capture):DeviceInterface(name,capture){
+            latency = hwm.network->LANlatency;
+        }
+
+        uint8_t progress(){
+            return 100; //%
+        }
+
+        virtual void init(){
         }
 
         virtual bool parseOut(const JsonObject& command){
@@ -215,9 +253,79 @@ class OSCInterface: public DeviceInterface{
             return success;
         }
 
-        virtual bool parseIn(JsonObject& data){return false;}
+        virtual bool parseIn(JsonObject& data){
+            if (hwm.network->udp == NULL){
+                //OSC_DEBUG_PRINT("\n<<OSCReadIn : null UDP");
+                return false;                
+            } 
+
+            // Check if packet was received
+            int size = hwm.network->udp->parsePacket();
+            if (size < 1) return false;
+
+            OSCMessage msg;
+
+            while (size--){
+                msg.fill(hwm.network->udp->read());
+                yield();
+            }
+
+            // Check for errors
+            if (msg.hasError()) {
+                //DEBUG_OSCMSG("error: %s\n", msg.getError());
+                return false;
+            }                       
+
+            int numberOfValues = msg.size();
+
+            for (int i = 0; i < numberOfValues; i++) {
+                char type = msg.getType(i);
+
+                switch (type) {
+                case 's': {
+                    char str[64];
+                    msg.getString(i, str, sizeof(str));
+                    data[EXEC_VALUE][i] = str;
+                    break;
+                }
+                case 'i':
+                    data[EXEC_VALUE][i] = msg.getInt(i);
+                    break;
+                case 'f':
+                    data[EXEC_VALUE][i] = msg.getFloat(i);
+                    break;
+                case 'T':
+                    data[EXEC_VALUE][i] = true;
+                    break;
+                case 'F':
+                    data[EXEC_VALUE][i] = false;
+                    break;
+                case 'b': { // blob (tableau d’octets)
+                    int blobSize = msg.getBlobLength(i);
+                    const uint8_t* blobData = msg.getBlob(i);
+                    // Créer un tableau JSON pour le blob
+                    JsonArray blobArray = data[EXEC_VALUE][i].createNestedArray();
+                    for (int j = 0; j < blobSize; j++) {
+                        blobArray.add(blobData[j]);
+                    }
+                    break;
+                }                    
+                default:
+                    data[EXEC_VALUE][i] = "unsupported";
+                    break;
+                }
+            }
+
+            // Ajoute l’adresse OSC comme champ
+            
+            msg.getAddress(buffer);
+            data[EXEC_ADDRESS] = buffer;            
+
+            return true;            
+
+        }
         
-        virtual void connect(Config* conf){}
+        virtual void connect(){}
         virtual void disconnect(){}
    
         void setClient(const IPAddress defaultIP, const int defaultPort){
@@ -228,13 +336,13 @@ class OSCInterface: public DeviceInterface{
         
         bool sendOSCMessage(OSCMessage *msg, const IPAddress _ip, const int _port){           
             OSC_DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString().c_str(),_port);
-            if (network->udp == NULL){
+            if (hwm.network->udp == NULL){
                 OSC_DEBUG_PRINT(":null UDP",msg->getAddress());
                 return false;
             }             
-            network->udp->beginPacket(_ip, _port);
-            msg->send(*network->udp);
-            network->udp->endPacket();
+            hwm.network->udp->beginPacket(_ip, _port);
+            msg->send(*hwm.network->udp);
+            hwm.network->udp->endPacket();
 
             msg->empty(); 
             return true;          
@@ -261,84 +369,6 @@ class OSCInterface: public DeviceInterface{
             if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%.2f",val);         
         }        
 
-        boolean OSCReadIn(OSCValues* data) {
-            
-            data->iValue = -1;
-            data->fValue = -0.1;
-            strcpy(data->addressStr,"");
-            strcpy(data->sValue,"");
-            strcpy(data->sValue1,"");
-            strcpy(data->sValue2,"");
-            data->incoming = false; // data are fresh and not yet consummed
-            
-
-            if (network->udp == NULL){
-                //OSC_DEBUG_PRINT("\n<<OSCReadIn : null UDP");
-                return false;                
-            } 
-
-            // Check if packet was received
-            int size = network->udp->parsePacket();
-            if (size < 1) return false;
-
-            OSCMessage msg;
-
-            while (size--){
-                msg.fill(network->udp->read());
-                yield();
-            }
-
-            // Check for errors
-            if (msg.hasError()) {
-                //DEBUG_OSCMSG("error: %s\n", msg.getError());
-                return false;
-            }
-            // Parse return OSC command
-            msg.getAddress(data->addressStr, 0);      // get message path
-            data->TypeStr = msg.getType(0);                       // get data type
-
-            OSC_DEBUG_PRINT("\n<<%s,%c,",data->addressStr,data->TypeStr);
-
-            /*if (data->expectedStr != "" && data->expectedStr == data->addressStr){
-                unsigned long t = millis()-RXtimerStart;
-                latency = (latency + t) / 2;            //avg with old value
-                if (latency<10) latency = 10;
-                OSC_DEBUG_PRINT("[%dms], ",latency);
-            } */         
-
-            data->incoming = true;
-
-            if (msg.isInt(0)){
-                data->iValue = msg.getInt(0);    // integer
-                OSC_DEBUG_PRINT("%i",data->iValue);
-            }
-            if (msg.isFloat(0)){
-                data->fValue = msg.getFloat(0);  // float
-                OSC_DEBUG_PRINT("%.2f",data->fValue);
-            }
-            if (msg.isString(0)) {
-                msg.getString(0, data->sValue);  // string
-                msg.getString(1, data->sValue1);
-                msg.getString(2, data->sValue2);
-                OSC_DEBUG_PRINT("%s, %s, %s",data->sValue,data->sValue1,data->sValue2);
-            }
-            if (msg.isBlob(0)) {
-                data->bSize = msg.getBlobLength(0);
-                //OSC_DEBUG_PRINT("BLOB(%i)", bSize);
-                if (data->bSize > data->oldbSize) {
-                //OSC_DEBUG_PRINT("\nResizing blob buffer");
-                delete data->bValue;
-                data->bValue = new uint8_t[data->bSize];
-                data->oldbSize = data->bSize;
-                }
-                if (msg.getBlob(0, data->bValue) != data->bSize) return false;
-                //DEBUG_OSCMSG("\nbValue=(%s)", bValue);
-            }
-            msg.empty();    
-
-            return true;
-        }    
-
         // Fonction pour démarrer la tâche de ping non bloquante
         virtual bool asyncPing(OSCPingTaskParameters* params) {
             OSC_DEBUG_PRINT("\nOSCasyncPing %s %s:%d T.O:%d",params->data->expectedStr,params->ip.toString().c_str(),params->port,params->timeOut);
@@ -359,25 +389,26 @@ class OSCInterface: public DeviceInterface{
             return true;
         }
 
-        bool blockingPing(OSCValues* data,uint32_t timeOut){
-            return blockingPing(ip,port,data, timeOut);
+        bool blockingPing(String address,JsonObject& data, uint32_t timeOut){
+            return blockingPing(ip,port,address,data, timeOut);
         }
 
-        bool blockingPing(IPAddress _ip, int _port, OSCValues* data, uint32_t timeOut = 0){
+        bool blockingPing(IPAddress _ip, int _port, String address, JsonObject& data, uint32_t timeOut = 0){
             //OSC_DEBUG_PRINT("\tblockingPing: %dms", timeOut);
             if (timeOut == 0) timeOut = latency;
 
-            OSCValues dataFlush;
-            while(OSCReadIn(&dataFlush)) yield();   //we flush the OSC queue
+            JsonObject dataFlush;
+            while(parseIn(dataFlush)) yield();   //we flush the OSC queue
 
             RXtimerStart = millis();
 
-            SendCmd2OSC(data->expectedStr,_ip,_port);            
+            SendCmd2OSC(address.c_str(),_ip,_port);            
             unsigned long t0 = millis();
+
             while (millis()-t0 < timeOut){
                 yield();
-                if (OSCReadIn(data)){
-                    if (strcmp(data->addressStr,data->expectedStr) == 0){
+                if (parseIn(data)){
+                    if (data[EXEC_ADDRESS] == address){
                         latency = millis()-RXtimerStart;
                         //OSC_DEBUG_PRINT("\t new latency: %d", latency);
                         return true;
@@ -438,10 +469,7 @@ class OSCInterface: public DeviceInterface{
             OSC_DEBUG_PRINT(": %s",p == pLen?"true":"false");
             return p == pLen; // Vrai si tout le pattern est traité
         }        
-
     
-    private:       
-        char   PacketBuffer[OSC_MAX_LEN/*UDP_TX_PACKET_MAX_SIZE*/];       
 };
 
 // Tâche de ping non bloquante
@@ -449,10 +477,10 @@ void OSCpingTask(void* parameter) {
   // Récupérer les paramètres passés à la tâche
   OSCPingTaskParameters* params = static_cast<OSCPingTaskParameters*>(parameter);
   OSC_DEBUG_PRINT("pingTask=>%s:%i",params->ip.toString().c_str(),params->port);
-  if (params->osc->blockingPing(params->ip,params->port,params->data,params->timeOut)) {
-    params->callback(true, params->data,params->port);  // Appel du callback en cas de succès
+  if (params->osc->blockingPing(params->ip,params->port,params->address,params->data,params->timeOut)) {
+    params->callback(true, params->port);  // Appel du callback en cas de succès
   } else {
-    params->callback(false, params->data,params->port);  // Appel du callback en cas d'échec
+    params->callback(false, params->port);  // Appel du callback en cas d'échec
   }
 
   // Libérer la mémoire allouée pour les paramètres

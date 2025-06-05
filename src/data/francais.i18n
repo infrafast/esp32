@@ -1,13 +1,4 @@
 {
-"Attempt":"Tentative de connexion WiFi (ou branchez cable ethernet)",
-"disconnected":"déconnecté",
-"connected":"connecté",
-"idle":"attente connexion",
-"connecting":"connexion",
 "mixer unreachable":"console injoignable",
-"mixing s. unreachable":"mixing s. injoignable",
-"searching":"recherche",
-"connect failed":"échec connexion",
-"trying":"tentative",
-"offline":"appui court on/off = hors connexion"
+"mixing s. unreachable":"mixing s. injoignable"
 }

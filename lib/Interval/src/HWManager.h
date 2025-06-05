@@ -1,3 +1,6 @@
+#ifndef HWMManager_h
+#define HWMManager_h
+
 #include <LinkedList.h>
 #include <spi.h>
 #include <LittleFS.h>
@@ -7,6 +10,8 @@
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
 #include "lwip/api.h"
+
+#include <OSCMessage.h>           //https://github.com/CNMAT/OSC  lib 1.3.5
 
 //#include "ping/ping_sock.h"
 //#include <ArduinoMDNS.h>
@@ -149,11 +154,13 @@ public:
 
     TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
-    uint8_t startupState = SYSTEM_OFF;
+    uint8_t startupState = NORMAL_STARTUP;
+
+    LinkedList<HWComponent*> hwComponents = LinkedList<HWComponent*>(); 
 
     LadderButton *buttons[3];
     //DigitalButton *buttons[3];
-    DigitalButton onOff = DigitalButton(ONOFF_PIN,INPUT_PULLUP,ON_OFF_TRIGGER,true,SHUTDOWN_PUSH_DELAY,DEFAULT_DCLIC_DELAY);
+    DigitalButton onOff = DigitalButton(ONOFF_PIN,INPUT_PULLUP,ON_OFF_TRIGGER,false,SHUTDOWN_PUSH_DELAY,DEFAULT_DCLIC_DELAY);
     DigitalOut powerRail = DigitalOut(POWERRAIL_EN_PIN,OFF);
     BatteryMonitor battery = BatteryMonitor(BATLEVEL_PIN,false);
     AnalogIn analogButtonIn = AnalogIn(ANALOGB_PIN,20,false); //20% threshold
@@ -178,7 +185,7 @@ public:
       #endif           
 
       #ifdef USE_NETWORK
-        network = new WiFiEth(ETH_CS_PIN,RST_PIN,true,true);
+        network = new WiFiEth(ETH_CS_PIN,RST_PIN,true,false);
         configMedia = network;
       #else
         network = new NoNetwork(true);
@@ -256,10 +263,7 @@ public:
       }
     }
     
-    virtual void init() {      
- 
-      //Serial.setDebugOutput(true);     
-
+    virtual void init() {            
       GenericComponent::init();            
       // init device that do not need power but are required for startup
       onOff.init();    
@@ -270,8 +274,7 @@ public:
 
 
 
-      MIDI_USB_BEGIN;
-      
+      MIDI_USB_BEGIN;    
       
       //Control_Surface.begin();
 
@@ -331,7 +334,9 @@ public:
 
     bool refresh(bool force=false) {  
       refreshed = force;     
-      for(int i = 0; i < hwComponents.size(); i++) refreshed |= hwComponents.get(i)->refresh(force);
+      for(int i = 0; i < hwComponents.size(); i++){
+        refreshed |= hwComponents.get(i)->refresh(force);
+      }
 
       //Control_Surface.loop();      
       
@@ -410,7 +415,7 @@ public:
       setup_t user;
     #endif
     uint8_t toggle = 0;
-    LinkedList<HWComponent*> hwComponents = LinkedList<HWComponent*>();     
+      
 };
 
-
+#endif

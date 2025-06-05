@@ -38,6 +38,9 @@ class LogUDP {
 public:
   // Méthode statique pour envoyer un message à un serveur de journalisation UDP
   static void sendLog(const char* message, UDP* udp) {    
+    
+    return;   
+
     uint8_t buffer[MAX_PACKET_SIZE];
     if (udp != nullptr) {    
       uint16_t len = snprintf((char *)buffer, MAX_PACKET_SIZE, "<%d> %s [%s]%s", PRI_INFO, "esp32", "footswitch", message);
@@ -476,6 +479,7 @@ class JsonList{
       if (!error) jsonToKeyValues(&doc);
       else{
         //DEBUG_PRINT("\t => %s",error.c_str());
+        addValue("void","value");
       }  
     }
 
@@ -584,18 +588,22 @@ void xTaskBackground(void *pvParameters);
 // persistants keyValues ID
 #define PERSISTANT_SCREEN_STATE   "screenState"
 #define PERSISTANT_SCREEN_ID      "screenID"
+#define PERSISTANT_STRIP_ID       "stripID"
 #define PERSISTANT_TFT_ROTATION   "rotation"
 #define PERSISTANT_BRIGHTNESS     "brightness"
 
 #include "HWManager.h"
-#include "GUIManager.h"
-#include "APPManager.h"
-
 HardwareManager hwm;
+
+#include "GUIManager.h"
 TFT_eSPI* GUI::tft = &hwm.tft;
 GUIManager gui(false);
 OpenFontRender* Label::ofr = &gui.labelOfr;
 OpenFontRender* Icon::ofr = &gui.iconOfr;
+
+
+#include "APPManager.h"
+
 ApplicationManager app(&hwm,&gui);
 DataRepository* StripSkeleton::dataRepo = &app.dataRepository;
 
@@ -617,7 +625,7 @@ void goDeepSleep(){
   while (hwm.onOff.state == ON_OFF_TRIGGER) hwm.onOff.refresh(); //wait button to be released
 
   #ifndef PROD
-    //DEBUG_PRINT(" LOOP");
+    DEBUG_PRINT("\ngoDeepSleep()");
     while(1);
   #else
     //DEBUG_PRINT(" SHUTTING DOWN");
@@ -786,7 +794,7 @@ void shutdown_menu_item_selected(MenuComponent* p_menu_component) {
 void brightness_menu_item_selected(MenuComponent* p_menu_component) {
   /*if (GUI::screenBrightness == 1.0) GUI::screenBrightness = 0.5;
   else GUI::screenBrightness = 1.0;
-  screen.focus = screen.focus - 1; // force redraw*/
+  app.triggerRedraw(); // force redraw*/
   screen.id = SCREEN_UTILS;
   screen.state = STATE_UTILS_BRIGHTNESS;
 }
@@ -900,7 +908,7 @@ void baseOverLayBuilder(uint8_t id){
   gui.add(new AnimatedIcon(app.iconRolling,TWOFRAMEICON,Align::Center,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,ANIMATE_REPEAT,250,&GUI::blue,&GUI::defaultBcolor));              
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor));                  
   gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor));          
-  gui.add (new PendingBar(&app.pendingBarWidth /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &GUI::zero /*y*/, TFT_WIDTH /*w*/, 1 /*h*/, /*pingpong*/ false, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/, 30, 4));                    
+  //gui.add (new PendingBar(&app.pendingBarWidth /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &GUI::zero /*y*/, TFT_WIDTH /*w*/, 1 /*h*/, /*pingpong*/ false, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/, 30, 4));                    
   app.rollingIcon(false);
 }
 
@@ -928,6 +936,33 @@ void bankOverlayBuilder(uint8_t BankIndex){
 //////////////////////////////////////////////////////////////
 ////                SCREENBUILDERS CALLBACKS           ///////
 //////////////////////////////////////////////////////////////
+#define MODAL_SCREEN_ICON_SIZE (ICON_MAX_SIZE/1.7)
+#define MODAL_SCREEN_SCROLLBAR_HEIGHT 8
+#define MODAL_SCREEN_TEXTAREA_WIDTH (TFT_WIDTH/2)*0.9
+
+int16_t topTextY = GUI::y1+TOP2WIDGET_SIZE;
+int16_t iconY = topTextY + CONFIG_TEXTAREA_MESSAGE_SIZE;
+int16_t iconX = 0;
+int16_t textAreaX = (TFT_WIDTH/2) + (MODAL_SCREEN_TEXTAREA_WIDTH/2);
+int16_t bottomTextY = iconY + MODAL_SCREEN_ICON_SIZE;
+int16_t scrollBarY = TFT_HEIGHT - NAV_HEIGHT*1.2 - MODAL_SCREEN_SCROLLBAR_HEIGHT;
+
+String iconInterfaceConnect = ICON_FOOTSWITCH;
+uint16_t iconInterfaceColor = GUI::red;
+
+void modalScreen(const String* topLabel, const String* midText, const String* bottomLabel, String* icon){
+  gui.add(new Label(topLabel, Align::Center,&app.midScreenHoriz, &topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
+
+  // if we have empty textfield, we don't display it and center the icon
+  iconX = TFT_WIDTH/2;
+  if (*midText != emptyString){
+    iconX -= MODAL_SCREEN_ICON_SIZE;
+    gui.add(new TextArea(midText, MODAL_SCREEN_TEXTAREA_WIDTH,Align::Center,Align::Center,&textAreaX,&iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));     
+  }
+
+  gui.add(new Icon(icon,Align::Center,&iconX, &iconY,MODAL_SCREEN_ICON_SIZE,&iconInterfaceColor,&GUI::defaultBcolor));   
+  gui.add(new Label(bottomLabel, Align::Center,&app.midScreenHoriz, &bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
+}
 
 void bankScreenBuilder(uint8_t subScreen){  
   app.userScreenBuilder(SCREEN_BANK,subScreen);
@@ -948,23 +983,46 @@ void bankScreenBuilder(uint8_t subScreen){
 
     uint8_t layout = bank->currentLayout;
 
-    Strip* strip = bank->getStrip(bank->selector);
+    Strip* strip = app.focusedStrip;
 
     if (strip != nullptr){
-      //DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),strip->win, bank->selector,layout);
-      if (layout == LAYOUT_ZOOM){
-        //strip->refresh();
-        strip->render(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
-      }else{
-        for (const auto& winstrip : bank->strips) {
-          // affiche tous les strips de la fenetre courante
-          if (winstrip->win == strip->win){            
-            //winstrip->refresh();
-            //bool focus = (winstrip->index == strip->index)?true:false;
-            winstrip->render(/*focus*/);
-          }
-        }
-      } 
+      StripState* stripState = &strip->state;
+      // check if the strip is online
+      switch (stripState->code){
+        case STRIP_DISCONNECTED:
+          DEBUG_PRINT("\nStrip %s is disconnected",strip->type.c_str());
+          modalScreen(&hwm.network->SSID,app.lang.getString("Attempt"),app.lang.getString("offline"),&app.networkIcon);
+          //gui.add (new ProgressBarH(&hwm.network->wiFiConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
+          //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                    
+        break;
+        case STRIP_PENDING:
+          DEBUG_PRINT("\nStrip %s is searching",strip->type.c_str());          
+          modalScreen(stripState->stateLabel,stripState->subStateLabel,app.lang.getString("please wait"),&iconInterfaceConnect);  
+          //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                              
+        break;
+        case STRIP_CONNECTING:
+          DEBUG_PRINT("\nStrip %s is syncing",strip->type.c_str());          
+          modalScreen(stripState->stateLabel,stripState->subStateLabel,app.lang.getString("please wait"),&iconInterfaceConnect);  
+          //gui.add (new ProgressBarH(&stripState->progress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
+        break;
+        case STRIP_ONLINE:
+          DEBUG_PRINT("\nStrip %s is online",strip->type.c_str());
+          //DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),strip->win, bank->selector,layout);
+          if (layout == LAYOUT_ZOOM){
+            strip->pushToGUI(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
+          }else{
+            for (const auto& winstrip : bank->strips) {
+              // affiche tous les strips de la fenetre courante
+              if (winstrip->win == strip->win){            
+                winstrip->pushToGUI(/**/);
+              }
+            }
+          } 
+        break;    
+        default:
+          DEBUG_PRINT("\nStrip %s status code unmanaged(%i)",strip->type.c_str(),stripState->code);
+        break;
+      }
       
       app.stripHeader = new StripHeaderWidget(strip,&app.lang);      
       gui.add(app.stripHeader);      
@@ -981,7 +1039,7 @@ void bankScreenBuilder(uint8_t subScreen){
       gui.add(new TextArea(app.lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   }
   
-  //DEBUG_PRINT("\n--------------X-----------------");
+  DEBUG_PRINT("\n--------------bankScreenBuilder exit-----------------");
 }
 
 void addTopandBottomMenuLabel(){
@@ -1005,7 +1063,6 @@ void setMenuColors(){
 }
 
 void menuScreenBuilder(uint8_t subScreen){
-  //DEBUG_PRINT("\nmenuScreenBuilder()");  
   setMenuColors();
   addMenuWidgets();
   //LogUDP::sendLog("menuScreenBuilder",hwm.network->udp);
