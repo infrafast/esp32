@@ -1,494 +1,889 @@
 #ifndef DEVICEINTERFACES_h
 #define DEVICEINTERFACES_h
 
-#include <Arduino.h>
+#include <vector>
+#include "Interval.h"
 
-#include <Ethernet.h>
-#include <OSCMessage.h>           //https://github.com/CNMAT/OSC  lib 1.3.5
+#include <AppleMIDI.h>
 
-#ifndef DEBUG_PRINT 
-    #define DEBUG_PRINT(...) 
-#endif
+class DeviceInterface {
+  #define INTERFACE_STATE       "state"
+  #define INTERFACE_PROGRESS    "progress"
+  #define INTERFACE_EXPOSED     "exposed"
+  #define INTERFACE_CONFIGZ     "config"
+  #define INTERFACE_OFFLINE     "offline"
+  #define INTERFACE_GROUP       "group"
+  #define INTERFACE_USENETWORK  "network"  
+  #define INTERFACE_PROVIDER    "provider"
+  
+  public:
 
-#ifdef DEBUG_OSC  
-  #define OSC_DEBUG_PRINT(...)   Serial.printf(__VA_ARGS__); Serial.flush() //ets_printf(__VA_ARGS__) //
-#else
-  #define OSC_DEBUG_PRINT(...) 
-#endif
+  String interfaceName; 
+  String interfaceState = "disconnected";
+  uint8_t progress = 0;
+  bool exposed = true;
+  bool offline = false;
+  bool network = true;  // by default an interface uses the network
+  String group = "undef"; // used by the strip to define which deviceinterface they can connect
 
+  virtual String getProviderName() = 0;
 
-#define INTERFACE_NAME "name"
-#define INTERFACE_KEY "interface"
-#define INTERFACE_PROGRESS "progress"
+  DeviceInterface(const String&, const String&, bool);
+  ~DeviceInterface();
 
-#define EXEC_OSC "osc"
-#define EXEC_ADDRESS "address"
-#define EXEC_VALUE "value"
+  String serializeState(){
+    JsonDocument doc;
+    
+    doc[interfaceName][INTERFACE_STATE] = interfaceState;
+    doc[interfaceName][INTERFACE_PROGRESS] = progress;
 
-///////////////////// DEVICE I/O CAPTURE ////////////////////////
-enum{
-    NO_CAPTURE,
-    CAPTURE_IN,
-    CAPTURE_OUT,
-    CAPTURE_INOUT
-};
+    doc.shrinkToFit();
+    String output;
+    serializeJson(doc, output);    
+    //{"MixerOffline":{"state":"disconnected","progress":0}}
+    //DEBUG_PRINT("\n<%s> serializeState: %s",interfaceName.c_str(),output.c_str());          
+    return output;
+  }  
 
+  String serializeConfig(bool mainNode = true){
+    // by default we serialize the full content (main node)
+    // but if an interface uses another one, it will only partially serialize 
+    // means we don't include somes attributes
+    JsonDocument doc;
+    //JsonObject config = doc[interfaceName].createNestedObject(/*INTERFACE_CONFIG*/);
+    JsonObject config;
 
-class DeviceInterface{
-    public:
-        String name="noname";
-        uint8_t recordMode = NO_CAPTURE;
-        uint8_t interfaceState = DISCONNECTED, oldInterfaceState = interfaceState ;        
-        bool changedState = false;
+    if (exposed) 
+      config = doc.createNestedObject(interfaceName);
+    else config = doc.to<JsonObject>();
 
-        DeviceInterface(String, uint8_t);
-        ~DeviceInterface();
-        
-        String serialize();
+    if (mainNode == true){
+      // that's the attribute we do not serialize in case of partial serialization
+      config[INTERFACE_EXPOSED] = exposed;
+      config[INTERFACE_USENETWORK] = network;
+      config[INTERFACE_OFFLINE] = offline;
+      config[INTERFACE_GROUP] = group;
+      config[INTERFACE_PROVIDER] = getProviderName();      
+    }
+    derivedConfig(config);
 
-        bool execute(const JsonObject& data);
-        bool monitor(JsonObject& data);
+    doc.shrinkToFit();
+    String output;
+    serializeJson(doc, output);    
+    //{"MixerOffline":{"config":{FILLED BY DERIVED CLASS}}}
+    //DEBUG_PRINT("\nserializeConfig: %s",output.c_str());          
+    return output;
+  }  
 
-        virtual uint8_t progress()=0;
-        virtual void connect()=0;
-        virtual void disconnect()=0;           
-        
+  bool restoreFromString(const char* config){    
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, config);
+    if (error) {
+      DEBUG_PRINT("\n%s restoreFromString %s",interfaceName.c_str(),error.c_str());
+      return false;
+    }
+    JsonObject configJson = doc.as<JsonObject>();
 
-    private:
-        virtual bool parseOut(const JsonObject& data) = 0;
-        virtual bool parseIn(JsonObject& data) = 0;  
-     
-};
+    //by default a used interface (which means it had a partial serialization) 
+    // is not exposed and is online, this can be overwritten by the deserialization 
+    // of a full interface
+    //offline = false;
+    //exposed = false;
 
-enum{
-    CAPTURE_PLAY,
-    CAPTURE_RECORD,
-    CAPTURE_STOP
-};
+    restore(configJson);    
 
-struct CaptureDescriptor{
-    DeviceInterface* interface;
-    uint8_t state;
-    File file;
+    doc.shrinkToFit();
+
+    #ifdef DEBUG
+      String output;
+      serializeJson(doc, output);    
+      //{"MixerOffline":{"config":{FILLED BY DERIVED CLASS}}}
+      DEBUG_PRINT("\nrestoreFromString: %s",output.c_str());          
+    #endif
+    return true;      
+  }
+
+  virtual void serialize(JsonDocument& interfaceDoc){
+    //start with the config
+    deserializeJson(interfaceDoc, serializeConfig());      
+    JsonDocument interfaceState;
+    // use another document to grab the state
+    deserializeJson(interfaceState, serializeState());
+    // fuzion the two, we have to do this on object as otherwise, key content would be overwritteb
+    // on utilise le nom de l'interface (qui est la clef commune aux deux documents)
+    //const char* interfaceName = interfaceDoc.as<JsonObject>().begin()->key().c_str();
+    JsonObject state = interfaceState[interfaceName];
+    JsonObject fullDoc = interfaceDoc[interfaceName];
+    for (JsonPair kv : state) {
+      fullDoc[kv.key()] = kv.value();  // Ajoute ou écrase les clés dans name1
+    }
+
+    // in case the "top level" interface is not exposed we have to put back the interface name as the key
+    // as it was filtered in the serializeConfig
+    if (!exposed){
+
+      // Sauvegarder l'ancien contenu dans un objet temporaire
+      JsonObject oldContent = interfaceDoc.as<JsonObject>();
+      JsonDocument temp;
+      temp.set(oldContent);
+
+      // Vider le document original
+      interfaceDoc.clear();
+
+      // Créer une nouvelle clé contenant l'ancien contenu
+      interfaceDoc[interfaceName].set(temp);
+
+    }
+
+  }
+
+  bool update(){
+    // reset the flag so strips will not be updated and re-processed already consummed data
+    dataAvailable = false;
+    // in case interface is offline, then easy: we do not waste time
+    if (offline) return false;
+    return monitor();
+  }
+
+  bool available(){ // called by strip 
+    return dataAvailable; 
+  }
+
+  virtual void restore(const JsonObject& config) = 0;  
+  virtual void derivedConfig(JsonObject& config) = 0;  
+ 
+  virtual bool monitor() = 0; // => set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
+  virtual void* read() = 0; // called by strip 
+  virtual void begin() = 0;
+
+  protected:
+
+  bool dataAvailable;
+
 };
 
 class InterfaceRepository{
+
   public:
-   
-    void record(const JsonObject& data){
-        // first we parse all interfaces to see if we find one that match the name    
-        for (const auto& descriptor : descriptors){
-            String interfaceName = data[INTERFACE_NAME];
-            if (descriptor.interface->name == interfaceName){
-                if (descriptor.state == CAPTURE_RECORD){                                        
-                    // record all data, except data[INTERFACE_NAME] to avoid storing too much data
-                    data.remove(interfaceName);
-                    // open file if not existing
-                    if (!descriptor.file) {
-                        // Ouvrir en mode "append"
-                        /*descriptor.file = LittleFS.open(, "w");
+    std::vector<DeviceInterface*> interfaces;
 
-                        if (!descriptor.file) {
-                            DEBUG_PRINT("Erreur à l'ouverture du fichier en append.");
-                        } else {
-                            DEBUG_PRINT("Fichier ouvert en mode append.");
-                        }*/
-                    }                    
-                }
-            }
-        }
-    }
+    void serialize(JsonArray* interfacesArray){
+      for (DeviceInterface* interface : interfaces) {
+        // serializing is used to save the interfaces config in the config file or to send them to the web app to be modified
+        // hence, we only do that for interface which are "persistant"
+        //if (interface->exposed == true){
+          JsonDocument interfaceDoc;
+          interface->serialize(interfaceDoc);
+          interfaceDoc.shrinkToFit();
+          interfacesArray->add(interfaceDoc);
+        //}
+      }     
+    }  
 
-    void changeState(String name, uint8_t newState){
-        // first we parse all interfaces to see if we find one that match the name    
-        for (auto& descriptor : descriptors){
-            if (descriptor.interface->name == name){
-                if (descriptor.state == CAPTURE_STOP){
-                    // file.close();
-                }
-            }
-            descriptor.state = newState;
-        }        
-    }
-
-    void retrieve(String name){
-        // THIS CODE IS CALLED BY THE STRIP ROUTINE THAT REPLAY A MACRO
-        for (const auto& descriptor : descriptors){
-            if (descriptor.interface->name == name){
-                
-            }
-        }         
-    }
-
-    void registerInterface(DeviceInterface* device){
-        CaptureDescriptor cd = {device,CAPTURE_STOP};
-        descriptors.push_back(cd);
-    }
-
-    void remove(DeviceInterface* device) {
-        for (auto it = descriptors.begin(); it != descriptors.end(); ++it) {
-            if (it->interface == device) {
-                descriptors.erase(it);
-                break; // On s’arrête après la première occurrence
-            }
-        }
-    }
-
-    
-    std::vector<CaptureDescriptor> descriptors;
-
+    DeviceInterface* retrieve(String _interfaceName);
 };
 
 InterfaceRepository interfaceRepo;
 
-DeviceInterface::DeviceInterface(String _name, uint8_t _mode = NO_CAPTURE):name(_name),recordMode(_mode){
-    interfaceRepo.registerInterface(this);
+
+DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable){
+  interfaceRepo.interfaces.push_back(this);
+  interfaceName = name;
+  group = _group;
 }
 
 DeviceInterface::~DeviceInterface(){
-    interfaceRepo.remove(this);
+  interfaceRepo.interfaces.erase(std::remove(interfaceRepo.interfaces.begin(), interfaceRepo.interfaces.end(), this), interfaceRepo.interfaces.end());
 }
 
-String DeviceInterface::serialize(){
-    JsonDocument doc;
-    doc[INTERFACE_KEY][INTERFACE_NAME] = name;
-    doc[INTERFACE_KEY]["interfaceState"] = interfaceState;
-    doc[INTERFACE_KEY][INTERFACE_PROGRESS] = progress();
+#define MACRO_NUMBER_MAX      10
+#define ADDRESS_SIMPLETEXT    "/text/%s"
+#define ADDRESS_STRIPIDS      "/strip/id/%s"
+#define ADDRESS_ACTION        "/action/%s"
+  #define ADDRESS_ACTION_SIZE 5
+#define ADDRESS_MACRONAME     "/macro/name/%s"
+#define ADDRESS_PROVIDER      "/provider/"
 
-    doc.shrinkToFit();
-}
+#define SYSTEM_INTERFACE "system"
+class SystemInterface: public DeviceInterface, public DataProvider{
+  #define GROUP_INTERFACE_SYSTEM "utils"
+  public:    
 
-bool DeviceInterface::execute(const JsonObject& data){
-    /*String s;      
-    serializeJson(data, s);
-    DEBUG_PRINT("\nexecute %s",s.c_str());*/
-    if (recordMode == CAPTURE_OUT) interfaceRepo.record(data);
-    return parseOut(data);
-};
+    DynamicDataSet simpleText = DynamicDataSet({ ADDRESS_SIMPLETEXT, INPUTTEXT },this);
+    DynamicDataSet stripIDs = DynamicDataSet({ADDRESS_STRIPIDS,INPUTSELECT},this);
+    DynamicDataSet dropDownActions = DynamicDataSet({ADDRESS_ACTION,INPUTSELECT},this);        
+    DynamicDataSet macroNames = DynamicDataSet({ADDRESS_MACRONAME,INPUTSELECT},this); 
 
-bool DeviceInterface::monitor(JsonObject& data){
-    changedState = false;
-    // do we have data ?        
-    if (parseIn(data)){
-        data[INTERFACE_NAME] = name;        
-        // if yes, is this interface supposed to record data coming in  ?
-        if (recordMode == CAPTURE_IN) interfaceRepo.record(data);
+
+    SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_SYSTEM,_configurable){}
+
+    //SystemInterface uses himself as data provider
+    virtual String getProviderName(){
+      return interfaceName;
     }
 
-    if (interfaceState != oldInterfaceState){
-        changedState = true;
-        oldInterfaceState = interfaceState;
+    virtual String getDataSetName(){
+      return interfaceName;
     }
 
-    return changedState;            
+    virtual void restore(const JsonObject& config){};  
+    virtual void derivedConfig(JsonObject& config){};    
+    virtual bool monitor(){return false;}
+    virtual void* read(){return nullptr;}
+    virtual void begin(){}
+
+    virtual uint16_t getSize(String addrr){
+      if (addrr == ADDRESS_SIMPLETEXT) return 1;
+      
+      else if (addrr == ADDRESS_STRIPIDS) return 0;
+      else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
+      else if (addrr == ADDRESS_MACRONAME) return MACRO_NUMBER_MAX;
+      else{
+        // IS IT AN INTERFACE ?
+        char group[64] = {0};
+        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
+        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
+          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX            
+          uint16_t count = 0;
+          for (const auto& interface : interfaceRepo.interfaces){
+            // check if we request provider listing
+            if (interface->group == group) count++;
+          }
+          //DEBUG_PRINT("\nDataSet getSize(%s) has %d items",addrr.c_str(),count);
+          return count;
+        }
+
+      }
+
+      DEBUG_PRINT("\nDataSet getSize(%s) is not implemented",addrr.c_str());
+      return 0;
+
+    }
+    
+    virtual const String* getValuePtr(String addrr, uint16_t index){
+      if (addrr == ADDRESS_SIMPLETEXT){
+        textValue = "hello"+String(index);
+        return &textValue;
+      }
+      else if (addrr == ADDRESS_STRIPIDS){
+        return &getStripID;         //javascript local function callback
+      }else if (addrr == ADDRESS_ACTION){
+        return &dropDownActionsValues[index];   
+      }else if (addrr == ADDRESS_MACRONAME){
+        return &macroNamesValues[index];      
+      }else{
+        char group[64] = {0};
+        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
+        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
+          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX    
+          int16_t count = -1;        
+          for (const auto& interface : interfaceRepo.interfaces){
+            if (interface->group == group) count++;
+            if (count == index){
+              String* s = &interface->interfaceName;
+              //DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) = %s",addrr.c_str(),index,s->c_str());
+              return s;
+            } 
+          }
+        }      
+      }
+      
+      DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) is not implemented",addrr.c_str(),index);
+      return &voidStatic;      
+    }
+
+  private:
+
+    String textValue = "";
+    
+    // javascript function that generates the data locally
+    String getStripID = "getStripID";
+        
+    String dropDownActionsValues[ADDRESS_ACTION_SIZE] = {
+      "play",
+      "pause",
+      "stop",
+      "FF",
+      "RW"      
+    };   
+    
+    String macroNamesValues[MACRO_NUMBER_MAX] = {
+      "macro1",
+      "macro2",
+      "macro3",      
+      "macro4",
+      "macro5",
+      "macro6",
+      "macro7",
+      "macro8",
+      "macro9",
+      "macro10"
+    };            
+  
+}systemInterface(false);
+
+DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){
+  for (const auto& interface : interfaceRepo.interfaces){ 
+    //DEBUG_PRINT("\nInterfaceRepository::retrieve(%s)=>%s",requestedInterface.c_str(),interface->interfaceName.c_str())     ;
+    if (interface->interfaceName == requestedInterface) return interface;
+  }
+  DEBUG_PRINT("\nError: requested interface <%s> is not existing, returning <%s>",requestedInterface.c_str(),systemInterface.interfaceName.c_str() );
+  return &systemInterface;
 }
 
-///////////////////// DATA STRUCTURES ////////////////////////
-
-typedef std::function<void(bool, int)> OSCPingCallback;    // ping success true/false, port
-
-class OSCInterface;
-
-struct OSCPingTaskParameters {
-  String address;
-  JsonObject data;
-  IPAddress ip;
-  int port;
-  bool isPinging = false;
-  uint16_t timeOut = 32;
-  OSCPingCallback callback;
-  OSCInterface* osc;
-};
-
-void OSCpingTask(void* parameter);
 
 class OSCInterface: public DeviceInterface{
-    public:
-        IPAddress ip;
-        int port;
-        uint16_t latency = 49;      // default reasonnable latency
-        unsigned long RXtimerStart = 0;        
-        
-        char buffer[64];
+  #define GROUP_INTERFACE_OSC "OSC"
+  public:
+    OSCInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_OSC,_configurable){}
 
-        OSCInterface(String name, uint8_t capture):DeviceInterface(name,capture){
-            latency = hwm.network->LANlatency;
-        }
+    virtual String getProviderName(){
+      return GROUP_INTERFACE_OSC;        // the provider is common to all MIDI strips
+    }    
+};
 
-        uint8_t progress(){
-            return 100; //%
-        }
+#define NETWORKOSC_INTERFACE "Network(OSC)"
+class NetworkOSC: public OSCInterface{
+  #define CONFIG_OSCIP  "oscIP"
+  #define CONFIG_OSCPORT  "oscPort"
+  public:
+    String OSC_IPaddress;
+    int OSC_port;
 
-        virtual void init(){
-        }
+    NetworkOSC(String _OSC_IPaddress,int _OSC_port,bool _configurable=false):OSC_IPaddress(_OSC_IPaddress),OSC_port(_OSC_port), OSCInterface(_configurable){
+      interfaceName = NETWORKOSC_INTERFACE;      
+    }
 
-        virtual bool parseOut(const JsonObject& command){
-            bool success = true;
+    virtual void derivedConfig(JsonObject& config){   
+      //{"oscIP":"5.6.7.8","oscPort":3000}
+      config[CONFIG_OSCIP] = OSC_IPaddress;
+      config[CONFIG_OSCPORT] = OSC_port;         
+    }
 
-            String s;
-            serializeJson(command, s);
-            DEBUG_PRINT("\n%s parseOut %s",name.c_str(),s.c_str());
+    virtual void restore(const JsonObject& config){
+      OSC_IPaddress = config[CONFIG_OSCIP].as<String>();
+      OSC_port = config[CONFIG_OSCPORT];        
+    }        
 
-            // {key: value}§
-            // {"/bus/03/config/name": «laurent»}
-            // {"/ch.3.mix.sends.2.on" :1 }
-            JsonPair kv = *command.begin();  // pointeur sur l’unique entrée
+    virtual bool monitor(){return false;}
+    virtual void* read(){return nullptr;}
 
-            const char* address = kv.key().c_str(); // ex: "osc"
-            JsonVariant val = kv.value().as<JsonVariant>(); // ex: {"address": "...", "value": ...}
-            
-            if (val.isNull()) {
-                // no value
-                SendCmd2OSC(address);
-            } else if (val.is<int>()) {
-                SendInt2OSC(address,val.as<int>());
-            }else if (val.is<float>()) {
-                SendFloat2OSC(address,val.as<float>());
-            } else if (0 /*BLOB, etc...*/) {
-                /*Serial.println("Type : bool");
-                bool v = val.as<bool>();*/
-            } else {
-                success = false;
-            }
-            return success;
-        }
+    virtual void begin(){}
 
-        virtual bool parseIn(JsonObject& data){
-            if (hwm.network->udp == NULL){
-                //OSC_DEBUG_PRINT("\n<<OSCReadIn : null UDP");
-                return false;                
-            } 
 
-            // Check if packet was received
-            int size = hwm.network->udp->parsePacket();
-            if (size < 1) return false;
+};
 
-            OSCMessage msg;
 
-            while (size--){
-                msg.fill(hwm.network->udp->read());
-                yield();
-            }
+class DMXInterface: public DeviceInterface{
+  #define GROUP_INTERFACE_DMX "DMX"
+  public:
+  
+    DMXInterface(const String& name, bool _configurable):DeviceInterface(name,GROUP_INTERFACE_DMX,_configurable){}
 
-            // Check for errors
-            if (msg.hasError()) {
-                //DEBUG_OSCMSG("error: %s\n", msg.getError());
-                return false;
-            }                       
+    virtual String getProviderName(){
+      return GROUP_INTERFACE_DMX;        // the provider is common to all MIDI strips
+    }    
 
-            int numberOfValues = msg.size();
+};
 
-            for (int i = 0; i < numberOfValues; i++) {
-                char type = msg.getType(i);
+#define ARTNETDMX_INTERFACE "Artnet"
+class ArtnetDMXInterface: public DMXInterface{
+  #define CONFIG_ARTNET "voidArtnetparam" 
+  public:
+    String voidArtnetParam = "artnet123";
 
-                switch (type) {
-                case 's': {
-                    char str[64];
-                    msg.getString(i, str, sizeof(str));
-                    data[EXEC_VALUE][i] = str;
-                    break;
-                }
-                case 'i':
-                    data[EXEC_VALUE][i] = msg.getInt(i);
-                    break;
-                case 'f':
-                    data[EXEC_VALUE][i] = msg.getFloat(i);
-                    break;
-                case 'T':
-                    data[EXEC_VALUE][i] = true;
-                    break;
-                case 'F':
-                    data[EXEC_VALUE][i] = false;
-                    break;
-                case 'b': { // blob (tableau d’octets)
-                    int blobSize = msg.getBlobLength(i);
-                    const uint8_t* blobData = msg.getBlob(i);
-                    // Créer un tableau JSON pour le blob
-                    JsonArray blobArray = data[EXEC_VALUE][i].createNestedArray();
-                    for (int j = 0; j < blobSize; j++) {
-                        blobArray.add(blobData[j]);
-                    }
-                    break;
-                }                    
-                default:
-                    data[EXEC_VALUE][i] = "unsupported";
-                    break;
-                }
-            }
+    ArtnetDMXInterface(bool _configurable):DMXInterface(ARTNETDMX_INTERFACE,_configurable){}
 
-            // Ajoute l’adresse OSC comme champ
-            
-            msg.getAddress(buffer);
-            data[EXEC_ADDRESS] = buffer;            
+    virtual bool monitor(){return false;}    
 
-            return true;            
+    virtual void derivedConfig(JsonObject& config){   
+      config[CONFIG_ARTNET] = voidArtnetParam;   // fill any parameters that are required by sysex
+    } 
 
-        }
-        
-        virtual void connect(){}
-        virtual void disconnect(){}
-   
-        void setClient(const IPAddress defaultIP, const int defaultPort){
-            ip = defaultIP;
-            port = defaultPort;
-            OSC_DEBUG_PRINT("\nOSC.setClient(%s,%d)",ip.toString().c_str(),port);
-        }
-        
-        bool sendOSCMessage(OSCMessage *msg, const IPAddress _ip, const int _port){           
-            OSC_DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString().c_str(),_port);
-            if (hwm.network->udp == NULL){
-                OSC_DEBUG_PRINT(":null UDP",msg->getAddress());
-                return false;
-            }             
-            hwm.network->udp->beginPacket(_ip, _port);
-            msg->send(*hwm.network->udp);
-            hwm.network->udp->endPacket();
+    virtual void restore(const JsonObject& config){
+      voidArtnetParam = config[CONFIG_ARTNET].as<String>();
+    }  
 
-            msg->empty(); 
-            return true;          
-        }
+    virtual void* read(){return nullptr;}
 
-        void SendCmd2OSC(const char* address){
-            SendCmd2OSC(address,ip,port);
-        }
+    virtual void begin(){}
 
-        void SendCmd2OSC(const char* address, const IPAddress _ip, const int _port){                        
-            OSCMessage msg(address);
-            sendOSCMessage(&msg,_ip,_port);
-        }
-
-        void SendInt2OSC(const char* address, int val){            
-            OSCMessage msg(address);
-            msg.add(val);
-            if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%i",val);          
-        }
-
-        void SendFloat2OSC(const char* address, float val){    
-            OSCMessage msg(address);
-            msg.add(val);
-            if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%.2f",val);         
-        }        
-
-        // Fonction pour démarrer la tâche de ping non bloquante
-        virtual bool asyncPing(OSCPingTaskParameters* params) {
-            OSC_DEBUG_PRINT("\nOSCasyncPing %s %s:%d T.O:%d",params->data->expectedStr,params->ip.toString().c_str(),params->port,params->timeOut);
-            if (params->isPinging){
-                OSC_DEBUG_PRINT("\t=>ping pending, no more allowed, stop.");
-            }
-            params->isPinging = true;
-            // Créer la tâche FreeRTOS pour le ping
-            xTaskCreatePinnedToCore(
-                OSCpingTask,         
-                "OSCPingTask",       
-                4096*2,             
-                params,           
-                1,                
-                NULL,   
-                APP_CPU_NUM  
-            );
-            return true;
-        }
-
-        bool blockingPing(String address,JsonObject& data, uint32_t timeOut){
-            return blockingPing(ip,port,address,data, timeOut);
-        }
-
-        bool blockingPing(IPAddress _ip, int _port, String address, JsonObject& data, uint32_t timeOut = 0){
-            //OSC_DEBUG_PRINT("\tblockingPing: %dms", timeOut);
-            if (timeOut == 0) timeOut = latency;
-
-            JsonObject dataFlush;
-            while(parseIn(dataFlush)) yield();   //we flush the OSC queue
-
-            RXtimerStart = millis();
-
-            SendCmd2OSC(address.c_str(),_ip,_port);            
-            unsigned long t0 = millis();
-
-            while (millis()-t0 < timeOut){
-                yield();
-                if (parseIn(data)){
-                    if (data[EXEC_ADDRESS] == address){
-                        latency = millis()-RXtimerStart;
-                        //OSC_DEBUG_PRINT("\t new latency: %d", latency);
-                        return true;
-                    }
-                    else{
-                        //OSC_DEBUG_PRINT("\t wrong frame");
-                        return false;
-                    }
-                }               
-            }
-            //OSC_DEBUG_PRINT("\t timed out");
-            return false;
-        }
-
-        static bool matchPattern(String pattern, const String& input) {
-
-            pattern.replace("%02d", "*");
-            pattern.replace("%d", "*");
-            pattern.replace("%i", "*");
-            pattern.replace("%s", "*");
-
-            int pLen = pattern.length();
-            int iLen = input.length();
-            int p = 0, i = 0;
-            int starIdx = -1, match = 0;
-
-            while (i < iLen) {               
-                // Cas 1 : Correspondance exacte ou wildcard '?'
-                if (p < pLen && (pattern[p] == input[i] /*|| pattern[p] == '?'*/)) {
-                    p++;
-                    i++;
-                }
-                // Cas 2 : Wildcard '*'
-                else if (p < pLen && pattern[p] == '*') {
-                    starIdx = p; // Enregistrer la position du '*'
-                    match = i;   // Enregistrer la position actuelle d'entrée
-                    p++;         // Passer au caractère suivant dans le pattern
-                }
-                // Cas 3 : Retour à un '*' précédent
-                else if (starIdx != -1) {
-                    p = starIdx + 1; // Reprendre après le '*'
-                    match++;
-                    i = match; // Réessayer la correspondance avec un caractère supplémentaire
-                }
-                // Cas 4 : Pas de correspondance
-                else {
-                    return false;
-                }
-            }
-
-            // Vérifier si les caractères restants dans le pattern sont uniquement des '*'
-            while (p < pLen && pattern[p] == '*') {
-                p++;
-            }
-            
-            OSC_DEBUG_PRINT("\nmatchPattern(%s,%s)",pattern.c_str(),input.c_str());
-
-            OSC_DEBUG_PRINT(": %s",p == pLen?"true":"false");
-            return p == pLen; // Vrai si tout le pattern est traité
-        }        
     
 };
 
-// Tâche de ping non bloquante
-void OSCpingTask(void* parameter) {
-  // Récupérer les paramètres passés à la tâche
-  OSCPingTaskParameters* params = static_cast<OSCPingTaskParameters*>(parameter);
-  OSC_DEBUG_PRINT("pingTask=>%s:%i",params->ip.toString().c_str(),params->port);
-  if (params->osc->blockingPing(params->ip,params->port,params->address,params->data,params->timeOut)) {
-    params->callback(true, params->port);  // Appel du callback en cas de succès
-  } else {
-    params->callback(false, params->port);  // Appel du callback en cas d'échec
+
+#define THREEEPINDMX_INTERFACE "3PinDMX"
+class ThreePinDMXInterface: public DMXInterface{
+  #define CONFIG_3PINDMX "void3PinDMXparam" 
+  public:
+    String void3pinDMXParam = "3pin123";
+
+    ThreePinDMXInterface(bool _configurable):DMXInterface(THREEEPINDMX_INTERFACE,_configurable){
+      network = false;  // no network dependency
+    }
+
+    virtual bool monitor(){return false;} 
+
+    virtual void derivedConfig(JsonObject& config){   
+      config[CONFIG_3PINDMX] = void3pinDMXParam;   // fill any parameters that are required by sysex
+    } 
+
+    virtual void restore(const JsonObject& config){
+      void3pinDMXParam = config[CONFIG_3PINDMX].as<String>();
+    }  
+
+    virtual void* read(){return nullptr;}
+
+    virtual void begin(){}
+
+    
+};
+
+using namespace APPLEMIDI_NAMESPACE;
+
+void OnAppleMidiException(const ssrc_t& ssrc, const Exception& e, const int32_t value ) {
+  switch (e)
+  {
+    case APPLEMIDI_NAMESPACE::Exception::BufferFullException:
+      DEBUG_PRINT("\n***MIDI BufferFullException");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::ParseException:
+      DEBUG_PRINT("\n***MIDI ParseException");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::TooManyParticipantsException:
+      DEBUG_PRINT("\n***MIDI TooManyParticipantsException");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::UnexpectedInviteException:
+      DEBUG_PRINT("\n***MIDI UnexpectedInviteException");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::ParticipantNotFoundException:
+      DEBUG_PRINT("\n***MIDI ParticipantNotFoundException");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::ComputerNotInDirectory:
+      DEBUG_PRINT("\n***MIDI ComputerNotInDirectory");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::NotAcceptingAnyone:
+      DEBUG_PRINT("\n***MIDI NotAcceptingAnyone");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::ListenerTimeOutException:
+      DEBUG_PRINT("\n***MIDI ListenerTimeOutException");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::MaxAttemptsException:
+      DEBUG_PRINT("\n***MIDI MaxAttemptsException");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::NoResponseFromConnectionRequestException:
+      DEBUG_PRINT("\n***MIDI:yyy did't respond to the connection request. Check the address and port, and any firewall or router settings. (time)");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::SendPacketsDropped:
+      DEBUG_PRINT("\n***MIDI SendPacketsDropped");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::ReceivedPacketsDropped:
+      DEBUG_PRINT("\n***MIDI***************************************** ReceivedPacketsDropped");
+      break;
+    case APPLEMIDI_NAMESPACE::Exception::UdpBeginPacketFailed:
+      DEBUG_PRINT("\n***MIDI UdpBeginPacketFailed");
+      break;
+  }
+}
+
+class MyMidiSessionInterface {
+public:
+  //virtual void begin() = 0;
+  virtual void read() = 0;
+  /*virtual void sendNoteOn(byte note, byte velocity, byte channel) = 0;
+  virtual void sendNoteOff(byte note, byte velocity, byte channel) = 0;*/
+  virtual ~MyMidiSessionInterface() {}
+  virtual void setHandleConnected(void (*fptr)(const ssrc_t &, const char *))= 0;
+  virtual void setHandleDisconnected(void (*fptr)(const ssrc_t &)) = 0;
+  virtual void setHandleException(void (*fptr)(const ssrc_t &, const Exception &, const int32_t value))=0;
+  virtual const char *getName() = 0;
+  virtual const uint16_t getPort() = 0;
+};
+
+template <typename UdpType>
+class AppleMidiWithInterfaceWrapper : public MyMidiSessionInterface {
+public:
+  //using SessionType = AppleMIDISession<UdpType>(const char* sessionName, uint16_t port);
+  //using MidiInterfaceType = MidiInterface<SessionType, AppleMIDISettings>;
+
+  AppleMIDISession<UdpType>* session;
+  MidiInterface<AppleMIDISession<UdpType>, AppleMIDISettings>* midi;
+
+  AppleMidiWithInterfaceWrapper<UdpType>(const char* sessionName, uint16_t port) {
+    DEBUG_PRINT("\n\n\n\t\tAppleMidiWithInterfaceWrapper(%s,%d)\n\n\n", sessionName, port);
+    session = new AppleMIDISession<UdpType>(sessionName, port);
+    midi = new MidiInterface<AppleMIDISession<UdpType>, AppleMIDISettings>(*session);   
+    session->begin();
+    DEBUG_PRINT("\n\n\n\t\tsession->begin()");
   }
 
-  // Libérer la mémoire allouée pour les paramètres
+  virtual const char *getName(){
+    return session->getName();
+  }
 
-  params->isPinging = false;
+  virtual const uint16_t getPort(){
+    return session->getPort();
+  }
 
-  // Suspendre la tâche après chaque ping (exécution ponctuelle)
-  vTaskDelete(NULL);
-}
+  virtual void setHandleConnected(void (*fptr)(const ssrc_t &, const char *)){
+    session->setHandleConnected(fptr);
+  }
+
+  virtual void setHandleDisconnected(void (*fptr)(const ssrc_t &)){
+    session->setHandleDisconnected(fptr);
+  }
+
+  virtual void setHandleException(void (*fptr)(const ssrc_t &, const Exception &, const int32_t value)){
+    session->setHandleException(fptr);
+  }
+
+
+  void read() override {
+    midi->read();
+  }
+
+  /*void sendNoteOn(byte note, byte velocity, byte channel) override {
+    midi->sendNoteOn(note, velocity, channel);
+  }
+
+  void sendNoteOff(byte note, byte velocity, byte channel) override {
+    midi->sendNoteOff(note, velocity, channel);
+  }*/
+
+
+  ~AppleMidiWithInterfaceWrapper() {
+    delete midi;
+    delete session;
+  }
+};
+
+
+class MIDIInterface: public DeviceInterface{
+  #define GROUP_INTERFACE_MIDI "MIDI"
+  public:
+    virtual void sendSysex() = 0;
+
+    virtual String getProviderName(){
+      return GROUP_INTERFACE_MIDI;        // the provider is common to all MIDI strips
+    }
+
+    MIDIInterface(const String& name,bool _configurable):DeviceInterface(name,GROUP_INTERFACE_MIDI,_configurable){
+    }
+
+    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
+
+
+};
+
+class MidiChannels : public StaticDataSet{
+  #define ADDRESS_MIDICHANNEL   "/midi/channel/%d"
+  #define MIDI_CHANNEL_NUMBER   16
+  public:
+    //String channelNames[MIDI_CHANNEL_NUMBER] = {"Piano", "Basse", "Guitare", "Cordes","Cuivres", "Chœur", "Lead", "FX","Pad", "Batterie", "Percu 2", "Synth","Harmonie", "Ambiance", "Drone", "Autre"};
+    String channelNames[MIDI_CHANNEL_NUMBER] = {"channel1","channel2","channel3","channel4","channel5","channel6","channel7","channel8","channel9","channel10","channel11","channel12","channel13","channel14","channel15","channel16"};
+
+
+    MidiChannels(const Address& adress, String name): StaticDataSet(adress, name,MIDI_CHANNEL_NUMBER){}
+    virtual const String* getValuePtr(uint16_t index){
+      if (index>MIDI_CHANNEL_NUMBER-1) return &errorDatasetOverflow;
+      return &channelNames[index];    //local javascript function 
+    }  
+}DSmidiChannels(Address{ADDRESS_MIDICHANNEL,INPUTSELECT},String(GROUP_INTERFACE_MIDI));
+
+class MidiValue : public StaticDataSet{
+  #define ADDRESS_MIDIVALUE     "/midi/value/%s"
+  public:
+    String value="1234";
+    MidiValue(const Address& adress, String name): StaticDataSet(adress, name,1){}
+    virtual const String* getValuePtr(uint16_t index){
+      return &value;     
+    }  
+}DSmidiValue(Address{ADDRESS_MIDIVALUE,INPUTUINT},String(GROUP_INTERFACE_MIDI));
+
+class MidiMessage : public StaticDataSet{
+  #define ADDRESS_MIDIMSG_SIZE 7
+  #define ADDRESS_MIDIMESSAGE   "/midi/message/%d"
+  public:
+    
+  enum MIDIMESSAGESID{
+      MIDI_MSG_NOTEON,
+      MIDI_MSG_NOTEOFF,
+      MIDI_MSG_PA,
+      MIDI_MSG_CC,
+      MIDI_MSG_PC,
+      MIDI_MSG_CA,      
+    };
+
+
+    String midiMessages[ADDRESS_MIDIMSG_SIZE] = {
+      "Note On",
+      "Note Off",
+      "Polyphonic Aftertouch",
+      "Control Change",
+      "Program Change",
+      "Channel Aftertouch",
+      "Pitch Bend",
+    };       
+
+    MidiMessage(const Address& adress, String name): StaticDataSet(adress, name, ADDRESS_MIDIMSG_SIZE){}
+    virtual const String* getValuePtr(uint16_t index){
+      if (index>ADDRESS_MIDIMSG_SIZE-1) return &errorDatasetOverflow;
+      return &midiMessages[index];    
+    }  
+
+}DSmidiMessages(Address{ADDRESS_MIDIMESSAGE,INPUTSELECT},String(GROUP_INTERFACE_MIDI));
+
+class SysexValue : public StaticDataSet{
+  #define ADDRESS_SYSEXVALUE     "/midi/sysex/%s"
+  public:
+    String value="sysexmsg";
+    SysexValue(const Address& adress, String name): StaticDataSet(adress, name,1){}
+    virtual const String* getValuePtr(uint16_t index){
+      return &value;     
+    }  
+}DSmidiSysex(Address{ADDRESS_SYSEXVALUE,INPUTTEXT},String(GROUP_INTERFACE_MIDI));
+
+#define BLEMIDI_INTERFACE "BLEMIDI"
+class BLEMIDIInterface: public MIDIInterface{
+  #define CONFIG_BLE "voidBLEparam" 
+  public:
+    String voidBLEparam = "abc";
+
+    BLEMIDIInterface(bool _configurable):MIDIInterface(BLEMIDI_INTERFACE,_configurable){
+      network = false;  // no network dependency
+    }
+
+    virtual uint16_t getSize(String addrr){
+      return 0;
+    }
+    
+    virtual const String* getValuePtr(String addrr, uint16_t index){
+      return &emptyString;
+    }
+
+    virtual bool monitor(){return false;}
+
+    virtual void* read(){return nullptr;}
+
+    virtual void begin(){}
+
+    virtual void derivedConfig(JsonObject& config){   
+      config[CONFIG_BLE] = voidBLEparam;   // fill any parameters that are required by sysex
+    } 
+
+    virtual void restore(const JsonObject& config){
+      voidBLEparam = config[CONFIG_BLE].as<String>();
+    }  
+
+    virtual void sendSysex(){}
+
+    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){};
+
+
+
+};
+
+#define USBMIDI_INTERFACE "USBMIDI"
+class USBMIDIInterface: public MIDIInterface{
+  #define CONFIG_USB "voidUSBparam"
+  public:
+    String voidUSBparam = "toto";
+
+    USBMIDIInterface(bool _configurable):MIDIInterface(USBMIDI_INTERFACE,_configurable){
+      network = false; // no network dependency
+    }
+
+    virtual bool monitor(){return false;}
+
+    virtual void sendSysex(){}
+
+    virtual void derivedConfig(JsonObject& config){   
+      config[CONFIG_USB] = voidUSBparam;   // fill any parameters that are required by sysex
+    } 
+
+    virtual void restore(const JsonObject& config){
+      voidUSBparam = config[CONFIG_USB].as<String>();
+    }      
+
+    virtual void* read(){return nullptr;}
+
+    virtual void begin(){}
+
+    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){};    
+
+};
+
+
+#define APPLEMIDI_INTERFACE "AppleMIDI"
+class AppleMIDIInterface: public MIDIInterface{
+  #define CONFIG_APPLE "voidAppleMidiParam"
+  public:
+    String voidAppleMidiParam = "titi";      
+
+    MyMidiSessionInterface* midiSession;
+
+    AppleMIDIInterface(bool _configurable):MIDIInterface(APPLEMIDI_INTERFACE,_configurable){
+      //AppleMIDI_RTP_ETH.setHandleException(OnAppleMidiException);
+            
+    }
+
+    virtual bool monitor(){
+      if (hwm.network->state == CONNECTED){
+        //if (hwm.network->media == CABLE_MEDIA) MIDI_RTP_ETH.read(); else
+        //AppleMIDI.read();
+        midiSession->read();
+      }
+      return false;
+    }
+
+    virtual void sendSysex(){}
+
+    virtual void derivedConfig(JsonObject& config){   
+      config[CONFIG_APPLE] = voidAppleMidiParam;   // fill any parameters that are required by sysex
+    } 
+
+    virtual void restore(const JsonObject& config){
+      voidAppleMidiParam = config[CONFIG_APPLE].as<String>();
+    }        
+
+    virtual void* read(){return nullptr;}
+
+    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
+      /*if (hwm.network->media == CABLE_MEDIA) MIDI_RTP_ETH.sendNoteOn(inNoteNumber,inVelocity,inChannel);
+      else myMidi->sendNoteOn(inNoteNumber,inVelocity,inChannel);*/
+    };
+
+    static void handleConnectedStatic(const ssrc_t& ssrc, const char* name) {
+        if (instancePtr) {
+            instancePtr->handleConnected(ssrc, name);
+        }
+    }
+
+    static void handleDisconnectedStatic(const ssrc_t& ssrc) {
+        if (instancePtr) {
+            instancePtr->handleDisconnected(ssrc);
+        }
+    }
+
+    // Méthode de l'instance réellement appelée
+    void handleConnected(const ssrc_t& ssrc, const char* name) {
+        //isConnected++;
+        DEBUG_PRINT("\nConnected to session: %s\n", name);
+    }    
+
+    void handleDisconnected(const ssrc_t& ssrc) {
+        //isConnected--;
+        DEBUG_PRINT("\nDisconnected from session\n");
+    }
+
+    virtual void begin(){
+      //AppleMIDI_RTP_ETH.setHandleConnected(handleConnectedStatic);      
+      //AppleMIDI_RTP_ETH.setHandleDisconnected(handleDisconnectedStatic);      
+      
+      /*appleMidiSession->setHandleDisconnected(handleDisconnectedStatic);
+      appleMidiSession->setHandleConnected(handleConnectedStatic);
+      appleMidiSession->setHandleException(OnAppleMidiException);*/
+      
+      if (hwm.network->media == CABLE_MEDIA) {
+          midiSession = new AppleMidiWithInterfaceWrapper<EthernetUDP>("ESP-ETH",DEFAULT_CONTROL_PORT);
+      } else {
+        midiSession = new AppleMidiWithInterfaceWrapper<WiFiUDP>("ESP-WiFi",DEFAULT_CONTROL_PORT);
+        if (MDNS.begin(midiSession->getName())) {  // Nom réseau : esp32-midi.local
+          DEBUG_PRINT("\n\n\n\t\t\tmDNS initialisé!\n\n\n");
+          MDNS.addService(MDNS_ANNOUNCED_SERVICE, "udp", midiSession->getPort());
+        } else {
+          DEBUG_PRINT("\n\n\nmDNS échec\n\n\n");
+        }         
+      }     
+      
+
+      midiSession->setHandleDisconnected(handleDisconnectedStatic);
+      midiSession->setHandleConnected(handleConnectedStatic);
+      midiSession->setHandleException(OnAppleMidiException);
+      
+
+    }
+
+    // À appeler dans `setup()` ou avant `begin()` pour enregistrer l'instance courante
+    static void setInstance(AppleMIDIInterface* inst) {
+        instancePtr = inst;
+    }    
+
+  private:
+    static inline AppleMIDIInterface* instancePtr = nullptr;
+
+};
+
+
+class MIDIOSC: public OSCInterface{
+  #define CONFIG_SYSEX "voidSysexParam"  
+  public:
+    MIDIInterface* midiTransport = nullptr;
+    String voidSysexParam = "xyz";
+
+    MIDIOSC(String midiInterface, bool _configurable){
+      instantiate(midiInterface,_configurable);
+
+    };
+
+    MIDIOSC(JsonObject& config){
+      //JsonObject uses = config[INTERFACE_USES].to<JsonObject>();
+      String midiInterfaceName ;//= uses.begin()->key().c_str();
+      serializeJson(config, midiInterfaceName);
+      //DEBUG_PRINT("\nZOGZOG: %s",midiInterfaceName.c_str());
+      bool _configurable = config[INTERFACE_EXPOSED];
+      instantiate(midiInterfaceName,_configurable);
+      restore(config);
+    }
+
+    ~MIDIOSC(){
+      delete midiTransport;
+    }
+
+    void instantiate(String midiInterface, bool _configurable){
+      interfaceName = "MIDI-"+midiInterface;
+      if (midiInterface == APPLEMIDI_INTERFACE) midiTransport = new AppleMIDIInterface(_configurable);
+      else if (midiInterface == BLEMIDI_INTERFACE) midiTransport = new BLEMIDIInterface(_configurable);
+      else midiTransport = new USBMIDIInterface(_configurable);      
+    }
+
+    virtual void derivedConfig(JsonObject& config){   
+      //{"sysex":""}}
+      config[CONFIG_SYSEX] = voidSysexParam;   // fill any parameters that are required by sysex
+
+      // we retrieve the config of the OSCInterface instance which is specific
+      String usesConf = midiTransport->serializeConfig(false);  // serializing a subnode
+      JsonDocument midiConf;
+
+      // convert it back to an object that can be attached to the parent config 
+      DeserializationError error = deserializeJson(midiConf, usesConf);
+      if (error) {
+        DEBUG_PRINT("\n%s serialize %s",interfaceName.c_str(),error.c_str());
+        return;
+      }
+      midiConf.shrinkToFit();
+      // "uses":{"USBMIDIInterface":{"voidUSBparam":""}}
+      // "uses":{"BLEMIDI":{"config":{"voidBLEparam":""}}
+      // "uses":{"AppleMIDI":{"config":{"voidAppleMidiParam":""}}
+
+      // partial serialization means we embbed the "uses" into the core config when it comes to unexposed interface
+      // in the first case we create a key "uses", in the second we just copy the elements ne by one
+      //if (exposed) config[INTERFACE_USES] = midiConf;
+      //else
+      {
+        // copie manuelle
+        for (JsonPair kv : midiConf.as<JsonObject>()) config[kv.key()] = kv.value();
+      }
+    } 
+
+    virtual void restore(const JsonObject& config){
+      voidSysexParam = config[CONFIG_SYSEX].as<String>();
+      /*JsonObject midiConfig = config[INTERFACE_USES]
+      midiTransport->restore(midiConfig);*/
+      midiTransport->restore(config);
+    }            
+};
+
+
 
 #endif

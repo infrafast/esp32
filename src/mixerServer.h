@@ -82,16 +82,21 @@ class MixerServer: public HWComponent2State{
       if (hwm.network->state == CONNECTED){                
 
           if (mixerInterface->changedState){
-            if (mixerInterface->interfaceState == DISCONNECTED) disconnect();
+            if (mixerInterface->interfaceState == DISCONNECTED) 
+              DEBUG_PRINT("\nmixer disconnect()");
+              //disconnect();
           }        
 
           if (millis()-lastDetectionAttemptTime > MIXER_DETECTION_PERIOD){
             lastDetectionAttemptTime = millis();
-            if (state == DISCONNECTED) connect();            
+            if (state == DISCONNECTED) 
+            DEBUG_PRINT("\nmixer connect()");
+            //connect();            
           }
           if (state == CONNECTED){
             if (mixerInterface->interfaceState == IDLE){
-              mixerInterface->connect();            
+              //mixerInterface->connect();     
+              DEBUG_PRINT("\ninterface connect()");       
             }
           }          
       }
@@ -181,6 +186,7 @@ class MixerServer: public HWComponent2State{
 
 
     void connect() { 
+      DEBUG_PRINT("mixerServer.connect()");
       static bool toggleBehringerMSTest = true;   
             
       state = DISCONNECTED ;              
@@ -198,11 +204,11 @@ class MixerServer: public HWComponent2State{
       String configIP = *app.userConfig.getString(SERVER_IP_KEY);
       if (!serverIP.fromString(configIP) || configIP=="") serverIP = IPAddress(0,0,0,0);  
 
-      //DEBUG_PRINT("\n * * MIXER SERVER_IP_KEY = %s, serverIP = %s",configIP.c_str(),serverIP.toString().c_str());
+      DEBUG_PRINT("\n * * MIXER SERVER_IP_KEY = %s, serverIP = %s",configIP.c_str(),serverIP.toString().c_str());
 
       // *************** autodetect:  **********************      
       if (discovery()){
-        //DEBUG_PRINT(" - D I S C O V E R Y - ");
+        DEBUG_PRINT(" - D I S C O V E R Y - ");
         
         serverIP = hwm.network->IP;      
         serverIP[3] = 255 ; // broadcast IP for Behringer and MS
@@ -216,13 +222,13 @@ class MixerServer: public HWComponent2State{
           if (behringerUDPPort == 10024) behringerUDPPort = 10023;
           else behringerUDPPort = 10024;          
         }                  
-        else
+        else;
           setMixingStationTest();
 
         toggleBehringerMSTest = !toggleBehringerMSTest;
 
       }else{
-        //DEBUG_PRINT(" - U S E R   D E F I N E D - ");
+        DEBUG_PRINT(" - U S E R   D E F I N E D - ");
         // *************** manual :  **********************        
         behringerUDPPort = app.userConfig.getInt(SERVER_PORT_KEY); 
         msUDPPort = app.userConfig.getInt(SERVER_PORT_KEY); 
@@ -264,7 +270,7 @@ class MixerServer: public HWComponent2State{
     }*/
 
     void setMixingStationTest(){      
-      //DEBUG_PRINT("\nsetMixingStationTest()");     
+      DEBUG_PRINT("\nsetMixingStationTest()");     
       pingParam.address = OSC_MS_PRE OSC_MS_PING;
       pingParam.port = msUDPPort;
       testMS_REST_API();  //trigger async answer               
@@ -272,7 +278,7 @@ class MixerServer: public HWComponent2State{
     }
 
     void setBehringerTest(){    
-      //DEBUG_PRINT("\nsetBehringerTest()");
+      DEBUG_PRINT("\nsetBehringerTest()");
       pingParam.address = BEHRINGER_QUERY;
       pingParam.port = behringerUDPPort;          
     }

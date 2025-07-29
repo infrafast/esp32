@@ -29,14 +29,15 @@
 #ifdef DEBUG
   #define MIDI_USB_NOTE_ON(arg1,arg2) DEBUG_PRINT("\nMIDI_USB_NOTE_ON(%d,%d)",arg1,arg2)
   #define MIDI_USB_NOTE_OFF(arg1) DEBUG_PRINT("\nMIDI_USB_NOTE_ON(%d,%d)",arg1)
-  #define MIDI_USB_BEGIN DEBUG_PRINT("\nMIDI_USB_BEGIN");
+  #define MIDI_USB_BEGIN DEBUG_PRINT("\nMIDI_USB_BEGIN fake")
+  #define MIDI_USB_CC(arg1,arg2,arg3) DEBUG_PRINT("\nMIDI_USB_CC(%d,%d,%d)",arg1,arg2,arg3)
 #else
   #include <midiusb.h>
   #include <USB.h>
   MIDIusb USBmidi;
-
   #define MIDI_USB_NOTE_ON(arg1,arg2) USBmidi.noteON(arg1,arg2)
   #define MIDI_USB_NOTE_OFF(arg1) USBmidi.noteOFF(arg1)
+  #define MIDI_USB_CC(arg1,arg2,arg3) USBmidi.controlChange(arg1,arg2,arg3)
 
   #define MIDI_USB_BEGIN USBmidi.setBaseEP(2); USBmidi.begin();
 
@@ -169,9 +170,7 @@ public:
     Network *network = nullptr;
     Network *configMedia = nullptr;    
 
-    String configIP;
-
-    StdFunctionCallbackVoidBool userInternetCallback;
+    String configURL;
 
     unsigned long bootTime = 0;     // how long it took to boot (means when powerRail is on)
 
@@ -200,7 +199,6 @@ public:
       buttons[RIGHTB] = new LadderButton(&analogButtonIn, HIGH,false);      // virtual ID 22      
       for (uint8_t i=0;i<3;i++) hwComponents.add(buttons[i]);
 
-      //onOff = new DigitalButton(ONOFF_PIN,&onOff_button_pushDelay,&default_button_dClicdelay,INPUT_PULLDOWN,ON_OFF_TRIGGER,false);
       onOff.id="onOff";      
       powerRail.id = "powerRail";
       hwComponents.add(&onOff);
@@ -217,6 +215,7 @@ public:
     }
     */
     void wakeUp(uint16_t pressTime){
+      startupState = WIZARD_STARTUP; return;
       #define RESET_DELAY 10000
       #define RESET_GRACE_PERIOD RESET_DELAY/3
       pinMode(BUILTIN_LED, OUTPUT);
@@ -293,7 +292,7 @@ public:
       digitalWrite(D7,HIGH);
       delay(100);*/
    
-      xTaskCreatePinnedToCore(xTaskBackground, "backgroundHWandGUI", 4096, NULL, 3, NULL, 0);
+      xTaskCreatePinnedToCore(xTaskBackground, "OnOFFandGUI", 4096, NULL, 3, NULL, 0);
       
       debounceTimer = millis();
       lastInterrupt = millis();

@@ -13,7 +13,7 @@
  */
 
 #define _DEBUG
-#define _DUMP_HANDSHAKE
+//#define _DUMP_HANDSHAKE
 //#define _DUMP_HEADER
 //#define _DUMP_FRAME_DATA
 

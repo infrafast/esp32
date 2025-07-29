@@ -1282,18 +1282,20 @@ class MixingStation : public OSCMixerInterface {
     virtual void disconnect(){
       interfaceState = DISCONNECTED;     // no REST API and no OSC
       //DEBUG_PRINT("\nWaiting semaphore release in disconnect()");
-      if (xSemaphoreTake(msRESTAPIClient.mutex, portMAX_DELAY)) { // Prendre le mutex
+      //if (xSemaphoreTake(msRESTAPIClient.httpAsyncMutex, portMAX_DELAY)) { // Prendre le mutex
+      unsigned long t1 = millis();
+      #define TIMEOUT_HTTP 500
+      while (msRESTAPIClient.isClientConnecting == true && millis()-t1 < TIMEOUT_HTTP) yield();
+
+      //DEBUG_PRINT("\ndeleting task");
+      //vTaskDelete(msRESTAPIClient.taskHandle); // Supprimer la tâche
+      //msRESTAPIClient.taskHandle = NULL;       // Mettre à jour le pointeur
+      if (msRESTAPIClient.client != NULL) msRESTAPIClient.client->stop();
+      hwm.network->clientSocketClose();
+      //DEBUG_PRINT("\nnetwork client stoppped");
+      //msRESTAPIClient.taskHandle  = nullptr;
         
-          //DEBUG_PRINT("\ndeleting task");
-          //vTaskDelete(msRESTAPIClient.taskHandle); // Supprimer la tâche
-          //msRESTAPIClient.taskHandle = NULL;       // Mettre à jour le pointeur
-          if (msRESTAPIClient.client != NULL) msRESTAPIClient.client->stop();
-          hwm.network->clientSocketClose();
-          //DEBUG_PRINT("\nnetwork client stoppped");
-          //msRESTAPIClient.taskHandle  = nullptr;
-        
-        xSemaphoreGive(msRESTAPIClient.mutex); // Relâcher le mutex
-      }
+        //xSemaphoreGive(msRESTAPIClient.httpAsyncMutex); // Relâcher le mutex
       
     }
 

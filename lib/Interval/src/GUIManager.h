@@ -184,8 +184,8 @@ class GUIManager : public GenericComponent {
 
     void clearScreenBuffer(){
       clearBuffer = true;
-      //screenBuffer.fillSprite(TFT_BGCOLOR);  
-          
+      //screenBuffer.fillSprite(TFT_BGCOLOR); 
+      DEBUG_PRINT("\nclearScreenBuffer true");
     }
 
     bool refresh(bool force=false) {  

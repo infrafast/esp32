@@ -9,6 +9,7 @@
 #include <HttpClient.h> // amcewen/HttpClient@^2.2.0 as opposed to the std lib #include <HTTPClient.h> which only handle WiFIclient
 #include <WiFiClientSecure.h>
 #include "BluetoothSerial.h"   //required for OSC
+
 // https://github.com/andrew-susanto/Arduino-Ethernet-Icmp.git	 => platform IO: works but corrupt the WiFi
 //#include <EthernetICMP.h>
 
@@ -20,11 +21,26 @@ using EthernetWebSocketClient = WebSocketClient<EthernetClient>;
 using WSclientOnMessageCallback = std::function<void(const char*)>;
 // using WSclientOnMessageCallback = std::function<void(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length)>;
 
-#include <AppleMIDI.h>
-APPLEMIDI_CREATE_INSTANCE(EthernetUDP,MIDI_RTP_ETH,"ESP32AappleMidiEth",DEFAULT_CONTROL_PORT);
-
-  ////////////////////////////////////////////////////////////////////
- ////                CLIENT SOCKET CALLBACKS                  ///////
+////////////////////////////////////////////////////////////////////
+///                MIDI LAYER OBJECTS DECLARATION            ///////
+////////////////////////////////////////////////////////////////////
+#define USE_EXT_CALLBACKS     // as from example => required for MIDI callbacks
+#include <AppleMIDI.h>        //https://github.com/lathoub/Arduino-AppleMIDI-Library
+#include <ESPmDNS.h>          // for WIFI registration
+#include <EthernetBonjour.h>  //for Eth registration
+#define MIDI_CHANNEL_OMNI 0
+#define MDNS_ANNOUNCED_SERVICE "apple-midi"   // standard name for apple midi. Do not change
+//APPLEMIDI_CREATE_INSTANCE(EthernetUDP,MIDI_RTP_ETH,"Interval-footswitch-Ethernet",DEFAULT_CONTROL_PORT);
+//APPLEMIDI_CREATE_INSTANCE(WiFiUDP,MIDI_RTP_WIFI,"Interval-footswitch-WiFi",DEFAULT_CONTROL_PORT);
+//APPLEMIDI_CREATE_DEFAULTSESSION_INSTANCE();
+using namespace APPLEMIDI_NAMESPACE;
+/*
+AppleMIDISession<WiFiUDP> *appleMidiSession;
+MidiInterface<AppleMIDISession<WiFiUDP>,AppleMIDISettings> *myMidi;
+void OnAppleMidiException(const ssrc_t& ssrc, const Exception& e, const int32_t value );
+*/
+////////////////////////////////////////////////////////////////////
+///                CLIENT SOCKET CALLBACKS                  ///////
 ////////////////////////////////////////////////////////////////////
 void defaultWSclientOnMessage(const char* message){
   //DEBUG_PRINT("\nWebsocketclient Message reçu : %s",message);
@@ -58,7 +74,9 @@ void socketClientOnClose(IWebSocket &ws, WebSocketCloseCode code, const char *re
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
-
+void pingTask(void*);
+void connectHTTPTask(void*);
+////////////////////////////////////////////////////////////////////////////////////////////
 
 class HWComponent: public GenericComponent{
   public:
@@ -165,11 +183,11 @@ class AnalogIn : public HWComponent{
 
 #define VBAT_CHANGE_THRESHOLD 0.06
 
-#define VBAT_CRIT 3.2
-#define VBAT_MIN 3.3
+#define VBAT_CRIT 3.2     // selon chat gpt => tension minimal. En dessous de 3.0v , dommages irreversibles
+#define VBAT_MIN 3.3      // selon chat gpt => tension a surveiller, seuil de pré-alarme
 #define VBAT_WARNING VBAT_MIN-VBAT_CHANGE_THRESHOLD
-#define VBAT_MAX 4.2
-#define VBAT_USB 4.6
+#define VBAT_MAX 4.2      // selon chat gpt => tension maximale
+#define VBAT_USB 4.6      // 
 
 #define VBAT_OFFSET 0.0 // compensate voltage drop (positive or negative) from the diode or other component
 
@@ -561,28 +579,18 @@ uint8_t LadderButton::bCount = 0;
 
 typedef std::function<void(bool)> PingCallback; // Utilisation de std::function pour plus de flexibilité
 
-struct PingTaskParameters {
-  const char* ipAddress;
-  PingCallback callback;
-};
-
-// Tâche de ping non bloquante
-void pingTask(void* parameter) {
-  // Récupérer les paramètres passés à la tâche
-  PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
-  //DEBUG_PRINT("pingTask=>%s",params->ipAddress);
-  if (Ping.ping(params->ipAddress)) {
-    params->callback(true);  // Appel du callback en cas de succès
-  } else {
-    params->callback(false);  // Appel du callback en cas d'échec
+class PingTaskParameters {
+public:
+  PingTaskParameters(){
+    DEBUG_PRINT("\nPingTaskParameters created");
+  }
+  ~PingTaskParameters(){
+    DEBUG_PRINT("\nPingTaskParameters deleted");
   }
 
-  // Libérer la mémoire allouée pour les paramètres
-  delete params;
-
-  // Suspendre la tâche après chaque ping (exécution ponctuelle)
-  vTaskDelete(NULL);
-}
+  String ipAddress;
+  PingCallback callback;
+};
 
 //typedef std::function<void()> StdFunctionCallbackVoid; 
 typedef std::function<void(const char*)> StdFunctionCallbackStringPointer;
@@ -598,7 +606,6 @@ struct AsyncHttpClient{
     String post="";    
     bool isClientConnecting = false; // Indicateur pour éviter de lancer plusieurs tâches
     uint32_t timeOut = 1000;
-    SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
 };
 
 // Prototype pour la tâche de connexion
@@ -706,107 +713,6 @@ void connectHTTPTask(void *parameter) {
 String httpTaskResult;
 ByteBuffer readHttpBuffer;
 
-// Prototype pour la tâche de connexion
-void connectHTTPTask(void *parameter) {
-    AsyncHttpClient *clientObj = static_cast<AsyncHttpClient *>(parameter);
-    DEBUG_PRINT("\nconnectHTTPTask(%s,%s,%i,<%s>)",clientObj->host.toString().c_str(),clientObj->URL.c_str(),clientObj->port,clientObj->post.c_str());
-     
-    Client* client = clientObj->client;  
-
-    if (clientObj->method == HTTP_METHOD_GET) clientObj->post = ""; 
-
-    //String result="{\""+String(API_ORIGIN)+"\":\""+clientObj->URL+"\",";
-
-    JsonDocument doc;        
-    doc[API_ORIGIN] = clientObj->URL;
-
-    if (client != NULL){
-      HttpClient httpClient(*client);      
-      //int httpResponseCode = httpClient->get(serverIP.toString().c_str(),url.c_str());
-      httpClient.beginRequest();
-      httpClient.setHttpResponseTimeout(clientObj->timeOut);
-      int httpResponseCode = httpClient.startRequest(clientObj->host.toString().c_str(),clientObj->port,clientObj->URL.c_str(),clientObj->method.c_str(),"ESP32HttpClient/1.0");     
-
-      if (httpResponseCode == 0) {
-        //DEBUG_PRINT("\nRequête %s lancée",method.c_str());
-
-        if (clientObj->method == HTTP_METHOD_POST ){
-          // Ajouter un en-tête Content-Type pour indiquer JSON
-          httpClient.sendHeader("Content-Type", "application/json");
-          httpClient.sendHeader("Content-Length", String(clientObj->post.length()).c_str());
-          //DEBUG_PRINT("\nPOST write: %s",post.c_str());
-          // Envoyer le corps de la requête
-          httpClient.write((const uint8_t*)clientObj->post.c_str(), clientObj->post.length());               
-        }
-
-        // Terminer la requête
-        httpClient.endRequest();
-
-        int httpStatusCode = httpClient.responseStatusCode();
-        DEBUG_PRINT("\nStatut HTTP : %d\n", httpStatusCode);
-
-        if (httpStatusCode == 200) {
-          httpClient.skipResponseHeaders();    // we want to read the body only
-
-          readHttpBuffer.flush();
-          while (httpClient.available()) { // Tant qu'il y a des données disponibles
-            readHttpBuffer.write(httpClient.read());    // Lire un caractère
-            yield();
-          }
-
-          JsonDocument payload;
-          //deserializeJson(payload,httpClient);
-          deserializeJson(payload,readHttpBuffer.buffer);
-          doc[API_STATUS] = API_OK;
-          doc[API_BODY] = payload;
-
-          //DEBUG_PRINT("\nRéponse %s reçue : %s",clientObj->method.c_str(),payload.c_str());
-        } else {           
-          doc[API_STATUS] = API_ERROR;
-          doc[API_BODY] = String(httpStatusCode);
-        }
-      } else {
-        doc[API_BODY] = String(httpResponseCode);
-        doc[API_STATUS] = API_ERROR;
-
-      }
-      httpClient.stop();    
-    }else{
-        doc[API_BODY] = "\"Null client\"";
-        doc[API_STATUS] = API_ERROR;
-    }
-
-    //result += "\"status\":"+String(status)+",\"data\":"+String(payload)+"}";
-    //result ="{\"origin\":\"/app/state\",\"status\":1,\"data\":{\"progress\": 0,\"state\": \"connected\"}}";
-
-    //DEBUG_PRINT("\nsend => %s",result.c_str());
-
-
-    // envoie la reponse
-    serializeJson(doc,httpTaskResult);
-    //clientObj->callback("{\"origin\":\"/app/state\",\"status\":1,\"data\":{\"progress\": 0,\"state\": \"connected\"}}");
-    clientObj->callback(httpTaskResult.c_str());
-    //DEBUG_PRINT("\nRESULT=>%s",result.c_str());
-    // Fin de la tentative de connexion, réinitialiser l'indicateur
-    //doc.clear();
-    // Tâche terminée, suppression    
-    //DEBUG_PRINT("\nWaiting semaphore release in connectTask");
-
-    doc.clear();
-
-    if (xSemaphoreTake(clientObj->mutex, portMAX_DELAY)) { // Prendre le mutex
-      //DEBUG_PRINT("\nconnectHTTPTask finished");
-
-      //if (clientObj->taskHandle != NULL) {
-      //  clientObj->taskHandle = NULL;       // Mettre à jour le pointeur
-      //}
-      clientObj->isClientConnecting = false;
-      xSemaphoreGive(clientObj->mutex); // Relâcher le mutex
-      vTaskDelete(NULL); // Supprimer la tâche    
-    }
-}
-
-
 class Network : public HWComponent2State{
 
   public:
@@ -842,23 +748,27 @@ class Network : public HWComponent2State{
       networkBusy = xSemaphoreCreateMutex();
     }
 
-    virtual void setLink(EthernetLinkStatus linkStatus) = 0;
-    
+    virtual void setLink(EthernetLinkStatus linkStatus) = 0;    
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path)=0;
     virtual void clientSocketSend(const char *message)=0;
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE)=0;
     virtual WebSocketReadyState clientSocketState()=0;
-
     virtual EthernetLinkStatus getLink() = 0;
     virtual String getConnectedDeviceIP() = 0;
+    virtual void asyncPing(String ipAddress, PingCallback callback)=0;
+    virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
+
+    virtual void init(){
+      //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
+      WiFi.setAutoConnect(false); 
+      WiFi.setAutoReconnect(false);      
+    }
+
     virtual void setSSID(String ssid, String pwd){
       SSID = ssid;
       wiFiList->addValue(SSID,pwd);         
     }
     
-    virtual void asyncPing(const char* ipAddress, PingCallback callback)=0;
-    // Méthode pour initier la connexion non bloquante, appelée dans la boucle
-    virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
 
     virtual void setWiFi(JsonList* list, String wiFiID){
       wiFiList = list;
@@ -870,11 +780,12 @@ class Network : public HWComponent2State{
     uint16_t wiFiTimeout = 7000;
 
     void setWifiPower(){
-      //#define WIFI_POWER WIFI_POWER_MINUS_1dBm // Set WiFi RF power output to lowest level
-      #define WIFI_POWER WIFI_POWER_8_5dBm
+      //#define WIFI_POWER WIFI_POWER_MINUS_1dBm // Set WiFi RF power output to lowest level      
       //#define WIFI_POWER WIFI_POWER_11dBm // Set WiFi RF power output to middle level
-      //#define WIFI_POWER WIFI_POWER_19_5dBm // Set WiFi RF power output to highest level      
-      WiFi.setTxPower(WIFI_POWER); // WiFi.setTxPower(WIFI_POWER_19_5dBm); // maximum power => https://github.com/G6EJD/ESP32-8266-Adjust-WiFi-RF-Power-Output/ 
+      //#define WIFI_POWER WIFI_POWER_19_5dBm // Set WiFi RF power output to highest level        
+      #define WIFI_POWER WIFI_POWER_8_5dBm    // Set WiFi RF power output to standard level        
+
+      //WiFi.setTxPower(WIFI_POWER); // maximum power => https://github.com/G6EJD/ESP32-8266-Adjust-WiFi-RF-Power-Output/ 
     }
 
     void setConnectTimeout() {
@@ -914,12 +825,13 @@ class Network : public HWComponent2State{
 
 
     void stopWiFi(){
+      DEBUG_PRINT("\n---------> stopWiFi() : WiFiEnabled = false <------------");
       WiFiEnabled = false;
       disconnectWifi();
     }
 
     void unpauseWiFi(){
-      //DEBUG_PRINT("\n\t\t\t\t---------> unpauseWiFi() <------------");
+      DEBUG_PRINT("\n\t\t\t\t---------> unpauseWiFi() : WiFiEnabled = true <------------");
       WiFiEnabled = true ;      
     }
 
@@ -983,7 +895,8 @@ class WiFiEth : public Network{
 
     }
 
-    void init(){
+    virtual void init(){
+      Network::init();
       //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
       tcpipInit();  // so ethernet can benefit from getting mac address and other low level function even if WiFi is not up      
       // if enabled is true it means wde want to use the ethernet shield, so we try to initialize if
@@ -1025,6 +938,7 @@ class WiFiEth : public Network{
 
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){
       DEBUG_PRINT("\nclientSocketOpen(%s,%d,%s)",host,port,path);
+      return false;
      
       if (state != CONNECTED){
         DEBUG_PRINT("\t failed, network not connected!");
@@ -1116,7 +1030,7 @@ class WiFiEth : public Network{
       WiFi.setSleep(false); // Désactiver le mode veille Wi-Fi
       WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); // Reconfigurer DHCP    */
 
-      //if (debug) DEBUG_PRINT("\nstartWifi(%s,%s)",SSID.c_str(),pwd.c_str());                
+      DEBUG_PRINT("\nstartWifi(%s,%s), wifiEnabled=%d",SSID.c_str(),pwd.c_str(),WiFiEnabled);                
       WiFi.begin(ssid,pwd);
       lastWiFiAttempt = millis();      
       _newWifiAttempt = false;      
@@ -1152,12 +1066,9 @@ class WiFiEth : public Network{
       //DEBUG_PRINT("\n:cable:%d",cable);
       if (state == DISCONNECTED){        
         // first try to connect eth
-
         if (cable == LinkON){       // ethernet is enabled  
-
           #define ETH_BEGIN_RETRY_DELAY 1000
           if (millis()-lastEthAttempt>ETH_BEGIN_RETRY_DELAY){
-
               lastEthAttempt = millis();
 
               bool success;
@@ -1169,13 +1080,12 @@ class WiFiEth : public Network{
                   else
                   */
               success = Ethernet.begin(ethMac,100,100);
-
               if (success){  // as it take 100ms, we only do it every ETH_BEGIN_RETRY_DELAY otherwise it really slows down the loop
                 state = CONNECTED;
                 media = CABLE_MEDIA;
 
-                if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(100)) == pdTRUE){
-                  // save power            
+                if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
+                  // save power    
                   disconnectWifi();
                   // we just connected ETH so we do everything related to ETH specialized object instanciation
                   IP = Ethernet.localIP();         
@@ -1184,10 +1094,18 @@ class WiFiEth : public Network{
                   if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
                   if (udp == NULL) udp = new EthernetUDP;
                   if (wsEthClient == nullptr) wsEthClient = new EthernetWebSocketClient{}; //WiFiWebSocketClient{};
-                  #define MIDI_CHANNEL_OMNI 0
-                  MIDI_RTP_ETH.begin(MIDI_CHANNEL_OMNI);
+                  /*
+                  MIDI_RTP_ETH.begin(MIDI_CHANNEL_OMNI);   
+                  if (!EthernetBonjour.begin("esp32-midi")) {
+                    DEBUG_PRINT("Bonjour init échoué");
+                  } else {
+                    DEBUG_PRINT("Bonjour initialisé");
+                    EthernetBonjour.addServiceRecord(MDNS_ANNOUNCED_SERVICE, AppleMIDI_RTP_ETH.getPort(), MDNSServiceUDP,"textContent");
+                  }                  
+                  */
                   xSemaphoreGive(networkBusy);
-
+                }else{
+                  DEBUG_PRINT("\nETH CONNECT: networkBusy"); 
                 }
               }else{
                 //if (debug) DEBUG_PRINT(".");
@@ -1207,7 +1125,6 @@ class WiFiEth : public Network{
                       DEBUG_PRINT("\nStatic WifI IP failed");
                     }
                   }*/
-
                 String pass = *wiFiList->getString(SSID);    // getting the password for the given ssid
                 startWifi(SSID,pass);
               }              
@@ -1232,8 +1149,7 @@ class WiFiEth : public Network{
             // save power and disconnect ethernet driver
             // TBC 
 
-            if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(100)) == pdTRUE){
-
+            if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
               IP = WiFi.localIP();
               //if (debug) DEBUG_PRINT("\nWifi.begin() => got IP: %s, %idb",IP.toString().c_str(),WiFi.RSSI());
               if (client == NULL) client = new WiFiClient();
@@ -1241,8 +1157,21 @@ class WiFiEth : public Network{
               if (udp == NULL) udp = new WiFiUDP;
               if (wsWiFiClient == nullptr) wsWiFiClient = new WiFiWebSocketClient{};
 
-              xSemaphoreGive(networkBusy);
+              /*
+              appleMidiSession = new AppleMIDISession<WiFiUDP>("appleMidi", 5004);
+              myMidi = new MidiInterface<AppleMIDISession<WiFiUDP>,AppleMIDISettings>(*appleMidiSession); 
+              appleMidiSession->begin();
+              
+              if (MDNS.begin(appleMidiSession->getName())) {  // Nom réseau : esp32-midi.local
+                DEBUG_PRINT("\n\n\n\t\t\tmDNS initialisé!\n\n\n");
+                MDNS.addService(MDNS_ANNOUNCED_SERVICE, "udp", appleMidiSession->getPort());
+              } else {
+                DEBUG_PRINT("\n\n\nmDNS échec\n\n\n");
+              }*/
 
+              xSemaphoreGive(networkBusy);
+            }else{
+              DEBUG_PRINT("\nWIFI CONNECT: networkBusy"); 
             }
 
           }
@@ -1262,6 +1191,8 @@ class WiFiEth : public Network{
             if (cable == LinkON){
               // do whatever is required when we are connected by cable
               wsEthClient->listen();
+              EthernetBonjour.run();
+
             }else{
               state = DISCONNECTED; 
               media = NO_MEDIA;
@@ -1280,83 +1211,66 @@ class WiFiEth : public Network{
           }
         }
       }
-      
       Network::refresh(force);
-
       if (cable != oldCable){
         oldCable = cable;
         refreshed = true;   // this refresh has to be flagged after NetworkRefresh to avoid being erased
       }
 
       if (refreshed){
-        if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(1000)) == pdTRUE){
-          //if (debug) DEBUG_PRINT("\n%s changed state => cable:%i, media:%i",id.c_str(),cable,media);
-          // common instantiation to both Wifi and Ethernet goes here
-          if (state == CONNECTED){
-            // client has been instantiated before
-            //if (http == NULL) http = new HttpClient(*client);
-            udp->begin(8888);   //this is to receive packets on port 8888
-
-            if (media == WIFI_MEDIA){
-              wsWiFiClient->onOpen(socketClientOnOpenCallback);
-              wsWiFiClient->onMessage(socketClientOnMessageCallback);
-
-              /*
-                userWSclientOnMessage = [this](IWebSocket &ws, const WebSocketDataType dataType,
-                                                const char *message, uint16_t length) {
-                      wsOnMessageCallback(ws, dataType, message, length);
-                  };
-              */
-
-
-              wsWiFiClient->onError(socketClientOnErrorCallback);
-              wsWiFiClient->onClose(socketClientOnClose);
-  
-              server->begin(); // <-- for some reason this begin cause the webserver not react with ethernet if it is called. But is required for WiFi
-              SSID = WiFi.SSID();
-              gateway = WiFi.gatewayIP();
-              lastConnectedSSID = SSID;
-              //DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
-              unpauseWiFi();
-            }else{
-              // ETHERNET
-              gateway = Ethernet.gatewayIP();
-
-              wsEthClient->onOpen(socketClientOnOpenCallback);
-              wsEthClient->onMessage(socketClientOnMessageCallback);
-              wsEthClient->onError(socketClientOnErrorCallback);
-              wsEthClient->onClose(socketClientOnClose);
-
-            }
-            checkInternet();
-            // doesnt change anything works without, with one or with both
-          }else if (state == DISCONNECTED){
-            internet = false;
+        
+        //if (debug) DEBUG_PRINT("\n%s changed state => cable:%i, media:%i",id.c_str(),cable,media);
+        // common instantiation to both Wifi and Ethernet goes here
+        if (state == CONNECTED){
+          // client has been instantiated before
+          //if (http == NULL) http = new HttpClient(*client);
+          if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888
+          if (media == WIFI_MEDIA){
+            wsWiFiClient->onOpen(socketClientOnOpenCallback);
+            wsWiFiClient->onMessage(socketClientOnMessageCallback);
+            wsWiFiClient->onError(socketClientOnErrorCallback);
+            wsWiFiClient->onClose(socketClientOnClose);
+            server->begin(); // <-- for some reason this begin cause the webserver not react with ethernet if it is called. But is required for WiFi
+            SSID = WiFi.SSID();
+            gateway = WiFi.gatewayIP();
+            lastConnectedSSID = SSID;
+            //DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
+            unpauseWiFi();
+          }else{
+            // ETHERNET
+            gateway = Ethernet.gatewayIP();
+            wsEthClient->onOpen(socketClientOnOpenCallback);
+            wsEthClient->onMessage(socketClientOnMessageCallback);
+            wsEthClient->onError(socketClientOnErrorCallback);
+            wsEthClient->onClose(socketClientOnClose);            
+          }
+          //checkInternet();
+        }else if (state == DISCONNECTED){
+          internet = false;
+          if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
             if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
             if (client != NULL){client->stop(); delete client; client = NULL;} 
             if (server != NULL){delete server; server  = NULL;} 
             if (wsWiFiClient != nullptr){ delete wsWiFiClient; wsWiFiClient = nullptr;}
             if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr;}
-            //if (http != NULL){http->stop(); delete http; http = NULL;}                    
-            restoreWiFiSSID();
-            //DEBUG_PRINT("\nall done");
-          } 
-        xSemaphoreGive(networkBusy);
+            xSemaphoreGive(networkBusy);              
+          }else{
+            DEBUG_PRINT("\nnetwork DISCONNECTED: networkBusy"); 
+          }
+          restoreWiFiSSID();
         }
       }
-
-
       return refreshed;
     }
 
     void onInternetPing(bool online) {
         internet = online;
-        //DEBUG_PRINT("\n\n\n\t\t\t * * * * PING %s * * * *",internet?"OK":"fail");
+        DEBUG_PRINT("\n\n\n\t\t\t * * * * PING %s * * * *",internet?"OK":"fail");
         if (userInternetCallback !=nullptr) userInternetCallback(&internet);
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
-    virtual void asyncPing(const char* ipAddress, PingCallback callBack) {
+    virtual void asyncPing(String ipAddress, PingCallback callBack) {
       // Allouer la mémoire pour stocker les paramètres de la tâche
       PingTaskParameters* params = new PingTaskParameters;
       params->ipAddress = ipAddress;
@@ -1370,6 +1284,7 @@ class WiFiEth : public Network{
         1,                // Priorité
         &pingTaskHandle   // Handle de la tâche
       );
+      DEBUG_PRINT("\nasyncPing task created");
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
@@ -1410,7 +1325,7 @@ class WiFiEth : public Network{
     }
 
     void checkInternet(){
-      //DEBUG_PRINT("\n\n\n\t\t\tcheckInternet => ");
+      DEBUG_PRINT("\n\n\tcheckInternet => ");
       // Utiliser des lambdas pour passer les méthodes membres comme callbacks
       asyncPing("8.8.8.8", 
         [&](bool online) { onInternetPing(online); }
@@ -1419,7 +1334,7 @@ class WiFiEth : public Network{
       //if (LAN) 
       //LANlatency = 20;
       //else 
-        WANlatency = 150;
+      WANlatency = 150;
 
     }
 
@@ -1532,12 +1447,16 @@ class  NoNetwork: public Network{
       return false;
     }
 
-    virtual void setLink(EthernetLinkStatus linkStatus){}
-    virtual EthernetLinkStatus getLink(){return LinkOFF;}      // access point has no physicalLink
-    virtual void stop(){}    
+    virtual void setLink(EthernetLinkStatus linkStatus){}    
+    virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){}
+    virtual void clientSocketSend(const char *message){}
+    virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){}
+    virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
+    virtual EthernetLinkStatus getLink(){return LinkOFF;}
     virtual String getConnectedDeviceIP(){return "";}
+    virtual void asyncPing(String ipAddress, PingCallback callback){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
-    virtual void asyncPing(const char* ipAddress, PingCallback callback){};
+
 };
 
 /* debug wifi AP:
@@ -1557,7 +1476,7 @@ class AccessPoint : public Network{
       id = "AccessPoint";
       media = WIFI_MEDIA;     
       SSID = *ssid+String(random(99)); // we create a different SSID each time to force the client (laptop) to see it as a new network and avoid asking to renew the DHCP lease, which oculd lead to failing getting an IP address.      
-      setWifiPower();
+      //setWifiPower();
       AP = true;
     }
 
@@ -1571,7 +1490,7 @@ class AccessPoint : public Network{
       }
     }
 
-    virtual void asyncPing(const char* ipAddress, PingCallback callback){};
+    virtual void asyncPing(String ipAddress, PingCallback callback){};
     virtual bool asyncConnect(AsyncHttpClient *clientParam){ return false;}
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}
     virtual void clientSocketSend(const char *message){};
@@ -1579,7 +1498,7 @@ class AccessPoint : public Network{
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
 
 
-    void init(){
+    virtual void init(){
       #define VISIBLE 0
       #define MAX_AP_CONNECTION 1
       #define WIFI_CHANNEL 2
@@ -1595,16 +1514,20 @@ class AccessPoint : public Network{
         WiFi.mode(WIFI_AP);
         //if (debug) DEBUG_PRINT("\n WiFi.mode(WIFI_AP)");
       #endif     
-      WiFi.setAutoConnect(false); WiFi.setAutoReconnect(false);
-
       
+      WiFi.mode(WIFI_AP_STA);
+      //WiFi.setTxPower(WIFI_POWER_19_5dBm);  // remets la puissance maximum
+      WiFi.setMinSecurity(WIFI_AUTH_OPEN); // accepte tous les réseaux ouverts et sécurisés
+
+
       WiFi.softAP(SSID,"",WIFI_CHANNEL,VISIBLE,MAX_AP_CONNECTION);         
       //WiFi.softAP(SSID,"");     // doesnt fix the AP stability issue    
-      setWifiPower();      
-      WiFi.setMinSecurity(WIFI_AUTH_WEP);      // https://www.esp32.com/viewtopic.php?t=32109 
-      IP = WiFi.softAPIP();
+      //setWifiPower();      
+
+
+     IP = WiFi.softAPIP();
       WiFi.enableLongRange(true);
-      //if (debug) DEBUG_PRINT("\nAccessPoint.init() softAPIP(%s) => %s",SSID.c_str(),IP.toString().c_str());        
+      DEBUG_PRINT("\nAccessPoint.init (%s) %s",SSID.c_str(),IP.toString().c_str());        
     }
 
     bool refresh(bool force=false) {      
@@ -1646,7 +1569,7 @@ class AccessPoint : public Network{
 
     virtual void stop(){
       // do stuff to stop AP
-      WiFi.setTxPower(WIFI_POWER_MINUS_1dBm); // power => https://github.com/G6EJD/ESP32-8266-Adjust-WiFi-RF-Power-Output/
+      //WiFi.setTxPower(WIFI_POWER_MINUS_1dBm); // power => https://github.com/G6EJD/ESP32-8266-Adjust-WiFi-RF-Power-Output/
     }
 
   private:

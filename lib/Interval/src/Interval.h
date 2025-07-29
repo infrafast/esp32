@@ -14,8 +14,9 @@
 //#include <miniz.h>    ==> works partially. produce gzip file but inflate seems not to be gzip format
 //#include <zlib.h> ==> incompatible with arm
 
-#ifdef DEBUG  
-  #define DEBUG_PRINT(...)   Serial.printf(__VA_ARGS__); Serial.flush() //ets_printf(__VA_ARGS__) //
+#ifdef DEBUG  //ets_printf(__VA_ARGS__) //
+  SemaphoreHandle_t serialMutex;
+  #define DEBUG_PRINT(...)   if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(500))) { Serial.printf(__VA_ARGS__); Serial.flush(); xSemaphoreGive(serialMutex);} else (void)0
 #else
   #define DEBUG_PRINT(...) 
 #endif
@@ -75,11 +76,10 @@ class GenericComponent{
     virtual bool refresh(bool force=false) = 0;  
     
     virtual void init(){
-      //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
+      //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str()); 
     }
 
 };
-
 
 class EventDispatcher {
 
@@ -90,7 +90,7 @@ class EventDispatcher {
         void* data;
       };
 
-      using eventCallback = std::function<void(Event*)>;
+      using EventCallback = std::function<void(Event*)>;
 
       enum EventType {
         EVENT_ANALOG_BUTTON,     
@@ -103,19 +103,16 @@ class EventDispatcher {
 
 
 
-    void registerCallback(eventCallback cb) {
-      callbacks.push_back(cb);
+    void registerCallback(EventCallback cb) {
+      eventCallBack = cb;
     }
 
     void fireEvent(Event* event) {
-      for (auto& callback : callbacks) {
-          callback(event);
-      }
+      if (eventCallBack != nullptr) eventCallBack(event);
     }
 
   protected:
-    std::function<void(Event*)> callback;
-    std::vector<eventCallback> callbacks;
+    EventCallback eventCallBack = nullptr;
 
 };
 
@@ -254,7 +251,7 @@ size_t bufferToGz(String* buf, ByteBuffer* dest){
   // deflate!
   size_t outputSize = LZPacker::compress( (uint8_t*)data, len, dest );
   //size_t fileSize = fout.position();
-  //Serial.printf("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
+  DEBUG_PRINT("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
   return outputSize;
 }
 
@@ -574,6 +571,108 @@ class JsonList{
     String noToken = "";    
 };
 
+///////////////////// JSON SERIALIZATION AND UTILITIES ////////////////////////
+
+class JsonListFile : public JsonList{
+  public:
+      String filename="voidconf.conf";
+
+      JsonListFile():JsonList(){};
+
+      bool load(String f,String defaultValues=""){
+
+        // We first clean up existing values
+        /*while (keyValues.size()>0){
+
+          KeyValue* kv = keyValues.shift();
+
+          delete(kv);
+        }*/
+        bool success = false;
+
+        if (defaultValues != "") deserialize(defaultValues);
+
+        filename = f;
+        // we try to allocate maximum memory and keep 20K free for security
+        //DynamicJsonDocument doc(getMaxAlloc());
+        JsonDocument doc;
+
+        if (!LittleFS.exists(filename)){
+
+        }else{
+          File file = LittleFS.open(filename);
+          DeserializationError error = deserializeJson(doc, file);      
+          if (!error){
+            jsonToKeyValues(&doc);
+            success = true;
+          }else{
+
+          }
+          doc.shrinkToFit();   
+
+        }
+        return success;      
+      }
+
+      bool save(String f=""){
+        bool success = true;
+        if (f !="") filename = f;
+        String s;
+        serialize(&s);
+
+        File file = LittleFS.open(filename, FILE_WRITE);
+        if(!file){
+
+            success = false;
+        }
+        if(!file.print(s)){
+
+            success = false;
+        }else{
+
+        }
+        file.close();  
+        return success;
+      }
+};
+
+class Config : public JsonListFile{
+  public:
+    Config():JsonListFile(){}  
+
+    const int getInt(String name) {
+      return getString(name,"0")->toInt();
+    };
+    const float getFloat(String name) {
+      return getString(name,"0")->toFloat();
+    };
+    const boolean getBool(String name) {
+      return (*getString(name,"0") != "0");
+    };
+
+};
+
+class I18n : public JsonListFile{
+  public:
+    I18n():JsonListFile(){}
+
+    virtual const String* getString(const String name, const String defaultValue="") {
+      int8_t index;
+      index = getIndex(String(name));
+      if (index < 0) {
+
+        addValue(name,name);  // if it doesnt exist we create it in the list
+        return getString(name);
+      } else {
+        
+        KeyValue* kv = keyValues.get(index);  
+
+        return &kv->value;
+      }
+    };
+};
+
+
 
 
 unsigned long onOffPushedStartTime = 0;
@@ -601,11 +700,11 @@ GUIManager gui(false);
 OpenFontRender* Label::ofr = &gui.labelOfr;
 OpenFontRender* Icon::ofr = &gui.iconOfr;
 
+#include "DataManagement.h"
 
 #include "APPManager.h"
 
 ApplicationManager app(&hwm,&gui);
-DataRepository* StripSkeleton::dataRepo = &app.dataRepository;
 
 
 void goDeepSleep(){
@@ -702,6 +801,28 @@ void commonFileServerWrapper(Request &req, Response &res) {
   app.commonFileServer(req,res);
 }
 
+void commonFileServerWrapperPost(Request &req, Response &res) {
+  app.httpPost(req,res);
+}
+
+
+// Tâche pour gérer un client dans son propre thread
+/*void handleWebEthClientTask(void* parameter) {
+  DEBUG_PRINT("\nhandleWebEthClientTask()");
+  EthernetClient* client = (EthernetClient*)parameter;
+
+  if (client && client->connected()) {
+    app.webServer->process(client);  // Thread-safe car chaque client est isolé
+  }
+
+  client->stop();
+  delete client; // important : éviter les fuites mémoire
+  app.activeClients--;
+  vTaskDelete(NULL); // terminer la tâche
+}*/
+
+
+
 /*
 void gzFileServer(Request &req, Response &res) {
     const char * path = req.path();
@@ -730,12 +851,134 @@ void scanNetworksTaskWrapper(void * parameter){
   vTaskDelete(NULL);
 }
 
-void webServerTaskWrapper(void * parameter){
+// Tâche de ping non bloquante
+void pingTask(void* parameter) {
+  // Récupérer les paramètres passés à la tâche
+  PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
+  DEBUG_PRINT("\npingTaskthread running=>%s",params->ipAddress);
+
+  if (Ping.ping(params->ipAddress.c_str())) {
+    params->callback(true);  // Appel du callback en cas de succès
+  } else {
+    params->callback(false);  // Appel du callback en cas d'échec
+  }
+
+  // Libérer la mémoire allouée pour les paramètres
+  delete params;
+
+  // Suspendre la tâche après chaque ping (exécution ponctuelle)
+  vTaskDelete(NULL);
+}
+
+// Prototype pour la tâche de connexion
+void connectHTTPTask(void *parameter) {
+
+  if (xSemaphoreTake(hwm.network->networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){ 
+
+    AsyncHttpClient *clientObj = static_cast<AsyncHttpClient *>(parameter);
+    DEBUG_PRINT("\nconnectHTTPTask(%s,%s,%i,<%s>)",clientObj->host.toString().c_str(),clientObj->URL.c_str(),clientObj->port,clientObj->post.c_str());
+     
+    Client* client = clientObj->client;  
+
+    if (clientObj->method == HTTP_METHOD_GET) clientObj->post = ""; 
+
+    //String result="{\""+String(API_ORIGIN)+"\":\""+clientObj->URL+"\",";
+
+    JsonDocument doc;        
+    doc[API_ORIGIN] = clientObj->URL;
+
+    if (client != NULL){
+      HttpClient httpClient(*client);      
+      //int httpResponseCode = httpClient->get(serverIP.toString().c_str(),url.c_str());
+      httpClient.beginRequest();
+      httpClient.setHttpResponseTimeout(clientObj->timeOut);
+      int httpResponseCode = httpClient.startRequest(clientObj->host.toString().c_str(),clientObj->port,clientObj->URL.c_str(),clientObj->method.c_str(),"ESP32HttpClient/1.0");     
+
+      if (httpResponseCode == 0) {
+        //DEBUG_PRINT("\nRequête %s lancée",method.c_str());
+
+        if (clientObj->method == HTTP_METHOD_POST ){
+          // Ajouter un en-tête Content-Type pour indiquer JSON
+          httpClient.sendHeader("Content-Type", "application/json");
+          httpClient.sendHeader("Content-Length", String(clientObj->post.length()).c_str());
+          //DEBUG_PRINT("\nPOST write: %s",post.c_str());
+          // Envoyer le corps de la requête
+          httpClient.write((const uint8_t*)clientObj->post.c_str(), clientObj->post.length());               
+        }
+
+        // Terminer la requête
+        httpClient.endRequest();
+
+        int httpStatusCode = httpClient.responseStatusCode();
+        DEBUG_PRINT("\nStatut HTTP : %d\n", httpStatusCode);
+
+        if (httpStatusCode == 200) {
+          httpClient.skipResponseHeaders();    // we want to read the body only
+
+          readHttpBuffer.flush();
+          while (httpClient.available()) { // Tant qu'il y a des données disponibles
+            readHttpBuffer.write(httpClient.read());    // Lire un caractère
+            yield();
+          }
+
+          JsonDocument payload;
+          //deserializeJson(payload,httpClient);
+          deserializeJson(payload,readHttpBuffer.buffer);
+          doc[API_STATUS] = API_OK;
+          doc[API_BODY] = payload;
+
+          //DEBUG_PRINT("\nRéponse %s reçue : %s",clientObj->method.c_str(),payload.c_str());
+        } else {           
+          doc[API_STATUS] = API_ERROR;
+          doc[API_BODY] = String(httpStatusCode);
+        }
+      } else {
+        doc[API_BODY] = String(httpResponseCode);
+        doc[API_STATUS] = API_ERROR;
+
+      }
+      httpClient.stop();    
+    }else{
+        doc[API_BODY] = "\"Null client\"";
+        doc[API_STATUS] = API_ERROR;
+    }
+
+    //result += "\"status\":"+String(status)+",\"data\":"+String(payload)+"}";
+    //result ="{\"origin\":\"/app/state\",\"status\":1,\"data\":{\"progress\": 0,\"state\": \"connected\"}}";
+
+    //DEBUG_PRINT("\nsend => %s",result.c_str());
+
+
+    // envoie la reponse
+    serializeJson(doc,httpTaskResult);
+    //clientObj->callback("{\"origin\":\"/app/state\",\"status\":1,\"data\":{\"progress\": 0,\"state\": \"connected\"}}");
+    clientObj->callback(httpTaskResult.c_str());
+    //DEBUG_PRINT("\nRESULT=>%s",result.c_str());
+    // Fin de la tentative de connexion, réinitialiser l'indicateur
+    //doc.clear();
+    // Tâche terminée, suppression    
+    //DEBUG_PRINT("\nWaiting semaphore release in connectTask");
+
+    doc.clear();
+
+    clientObj->isClientConnecting = false;
+
+    xSemaphoreGive(hwm.network->networkBusy);
+
+  }else{
+    DEBUG_PRINT("\nconnectHTTPTask: networkbusy");
+  }
+  vTaskDelay(1);
+  vTaskDelete(NULL);
+}
+
+
+/*void webServerTaskWrapper(void * parameter){
   while(true){
     vTaskDelay(1);
     app.handleWeb(parameter);
   }
-}
+}*/
 
 // Fonction de gestion de la connexion client
 /*void handleWebConnection(void *parameter) {
@@ -764,18 +1007,6 @@ void OnWiFiEvent(WiFiEvent_t event){
     hwm.network->wiFiTimeout = 10000; // we let 10s to get the IP and setup the wifi link
   }
 }
-
-/*
-String minSec,testString="jtestSTRING-123g",connectionState="",vBat="",milli3,milli4;
-String longText="The Game of Life, also known simply as Life, is a cellular automaton devised by the British mathematician John Horton Connway in 1970.";
-int16_t midVertical = 120, tenPixels = 35, topScreen = 10, leftScreen = 10, bottomScreen = 220, x1=40, x2=100, x3=130, x4=200;
-int16_t m2 = tenPixels + 32;
-int16_t m3 = tenPixels + 64;
-bool onOff = true;
-
-int16_t xa = 20, xb=90, xc=220;
-float negative = -5.5, positive = 5; 
-String db="dB",ms="ms";*/
 
 //////////////////////////////////////////////////////////////
 ////                MENU ACTION ITEM CALLBACKS         ///////
@@ -832,9 +1063,6 @@ void handleConfigConnection(){
     if (app.startWebApp()){
       screen.id = SCREEN_UTILS;
       screen.state = STATE_UTILS_CONNECTWEBAPP;    
-      /*app.setWidgetText(MENU_ICON_MIDDLE].widget->setFcolor(&GUI::green);
-      app.menuTopText = *app.lang.getString("Open browser http://")+hwm.network->mainIP.toString();
-      app.setWidgetText(CONFIG_TEXTAREA_MESSAGE].widget->setText(&app.menuTopText);*/
     }else{
       // There is no valid connection, so we launch AP mode    
       screen.id = SCREEN_UTILS;
@@ -842,8 +1070,6 @@ void handleConfigConnection(){
       hwm.startAP(app.system.getString(S_AP_NAME));
       app.setAPandNetIcons();
       //https://deepbluembedded.com/esp32-wifi-library-examples-tutorial-arduino/#esp32-wifi-modes
-      /*app.setWidgetText(MENU_ICON_MIDDLE].widget->setFcolor(&GUI::red);
-      app.setWidgetText(CONFIG_TEXTAREA_MESSAGE].widget->setText(app.lang.getString("Error"));*/
     }  
   }
 }
@@ -901,11 +1127,11 @@ void voidOverlay(uint8_t id){
 }
 
 
-void baseOverLayBuilder(uint8_t id){
+void baseOverLayBuilder(uint8_t id){  
   /*GUI::tft->fillRect(0,app.overlayIconY,TFT_WIDTH,OVERLAY_ICON_SIZE,GUI::overlayIconBackgroundColor);
   GUI::tft->drawFastHLine(0,app.overlayIconY-1,TFT_WIDTH,TFT_SILVER);*/
   gui.add(new Icon(&app.networkIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.networkIconColorIdle,&GUI::defaultBcolor));             
-  gui.add(new AnimatedIcon(app.iconRolling,TWOFRAMEICON,Align::Center,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,ANIMATE_REPEAT,250,&GUI::blue,&GUI::defaultBcolor));              
+  //gui.add(new AnimatedIcon(app.iconRolling,TWOFRAMEICON,Align::Center,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,ANIMATE_REPEAT,250,&GUI::blue,&GUI::defaultBcolor));              
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor));                  
   gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor));          
   //gui.add (new PendingBar(&app.pendingBarWidth /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &GUI::zero /*y*/, TFT_WIDTH /*w*/, 1 /*h*/, /*pingpong*/ false, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/, 30, 4));                    
@@ -990,23 +1216,23 @@ void bankScreenBuilder(uint8_t subScreen){
       // check if the strip is online
       switch (stripState->code){
         case STRIP_DISCONNECTED:
-          DEBUG_PRINT("\nStrip %s is disconnected",strip->type.c_str());
+          //DEBUG_PRINT("\nStrip %s is disconnected",strip->type.c_str());
           modalScreen(&hwm.network->SSID,app.lang.getString("Attempt"),app.lang.getString("offline"),&app.networkIcon);
           //gui.add (new ProgressBarH(&hwm.network->wiFiConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
           //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                    
         break;
         case STRIP_PENDING:
-          DEBUG_PRINT("\nStrip %s is searching",strip->type.c_str());          
+          //DEBUG_PRINT("\nStrip %s is searching",strip->type.c_str());          
           modalScreen(stripState->stateLabel,stripState->subStateLabel,app.lang.getString("please wait"),&iconInterfaceConnect);  
           //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                              
         break;
         case STRIP_CONNECTING:
-          DEBUG_PRINT("\nStrip %s is syncing",strip->type.c_str());          
+          //DEBUG_PRINT("\nStrip %s is syncing",strip->type.c_str());          
           modalScreen(stripState->stateLabel,stripState->subStateLabel,app.lang.getString("please wait"),&iconInterfaceConnect);  
           //gui.add (new ProgressBarH(&stripState->progress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
         break;
         case STRIP_ONLINE:
-          DEBUG_PRINT("\nStrip %s is online",strip->type.c_str());
+          //DEBUG_PRINT("\nStrip %s is online",strip->type.c_str());
           //DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),strip->win, bank->selector,layout);
           if (layout == LAYOUT_ZOOM){
             strip->pushToGUI(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
@@ -1020,7 +1246,7 @@ void bankScreenBuilder(uint8_t subScreen){
           } 
         break;    
         default:
-          DEBUG_PRINT("\nStrip %s status code unmanaged(%i)",strip->type.c_str(),stripState->code);
+          //DEBUG_PRINT("\nStrip %s status code unmanaged(%i)",strip->type.c_str(),stripState->code);
         break;
       }
       
@@ -1039,7 +1265,7 @@ void bankScreenBuilder(uint8_t subScreen){
       gui.add(new TextArea(app.lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   }
   
-  DEBUG_PRINT("\n--------------bankScreenBuilder exit-----------------");
+  //DEBUG_PRINT("\n--------------bankScreenBuilder exit-----------------");
 }
 
 void addTopandBottomMenuLabel(){
@@ -1063,9 +1289,11 @@ void setMenuColors(){
 }
 
 void menuScreenBuilder(uint8_t subScreen){
+  //DEBUG_PRINT("\nIN-----------------nmenuScreenBuilder()--------------");    
   setMenuColors();
   addMenuWidgets();
   //LogUDP::sendLog("menuScreenBuilder",hwm.network->udp);
+  //DEBUG_PRINT("\nOUT-----------------nmenuScreenBuilder()--------------");    
 }
 
 void bankSwitchScreenBuilder(uint8_t id){
@@ -1211,14 +1439,13 @@ void utilsScreenBuilder(uint8_t state){
       addLeftRightIcons();  
       app.iconPending[0] = ICON_TIMER;
       app.iconPending[1] = " ";
-      gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
-
+      //gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
       gui.add(new TextArea(app.lang.getString("Open browser"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      gui.add(new Label(&hwm.configIP, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));      
+      gui.add(new Label(&hwm.configURL, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
-      //DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP: %s",app.menuTopText.c_str());
+      DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP");          
     break;
     case STATE_UTILS_WEBAPPCONNECTED:         
       addLeftRightIcons();
@@ -1258,37 +1485,32 @@ void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, con
 }
 
 void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *reason, uint16_t length) {
-  //DEBUG_PRINT("\n\t!!! socketCloseCallback=>code:%i length:%i\n",code,length);
+  DEBUG_PRINT("\n\t!!! socketCloseCallback=>code:%i length:%i\n",code,length);
   app.webAppConnected = false;
   hwm.configMedia->refreshed = true;    // this is to trigger app manager to refresh the screen showing how to connect.
 }
 
 
 void socketConnectionCallback(IWebSocket &ws) {
-
+  DEBUG_PRINT("\nwebAppConnected = true!");
   app.webAppConnected = true;
 
   const auto protocol = ws.getProtocol();
   if (protocol) {
-    //DEBUG_PRINT("\nProtocol: %i",protocol);
+    DEBUG_PRINT("\nProtocol: %i",protocol);
   }
 
   ws.onMessage(socketMessageCallback);
   ws.onClose(socketCloseCallback);
 
   app.configClientIP = ws.getRemoteIP().toString();
-  //DEBUG_PRINT("\nNew websocket client IP: %s",app.configClientIP.c_str());
+  DEBUG_PRINT("\nNew websocket client IP: %s",app.configClientIP.c_str());
 
   // any message to be send straigth after connexion was established would be put here.
-  //app.broadCast(app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivityConfig\"}"));  // inform webclient               could be done via ws.send as well  
+  // app.broadCast(app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well  
   // it should only be short message as the socketbuffer out is quite small, hence the fullCOnfig is requested by Post instead
-
   /*String fullConfig = app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"fullConfig\"}"); 
   ws.send(WebSocketDataType::TEXT, fullConfig.c_str(), fullConfig.length());*/
-
-  String connectivityConfig = app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivityConfig\"}");
-  ws.send(WebSocketDataType::TEXT, connectivityConfig.c_str(), connectivityConfig.length());
-
 }
 
 //////////////////////////////////////////////////////////////
@@ -1296,7 +1518,15 @@ void socketConnectionCallback(IWebSocket &ws) {
 //////////////////////////////////////////////////////////////
 Strip* textStripConstructorCallback(){
   //DEBUG_PRINT("\n\ttextStripConstructorCallback()"/*,values.c_str()*/);
-  return new TextStrip(stripTextSkel,&gui);
+  return new TextStrip(stripTextSkel);
+}
+
+Strip* midiStripConstructorCallback(){
+  return new MidiStrip(stripMidiSkel);
+}
+
+Strip* sysexStripConstructorCallback(){
+  return new SysexStrip(stripSysexSkel);
 }
 
 #endif

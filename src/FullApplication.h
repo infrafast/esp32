@@ -1,4 +1,7 @@
 // the stripHeader class which is added in interval buildModuleScreen crashes probably because of lack of proper initialisation of its internal strip*
+// I deactivated all creation of pending bar (ex. in overlay and in interval build module screen) as it seems to generate crash null pointer
+// I deactivated refresh of USB and mixerServer in loop to stablize multitask and debug semphore 
+// be careful with the disconnect fonction of MixingStation which (line 1282) is supposed to wait the http client to finish its task before closing connection and its destructor being called
 
 // debugging https://docs.platformio.org/en/stable/tutorials/espressif32/arduino_debugging_unit_testing.html
 
@@ -339,8 +342,14 @@ class Ch2BusStrip : public SendStrip{
       //const MIDIAddress noteAddress {MIDI_Notes::C[4], Channel_1};
       // Send Note On for current position at full velocity (127) on channel 1.
       //MIDI_NOTE_ON(noteAddress, 127);
-      MIDI_USB_NOTE_ON(90, 127);
+
+      //Ch Faders	1	CC	0-15	0-127	Input Channels 1-16
+      // Ch Mutes	2	CC	0-15	0 127	Input Channels 1-16
+      //void controlChange(uint8_t controller, uint8_t value, uint8_t channel = (uint8_t)0U)
+      MIDI_USB_CC(1,1,60);
+      MIDI_USB_NOTE_ON(90, 127);      
       MIDI_RTP_ETH.sendNoteOn(40, 55, 1);
+      MIDI_RTP_ETH.sendControlChange(1,60,1);
 
       //hwm.network->RTPmidi.sendNoteOn(60, 100, 1);  // C4
       delay(200);
@@ -619,8 +628,8 @@ class LocalDataProvider: public DataProvider{ // temp while shortcut factory is 
 } localProvider; // temp while shortcut factory is not implemented;
 
 
-///////////////////////////////////////////////////////////////////
-/////////////////////                         /////////////////////
+//////////////////////////////////////////////////////////////////
+/////////////////////                         ////////////////////
 /////////////////////    DATA DEFINITIONS    /////////////////////
 /////////////////////                         ////////////////////
 //////////////////////////////////////////////////////////////////
@@ -633,9 +642,9 @@ DynamicDataSet ipDS = DynamicDataSet(ADDRESS_IP,INPUTTEXT,&localProvider);
 DynamicDataSet portDS = DynamicDataSet(ADDRESS_PORT,INPUTTEXT,&localProvider); 
 DynamicDataSet msgDS = DynamicDataSet(ADDRESS_MESSAGE,INPUTTEXT,&localProvider); 
 
-/////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////                                               /////////////////////
-/////////////////////    STRIP CONSTRUCTOR CALLBACKS DEFINITIONS    /////////////////////
+////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////                                               ////////////////////
+/////////////////////    STRIP CONSTRUCTOR CALLBACKS DEFINITIONS    ////////////////////
 /////////////////////                                               ////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -655,9 +664,9 @@ Strip* gain2chStripConstructorCallback(){
   return new ChGainStrip(stripChGainSkel,&gui,&mixerServer);
 }
 
-///////////////////////////////////////////////////////////////////
-/////////////////////                         /////////////////////
-/////////////////////    UTILITIES            /////////////////////
+//////////////////////////////////////////////////////////////////
+/////////////////////                         ////////////////////
+/////////////////////    UTILITIES            ////////////////////
 /////////////////////                         ////////////////////
 //////////////////////////////////////////////////////////////////
 String mixerDemoJsonString(){
@@ -675,7 +684,7 @@ String mixerDemoJsonString(){
 void QueryingDemoMixer(bool internet){
   demoIP = "";
   if (internet){
-    //DEBUG_PRINT("\nQuerying demo mixer");    
+    DEBUG_PRINT("\nQuerying demo mixer");    
     IPAddress demoServer(82,65,4,93);
     OSCInterface osc("pingDemoMixer",NO_CAPTURE);
     osc.setClient(demoServer,10023);
@@ -685,9 +694,9 @@ void QueryingDemoMixer(bool internet){
 
     if(osc.blockingPing(demoServer,10023,BEHRINGER_QUERY,input, hwm.network->WANlatency)){
         demoIP = "82.65.4.93";                // should be retrieved by an http request
-        //DEBUG_PRINT("\tDemo Mixer responded");    
+        DEBUG_PRINT("\tDemo Mixer responded");    
     }else{
-      //DEBUG_PRINT("\tDemo Mixer didn't respond");    
+      DEBUG_PRINT("\tDemo Mixer didn't respond");    
     }
     doc.shrinkToFit();
   }
@@ -720,7 +729,6 @@ String getMixersState(){
 
 
 /////////////////////    USER.HTML CALLBACKS       /////////////////////
-#define USER_CONFIG_REQ "userConfig"
 #define RET_RELOAD_BANKS "reloadBanks"
 bool userHTMLJsonInput(JsonObject& jsonDoc,JsonAnswer* jsonAnswer){
   bool success = false;
@@ -789,20 +797,20 @@ String userPongCallback(){
 
 /////////////////////    NETWORK       /////////////////////
 void netChangeState(bool state){
-  //DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);  
+  DEBUG_PRINT("\nusertNetworkChangeStateCallback(%i)",state);  
   // in case we were offline but footswitch connects a network, we give the possibility to connect again or offer user to confirm he wants to stay offline
   if (mixerServer.offline == true && hwm.network->state == CONNECTED) mixerServer.offline = false;  
 }
 
 void internetChangeState(bool internet){
-  //DEBUG_PRINT("\n\n\n\t\t\t * * * * USER INTERNET CALLBACK %s * * * *",internet?"OK":"fail"); 
+  DEBUG_PRINT("\n\n\n\t\t\t * * * * USER INTERNET CALLBACK %s * * * *",internet?"OK":"fail"); 
   // check updates
 
   // check remote instruction
 
   // check mixer demo online
-  QueryingDemoMixer(internet);
-  // check demoMixer
+  // QueryingDemoMixer(internet);    // <--------------------------- CRASH WHEN NO MIXER IS CONNECTED
+  
 }
 
 /////////////////////    EVENT HANDLING       /////////////////////
@@ -972,7 +980,7 @@ Serial.println(velocity);
 ///////////////////////////////////////////////////////////////////
 /////////////////////                         /////////////////////
 /////////////////////                         /////////////////////
-                          void setup_FullApp()
+                          void _setup()
 /////////////////////                         ////////////////////
 /////////////////////                         /////////////////////
 //////////////////////////////////////////////////////////////////
@@ -989,16 +997,16 @@ Serial.println(velocity);
   stripOSCSkel->registerDataSetAddress(ADDRESS_PORT);
   stripOSCSkel->registerDataSetAddress(ADDRESS_MESSAGE);
 
-  app.stripFactory.add(stripTextSkel);
-  app.stripFactory.add(stripSendSkel);
-  app.stripFactory.add(stripChGainSkel);
-  app.stripFactory.add(stripOSCSkel);
+  /*stripFactory.add(stripTextSkel);
+  stripFactory.add(stripSendSkel);
+  stripFactory.add(stripChGainSkel);
+  stripFactory.add(stripOSCSkel);*/
 
-  app.dataRepository.addDataSet(&macroNames);   
+  /*app.dataRepository.addDataSet(&macroNames);   
   app.dataRepository.addDataSet(&actionPlay);  
   app.dataRepository.addDataSet(&ipDS);  
   app.dataRepository.addDataSet(&portDS);  
-  app.dataRepository.addDataSet(&msgDS);  
+  app.dataRepository.addDataSet(&msgDS);  */
 
   app.registerCallback(eventHandling);
 
@@ -1024,9 +1032,6 @@ Serial.println(velocity);
     ftp.begin();
   #endif
   
-  String configIP = *app.userConfig.getString(SERVER_IP_KEY); 
-  //DEBUG_PRINT("\n * * SERVER_IP_KEY = %s",configIP.c_str());
-
   size_t dataSize = 0;
   //myOfr.setDebugLevel( OFR_INFO | OFR_ERROR);
   dataSize = readGzFileToBuffer("/webapp/user.ttf.gz",&userFontBuffer);
@@ -1126,7 +1131,7 @@ void processMixerState(){
 ///////////////////////////////////////////////////////////////////
 /////////////////////                         /////////////////////
 /////////////////////                         /////////////////////
-                          void loop_FullApp()
+                          void _loop()
 /////////////////////                         ////////////////////
 /////////////////////                         /////////////////////
 //////////////////////////////////////////////////////////////////
@@ -1134,7 +1139,7 @@ void processMixerState(){
   app.refresh();
   
   if (screen.id == SCREEN_BANK || screen.id == SCREEN_WIZARD){  
-    //mixerServer.refresh();           
+    mixerServer.refresh();           
   }
 
   if (hwm.network->state == CONNECTED) MIDI_RTP_ETH.read();

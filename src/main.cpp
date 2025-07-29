@@ -1,11 +1,10 @@
 #include <Arduino.h>
-
-#include "FullApplication.h"
+#include "TestApplication.h"
 
 void setup(){
-  setup_FullApp();
+  _setup();
 }
 
 void loop(){
-  loop_FullApp();
+  _loop();
 }
