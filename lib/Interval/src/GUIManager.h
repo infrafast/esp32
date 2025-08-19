@@ -224,8 +224,22 @@ class GUIManager : public GenericComponent {
           TFT_eSprite* sprite = widget->sprite;
           if (sprite != nullptr){
             // when using transparency, widget sprite are pushed to the screen buffer instead of the screen directly
-            if (transparency) sprite->pushToSprite(&screenBuffer,widget->getX(),widget->getY(),TFT_BGCOLOR);
-            else sprite->pushSprite(widget->getX(),widget->getY(),TFT_TRANSPARENT);              
+            
+            if (widget->angle == 0){
+              // no rotation, push the sprite at widget requested x and y location
+              if (transparency) sprite->pushToSprite(&screenBuffer,widget->getX(),widget->getY(),TFT_BGCOLOR);
+              else sprite->pushSprite(widget->getX(),widget->getY(),TFT_TRANSPARENT);              
+            }else{
+              sprite->setPivot(0,0);              
+              if (transparency){
+                // this code was not tested and need to be reviewed
+                screenBuffer.setPivot(widget->getX(),widget->getY());
+                sprite->pushRotated(&screenBuffer,widget->angle,TFT_BGCOLOR);
+              }else{
+                GUI::tft->setPivot(widget->getX(),widget->getY());
+                sprite->pushRotated(widget->angle,TFT_TRANSPARENT);
+              }
+            }
             delete sprite;        
             widget->sprite = nullptr;            
           }

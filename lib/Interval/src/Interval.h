@@ -11,12 +11,15 @@
 #define DEST_FS_USES_LITTLEFS // filesystem object will be available as "tarGzFS"
 #include <ESP32-targz.h>
 
+#define INTERVAL_PRODUCT_NAME "interval"
+
 //#include <miniz.h>    ==> works partially. produce gzip file but inflate seems not to be gzip format
 //#include <zlib.h> ==> incompatible with arm
 
 #ifdef DEBUG  //ets_printf(__VA_ARGS__) //
   SemaphoreHandle_t serialMutex;
   #define DEBUG_PRINT(...)   if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(500))) { Serial.printf(__VA_ARGS__); Serial.flush(); xSemaphoreGive(serialMutex);} else (void)0
+  //#define SerialMon Serial    //used by Midi
 #else
   #define DEBUG_PRINT(...) 
 #endif
@@ -115,7 +118,6 @@ class EventDispatcher {
     EventCallback eventCallBack = nullptr;
 
 };
-
 
 ///////////////////// API MANAGEMENT //////////////////////
 
@@ -652,6 +654,23 @@ class Config : public JsonListFile{
 
 };
 
+Config bankCfg = Config();
+Config systemCfg = Config();
+Config userCfg = Config();
+
+///////////////////// SYSTEM PARAMETERS ////////////////////////
+#define S_PUSHDELAY         "pushDelay"
+#define S_DCLICREACTIVITY   "dClicReactivity"
+#define S_FADERSPEED        "faderSpeed"
+#define S_AP_NAME           "apName"
+#define S_LANG              "lang"
+#define S_CONFIG_FILE       "profile"
+#define S_SSID              "ssid"
+#define S_LAST_USED_SSID    "lastSSID"
+#define S_BUTTON_ASSIGN     "buttonsAssignements"
+#define S_SHORTCUTS         "shortcuts"
+
+
 class I18n : public JsonListFile{
   public:
     I18n():JsonListFile(){}
@@ -673,7 +692,8 @@ class I18n : public JsonListFile{
 };
 
 
-
+I18n lang = I18n();
+I18n userLang = I18n();
 
 unsigned long onOffPushedStartTime = 0;
 
@@ -694,6 +714,50 @@ void xTaskBackground(void *pvParameters);
 #include "HWManager.h"
 HardwareManager hwm;
 
+
+/*enum{
+  IDLE = CONNECTED+1,
+  CONNECTING,
+  SYNCING_SOFTWARE,
+  DEVICE_UNREACHABLE,
+  SOFTWARE_UNREACHABLE,
+  SEARCHING,
+  CONNECTFAILED,
+  SYNCING_DATA,
+  OFFLINE,
+  EOF_STATE
+};
+
+String stateNames[EOF_STATE]={
+  "disconnected",
+  "connected",
+  "idle",
+  "connecting",
+  "syncing software",
+  "device unreachable",
+  "software unreachable",
+  "searching",
+  "connect failed",
+  "syncing data",
+  "offline"
+};*/
+
+enum{
+  IF_STATE_NOT_READY,
+  IF_STATE_READY
+};
+
+struct State{ // used by Strip and Interface
+  uint8_t code = IF_STATE_READY;
+  String label = "stateLabel";
+  String subLabel = "subStateLabel";
+  String userInstructions = "userInstructions";
+  bool offline = false;
+  float progress = 0;
+  bool stateChanged = false;
+};
+
+
 #include "GUIManager.h"
 TFT_eSPI* GUI::tft = &hwm.tft;
 GUIManager gui(false);
@@ -705,6 +769,8 @@ OpenFontRender* Icon::ofr = &gui.iconOfr;
 #include "APPManager.h"
 
 ApplicationManager app(&hwm,&gui);
+
+
 
 
 void goDeepSleep(){
@@ -1067,7 +1133,7 @@ void handleConfigConnection(){
       // There is no valid connection, so we launch AP mode    
       screen.id = SCREEN_UTILS;
       screen.state = STATE_UTILS_CONNECTCONFIGMEDIA;
-      hwm.startAP(app.system.getString(S_AP_NAME));
+      hwm.startAP(systemCfg.getString(S_AP_NAME));
       app.setAPandNetIcons();
       //https://deepbluembedded.com/esp32-wifi-library-examples-tutorial-arduino/#esp32-wifi-modes
     }  
@@ -1083,16 +1149,16 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
   String langName = app.getNameFromString(menuString);
   // load should return a boolean which indicate if the lanugage file has been loaded correctly to 
   // process the semantic return and update the menu title accordingly if it was loaded or not
-  if (app.lang.load("/"+langName+".lang")){
-    app.system.setValue(S_LANG,langName);
+  if (lang.load("/"+langName+".lang")){
+    systemCfg.setValue(S_LANG,langName);
     /*app.menuActiveIconColor = TFT_GREEN;
     GUI::glowingGoldColor.value = &GUI::unUsedColor;*/
-    app.system.save();
+    systemCfg.save();
     app.restoreScreen();    // return to the caller
   }else{
     app.menuActiveIconColor = TFT_RED;
     GUI::glowingGoldColor.value = &GUI::unUsedColor;
-    app.menuTopText = *app.lang.getString("File Error");
+    app.menuTopText = *lang.getString("File Error");
   }  
 }
 
@@ -1109,8 +1175,8 @@ void menu_selected(MenuComponent* p_menu_component){
     /*for (int i = 0; i < app.langMenu->get_num_components(); ++i) {
       MenuComponent const* cp_m_comp = app.langMenu->get_menu_component(i);
       String country = String(cp_m_comp->get_name()).substring(2,String(cp_m_comp->get_name()).length());
-      DEBUG_PRINT("\n%s <-> %s",cp_m_comp->get_name(),app.system.getString(S_LANG)->c_str());              
-      if (strcmp(country.c_str(),app.system.getString(S_LANG)->c_str()) == 0) break;
+      DEBUG_PRINT("\n%s <-> %s",cp_m_comp->get_name(),app.systemCfg.getString(S_LANG)->c_str());              
+      if (strcmp(country.c_str(),app.systemCfg.getString(S_LANG)->c_str()) == 0) break;
       DEBUG_PRINT("\t[%s]",app.langMenu->get_current_component()->get_name());              
       app.ms.next(true);
       DEBUG_PRINT("\t[%s]",app.langMenu->get_current_component()->get_name());              
@@ -1150,7 +1216,8 @@ void bankOverlayBuilder(uint8_t BankIndex){
   Interval::Bank* bank = app.banks.get(BankIndex);
   if (bank != nullptr){
     //DEBUG_PRINT("\n\n\n--------------------------------- bankOverlayBuilder %s ---------------------------------\n\n ",bank->name.c_str());
-    BankNavigator* navBar = new BankNavigator(bank,true);   
+    uint8_t layout = bank->currentLayout;
+    BankNavigator* navBar = new BankNavigator(layout,bank,true);   
     gui.add(navBar);
   }else{
     //DEBUG_PRINT("\nbankOverlayBuilder NULL BANK");
@@ -1162,33 +1229,47 @@ void bankOverlayBuilder(uint8_t BankIndex){
 //////////////////////////////////////////////////////////////
 ////                SCREENBUILDERS CALLBACKS           ///////
 //////////////////////////////////////////////////////////////
-#define MODAL_SCREEN_ICON_SIZE (ICON_MAX_SIZE/1.7)
-#define MODAL_SCREEN_SCROLLBAR_HEIGHT 8
-#define MODAL_SCREEN_TEXTAREA_WIDTH (TFT_WIDTH/2)*0.9
 
-int16_t topTextY = GUI::y1+TOP2WIDGET_SIZE;
-int16_t iconY = topTextY + CONFIG_TEXTAREA_MESSAGE_SIZE;
-int16_t iconX = 0;
-int16_t textAreaX = (TFT_WIDTH/2) + (MODAL_SCREEN_TEXTAREA_WIDTH/2);
-int16_t bottomTextY = iconY + MODAL_SCREEN_ICON_SIZE;
-int16_t scrollBarY = TFT_HEIGHT - NAV_HEIGHT*1.2 - MODAL_SCREEN_SCROLLBAR_HEIGHT;
+    #define MENU_ICON_SIZE TFT_WIDTH/3
+    #define MENU_TITLE_SIZE MENU_ICON_SIZE/2
 
-String iconInterfaceConnect = ICON_FOOTSWITCH;
-uint16_t iconInterfaceColor = GUI::red;
+    #define WIDGET_SMALL_WIDTH TFT_WIDTH/8-5
+    #define WIDGET_BIG_WIDTH TFT_WIDTH/5
+    #define ICON_MAX_SIZE TFT_WIDTH/2
 
-void modalScreen(const String* topLabel, const String* midText, const String* bottomLabel, String* icon){
-  gui.add(new Label(topLabel, Align::Center,&app.midScreenHoriz, &topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
+    #define MODAL_SCREEN_ICON_SIZE (ICON_MAX_SIZE/1.7)
+    #define MODAL_SCREEN_SCROLLBAR_HEIGHT 8
+    #define MODAL_SCREEN_TEXTAREA_WIDTH (TFT_WIDTH/2)*0.9
+    #define CONFIG_TEXTAREA_MESSAGE_SIZE MENU_TITLE_SIZE/1.8
 
-  // if we have empty textfield, we don't display it and center the icon
-  iconX = TFT_WIDTH/2;
-  if (*midText != emptyString){
-    iconX -= MODAL_SCREEN_ICON_SIZE;
-    gui.add(new TextArea(midText, MODAL_SCREEN_TEXTAREA_WIDTH,Align::Center,Align::Center,&textAreaX,&iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));     
-  }
+    int16_t topTextY = GUI::y1+TOP2WIDGET_SIZE;
+    int16_t iconY = topTextY + CONFIG_TEXTAREA_MESSAGE_SIZE;
+    int16_t iconX = 0;
+    int16_t textAreaX = (TFT_WIDTH/2) + (MODAL_SCREEN_TEXTAREA_WIDTH/2);
+    int16_t bottomTextY = iconY + MODAL_SCREEN_ICON_SIZE;
+    int16_t scrollBarY = TFT_HEIGHT - NAV_HEIGHT*1.2 - MODAL_SCREEN_SCROLLBAR_HEIGHT;    
 
-  gui.add(new Icon(icon,Align::Center,&iconX, &iconY,MODAL_SCREEN_ICON_SIZE,&iconInterfaceColor,&GUI::defaultBcolor));   
-  gui.add(new Label(bottomLabel, Align::Center,&app.midScreenHoriz, &bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
-}
+    const int16_t tenPixels = 10, midScreenHoriz = TFT_WIDTH/2, midScreenVertical = TFT_HEIGHT/2, bigWidgetMidY = midScreenVertical-WIDGET_BIG_WIDTH/2, iconMidY = midScreenVertical-ICON_MAX_SIZE/2 ;
+    const int16_t iconRow2 = OVERLAY_ICON_SIZE*1.5;
+
+    int16_t hquarter1xPos = TFT_HQUARTER-TFT_HQUARTER/2;
+    int16_t hquarter2xPos = TFT_HQUARTER*2-TFT_HQUARTER/2;
+    int16_t hquarter3xPos = TFT_HQUARTER*3-TFT_HQUARTER/2;
+    int16_t hquarter4xPos = TFT_HQUARTER*4-TFT_HQUARTER/2;
+
+    
+    int16_t vquarter1xPos = TFT_VQUARTER-TFT_VQUARTER/2;
+    int16_t vquarter2xPos = TFT_VQUARTER*2-TFT_VQUARTER/2;
+    int16_t vquarter3xPos = TFT_VQUARTER*3-TFT_VQUARTER/2;
+    int16_t vquarter4xPos = TFT_VQUARTER*4-TFT_VQUARTER/2;
+   
+    int16_t hthird3xPos = TFT_HTHIRD*2+TFT_HQUARTER/2;
+
+    const int16_t menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2, leftMenuIconXpos = midScreenHoriz-MENU_ICON_SIZE*1.4,rightMenuIconXpos = midScreenHoriz+MENU_ICON_SIZE*1.4;
+    const int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE; 
+
+    uint16_t iconInterfaceColor = GUI::red;
+
 
 void bankScreenBuilder(uint8_t subScreen){  
   app.userScreenBuilder(SCREEN_BANK,subScreen);
@@ -1212,65 +1293,55 @@ void bankScreenBuilder(uint8_t subScreen){
     Strip* strip = app.focusedStrip;
 
     if (strip != nullptr){
-      StripState* stripState = &strip->state;
-      // check if the strip is online
-      switch (stripState->code){
-        case STRIP_DISCONNECTED:
-          //DEBUG_PRINT("\nStrip %s is disconnected",strip->type.c_str());
-          modalScreen(&hwm.network->SSID,app.lang.getString("Attempt"),app.lang.getString("offline"),&app.networkIcon);
-          //gui.add (new ProgressBarH(&hwm.network->wiFiConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
-          //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                    
-        break;
-        case STRIP_PENDING:
-          //DEBUG_PRINT("\nStrip %s is searching",strip->type.c_str());          
-          modalScreen(stripState->stateLabel,stripState->subStateLabel,app.lang.getString("please wait"),&iconInterfaceConnect);  
-          //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                              
-        break;
-        case STRIP_CONNECTING:
-          //DEBUG_PRINT("\nStrip %s is syncing",strip->type.c_str());          
-          modalScreen(stripState->stateLabel,stripState->subStateLabel,app.lang.getString("please wait"),&iconInterfaceConnect);  
-          //gui.add (new ProgressBarH(&stripState->progress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
-        break;
-        case STRIP_ONLINE:
-          //DEBUG_PRINT("\nStrip %s is online",strip->type.c_str());
-          //DEBUG_PRINT("%s window: %d, strip: %d, layout: %d",bank->name.c_str(),strip->win, bank->selector,layout);
-          if (layout == LAYOUT_ZOOM){
-            strip->pushToGUI(/*true,*/LAYOUT_ZOOM);    // affiche uniquement un strip qui est celui selectionné avec focus dessus
-          }else{
-            for (const auto& winstrip : bank->strips) {
-              // affiche tous les strips de la fenetre courante
-              if (winstrip->win == strip->win){            
-                winstrip->pushToGUI(/**/);
-              }
-            }
-          } 
-        break;    
-        default:
-          //DEBUG_PRINT("\nStrip %s status code unmanaged(%i)",strip->type.c_str(),stripState->code);
-        break;
-      }
+    
+      if (layout == LAYOUT_ZOOM){
+        //DEBUG_PRINT("\naffiche uniquement un strip qui est celui selectionné avec focus dessus");
+        strip->pushToGUI(LAYOUT_ZOOM);    
+      }else{
+        for (const auto& winstrip : bank->strips) {
+          //DEBUG_PRINT("\naffiche tous les strips de la fenetre courante");
+          if (winstrip->win == strip->win){            
+            winstrip->pushToGUI(LAYOUT_DETAILS);
+          }
+        }
+      } 
       
-      app.stripHeader = new StripHeaderWidget(strip,&app.lang);      
+      app.stripHeader = new StripHeaderWidget(strip);      
       gui.add(app.stripHeader);      
-
+          
       app.focus(strip,bank); // give focus to the strip
       
       
     }else{
       //DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
-      gui.add(new TextArea(app.lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new TextArea(lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
     }
   }else{
       //DEBUG_PRINT("\nNO BANK");
-      gui.add(new TextArea(app.lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new TextArea(lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   }
   
   //DEBUG_PRINT("\n--------------bankScreenBuilder exit-----------------");
 }
 
+void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* bottomLabel, String* icon){
+  //DEBUG_PRINT("\naddFullScreenTextWithIcon(%s, %s, %s, %s)",topLabel->c_str(), midText->c_str(), bottomLabel->c_str(),icon->c_str());
+  gui.add(new Label(topLabel, Align::Center,&midScreenHoriz, &topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
+
+  // if we have empty textfield, we don't display it and center the icon
+  iconX = TFT_WIDTH/2;
+  if (*midText != emptyString){
+    iconX -= MODAL_SCREEN_ICON_SIZE;
+    gui.add(new TextArea(midText, MODAL_SCREEN_TEXTAREA_WIDTH,Align::Center,Align::Center,&textAreaX,&iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));     
+  }
+
+  gui.add(new Icon(icon,Align::Center,&iconX, &iconY,MODAL_SCREEN_ICON_SIZE,&iconInterfaceColor,&GUI::defaultBcolor));   
+  gui.add(new Label(bottomLabel, Align::Center,&midScreenHoriz, &bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
+}    
+
 void addTopandBottomMenuLabel(){
-  gui.add(new TextArea(&app.menuTopText, TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-  gui.add(new Label(&app.menuBottomLabel, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new TextArea(&app.menuTopText, TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(&app.menuBottomLabel, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
 }
 
 void addMenuWidgets(){
@@ -1278,9 +1349,9 @@ void addMenuWidgets(){
 
   addTopandBottomMenuLabel();
 
-  gui.add(new Icon(&app.menuItemIcon[1], Align::Center,&app.midScreenHoriz, &app.menuIconYpos,MENU_ICON_SIZE,&app.menuActiveIconColor,&GUI::defaultBcolor));
-  gui.add(new Icon(&app.menuItemIcon[0], Align::Center,&app.leftMenuIconXpos, &app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuInactiveIconColor,&GUI::defaultBcolor));  
-  gui.add(new Icon(&app.menuItemIcon[2], Align::Center,&app.rightMenuIconXpos, &app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuInactiveIconColor,&GUI::defaultBcolor));    
+  gui.add(new Icon(&app.menuItemIcon[1], Align::Center,&midScreenHoriz, &menuIconYpos,MENU_ICON_SIZE,&app.menuActiveIconColor,&GUI::defaultBcolor));
+  gui.add(new Icon(&app.menuItemIcon[0], Align::Center,&leftMenuIconXpos, &menuIconYpos,MENU_ICON_SIZE,&GUI::menuInactiveIconColor,&GUI::defaultBcolor));  
+  gui.add(new Icon(&app.menuItemIcon[2], Align::Center,&rightMenuIconXpos, &menuIconYpos,MENU_ICON_SIZE,&GUI::menuInactiveIconColor,&GUI::defaultBcolor));    
 }
 
 void setMenuColors(){
@@ -1339,7 +1410,7 @@ void wizardScreenBuilder(uint8_t subScreen){
     break;      
     case STATE_WIZARD_CONNECT_NETWORK_STEP3:
       GUI::cls();
-      gui.add(new Label(app.lang.getString("Waiting network"), Align::Center,&app.midScreenHoriz, &app.midScreenVertical,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));   
+      gui.add(new Label(lang.getString("Waiting network"), Align::Center,&midScreenHoriz, &midScreenVertical,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));   
     break;    
     case STATE_WIZARD_USER_STEP4:
       app.userScreenBuilder(SCREEN_WIZARD, STATE_WIZARD_USER_STEP4);
@@ -1352,8 +1423,8 @@ void byeScreenBuilder(uint8_t subScreen){
   GUI::defaultFcolor = TFT_FCOLOR;
   GUI::cls();
   addTopandBottomMenuLabel();
-  //gui.add(new Icon(&app.byeIcon,Align::Center,&app.midScreenHoriz, &app.bigWidgetMidY,WIDGET_BIG_WIDTH,&app.byeIconColor,&GUI::defaultBcolor));                     
-  gui.add(new Icon(app.byeIcon,Align::Center,&app.midScreenHoriz, &app.iconMidY,ICON_MAX_SIZE,app.byeIconColor,&GUI::defaultBcolor));                     
+  //gui.add(new Icon(&app.byeIcon,Align::Center,&midScreenHoriz, &app.bigWidgetMidY,WIDGET_BIG_WIDTH,&app.byeIconColor,&GUI::defaultBcolor));                     
+  gui.add(new Icon(app.byeIcon,Align::Center,&midScreenHoriz, &iconMidY,ICON_MAX_SIZE,app.byeIconColor,&GUI::defaultBcolor));                     
 }
 
 void startupScreenBuilder(uint8_t id){
@@ -1366,13 +1437,13 @@ void promptScreenBuiler(uint8_t id){}
 void addLeftRightIcons(){
     //DEBUG_PRINT("addLeftRightIcons()");
     GUI::cls(GUI::defaultBcolor);  
-    gui.add(new Icon(&app.leftIcon, Align::Right,&app.hquarter2xPos,&app.menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
-    gui.add(new Icon(&app.rightIcon, Align::Left,&app.hquarter3xPos,&app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
+    gui.add(new Icon(&app.leftIcon, Align::Right,&hquarter2xPos,&menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
+    gui.add(new Icon(&app.rightIcon, Align::Left,&hquarter3xPos,&menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
     addTopandBottomMenuLabel();    
 }
 
 void setAPIconAndText(){
-  gui.add(new TextArea(app.lang.getString("Connect WiFi Access Point"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new TextArea(lang.getString("Connect WiFi Access Point"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   app.leftIcon = ICON_AP;
 }
 
@@ -1381,26 +1452,26 @@ void buildNetworkScreen(){
 
   app.rightIcon = ICON_LAPTOP;
   app.configIconGlowingRedColor.value = &app.leftIconColor;  
-  //gui.add(new AnimatedIcon(app.iconRolling,2,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));              
+  //gui.add(new AnimatedIcon(app.iconRolling,2,Align::Center,&midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));              
   #ifdef USE_NETWORK
     if (!hwm.network->ethEnabled){
       //if ethernet bank is absent, we only offer to connect the AP
       setAPIconAndText();                    
     }else{
-      gui.add(new TextArea(app.lang.getString("Connect"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new TextArea(lang.getString("Connect"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
       app.leftIcon = ICON_MIXETHWIFI;
     }
   #else
     setAPIconAndText();
   #endif
 
-  gui.add(new Icon(&app.leftIcon, Align::Right,&app.hquarter2xPos,&app.menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
-  gui.add(new Icon(&app.rightIcon, Align::Left,&app.hquarter3xPos,&app.menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
+  gui.add(new Icon(&app.leftIcon, Align::Right,&hquarter2xPos,&menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
+  gui.add(new Icon(&app.rightIcon, Align::Left,&hquarter3xPos,&menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
 
-  gui.add(new Label(&hwm.configMedia->SSID, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(&hwm.configMedia->SSID, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
 }
 
-int16_t brightYpos = app.menuIconYpos*1.2;
+int16_t brightYpos = menuIconYpos*1.2;
 
 void utilsScreenBuilder(uint8_t state){
   //DEBUG_PRINT("\nutilsScreenBuilder(%d)",state);
@@ -1410,10 +1481,10 @@ void utilsScreenBuilder(uint8_t state){
       //DEBUG_PRINT("\nSTATE_UTILS_BRIGHTNESS");
       GUI::cls();
       //gui.add(new ProgressBarH(&GUI::screenBrightness /*v*/, BRIGHTNESS_MIN /*min*/,BRIGHTNESS_MAX /*max*/, &GUI::zero /*x*/, &app.menuIconYpos /*y*/, TFT_WIDTH /*w*/, TFT_HEIGHT/6 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::gold /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
-      gui.add(new Label(app.lang.getString("BRIGHTNESS"), Align::Center,&app.midScreenHoriz, &GUI::three,MENU_TITLE_SIZE*0.8,&GUI::defaultFcolor,&GUI::defaultBcolor));            
-      gui.add(new Arc(&GUI::screenBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &app.midScreenHoriz, &app.midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
-      gui.add(new Icon(&app.brightIcon, Align::Center,&app.midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
-      gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
+      gui.add(new Label(lang.getString("BRIGHTNESS"), Align::Center,&midScreenHoriz, &GUI::three,MENU_TITLE_SIZE*0.8,&GUI::defaultFcolor,&GUI::defaultBcolor));            
+      gui.add(new Arc(&GUI::screenBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &midScreenHoriz, &midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
+      gui.add(new Icon(&app.brightIcon, Align::Center,&midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
+      gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SEARCHING_CONNECTION:{
@@ -1424,9 +1495,9 @@ void utilsScreenBuilder(uint8_t state){
       //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());
       GUI::cls(GUI::menuBackGroundColor);
 
-      gui.add(new TextArea(app.lang.getString("!\"#$%%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&app.midScreenHoriz,&app.midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new TextArea(lang.getString("!\"#$%%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&midScreenHoriz,&midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
-      gui.add(new Label(&app.vBatLabel, Align::Center,&app.midScreenHoriz, &app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
+      gui.add(new Label(&app.vBatLabel, Align::Center,&midScreenHoriz, &tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
     break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_CONNECTCONFIGMEDIA:
@@ -1439,9 +1510,9 @@ void utilsScreenBuilder(uint8_t state){
       addLeftRightIcons();  
       app.iconPending[0] = ICON_TIMER;
       app.iconPending[1] = " ";
-      //gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
-      gui.add(new TextArea(app.lang.getString("Open browser"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      gui.add(new Label(&hwm.configURL, Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));      
+      //gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
+      gui.add(new TextArea(lang.getString("Open browser"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new Label(&hwm.configURL, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
@@ -1453,10 +1524,10 @@ void utilsScreenBuilder(uint8_t state){
       //gui.add(new Label(&hwm.configIP, Align::Right,&app.quarter4xPos, &app.belowMenuIcon,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
       app.iconPending[0] = ICON_LEFTDOT;
       app.iconPending[1] = ICON_RIGHTDOT;      
-      gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&app.midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
+      gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&midScreenHoriz, &midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
 
-      gui.add(new TextArea(app.lang.getString("Press button"), TFT_WIDTH*0.90,Align::Center,Align::Center,&app.midScreenHoriz,&app.tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      gui.add(new Label(app.lang.getString("Connected"), Align::Center,&app.midScreenHoriz, &app.menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));      
+      gui.add(new TextArea(lang.getString("Press button"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new Label(lang.getString("Connected"), Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
@@ -1511,22 +1582,6 @@ void socketConnectionCallback(IWebSocket &ws) {
   // it should only be short message as the socketbuffer out is quite small, hence the fullCOnfig is requested by Post instead
   /*String fullConfig = app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"fullConfig\"}"); 
   ws.send(WebSocketDataType::TEXT, fullConfig.c_str(), fullConfig.length());*/
-}
-
-//////////////////////////////////////////////////////////////
-////                DEFAULT STRIPS CONSTRUCTOR         ///////
-//////////////////////////////////////////////////////////////
-Strip* textStripConstructorCallback(){
-  //DEBUG_PRINT("\n\ttextStripConstructorCallback()"/*,values.c_str()*/);
-  return new TextStrip(stripTextSkel);
-}
-
-Strip* midiStripConstructorCallback(){
-  return new MidiStrip(stripMidiSkel);
-}
-
-Strip* sysexStripConstructorCallback(){
-  return new SysexStrip(stripSysexSkel);
 }
 
 #endif

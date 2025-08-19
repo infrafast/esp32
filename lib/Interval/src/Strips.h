@@ -4,6 +4,7 @@
 #include "Interval.h"
 using IntervalButton = Interval::Button;
 
+void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* bottomLabel, String* icon);
 //-------------------------
 
 #define C_PROPERTIES    "properties"
@@ -163,22 +164,7 @@ StripSkeleton::StripSkeleton(String id, String g, StripBuilderCallback c, unsign
 #define SHAPE1X4 "1x4"
 #define SHAPE2X2 "2x2"
 
-enum {
-  STRIP_DISCONNECTED,
-  STRIP_PENDING,
-  STRIP_CONNECTING,
-  STRIP_ONLINE,
-  STRIP_UNDEF_STATE,
-};
-
 float oneHundedFloat = 100.0;
-
-struct StripState{
-  uint8_t code = STRIP_DISCONNECTED;
-  const String* stateLabel = &emptyString;
-  const String* subStateLabel = &emptyString;
-  float progress = 0;
-};
 
 class Strip {  
   #define JSON_STRIP_PROPERTY_SIZE 100
@@ -188,17 +174,19 @@ class Strip {
 
     // flag to indicate if position is out of range
     bool renderError;
+    bool redraw = false;
 
     bool toggle1 = false;
     bool toggle2 = false;
-
     bool updated = false;
-
     uint16_t frontColor, backColor;    
+
+    String iconInterfaceConnect = ICON_FOOTSWITCH;
 
     String type="undef";
 
     String interfaceName = SYSTEM_INTERFACE; //
+    DeviceInterface* interface = nullptr;
 
     // logical position
     uint8_t x, y, win, index;
@@ -217,14 +205,13 @@ class Strip {
     Strip(StripSkeleton* s){
       skeleton = s;
       value = (valueMax-valueMin)/2;
+      interface = &systemInterface;     // default
       //id = skeleton->stripID;
     }    
 
     virtual ~Strip(){
     }
-
-    StripState state;
-    
+   
     virtual uint8_t getNumberOfProperties(){
       return skeleton->dataSetAddresses.size();      
     }
@@ -232,14 +219,30 @@ class Strip {
     virtual bool actionCallback(uint8_t trigger)=0;
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;        
-    virtual void queryValues() = 0;  // // this code is called when entering a strip to get its initial state (values, etc...)
+    virtual void queryInterface() = 0; // this method is the one which is used to force poll data from the interface, 
+    // it will usually drop a command to the interface which outcome be lately read by the process() method
+    // is called from the focus() method so to force data to be updated in case some whre missed
     virtual const String* getTopLabel()=0;
     virtual const String* getBottomLabel()=0;
-    virtual bool update() = 0;
+    virtual void update() = 0;  // // this code is called by process()
+    // it assign the GUI values the values that were acquired or processed in the process() method
+    // basedon its internal state, it will set the redraw flag 
+    
+    virtual bool process(){ // this code is requesting the strip to update its state (values, etc...) using data from the interface (with read())
+    // process() is called from main app on all strip: the strip decide then if he has to do the query (for instance if it is focused) as       
+    // some strip may do some backgroud tasks (like playing sample or executing a macro), other will only do this if they have focus         
+      redraw = false;
+      if (interface->state.stateChanged) redraw = true;
+      if (interface->available()) update();
+      return redraw;      
+    }; 
+
 
     void focus(bool f=true){
       if (f){
         brightness = 1.0;
+        // we get the latest data if they are available        
+        queryInterface();
       }else{
         brightness = 0.5;
       }
@@ -379,8 +382,44 @@ class Strip {
       return delta;      
     }
 
-    virtual void pushToGUI(uint8_t layout = LAYOUT_DETAILS){
-      queryValues();
+    void pushSimpleText(uint8_t layout, const String* text){
+      // this is a utility function which display the text provided as parameter into the strip 
+      // to take its full size, it is essentially used to display the strip state when not connected
+      // or used by utility strips
+      uint16_t fontSize;
+      int16_t angle = 0;
+      //DEBUG_PRINT("\npushText(%s) %s layout:%i",text->c_str(),size.c_str(), layout);
+      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
+        textX = renderX + WIDGET4X4W/2;
+        textY = renderY + WIDGET4X4H/4;    
+        fontSize = WIDGET4X4W / text->length() * 3.3;
+      }
+      else if (size == SHAPE1X4){
+        textX = renderX + WIDGET1X4W*1.6;
+        textY = renderY + WIDGET1X4H/7;    
+        fontSize = WIDGET1X4H / text->length() * 3.3;
+        // put it vertically
+        angle = 90;
+      }
+      else if (size == SHAPE2X2){
+        textX = renderX + WIDGET2X2W/2;
+        textY = renderY + WIDGET2X2H/4;    
+        fontSize = WIDGET2X2W / text->length() * 3.3;
+      }
+      else if (size == SHAPE4X1){
+        textX = renderX + WIDGET4X1W/2;
+        textY = renderY + WIDGET4X1H/7;            
+        fontSize = 40;     
+      }
+
+      Label* label = new Label(text, Align::Center,&textX,&textY,fontSize,&frontColor,&backColor,&brightness);
+      label->angle = angle;
+      gui.add(label);
+
+    }
+
+    virtual void pushToGUI(uint8_t layout){
+      
       renderError = false;
 
       frontColor = colorMap[colorID].fColor;
@@ -388,9 +427,41 @@ class Strip {
 
       if (x>3 || y>3){
         renderError = true;
+        DEBUG_PRINT("\nIncorrect strip location: %dx%d",x,y);
+        pushSimpleText(layout, lang.getString("Strip x/y error"));
+        return;
+      }
+            
+      if (!determineTopLeft(layout)){
+        renderError = true;
+        DEBUG_PRINT("\nIncorrect strip size of layout: %s / %d",size.c_str(), layout);
+        pushSimpleText(layout, lang.getString("Strip shape error"));
         return;
       }
 
+      // strip size and position are correct, we therefore go ahead and render it
+
+      uint8_t state = interface->state.code;
+      
+      // if connected, we call the virtual function that display the strip
+      if (interface->state.code == IF_STATE_READY || interface->state.offline == true){
+        if (interface->state.offline == true){
+          // if offline , we may want to add a widget indicating it in addition to all the rest which is displayed
+          gui.add(new Canva(&GUI::zero, &GUI::zero, TFT_WIDTH, TFT_HEIGHT, &GUI::red, &GUI::transparentColor,&brightness));  
+          DEBUG_PRINT("\nStrip %s(%i) is offline",type.c_str(),index);
+        }        
+        // go ahead with normal rendering
+        composeWidgets(layout);
+      }else{
+        //DEBUG_PRINT("\nStrip %s is syncing",strip->type.c_str());          
+        composeInterfaceState(layout);  
+        //gui.add (new ProgressBarH(&&stripState.progress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
+      }
+
+    }
+
+    bool determineTopLeft(uint8_t layout){
+      // retrieve the corner of the strip where we can start drawing, which is renderX, renderY
       if (layout == LAYOUT_ZOOM || size == SHAPE4X4){
         renderX = 0;
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);
@@ -407,124 +478,52 @@ class Strip {
         renderX = (x * WIDGET2X2W/2);
         renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
       }else{
-        renderError = true;
-        return;
-      }      
-   
-      composeWidgets();  // call virtual method
+        return false;
+      }         
+      return true;
     }
 
-    virtual void composeWidgets(){
-      if (size == SHAPE4X4) gui.add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &frontColor,&brightness));  
+    virtual void composeInterfaceState(uint8_t layout){
+      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
+        addFullScreenTextWithIcon(lang.getString(interface->state.label), lang.getString(interface->state.userInstructions), lang.getString(interface->state.subLabel), &interface->icon);        
+        
+        //gui.add (new ProgressBarH(&hwm.network->wiFiConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                             
+        //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                            
+
+      }else if (size == SHAPE1X4){
+        pushSimpleText(layout, lang.getString(interface->state.label));
+      }else if (size ==SHAPE2X2 ){
+         pushSimpleText(layout, lang.getString(interface->state.label));
+      }else if (size == SHAPE4X1){
+         pushSimpleText(layout, lang.getString(interface->state.label));
+      }else{
+
+      }
+
+    }    
+
+    virtual void composeWidgets(uint8_t layout){
+      defaultFrame(layout);
+    } 
+
+    void defaultFrame(uint8_t layout){
+      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) gui.add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &frontColor,&brightness));  
       else if ( size == SHAPE1X4) gui.add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &frontColor,&brightness));
       else if (size == SHAPE2X2) gui.add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &frontColor,&brightness));  
-      else if (size == SHAPE4X1) gui.add(new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &frontColor,&brightness));
-    } 
+      else if (size == SHAPE4X1) gui.add(new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &frontColor,&brightness));      
+    }
 
     JsonArray properties;
     StripSkeleton* skeleton;
     //LinkedList<Widget*> widgetHandles = LinkedList<Widget*>();
     float value = 0.0, valueMin = 0, valueMax = 1;
+
+    int16_t textX = 0, textY = 0;
+
   protected:
     unsigned long lastCall;     
-    uint8_t layout = LAYOUT_DETAILS;
     //Label* defaultLabel = nullptr;
-    static DeviceInterface* interface;
 };
-
-DeviceInterface* Strip::interface = nullptr;
-
-StripSkeleton* stripTextSkel;
-Strip* textStripConstructorCallback();
-
-class TextStrip : public Strip{
-  
-  #define STRIP_TEXT "text"
-  //#define STRIP_TEXT_PROPERTY_VALUE "value"
-  
-  public:  
-        
-    TextStrip(StripSkeleton* s,bool debug=false):Strip(s){
-      //icon = ICON_TEXT_STRIP;
-      textPropertyAddress = s->dataSetAddresses.get(0)->pattern;
-      state.code = STRIP_ONLINE;      
-    }
-
-    virtual bool update() {     
-      // IMPLEMENTS CODE TO PROCESS DATA HERE
-      //Type* params = static_cast<Type*>(data);
-      return false;
-    }
-
-    virtual bool actionCallback(uint8_t trigger){return true;}
-
-    virtual void composeWidgets() override{
-
-      uint8_t fontSize;
-      if (size == SHAPE4X4){
-        renderX += WIDGET4X4W/2;
-        renderY += WIDGET4X4H/4;    
-        fontSize = WIDGET4X4W / text.length() * 3.3;
-      }
-      else if (size == SHAPE1X4){
-        renderX += WIDGET1X4W/2;
-        renderY += WIDGET1X4H/4;    
-        fontSize = WIDGET1X4W / text.length() * 3.3;
-      }
-      else if (size == SHAPE2X2){
-        renderX += WIDGET2X2W/2;
-        renderY += WIDGET2X2H/4;    
-        fontSize = WIDGET2X2W / text.length() * 3.3;
-      }
-      else if (size == SHAPE4X1){
-        renderX += WIDGET4X1W/2;
-        renderY += WIDGET4X1H/4;    
-        fontSize = WIDGET4X1W / text.length() * 3.3;
-      }
-
-      Label* label = new Label(&text, Align::Center,&renderX,&renderY,fontSize,&frontColor,&backColor,&brightness);
-      //widgetHandles.add(label);          
-      gui.add(label);
-    }
-
-    virtual void queryValues(){
-    }
-
-    virtual void deserializeProperty(String property)  {  
-      // property = /text/toto   
-      // textProperty = /text/%s
-      // value = toto
-      char buffer[50];
-
-      if (sscanf(property.c_str(), textPropertyAddress.c_str(), buffer) == 1){
-        text = String(buffer);
-      }           
-    }
-
-    virtual void serializeProperties(){
-      char* buf = (char*)malloc(textPropertyAddress.length()*sizeof(char*));
-      sprintf(buf,textPropertyAddress.c_str(),text.c_str());
-      properties.add(String(buf));
-      delete buf;
-
-    }
-
-
-
-    virtual const String* getTopLabel(){return &type;}
-    virtual const String* getBottomLabel(){return &emptyString;}  
-
-
-    virtual float increaseCallback(unsigned long time,uint8_t trigger){return true;}
-    virtual float decreaseCallback(unsigned long time,uint8_t trigger){return true;}
-    virtual float getIncrement(unsigned long time){return 0.0;}
-
-    protected:
-      String text="undef!";
-      int16_t x=GUI::width()/2, y=GUI::height()/2;       
-      String textPropertyAddress;
-};
-
 
 class TwoSelectStrip : public Strip{
 
@@ -601,199 +600,6 @@ class ThreeSelectStrip: public TwoSelectStrip{
     String select3PropertyAddress;
     Top2Toggles* topLabels;  
 };
-
-StripSkeleton *stripMidiSkel, *stripSysexSkel;
-Strip* midiStripConstructorCallback();
-Strip* sysexStripConstructorCallback();
-
-class MidiStrip : public ThreeSelectStrip{
-  #define STRIP_MIDI "MIDI"
-
-  public:
-    MidiStrip(StripSkeleton* s,bool debug=false):ThreeSelectStrip(s,debug){
-
-    }
-
-    ~MidiStrip(){};
-
-    virtual bool update() {     
-      // IMPLEMENTS CODE TO PROCESS DATA HERE
-      return false;
-    }
-    
-    void serializeProperties(){
-      ThreeSelectStrip::serializeProperties();
-
-      // "/midi/value/000000"     => DSmidiValue.address.pattern
-      char* buf = (char*)malloc( strlen(ADDRESS_MIDIVALUE)*sizeof(char*)+5);    // 5 digit max
-      sprintf(buf, ADDRESS_MIDIVALUE,String(midiValue).c_str());
-      properties.add(String(buf));
-      delete buf;
-
-    }
-
-
-    virtual void deserializeProperty(String property)  {  
-      // message = "/midi/message/%d"  => select3PropertyAddress => select3id
-      // channel = "/midi/channel/%d"  => select2PropertyAddress => select2id
-      ThreeSelectStrip::deserializeProperty(property);
-
-      // sValue = "/midi/value/%s"     => DSmidiValue.address.pattern
-      char sValue[50];                  
-      if (sscanf(property.c_str(), ADDRESS_MIDIVALUE, sValue) == 1){
-        midiValue = String(sValue).toInt();
-        //DEBUG_PRINT("\nMidiStrip=>deserializeProperty midiValue: %d",midiValue);
-      }  
-    }
-
-    virtual void composeWidgets() override{      
-
-      uint16_t h = 0, w = 0;
-
-      if (size == SHAPE4X4){
-        h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
-        w = WIDGET4X4W;
-        renderY += h/2; 
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }
-      else if (size == SHAPE1X4){
-        w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
-        h = WIDGET1X4H;
-        renderX += w/2;           
-        gui.add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }
-      else if (size == SHAPE2X2){
-        w = WIDGET2X2W;   // width of the bar is 2 time less big than the full width of the cell
-        h = WIDGET2X2H;
-        renderX += w/2;   
-        renderY += h/2;      
-        RingMeter* ringMeter = new RingMeter(&value, valueMin, valueMax, 1, &renderX,&renderY, h/2, &unitString,&GUI::blue,&GUI::transparentColor,&brightness);
-        gui.add(ringMeter);
-      }
-      else if (size == SHAPE4X1){
-        h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
-        w = WIDGET4X1W;
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }     
-
-      //DEBUG_PRINT("\nchGainStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
-
-      //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
-    }
-
-    virtual void queryValues(){
-      
-    }
-
-    virtual bool actionCallback(uint8_t trigger){
-      return false;
-    }
-       
-  private:
-    String unitString = "dB";
-    uint16_t midiValue=0;
-
-};
-
-
-class SysexStrip : public TwoSelectStrip{
-  #define STRIP_SYSEX "Sysex"
-  #define SYSEX_MAX_MESSAGE_LENGTH 128
-
-  public:
-    SysexStrip(StripSkeleton* s,bool debug=false):TwoSelectStrip(s,debug){
-
-    }
-
-    ~SysexStrip(){};
-
-    virtual bool update() {     
-      // IMPLEMENTS CODE TO PROCESS DATA HERE
-      return false;
-    }
-
-    void serializeProperties(){
-      TwoSelectStrip::serializeProperties();
-
-      // "/midi/sysex/000000"     => DSmidiValue.address.pattern
-      char* buf = (char*)malloc( strlen(ADDRESS_SYSEXVALUE)*sizeof(char*)+SYSEX_MAX_MESSAGE_LENGTH);    // syex message length max
-      sprintf(buf, DSmidiSysex.address.pattern.c_str(),sysexMessage.c_str());
-      properties.add(String(buf));
-      delete buf;
-
-    }
-
-
-    virtual void deserializeProperty(String property)  {  
-      // channel = "/midi/channel/%d"  => select2PropertyAddress => select2id
-      TwoSelectStrip::deserializeProperty(property);
-
-      // sValue = "/midi/sysex/%s"     => DSmidiSysex.address.pattern
-      char buffer[SYSEX_MAX_MESSAGE_LENGTH];                  
-      if (sscanf(property.c_str(), ADDRESS_SYSEXVALUE, buffer) == 1){
-        sysexMessage = String(buffer);
-      }  
-    }
-
-    virtual void composeWidgets() override{      
-
-      uint16_t h = 0, w = 0;
-
-      if (size == SHAPE4X4){
-        h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
-        w = WIDGET4X4W;
-        renderY += h/2; 
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }
-      else if (size == SHAPE1X4){
-        w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
-        h = WIDGET1X4H;
-        renderX += w/2;           
-        gui.add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }
-      else if (size == SHAPE2X2){
-        w = WIDGET2X2W;   // width of the bar is 2 time less big than the full width of the cell
-        h = WIDGET2X2H;
-        renderX += w/2;   
-        renderY += h/2;      
-        RingMeter* ringMeter = new RingMeter(&value, valueMin, valueMax, 1, &renderX,&renderY, h/2, &unitString,&GUI::blue,&GUI::transparentColor,&brightness);
-        gui.add(ringMeter);
-      }
-      else if (size == SHAPE4X1){
-        h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
-        w = WIDGET4X1W;
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }     
-
-      //DEBUG_PRINT("\nchGainStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
-
-      //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
-    }
-
-    virtual void queryValues(){
-      
-    }
-
-    virtual float increaseCallback(unsigned long time,uint8_t trigger){
-      return 0.0;
-    }
-
-    virtual float decreaseCallback(unsigned long time,uint8_t trigger){
-      return 0.0;
-    }
-
-
-    virtual bool actionCallback(uint8_t trigger){
-      return false;
-    }
-       
-  private:
-    String unitString = "dB";
-    String sysexMessage="";
-
-};
-
-
 
 
 #endif

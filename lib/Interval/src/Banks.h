@@ -203,13 +203,13 @@ class BankNavigator: public Widget{
   //#define BANK_NAME_SIZE TFT_WIDTH/15
   public:
 
-    BankNavigator(IntervalBank* b/*, LinkedList<Widget*>* w*/, bool debug = false):Widget(&xPos, &yPos, &fC, &bC, &GUI::fullBrightness, debug){      
-      bank = b;
+    uint8_t layout = LAYOUT_DETAILS;
+
+    BankNavigator(uint8_t _layout, IntervalBank* b/*, LinkedList<Widget*>* w*/, bool debug = false):layout(_layout), bank(b), Widget(&xPos, &yPos, &fC, &bC, &GUI::fullBrightness, debug){      
       //widgetList = w;
       oldSelector = bank->selector - 1; //this is to force first refresh
       width = TFT_WIDTH/2; height = OVERLAY_ICON_SIZE;
       id = "BankNavigator"+String(xPos)+"x"+String(yPos); 
-
     }
 
     virtual bool refresh(bool force = false) {
@@ -230,19 +230,15 @@ class BankNavigator: public Widget{
       id = bank->name;
       oldSelector = bank->selector;
 
-      if (debug) {
-
-      }
-
       // Define UI sizes
       #define NAV_HEIGHT OVERLAY_ICON_SIZE
-      #define WIN_WIDTH OVERLAY_ICON_SIZE * 1.6
+      #define WIN_WIDTH (OVERLAY_ICON_SIZE * 1.6)
       #define YPADDING 1
       #define XPADDING 2
       #define SPACE_BETWEEN_WIN  3
-      #define NAV_WIDTH (WIN_WIDTH * BANK_MAXWINDOW) + (SPACE_BETWEEN_WIN * BANK_MAXWINDOW)
-      #define CELL_WIDTH WIN_WIDTH / STRIP_PER_WINDOW
-      #define CELL_HEIGHT NAV_HEIGHT / STRIP_PER_WINDOW
+      #define NAV_WIDTH ((WIN_WIDTH * BANK_MAXWINDOW) + (SPACE_BETWEEN_WIN * BANK_MAXWINDOW))
+      #define CELL_WIDTH (WIN_WIDTH / STRIP_PER_WINDOW)
+      #define CELL_HEIGHT (NAV_HEIGHT / STRIP_PER_WINDOW)
       #define CANVA_VS_BANKNAME_SPACE 2
 
       uint16_t navFrameColor = GUI::luminance(GUI::gold, 100);
@@ -286,26 +282,48 @@ class BankNavigator: public Widget{
     }
 
     void drawStripMap(Canva* canva){
-      for (uint8_t i = 0; i < bank->strips.size(); i++) {
+      int index, cellX, cellY, cellWidth, cellHeight;          
+
+      uint8_t numberOfStrips = bank->strips.size();
+      
+      for (uint8_t i = 0; i < numberOfStrips; i++) {            
+
         Strip* strip = bank->strips[i];
         if (strip == nullptr) continue;
 
-        // Calculate strip position
-        uint8_t cellX = (strip->x * CELL_WIDTH) + (strip->win * WIN_WIDTH) + (SPACE_BETWEEN_WIN * strip->win);
-        uint8_t cellY = strip->y * CELL_HEIGHT;
+        if (layout == LAYOUT_DETAILS){
+          // Calculate strip position
+          cellX = (strip->x * CELL_WIDTH) + (strip->win * WIN_WIDTH) + (SPACE_BETWEEN_WIN * strip->win);
+          cellY = strip->y * CELL_HEIGHT;
 
-        // Extract width & height from "3x2" style string
-        int index = strip->size.indexOf('x');
-        int widgetWidth = strip->size.substring(0, index).toInt();
-        int widgetHeight = strip->size.substring(index + 1).toInt();
+          index = strip->size.indexOf('x');         
 
-        uint8_t cellWidth = (widgetWidth * CELL_WIDTH) - XPADDING;
-        uint8_t cellHeight = (widgetHeight * CELL_HEIGHT) - YPADDING;
+          // Extract width & height from the strip using pattern "3x2" 
+          int widgetWidth = strip->size.substring(0, index).toInt();
+          int widgetHeight = strip->size.substring(index + 1).toInt();
 
+          cellWidth = (widgetWidth * CELL_WIDTH) - XPADDING;
+          cellHeight = (widgetHeight * CELL_HEIGHT) - YPADDING;
+
+        }else{
+          // fixed size when zooming, width & height take one cell
+          cellWidth = (NAV_WIDTH / numberOfStrips) - XPADDING;          
+          cellHeight =  NAV_HEIGHT / 2;          
+
+          index = strip->index-1;
+
+          cellX = (index * cellWidth) + XPADDING;          
+          cellY = NAV_HEIGHT / 3;      
+
+          //DEBUG_PRINT("\nCell width: %i, index:%i, cellX:%i",cellWidth,index,cellX);
+
+        }
         // Draw strip on the canvas
         canva->sprite->fillRect(cellX + XPADDING, cellY + YPADDING, cellWidth, cellHeight, GUI::luminance(colorMap[strip->colorID].fColor, strip->brightness * GUI::screenBrightness * 255));
         canva->sprite->drawRect(cellX, cellY, cellWidth + XPADDING, cellHeight + YPADDING,  GUI::luminance(colorMap[strip->colorID].bColor, strip->brightness * GUI::screenBrightness * 255));
+
       }      
+
     }
 
     void drawStripID(Canva* canva){

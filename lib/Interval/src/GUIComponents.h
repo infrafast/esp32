@@ -277,6 +277,8 @@ class Widget : public GUI{
     TFT_eSprite* sprite = nullptr;    
     const float* brightness = &GUI::fullBrightness;
     float oldBrightness = 0;
+    int16_t angle = 0;
+
 
     Widget(const int16_t* xPos, const int16_t* yPos, const uint16_t* fC, const uint16_t* bC, const float* _brightness = &GUI::fullBrightness, bool d=false):brightness(_brightness),GUI(d){
       x = xPos; y = yPos; fColor = fC; bColor = bC;
@@ -293,7 +295,7 @@ class Widget : public GUI{
 
     virtual bool refresh(bool force=false){
       refreshed = force;      
-      if (oldX != *x || oldY != *y || oldfColor != *fColor || oldbColor != *bColor || oldBrightness != *brightness || refreshed){
+      if (oldX != *x || oldY != *y || oldfColor != *fColor || oldbColor != *bColor || oldBrightness != *brightness || refreshed ){
         /*if (debug){
           DEBUG_PRINT("\n%s.refreshed()",id.c_str());
           if (oldfColor != *fColor) DEBUG_PRINT("\tfColor %i=>%i",this->id.c_str(),oldfColor,*fColor);
@@ -380,17 +382,17 @@ class Canva : public Widget{
 class Font : public Widget{  
   public:    
  
-    Font(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=true):Widget(posX, posY, fC, bC, _brightness, d){
+    Font(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint16_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=true):Widget(posX, posY, fC, bC, _brightness, d){
       value = v; 
       init(a,posX,posY,s);
       //if (d) DEBUG_PRINT("\nnew %s(<%s>)",id.c_str(),value->c_str());    => cause problem as value may not be initialized when call from AnimatedIcon
     }
 
-    Font(Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* brightness = &GUI::fullBrightness,bool d=true):Widget(posX, posY, fC, bC, brightness, d){
+    Font(Align a, const int16_t* posX, const int16_t* posY, uint16_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* brightness = &GUI::fullBrightness,bool d=true):Widget(posX, posY, fC, bC, brightness, d){
       init(a,posX,posY,s);
     }
 
-    void init(Align a,const int16_t* posX, const int16_t* posY,uint8_t s){
+    void init(Align a,const int16_t* posX, const int16_t* posY,uint16_t s){
       size = s; align = a;
       id = "Font"+String(*posX)+"x"+String(*posY);       
     }
@@ -413,13 +415,13 @@ class Font : public Widget{
 
         FT_BBox boundaries1 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,oldValue.c_str());
         FT_BBox boundaries2 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,value->c_str());
-        width = max(boundaries1.xMax,boundaries2.xMax)+1; 
         // add 2 pixels for surrounding animation move to right/left
-        //height = max(boundaries1.yMax,boundaries2.yMax)*0.8; 
-        height = max(boundaries1.yMax,boundaries2.yMax)+1; 
-        // the boundaries provided are a bit too big in height, therefore, we reduce it by 20%
+        width = max(boundaries1.xMax,boundaries2.xMax)+1; 
+        height = max(boundaries1.yMax,boundaries2.yMax)+1;
+        //height = height*1.6;  // why 1.6 ? no idea... if we remove this the font is truncated : last version: 2.0 truncate font for some reason., see platformIO.ini
 
         getOfr()->setFontSize(size);
+
         /*width = max(getOfr()->getTextWidth(value->c_str()),getOfr()->getTextWidth(oldValue.c_str()))+2;
         height = max(getOfr()->getTextHeight(value->c_str()),getOfr()->getTextHeight(oldValue.c_str()));*/
 
@@ -481,14 +483,14 @@ class Font : public Widget{
     Align align;
   protected:
       const String *value;
-      uint8_t size = 0;
+      uint16_t size = 0;
       virtual OpenFontRender* getOfr()=0;
 };
 
 class Label : public Font{
   public:
       static OpenFontRender* ofr; 
-      Label(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Font(v, a, posX, posY, s, fC , bC ,_brightness, d){
+      Label(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint16_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Font(v, a, posX, posY, s, fC , bC ,_brightness, d){
         id = "Label";
       };
 

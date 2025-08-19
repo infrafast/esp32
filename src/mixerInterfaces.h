@@ -60,7 +60,7 @@ class OSCMixerInterface : public MixerInterface{
       
     } 
 
-    virtual bool monitor(){return false;}
+    virtual void monitor(){}
 
     virtual void* read(){return nullptr;}
 
@@ -106,6 +106,8 @@ class MixingStation: public OSCMixerInterface{
     }            
 
     virtual void begin(){}    
+
+    virtual void end(){}         
 };
 
 class BehringerXMR: public OSCMixerInterface{

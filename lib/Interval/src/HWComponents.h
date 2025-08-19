@@ -1,6 +1,7 @@
 #ifndef HWComponents_h
 #define HWComponents_h
 
+#include "Interval.h"
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 #include <WiFiGeneric.cpp>   // for tipipinit
@@ -9,6 +10,8 @@
 #include <HttpClient.h> // amcewen/HttpClient@^2.2.0 as opposed to the std lib #include <HTTPClient.h> which only handle WiFIclient
 #include <WiFiClientSecure.h>
 #include "BluetoothSerial.h"   //required for OSC
+#include <ESPmDNS.h>          // for WIFI registration
+#include <EthernetBonjour.h>  //for Eth registration
 
 // https://github.com/andrew-susanto/Arduino-Ethernet-Icmp.git	 => platform IO: works but corrupt the WiFi
 //#include <EthernetICMP.h>
@@ -24,12 +27,11 @@ using WSclientOnMessageCallback = std::function<void(const char*)>;
 ////////////////////////////////////////////////////////////////////
 ///                MIDI LAYER OBJECTS DECLARATION            ///////
 ////////////////////////////////////////////////////////////////////
-#define USE_EXT_CALLBACKS     // as from example => required for MIDI callbacks
-#include <AppleMIDI.h>        //https://github.com/lathoub/Arduino-AppleMIDI-Library
-#include <ESPmDNS.h>          // for WIFI registration
-#include <EthernetBonjour.h>  //for Eth registration
+#include "interfaces\midiHelpers.h"
 #define MIDI_CHANNEL_OMNI 0
-#define MDNS_ANNOUNCED_SERVICE "apple-midi"   // standard name for apple midi. Do not change
+/*#define APPLE_MIDIETHCLIENT_NAME  "interval"    
+#define APPLE_MIDIWIFICLIENT_NAME  "interval"    */
+#define MDNS_ANNOUNCED_APPLEMIDI_SERVICE "apple-midi"   // standard name for apple midi. Do not change
 //APPLEMIDI_CREATE_INSTANCE(EthernetUDP,MIDI_RTP_ETH,"Interval-footswitch-Ethernet",DEFAULT_CONTROL_PORT);
 //APPLEMIDI_CREATE_INSTANCE(WiFiUDP,MIDI_RTP_WIFI,"Interval-footswitch-WiFi",DEFAULT_CONTROL_PORT);
 //APPLEMIDI_CREATE_DEFAULTSESSION_INSTANCE();
@@ -731,6 +733,9 @@ class Network : public HWComponent2State{
     //IWebSocketServer *wss{ nullptr };
     UDP* udp = NULL;
     Server* server=NULL;
+
+    MidiClient* midiClient = nullptr;
+
     uint8_t media = NO_MEDIA;
     IPAddress IP, gateway,subnet;
     //HttpClient* http = NULL;    
@@ -1089,26 +1094,28 @@ class WiFiEth : public Network{
                   disconnectWifi();
                   // we just connected ETH so we do everything related to ETH specialized object instanciation
                   IP = Ethernet.localIP();         
-                  //if (debug) DEBUG_PRINT("\nEthernet.begin() => got IP:%s",IP.toString().c_str());  
+                  DEBUG_PRINT("\nEthernet.begin() => got IP:%s",IP.toString().c_str());  
                   if (client == NULL) client = new EthernetClient();
                   if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
                   if (udp == NULL) udp = new EthernetUDP;
-                  if (wsEthClient == nullptr) wsEthClient = new EthernetWebSocketClient{}; //WiFiWebSocketClient{};
-                  /*
-                  MIDI_RTP_ETH.begin(MIDI_CHANNEL_OMNI);   
-                  if (!EthernetBonjour.begin("esp32-midi")) {
-                    DEBUG_PRINT("Bonjour init échoué");
-                  } else {
-                    DEBUG_PRINT("Bonjour initialisé");
-                    EthernetBonjour.addServiceRecord(MDNS_ANNOUNCED_SERVICE, AppleMIDI_RTP_ETH.getPort(), MDNSServiceUDP,"textContent");
-                  }                  
-                  */
+                  if (wsEthClient == nullptr) wsEthClient = new EthernetWebSocketClient{}; 
+                  if (midiClient == nullptr) midiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);
+                  String midiName = String(midiClient->getName()+String("._")+MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
+                  String httpName = String(midiClient->getName()+String("._http"));
+                  if (EthernetBonjour.begin(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str())){
+                    EthernetBonjour.addServiceRecord(midiName.c_str(), midiClient->getPort(),MDNSServiceUDP);
+                    EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
+                  }else{
+                     DEBUG_PRINT("\nEthernetBonjour registration <%> failed", systemCfg.getString(S_AP_NAME)->c_str());
+                  }   
+
+                  DEBUG_PRINT("\t...all Eth object instantiated\n");                  
                   xSemaphoreGive(networkBusy);
                 }else{
-                  DEBUG_PRINT("\nETH CONNECT: networkBusy"); 
+                  DEBUG_PRINT("\nETH CONNECT: networkBusy\n"); 
                 }
               }else{
-                //if (debug) DEBUG_PRINT(".");
+                //DEBUG_PRINT(".");
               }
           }
         }else{
@@ -1151,24 +1158,19 @@ class WiFiEth : public Network{
 
             if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
               IP = WiFi.localIP();
+              DEBUG_PRINT("\t => got IP:%s",IP.toString().c_str()); 
               //if (debug) DEBUG_PRINT("\nWifi.begin() => got IP: %s, %idb",IP.toString().c_str(),WiFi.RSSI());
               if (client == NULL) client = new WiFiClient();
               if (server == NULL){ server = new WiFiServer(80,3);}
               if (udp == NULL) udp = new WiFiUDP;
               if (wsWiFiClient == nullptr) wsWiFiClient = new WiFiWebSocketClient{};
-
-              /*
-              appleMidiSession = new AppleMIDISession<WiFiUDP>("appleMidi", 5004);
-              myMidi = new MidiInterface<AppleMIDISession<WiFiUDP>,AppleMIDISettings>(*appleMidiSession); 
-              appleMidiSession->begin();
-              
-              if (MDNS.begin(appleMidiSession->getName())) {  // Nom réseau : esp32-midi.local
-                DEBUG_PRINT("\n\n\n\t\t\tmDNS initialisé!\n\n\n");
-                MDNS.addService(MDNS_ANNOUNCED_SERVICE, "udp", appleMidiSession->getPort());
-              } else {
-                DEBUG_PRINT("\n\n\nmDNS échec\n\n\n");
-              }*/
-
+              if (midiClient == nullptr) midiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(/*APPLE_MIDIWIFICLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);             
+              if (MDNS.begin(systemCfg.getString(S_AP_NAME)->c_str())){
+                MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", midiClient->getPort());
+                MDNS.addService("http", "tcp", 80);                
+              }else{
+                DEBUG_PRINT("\nMDNS registration <%> failed",midiClient->getName());
+              }
               xSemaphoreGive(networkBusy);
             }else{
               DEBUG_PRINT("\nWIFI CONNECT: networkBusy"); 
@@ -1184,15 +1186,15 @@ class WiFiEth : public Network{
           lastEthAttempt = 0; // with no delay
         }else{
           // we are connected so do whatever is required to refresh common network object here
-          ;           
-          // while ( (http->connected() || http->available()) && ((millis() - timeoutStart) < 30*1000) ){
+          
+          //if (midiClient != nullptr) midiClient->read();   // we prefer to put it into the AppleMIDIInterface monitor() as we will save some time in case interface is offline
+          
           //and monitoring the connexion + do whatever is required to refresh specialized network object here
           if (media == CABLE_MEDIA){
             if (cable == LinkON){
               // do whatever is required when we are connected by cable
               wsEthClient->listen();
               EthernetBonjour.run();
-
             }else{
               state = DISCONNECTED; 
               media = NO_MEDIA;
@@ -1201,7 +1203,7 @@ class WiFiEth : public Network{
             if (WiFi.status() == WL_CONNECTED){
               // do whatever is required when we are connected by WiFI
               // this code is executed in loop
-              ArduinoOTA.handle();     
+              //ArduinoOTA.handle();     
               wsWiFiClient->listen();              
             }else{
               // this code is executed in loop
@@ -1219,12 +1221,15 @@ class WiFiEth : public Network{
 
       if (refreshed){
         
-        //if (debug) DEBUG_PRINT("\n%s changed state => cable:%i, media:%i",id.c_str(),cable,media);
-        // common instantiation to both Wifi and Ethernet goes here
+        DEBUG_PRINT("\n%s changed state => cable:%i, media:%i",id.c_str(),cable,media);
+        
         if (state == CONNECTED){
-          // client has been instantiated before
-          //if (http == NULL) http = new HttpClient(*client);
+          // initialiser of common object to both Wifi and Ethernet goes here
+          
           if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888
+          midiClient->begin();
+          // then specific to ETH or WIFI
+          
           if (media == WIFI_MEDIA){
             wsWiFiClient->onOpen(socketClientOnOpenCallback);
             wsWiFiClient->onMessage(socketClientOnMessageCallback);
@@ -1237,7 +1242,7 @@ class WiFiEth : public Network{
             //DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
             unpauseWiFi();
           }else{
-            // ETHERNET
+            // ETHERNET        
             gateway = Ethernet.gatewayIP();
             wsEthClient->onOpen(socketClientOnOpenCallback);
             wsEthClient->onMessage(socketClientOnMessageCallback);
@@ -1245,14 +1250,28 @@ class WiFiEth : public Network{
             wsEthClient->onClose(socketClientOnClose);            
           }
           //checkInternet();
+          DEBUG_PRINT("\t...all begin() done");
         }else if (state == DISCONNECTED){
-          internet = false;
-          if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
+          if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
+            // common destruction
+            internet = false;          
+
             if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
             if (client != NULL){client->stop(); delete client; client = NULL;} 
             if (server != NULL){delete server; server  = NULL;} 
             if (wsWiFiClient != nullptr){ delete wsWiFiClient; wsWiFiClient = nullptr;}
             if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr;}
+            if (midiClient != nullptr){ delete midiClient; midiClient = nullptr;}
+            
+            // specific destruction to WIFI or ETH
+            if (media == CABLE_MEDIA){
+              // eth
+              EthernetBonjour.stop();
+            }else{
+              // wifi
+              MDNS.end();
+            }
+            
             xSemaphoreGive(networkBusy);              
           }else{
             DEBUG_PRINT("\nnetwork DISCONNECTED: networkBusy"); 
@@ -1448,7 +1467,7 @@ class  NoNetwork: public Network{
     }
 
     virtual void setLink(EthernetLinkStatus linkStatus){}    
-    virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){}
+    virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}
     virtual void clientSocketSend(const char *message){}
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){}
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}

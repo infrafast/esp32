@@ -215,13 +215,16 @@ public:
     }
     */
     void wakeUp(uint16_t pressTime){
-      startupState = WIZARD_STARTUP; return;
-      #define RESET_DELAY 10000
-      #define RESET_GRACE_PERIOD RESET_DELAY/3
       pinMode(BUILTIN_LED, OUTPUT);
       ledcSetup(0, 5000, 8);        // chhanel 0, freq 5000, resolution 8 bit
       ledcAttachPin(BUILTIN_LED, 0);   
       ledcWrite(0,255);
+
+      startupState = NORMAL_STARTUP; return;
+
+
+      #define RESET_DELAY 10000
+      #define RESET_GRACE_PERIOD RESET_DELAY/3
 
       startupState = SYSTEM_OFF;
       onOff.usesLed = false;

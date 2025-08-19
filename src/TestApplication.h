@@ -5,17 +5,16 @@
 //#define TFT_BGCOLOR   TFT_DARKGREY
 
 #include "Interval.h"
-
 #include "mixerInterfaces.h"
 
 NetworkOSC* networkOSCinterface2 = new NetworkOSC("999.999.999.999",99999,false); // false = not exposed
 
-void _setup(){
+void setup(){
     app.init();
 
     new MixingStation(networkOSCinterface2);    
 }
 
-void _loop(){
+void loop(){
     app.refresh();
 }

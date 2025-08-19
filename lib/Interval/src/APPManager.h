@@ -7,13 +7,17 @@
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 
-#include "Interfaces.h"
+#include "interfaces\i_midi.h"
+#include "interfaces\i_dmx.h"
+#include "interfaces\i_osc.h"
 
 ///////////////////// WIDGET LOCATION & SIZE ////////////////////////
 #define OVERLAY_ICON_SIZE TFT_HEIGHT/15
 
 
-#include "Strips.h"
+#include "strips\s_midi.h"
+#include "strips\s_utils.h"
+
 #include "Banks.h"
 
 //#include <esp32FOTA.hpp>
@@ -29,25 +33,7 @@ using WiFiWebSocketServer = WebSocketServer<WiFiServer, WiFiClient, 1>;
 using EthernetWebSocketServer = WebSocketServer<EthernetServer, EthernetClient, 1>;
 
 void socketConnectionCallback(IWebSocket &ws);
-
-
-
-
-///////////////////// SYSTEM PARAMETERS ////////////////////////
-#define S_PUSHDELAY         "pushDelay"
-#define S_DCLICREACTIVITY   "dClicReactivity"
-#define S_FADERSPEED        "faderSpeed"
-#define S_AP_NAME           "apName"
-#define S_LANG              "lang"
-#define S_CONFIG_FILE       "profile"
-#define S_SSID              "ssid"
-#define S_LAST_USED_SSID    "lastSSID"
-#define S_BUTTON_ASSIGN     "buttonsAssignements"
-#define S_SHORTCUTS         "shortcuts"
-
-///////////////////// CONFIG PARAMETERS ////////////////////////
-
-  
+ 
 
 ///////////////////// VOLATILE PARAMETERS ///////////////////////
 //#define V_USE_NETWORK       "myNetworkIP"
@@ -177,7 +163,7 @@ void handleConfigConnection();  //
 class StripHeaderWidget: public Top2Toggles{
   public:
 
-    StripHeaderWidget(Strip* s,I18n* i18n, bool debug=false):lang(i18n),strip(s),Top2Toggles(&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&topFcolor, &topBcolor , &GUI::defaultFcolor, &GUI::silver,&GUI::fullBrightness,debug){}
+    StripHeaderWidget(Strip* s,bool debug=false):strip(s),Top2Toggles(&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&topFcolor, &topBcolor , &GUI::defaultFcolor, &GUI::silver,&GUI::fullBrightness,debug){}
     //StripHeaderWidget(Strip* s,I18n* i18n, bool debug=false):lang(i18n),strip(s),Top2Toggles(&topLabel,&bottomLabel,&topReverse ,&bottomReverse,&GUI::red, &GUI::green , &GUI::blue, &GUI::yellow,&GUI::fullBrightness,debug){}
 
     virtual bool refresh(bool force=false){    
@@ -206,8 +192,6 @@ class StripHeaderWidget: public Top2Toggles{
     Strip* strip = nullptr;
     Strip* oldStrip = nullptr; 
 
-    I18n* lang = nullptr;
-
     String topLabel = "";
     bool topReverse = false;    
     uint16_t topFcolor = GUI::defaultFcolor;
@@ -218,9 +202,8 @@ class StripHeaderWidget: public Top2Toggles{
 
     void setValues(){            
       //DEBUG_PRINT("\n setValues()");
-      topReverse = strip->toggle1;      
-      if (strip->renderError) topLabel = *lang->getString("Strip render error");
-      else topLabel = *strip->getTopLabel();
+      topReverse = strip->toggle1;         
+      topLabel = *strip->getTopLabel();
       topFcolor = strip->frontColor;
   
       bottomReverse = strip->toggle2;
@@ -288,29 +271,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     float pendingBarWidth = TFT_WIDTH;
 
-    ///////////////////// WIDGETS & ATTRIBUTES ////////////////////////
-    #define WIDGET_SMALL_WIDTH TFT_WIDTH/8-5
-    #define WIDGET_BIG_WIDTH TFT_WIDTH/5
-    #define ICON_MAX_SIZE TFT_WIDTH/2
-
-    const int16_t tenPixels = 10, midScreenHoriz = TFT_WIDTH/2, rightScreen = TFT_WIDTH, midScreenVertical = TFT_HEIGHT/2, bigWidgetMidY = midScreenVertical-WIDGET_BIG_WIDTH/2, iconMidY = midScreenVertical-ICON_MAX_SIZE/2 ;
-    const int16_t iconRow2 = OVERLAY_ICON_SIZE*1.5;
-
     uint16_t rainbowC;
     AlteredColor rainbowColor = AlteredColor{.baseColor = TFT_WHITE, .value = &rainbowC};    
-
-    int16_t hquarter1xPos = TFT_HQUARTER-TFT_HQUARTER/2;
-    int16_t hquarter2xPos = TFT_HQUARTER*2-TFT_HQUARTER/2;
-    int16_t hquarter3xPos = TFT_HQUARTER*3-TFT_HQUARTER/2;
-    int16_t hquarter4xPos = TFT_HQUARTER*4-TFT_HQUARTER/2;
-
-    
-    int16_t vquarter1xPos = TFT_VQUARTER-TFT_VQUARTER/2;
-    int16_t vquarter2xPos = TFT_VQUARTER*2-TFT_VQUARTER/2;
-    int16_t vquarter3xPos = TFT_VQUARTER*3-TFT_VQUARTER/2;
-    int16_t vquarter4xPos = TFT_VQUARTER*4-TFT_VQUARTER/2;
-   
-    int16_t hthird3xPos = TFT_HTHIRD*2+TFT_HQUARTER/2;
 
     String leftIcon,rightIcon, brightIcon = ICON_BRIGHTNESS;
 
@@ -319,11 +281,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     Strip* focusedStrip = nullptr;
     StripHeaderWidget* stripHeader = nullptr;
 
-    ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
-    #define MENU_ICON_SIZE TFT_WIDTH/3
-    #define MENU_TITLE_SIZE MENU_ICON_SIZE/2
-    #define CONFIG_TEXTAREA_MESSAGE_SIZE MENU_TITLE_SIZE/1.8
+    int16_t rightScreen = TFT_WIDTH;
 
+    ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
+    
     MenuSystem ms = MenuSystem(*this);
     MenuSystem* bankMenu = nullptr;
     MenuSystem* wizardMenu = nullptr;
@@ -335,9 +296,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     String menuBottomLabel=" ";
 
     uint16_t menuActiveIconColor;
-
-    const int16_t menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2, leftMenuIconXpos = midScreenHoriz-MENU_ICON_SIZE*1.4,rightMenuIconXpos = midScreenHoriz+MENU_ICON_SIZE*1.4;
-    const int16_t menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1, belowMenuIcon = menuIconYpos+MENU_ICON_SIZE; 
 
     #define TWOFRAMEICON 2
     String iconRolling[TWOFRAMEICON] = {ICON_ROLLING1,ICON_ROLLING2};
@@ -355,13 +313,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     const char* brightnessMenuString{ICON_BRIGHTNESS":BRIGHTNESS"};
 
     ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
-    I18n lang = I18n();
-    I18n userLang = I18n();
-    
-    Config bankCfg = Config();
-    Config system = Config();
-    Config userConfig;
-    
+      
     Preferences persistants;
     Shortcuts shortcuts;
 
@@ -429,7 +381,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         
       std::vector<String> groupesUniques;
       /* register the interface names in the dataset of their group, without duplating the groups 
-          {"provider":"system","address":"/provider/Mixer/%s","values":["X+Mseries-Network(OSC)","MixingStation"]},
+          {"provider":"systemCfg","address":"/provider/Mixer/%s","values":["X+Mseries-Network(OSC)","MixingStation"]},
           this is used by the webapp to populate the available interface for a defined strip 
       */
       for (const auto& interface : interfaceRepo.interfaces){
@@ -592,13 +544,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
 
     void applySystemSettings(){
-      // this function applies all settings from the system conf file
-      wiFiList.deserialize(*system.getString(S_SSID));
-      hwm->setWiFi(&wiFiList,*system.getString(S_LAST_USED_SSID));
+      // this function applies all settings from the systemCfg conf file
+      wiFiList.deserialize(*systemCfg.getString(S_SSID));
+      hwm->setWiFi(&wiFiList,*systemCfg.getString(S_LAST_USED_SSID));
 
-      hwm->setButtonReactivity(system.getInt(S_PUSHDELAY),system.getInt(S_DCLICREACTIVITY));     
+      hwm->setButtonReactivity(systemCfg.getInt(S_PUSHDELAY),systemCfg.getInt(S_DCLICREACTIVITY));     
 
-      String langFile = "/"+*system.getString(S_LANG,"ENGLISH");
+      String langFile = "/"+*systemCfg.getString(S_LANG,"ENGLISH");
       langFile.toUpperCase();
 
       lang.load(langFile+".lang"); 
@@ -611,18 +563,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     void loadConfig(){
       // this function applies all settings from the banks and user conf file
-      String profileFile = "/"+*system.getString(S_CONFIG_FILE,DEFAULT_CONFIG_FILE_NAME);
+      String profileFile = "/"+*systemCfg.getString(S_CONFIG_FILE,DEFAULT_CONFIG_FILE_NAME);
       bankCfg.load(profileFile+".conf",defaultBanksConf);  
-      userConfig.load(profileFile+".user",defaultUserConf);            
+      userCfg.load(profileFile+".user",defaultUserConf);            
     }  
 
     #define SYSTEM_FILE_NAME "/settings.sys"
     void clearConfig(){
       // add a callback usere function userClearConfig()
       // delete all config files here, add the code to iterate FS on *.conf
-      LittleFS.remove(userConfig.filename);
+      LittleFS.remove(userCfg.filename);
       LittleFS.remove(DEFAULT_CONFIG_FILE_NAME);
-      // delete system settings
+      // delete systemCfg settings
       LittleFS.remove(SYSTEM_FILE_NAME);
       persistants.clear();
       persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);      
@@ -630,17 +582,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
-
-    bool initBanks(){
-      if (deserializeBanks(bankCfg.getString(C_BANKS)) == nullptr){
-        menuTopText = *lang.getString("IntervalBank creation");
-        menuBottomLabel = emptyString;
-        byeIconColor = &GUI::red; byeIcon = &iconForbid;
-        screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
-        return false;
-      }
-      return true;
-    }   
 
     void init(String _defaultUserConf="{}"){          
       
@@ -663,21 +604,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       persistants.begin("interval", false);      
 
-      system.load(SYSTEM_FILE_NAME,defaultSysConf);  
+      systemCfg.load(SYSTEM_FILE_NAME,defaultSysConf);  
       applySystemSettings();
 
       loadConfig();      
 
       #ifdef DEBUG
         String s;
-        system.serialize(&s);
-        DEBUG_PRINT("\n\n system:\t%s [...]",s.substring(0,180).c_str());
+        systemCfg.serialize(&s);
+        DEBUG_PRINT("\n\n systemCfg:\t%s [...]",s.substring(0,180).c_str());
         s="";
         bankCfg.serialize(&s);
         DEBUG_PRINT("\n\n bankCfg:\t%s [...]",s.substring(0,180).c_str());
         s="";
-        userConfig.serialize(&s);
-        DEBUG_PRINT("\n\n userConfig:\t%s [...]",s.substring(0,180).c_str());        
+        userCfg.serialize(&s);
+        DEBUG_PRINT("\n\n userCfg:\t%s [...]",s.substring(0,180).c_str());        
         s="";
         lang.serialize(&s);
         DEBUG_PRINT("\n\n langfile:\t%s [...]",s.substring(0,180).c_str());        
@@ -775,14 +716,26 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         case WIZARD_STARTUP:          
           persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_WIZARD);
           persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_LANG_STEP1);
-          // no break, we continue normal startup
+          startup();
+        break;
         case NORMAL_STARTUP:
-          // perform all application initialization
-          bootScreen();                
-          // we init banks and then go to banks or resume wizard
-          if (initBanks()) restoreScreen();
+          persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
+          startup();
         break;
       }
+    }
+
+    void startup(){
+      // perform all application initialization
+      bootScreen();                
+      // we init banks and then go to banks or resume wizard
+      if (deserializeBanks(bankCfg.getString(C_BANKS)) == nullptr){
+        menuTopText = *lang.getString("IntervalBank creation");
+        menuBottomLabel = emptyString;
+        byeIconColor = &GUI::red; byeIcon = &iconForbid;
+        screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
+      }  
+      restoreScreen();      
     }
 
     // EVENTS HANDLING
@@ -990,7 +943,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           }
         break;
         case SCREEN_BANK:
-          //DEBUG_PRINT("\nreleaseHoldCallback: %i",buttonID);
+          switchBankLayout();
         break;
       }  
     }
@@ -1091,6 +1044,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   }
 
 
+  void switchBankLayout(){
+    Interval::Bank* bank = banks.get(screen.state);          
+    if (bank != nullptr){
+      if (bank->currentLayout == LAYOUT_DETAILS) bank->currentLayout = LAYOUT_ZOOM;
+      else bank->currentLayout = LAYOUT_DETAILS;
+    }          
+    triggerRedraw();
+  }
+
   void moduleHoldClic(uint8_t buttonID, unsigned long time){
     // perform the behaviour defined in the config file
     // at the moment, this is hard coded
@@ -1109,56 +1071,52 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
   }
 
+  void setScreenAndButtonRotation(){
+    if (persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES){
+      //swap button
+      uint8_t oldLeftID = hwm->buttons[LEFTB]->getID();
+      hwm->buttons[LEFTB]->setID(hwm->buttons[RIGHTB]->getID());
+      hwm->buttons[RIGHTB]->setID(oldLeftID);
+    }else{
+      // by default we keep the button as they were initialized by the HWM
+      // however, in case user has rotated from the menu, we have to swap button
+      if (swapButton){
+        uint8_t oldRightID = hwm->buttons[RIGHTB]->getID();
+        hwm->buttons[RIGHTB]->setID(hwm->buttons[LEFTB]->getID());
+        hwm->buttons[LEFTB]->setID(oldRightID);
+      }
+    }  
+    GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO));        
+  }
 
+  void refreshWiFiSignalIcon(){
+    int8_t signalStrength = abs(WiFi.RSSI());
+    if (signalStrength >=90) networkIcon = ICON_WIFI_STRENGTH_0;
+    else if (signalStrength >=75) networkIcon = ICON_WIFI_STRENGTH_1;
+    else if (signalStrength >=45) networkIcon = ICON_WIFI_STRENGTH_2;
+    else networkIcon = ICON_WIFI_STRENGTH_3;      
+    //DEBUG_PRINT("\nrssi: %d",signalStrength);
+  }
 
-
-
-    void setScreenAndButtonRotation(){
-      if (persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES){
-        //swap button
-        uint8_t oldLeftID = hwm->buttons[LEFTB]->getID();
-        hwm->buttons[LEFTB]->setID(hwm->buttons[RIGHTB]->getID());
-        hwm->buttons[RIGHTB]->setID(oldLeftID);
+  String serializeBanks(){
+    JsonDocument bankDoc;
+    //DynamicJsonDocument bankDoc(10000); 
+    for (uint8_t i=0; i<banks.size(); i++){
+      //DynamicJsonDocument jsonBank(JSON_BANK_SIZE); 
+      JsonDocument jsonBank;
+      IntervalBank* bank = banks.get(i);
+      String stringBank = bank->serialize();
+      DeserializationError error = deserializeJson(jsonBank, stringBank);
+      jsonBank.shrinkToFit();
+      if (error){
+        
+        return "{}";
       }else{
-        // by default we keep the button as they were initialized by the HWM
-        // however, in case user has rotated from the menu, we have to swap button
-        if (swapButton){
-          uint8_t oldRightID = hwm->buttons[RIGHTB]->getID();
-          hwm->buttons[RIGHTB]->setID(hwm->buttons[LEFTB]->getID());
-          hwm->buttons[LEFTB]->setID(oldRightID);
-        }
-      }  
-      GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO));        
-    }
-
-    void refreshWiFiSignalIcon(){
-      int8_t signalStrength = abs(WiFi.RSSI());
-      if (signalStrength >=90) networkIcon = ICON_WIFI_STRENGTH_0;
-      else if (signalStrength >=75) networkIcon = ICON_WIFI_STRENGTH_1;
-      else if (signalStrength >=45) networkIcon = ICON_WIFI_STRENGTH_2;
-      else networkIcon = ICON_WIFI_STRENGTH_3;      
-      //DEBUG_PRINT("\nrssi: %d",signalStrength);
-    }
-
-    String serializeBanks(){
-      JsonDocument bankDoc;
-      //DynamicJsonDocument bankDoc(10000); 
-      for (uint8_t i=0; i<banks.size(); i++){
-        //DynamicJsonDocument jsonBank(JSON_BANK_SIZE); 
-        JsonDocument jsonBank;
-        IntervalBank* bank = banks.get(i);
-        String stringBank = bank->serialize();
-        DeserializationError error = deserializeJson(jsonBank, stringBank);
-        jsonBank.shrinkToFit();
-        if (error){
-          
-          return "{}";
-        }else{
-          bankDoc[bank->name] = jsonBank;
-        }       
-      }      
-      return bankDoc.as<String>();
-    }
+        bankDoc[bank->name] = jsonBank;
+      }       
+    }      
+    return bankDoc.as<String>();
+  }
 
 
 /*
@@ -1205,7 +1163,7 @@ void setup() {
       doc["langs"][1] = "english";       // change to "dir *.lang"
       doc["maxPOSTsize"] = MAX_POST_COMMAND_SIZE;
       doc["wizard"] = (persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD)?true:false;
-      doc["lang"] = *system.getString(S_LANG,"francais");  
+      doc["lang"] = *systemCfg.getString(S_LANG,"francais");  
       
       serializeJson(doc, *returnedJsonStringData);  
       removeJsonQuote(returnedJsonStringData);      
@@ -1233,7 +1191,7 @@ void setup() {
       doc["shortcutsDef"] = tempJsonString;
 
       tempJsonString="";
-      system.serialize(&tempJsonString);  
+      systemCfg.serialize(&tempJsonString);  
       doc["system"]=tempJsonString;
 
       tempJsonString = serializeBanks();      
@@ -1249,17 +1207,22 @@ void setup() {
       //DEBUG_PRINT("\nrestoreScreen():");
       screen.id = persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
       screen.state = persistants.getUChar(PERSISTANT_SCREEN_STATE,0);  
-      //DEBUG_PRINT("\t id=%d / state:%d",screen.id,screen.state);
+      //DEBUG_PRINT("\t read: id=%d / state:%d",screen.id,screen.state);
       // prevents wrong branching
       if (screen.id == SCREEN_BANK && screen.state > banks.size()-1) screen.state = 0; 
       if (screen.id == SCREEN_WIZARD && screen.state > STATE_WIZARD_USER_STEP4) screen.state = STATE_WIZARD_LANG_STEP1;       
-      //DEBUG_PRINT("\t fixed to id=%d / state:%d",screen.id,screen.state);
+      //DEBUG_PRINT("\t => id=%d / state:%d",screen.id,screen.state);
       // branch the first available strip 
-      if (focusedStrip == nullptr && screen.id == SCREEN_BANK){
+      if (focusedStrip == nullptr && screen.id == SCREEN_BANK){        
         IntervalBank* bank = banks.get(screen.state);           
-        if (bank->strips.size()>0) focusedStrip = bank->strips[0];
+        //DEBUG_PRINT("\tfixed");
+        if (bank->strips.size()>0){
+          focus(bank->strips[0], bank);          
+        }else{
+          focusedStrip = nullptr;
+        }
       }
-      //DEBUG_PRINT("\t focusedStrip:%s",focusedStrip == nullptr?"null":focusedStrip->getTopLabel()->c_str());
+      //DEBUG_PRINT("\tfocusedStrip:%s, id:%i",focusedStrip == nullptr?"null":focusedStrip->getTopLabel()->c_str(),focusedStrip == nullptr?0:focusedStrip->index);
     }
 
     void restoreMenu(){
@@ -1548,27 +1511,30 @@ void setup() {
         
         setNetworkIcon();
 
-        // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
-        broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well
         // ============>>> CALLBACK APPLICATION
         evt.type = EVENT_NETWORK_CHANGED_STATE;
         evt.data = &hwm->network->state;
         fireEvent(&evt);
         //userNetworkChangeStateCallback(hwm->network->state);
 
-        if (hwm->network->state == CONNECTED){         
+        if (hwm->network->state == CONNECTED){    
+
+          appleMIDIInterface->begin();
+
+          // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
+          if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                   
+
           // network has refreshed so we shift to appropriate configMedia
           if (hwm->network->media == WIFI_MEDIA){
             //we set last used Wifi SSID (id) and save config, hence keep WIFI_MEDIA credential
             //DEBUG_PRINT("\n------> SAVING SSID");
-            system.setValue(S_LAST_USED_SSID,hwm->network->SSID);
-            system.save(); 
+            systemCfg.setValue(S_LAST_USED_SSID,hwm->network->SSID);
+            systemCfg.save(); 
             /* add this to the possible SSID "ssid": {
             "intervalmix": "intervalpop74",
             "infrafast": "Mf9k8iie2",
             "ssid3": "pass3"
             */
-            appleMIDIInterface->begin();
           }else{
             
           }
@@ -1583,7 +1549,7 @@ void setup() {
           }
         }else{
           // we disconnected , so we give back the priority on the WiFI connection list to  the last connected WiFi 
-          //hwm->setWiFi(&wiFiList,*system.getString(S_LAST_USED_SSID)); 
+          //hwm->setWiFi(&wiFiList,*systemCfg.getString(S_LAST_USED_SSID)); 
         }
       }  
 
@@ -1625,42 +1591,48 @@ void setup() {
       // MANAGE INTERFACE
       //
       //------------------
-
-      for (const auto& interface : interfaceRepo.interfaces){
-
-        /*JsonDocument doc;
-        JsonObject input = doc.to<JsonObject>();*/
-
-        if (interface->update()){
+      bool interfaceChangedState = false;
+      for (const auto& interface : interfaceRepo.interfaces){        
+        interfaceChangedState = interface->update();
+        if (interfaceChangedState == true){
           broadCast(interface->serializeState());
-        }
-        //doc.shrinkToFit();
-        
-        //
-
-        // we only have a currenntStrip valid when current screen is a bank
-        if (screen.id == SCREEN_BANK){
-          Interval::Bank* bank = banks.get(screen.state);          
-          if (bank != nullptr){         
-            if (focusedStrip != nullptr){
-              if (bank->currentLayout == LAYOUT_ZOOM){
-                if (focusedStrip->update())  triggerRedraw();;    // traite le strip avec focus/ full screen donc full update
-              }else{
-                for (const auto& strip : bank->strips) {
-                  // traite tous les strips de la fenetre courante, c'esta dire ceux ayant la meme fenetre que le strip ayant le focus
-                  if (strip->win == focusedStrip->win)
-                    if (strip->update())  triggerRedraw();;
-                }
-              } 
-            }
-          }   
-        }                      
+        }       
       }
+
+      //------------------
+      //
+      // MANAGE BANKS STRIPS
+      //
+      //------------------      
+      Interval::Bank* bank = banks.get(screen.state);          
+      if (bank != nullptr){                
+        for (const auto& strip : bank->strips) {
+          
+          // we ask each strip of the bank to process itself
+          // it's up to him to determine if he refreshes it's internal data or not
+          // some may only do that if they have the focus        
+          bool redraw = strip->process();
+          
+          // then if we show the bank, we update the GUI part
+          if (screen.id == SCREEN_BANK){
+            if (strip == focusedStrip && bank->currentLayout == LAYOUT_ZOOM){
+              // traite le strip avec focus/ full screen donc full update
+              if (redraw)  triggerRedraw();    
+            }else{
+              // traite tous les strips de la fenetre courante, c'esta dire ceux ayant la meme fenetre que le strip ayant le focus
+              if (strip->win == focusedStrip->win){
+                if (redraw)  triggerRedraw();
+              }
+            }
+          }
+        }
+      }   
+
 
 
       //------------------
       //
-      // MANAGE GUI OBJECT
+      // MANAGE GUI 
       //
       //------------------
       if (screen.value != oldScreen.value){
@@ -1786,7 +1758,8 @@ void setup() {
     }
 
     void broadCast(String msg){
-      broadcastQueue.push_back(msg);
+      if (webAppConnected && hwm->configMedia->state == CONNECTED) 
+        broadcastQueue.push_back(msg);      
     }
 
     void processBroadcastQueue() {
@@ -1930,7 +1903,7 @@ void setup() {
               if (debug) DEBUG_PRINT("Error setting up MDNS responder!");
             } */                       
           }
-          hwm->configURL = "http://"+hwm->configMedia->IP.toString();          
+          hwm->configURL = "http://"+*systemCfg.getString(S_AP_NAME)+".local"; // hwm->configMedia->IP.toString();          
           DEBUG_PRINT("\nWebserver serving on %s",hwm->configURL.c_str() );
           return true;
         }
@@ -2455,9 +2428,13 @@ void setup() {
       //highlight strip
       focus(strip,targetBank);
 
-      // Force screen redraw if we changed the window or the bank
-      //DEBUG_PRINT("\n WINDOW previous=%d current=%d",previousWindow, strip->win);      
-      if (previousWindow != strip->win || currentBank != targetBank){
+      // Force screen redraw if we changed the window or the bank OR if we are displaying full size strip
+      if (
+             previousWindow != strip->win 
+          || currentBank != targetBank
+          || strip->size == SHAPE4X4
+          || targetBank->currentLayout == LAYOUT_ZOOM
+      ){
         triggerRedraw(); // force refresh 
         //DEBUG_PRINT("\nFORCE REFRESH!!!!!");
       }
@@ -2470,13 +2447,19 @@ void setup() {
       for (const auto& winstrip : bank->strips) winstrip->focus(false);
       strip->focus(true);    // full brightness
       focusedStrip = strip;    
+      bank->selector = focusedStrip->index;      
+      //strip header may be null in the case we start a bank from scratch
       if (stripHeader != nullptr) stripHeader->setStrip(focusedStrip);    // this trigger the update of the stripheaderwidget to the next GUI refresh
     }
 
     IntervalBank* jumpToBank(String bankName){
+      //DEBUG_PRINT("\njumptobank(%s)",bankName.c_str());
       uint8_t bankIndex = 0;
       IntervalBank* bank = getBank(bankName,&bankIndex);
-      if (bank == nullptr) return nullptr;  // Early exit if the bank is not found
+      if (bank == nullptr){
+           //DEBUG_PRINT("\tinexisting bank, returning nullptr");
+          return nullptr;  // Early exit if the bank is not found
+      } 
 
       persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
       persistants.putUChar(PERSISTANT_SCREEN_STATE,bankIndex);
@@ -2560,10 +2543,10 @@ void setup() {
         //DEBUG_PRINT("\t => section:%s id:%s value:%s",section.c_str(),id.c_str(),value.c_str());
         bool success;        
         if (section == "system"){
-          success = system.setValue(id,value);
+          success = systemCfg.setValue(id,value);
           if (success){
             applySystemSettings();      // ===>  propagate config values by giving reference to conf object using parameters instead of using local variable
-            system.save();
+            systemCfg.save();
           }
         }else if (section == "config"){
           success = bankCfg.setValue(id,value);
@@ -2770,8 +2753,8 @@ void setup() {
         String fullConfig;
         serialize(&fullConfig);
         bool ret = bankCfg.save();
-        ret &=  system.save();   
-        userConfig.save();   
+        ret &=  systemCfg.save();   
+        userCfg.save();   
         if (ret){
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value = "0";  
@@ -2957,7 +2940,7 @@ void setup() {
       "\""+String(S_PUSHDELAY)+"\":\"852\","
       "\""+String(S_DCLICREACTIVITY)+"\":\"251\","
       "\""+String(S_CONFIG_FILE)+"\":\""DEFAULT_CONFIG_FILE_NAME"\"," 
-      "\""+String(S_AP_NAME)+"\":\"footswitch\","
+      "\""+String(S_AP_NAME)+"\":\""INTERVAL_PRODUCT_NAME"\","
       "\""+String(S_LAST_USED_SSID)+"\":\"intervalmix1\","
       "\""+String(S_LANG)+"\":\"francais\","
       "\""+String(S_FADERSPEED)+"\":\"157\","
