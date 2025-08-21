@@ -21,7 +21,9 @@ class ArtnetDMXInterface: public DMXInterface, NetworkInterface{
   public:
     String voidArtnetParam = "artnet123";
 
-    ArtnetDMXInterface(bool _configurable):DMXInterface(ARTNETDMX_INTERFACE,_configurable), NetworkInterface(this){}
+    ArtnetDMXInterface(bool _configurable):DMXInterface(ARTNETDMX_INTERFACE,_configurable), NetworkInterface(this){
+      icon = "b";
+    }
 
     virtual void monitor(){}    
 
@@ -49,6 +51,7 @@ class ThreePinDMXInterface: public DMXInterface{
     String void3pinDMXParam = "3pin123";
 
     ThreePinDMXInterface(bool _configurable):DMXInterface(THREEEPINDMX_INTERFACE,_configurable){
+      icon = "a";
     }
 
     virtual void monitor(){

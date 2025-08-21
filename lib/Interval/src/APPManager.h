@@ -49,7 +49,8 @@ void scanNetworksTaskWrapper(void * parameter);         // parrallel task
 void webServerTaskWrapper(void * parameter);            // parrallel task
 void defaultWizardStepFlow();
 
-
+void startAnimationThread(AnimationTaskParams* param);
+void stopAnimationThread();
 
 // Prototypage de la fonction de gestion de la connexion
 //void handleWebConnection(void *parameter);
@@ -320,11 +321,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     ///////////////// INTERFACES ///////////////////
     //OSCInterface osc;
     NetworkOSC* networkOSCinterface;
+    
     AppleMIDIInterface* appleMIDIInterface;
     USBMIDIInterface* usbMIDIInterface;
     BLEMIDIInterface* bleMIDIInterface;
+    DINMIDIInterface*  dinMIDIInterface; 
+
     ArtnetDMXInterface* artnetDMXInterface;
-    ThreePinDMXInterface* threePinDMXInterface;    
+    ThreePinDMXInterface* threePinDMXInterface;
+       
 
     ////////////////////////////////////////////////
 
@@ -361,6 +366,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       usbMIDIInterface = new USBMIDIInterface(true);
       bleMIDIInterface = new BLEMIDIInterface(true);
+      dinMIDIInterface = new DINMIDIInterface(true);
+
       artnetDMXInterface = new ArtnetDMXInterface(true);
       threePinDMXInterface = new ThreePinDMXInterface(true);  
 
@@ -490,8 +497,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         }else{
           networkIconGlowingRedColor.value = &networkIconColorIdle;
 
-          if (hwm->network->ethEnabled && hwm->network->WiFiEnabled && hwm->network->getLink() == LinkOFF) networkIcon = ICON_MIXETHWIFI; // both WiFi and ETh are up but there is no cable on, we don't know who will connect first
-          else if ((hwm->network->ethEnabled && !hwm->network->WiFiEnabled) || (hwm->network->getLink() == LinkON)) networkIcon = ICON_ETH;  //case when we bootSprite for a DHCP lease or have no WiFi enabled
+          if (hwm->network->ethEnabled && hwm->network->WiFiEnabled && hwm->network->getLink() == LinkOFF) networkIcon = GUI::iconMixEthWiFi; // both WiFi and ETh are up but there is no cable on, we don't know who will connect first
+          else if ((hwm->network->ethEnabled && !hwm->network->WiFiEnabled) || (hwm->network->getLink() == LinkON)) networkIcon = GUI::iconEth;  //case when we bootSprite for a DHCP lease or have no WiFi enabled
           else if (!hwm->network->ethEnabled && hwm->network->WiFiEnabled) networkIcon = ICON_WIFI_STRENGTH_3; 
           else networkIcon = emptyString;  // when it is only wifi and ap is launched.
         }
@@ -1595,7 +1602,8 @@ void setup() {
       for (const auto& interface : interfaceRepo.interfaces){        
         interfaceChangedState = interface->update();
         if (interfaceChangedState == true){
-          broadCast(interface->serializeState());
+          String if_change ="{\"interfaceState\":"+interface->serializeState()+"}";
+          broadCast(if_change);
         }       
       }
 
@@ -1774,27 +1782,6 @@ void setup() {
       }
     }
 
-    /*void handleEthClient(EthernetClient* clientPtr) {
-
-      EthernetClient* cli = new EthernetClient(*clientPtr);  // important
-
-      if (activeClients < maxConcurrentClients) {
-        DEBUG_PRINT("\nxCreateTask handleWebEthClientTask...");
-        activeClients++;
-        xTaskCreate(
-          handleWebEthClientTask,
-          "EthClientHandler",
-          8096,
-          cli,
-          1,
-          NULL
-        );
-      } else {
-        DEBUG_PRINT("\nQueueing client");
-        clientQueue.push(cli);
-      }
-    } */   
-
     void reset(){      
       nvs_flash_erase(); // erase the NVS partition and...
       nvs_flash_init(); // initialize the NVS partition.        
@@ -1809,8 +1796,18 @@ void setup() {
 
       if (webServer == nullptr) return; // no need to define websocket server if webserver has not been instanciated
 
+      AnimationTaskParams* param;
+
       if (wss != nullptr){
-        //wss->shutdown();  // need the patch here: https://github.com/skaarj1989/mWebSockets/discussions/67#
+        // when you are connected to Eth, if you unplug the cable, the wifi connection goes back 
+        // but sometime the program freeze betweeen the delete wss below and the new WifiWebSocketServer creation
+        // so we create thread that will take care of displaying a waiting message
+        // Lance l’animation pendant que la tache principale travaille
+        if (hwm->configMedia->media == WIFI_MEDIA){
+          param = new AnimationTaskParams(lang.getString("ReconNet"),ICON_MIXETHWIFI); 
+          startAnimationThread(param);          
+        }
+        wss->shutdown();  // need the patch here: https://github.com/skaarj1989/mWebSockets/discussions/67#       
         DEBUG_PRINT("\ndelete wss");
         delete wss; 
       }
@@ -1821,54 +1818,15 @@ void setup() {
       }else{
         DEBUG_PRINT("\nnew WiFiWebSocketServer{}");
         wss = new WiFiWebSocketServer{};
+        stopAnimationThread();
+        delete param;        
       }
+
 
       wss->onConnection(socketConnectionCallback);    
       wss->begin();
       DEBUG_PRINT("\nwss->begin()...");      
     }
-
-    /*
-
-    TaskHandle_t webTaskHandle = nullptr;
-
-    static void webTaskLoop(void* parameter) {
-        ApplicationManager* self = static_cast<ApplicationManager*>(parameter);
-        while (true) {
-          self->handleWeb(nullptr);
-        }
-    }
-
-    // Méthode pour gérer la tâche en fonction de l'état
-    void webTaskhandle(bool state) {
-        if (state) {
-            if (webTaskHandle == nullptr) {
-                // Créer une nouvelle tâche si elle n'existe pas déjà
-                xTaskCreatePinnedToCore(
-                    webTaskLoop,       // Méthode de la tâche
-                    "webserver",         // Nom de la tâche
-                    4096*2,             // Taille de la pile
-                    this,             // Paramètre passé à la tâche
-                    1,                // Priorité
-                    &webTaskHandle,      // Handle de la tâche
-                    PRO_CPU_NUM       // CPU pour exécuter la tâche APP_CPU_NUM = 1 = loop()
-                );
-                //DEBUG_PRINT("\nwebTaskhandle start");
-            } else {
-                //DEBUG_PRINT("\nwebTaskhandle est déjà en cours.");
-            }
-        } else {
-            if (webTaskHandle != nullptr) {
-                // Arrêter et supprimer la tâche
-                vTaskDelete(webTaskHandle);
-                webTaskHandle = nullptr;
-                //DEBUG_PRINT("\nwebTaskhandle STOPPED.");
-            } else {
-                //DEBUG_PRINT("\nNo webstaskhandle to stop");
-            }
-        }
-    }
-    */
 
     bool startWebApp(){
       if (hwm->configMedia != nullptr){
@@ -2809,7 +2767,7 @@ void setup() {
       for (int i = 0; i < numberOfNetworks && i<MAX_NUMBER_OF_NETWORK_TO_REPORT; i++) {
         //DEBUG_PRINT("\nNetwork name: %s",WiFi.SSID(i).c_str());
         scannedWifi.add(WiFi.SSID(i));
-
+        vTaskDelay(pdMS_TO_TICKS(1));
         String ssid = WiFi.SSID(i);         // Nom du réseau (SSID)
         int32_t rssi = WiFi.RSSI(i);        // Puissance du signal (RSSI)
         int32_t channel = WiFi.channel(i);  // Canal utilisé

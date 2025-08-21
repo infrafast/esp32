@@ -22,7 +22,8 @@ class NetworkOSC: public OSCInterface,NetworkInterface{
     int OSC_port;
 
     NetworkOSC(String _OSC_IPaddress,int _OSC_port,bool _configurable=false):OSC_IPaddress(_OSC_IPaddress),OSC_port(_OSC_port), OSCInterface(_configurable),NetworkInterface(this){
-      interfaceName = NETWORKOSC_INTERFACE;      
+      interfaceName = NETWORKOSC_INTERFACE;
+      icon = "g";     
     }
 
     virtual void derivedConfig(JsonObject& config){   

@@ -97,6 +97,7 @@ class BLEMIDIInterface: public MIDIInterface{
 
     BLEMIDIInterface(bool _configurable):MIDIInterface(BLEMIDI_INTERFACE,_configurable){
       network = false;  // no network dependency
+      icon = "e";
     }
 
     virtual uint16_t getSize(String addrr){
@@ -140,6 +141,7 @@ class USBMIDIInterface: public MIDIInterface{
 
     USBMIDIInterface(bool _configurable):MIDIInterface(USBMIDI_INTERFACE,_configurable){
       network = false; // no network dependency
+      icon = "f";
     }
 
     virtual void monitor(){}
@@ -165,6 +167,41 @@ class USBMIDIInterface: public MIDIInterface{
 };
 
 
+#define DINMIDI_INTERFACE "DINMIDI"
+class DINMIDIInterface: public MIDIInterface{
+  #define CONFIG_DIN "voidUSBparam"
+  public:
+    String voidDinparam = "din1";
+
+    DINMIDIInterface(bool _configurable):MIDIInterface(DINMIDI_INTERFACE,_configurable){
+      network = false; // no network dependency
+      icon = "c";
+    }
+
+    virtual void monitor(){}
+
+
+    virtual void derivedConfig(JsonObject& config){   
+      config[CONFIG_DIN] = voidDinparam;   // fill any parameters that are required by sysex
+    } 
+
+    virtual void restore(const JsonObject& config){
+      voidDinparam = config[CONFIG_DIN].as<String>();
+    }      
+
+    virtual void* read(){return nullptr;}
+
+    virtual void begin(){}
+
+    virtual void end(){}     
+
+    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){};    
+    virtual void sendSysex(){}
+
+};
+
+
+
 #define APPLEMIDI_INTERFACE "AppleMIDI"
 class AppleMIDIInterface: public MIDIInterface,NetworkInterface{
   #define CONFIG_APPLE "voidAppleMidiParam"
@@ -172,6 +209,7 @@ class AppleMIDIInterface: public MIDIInterface,NetworkInterface{
     String voidAppleMidiParam = "titi";      
 
     AppleMIDIInterface(bool _configurable):MIDIInterface(APPLEMIDI_INTERFACE,_configurable),NetworkInterface(this){
+      icon = "d";
     }
 
     virtual void monitor(){      
@@ -271,8 +309,8 @@ class AppleMIDIInterface: public MIDIInterface,NetworkInterface{
     // Méthode de l'instance réellement appelée
     void handleConnected(const ssrc_t& ssrc, const char* name) {
         DEBUG_PRINT("\nConnected to session: %s\n", name);
-        state.code = IF_STATE_READY;
-        state.label = "connected";
+        state.code = IF_READY;
+        state.label = IF_STATE_CONNECTED;
     }    
 
     void handleDisconnected(const ssrc_t& ssrc) {
@@ -281,10 +319,10 @@ class AppleMIDIInterface: public MIDIInterface,NetworkInterface{
     }
 
     void setStatePendingSession(){
-      state.code = IF_STATE_NOT_READY;      
-      state.label = "Pending";
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_PENDING;
       state.subLabel =  hwm.network->midiClient->getName() +String(" (or ")+hwm.network->IP.toString() + String(", port: ")+hwm.network->midiClient->getPort()+ String(")");
-      state.userInstructions = "Connect your MIDI gateway to to the following Apple Midi session";          
+      state.userInstructions = "ConnectMIDIsession";          
     }
 
     virtual void begin(){

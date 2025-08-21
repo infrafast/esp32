@@ -3,9 +3,10 @@
 Import("env")
 
 #env.Append(CPPDEFINES=[("CONFIG_SDKCONFIG_DEFAULTS", "sdkconfig.defaults")])
+env.Append(CPPDEFINES=[("LOAD_GLCD")])
 
 env.Append(CPPDEFINES=[("USER_SETUP_LOADED", 1)])
-env.Append(CPPDEFINES=[("ILI9341_2_DRIVER", 1)])
+env.Append(CPPDEFINES=[("ILI9341_2_DRIVER", 1)]) 
 #env.Append(CPPDEFINES=[("ILI9341_2_DRIVER", 1)])
 env.Append(CPPDEFINES=[("SPI_FREQUENCY", 48000000  )])            #48000000
 env.Append(CPPDEFINES=[("SUPPORT_TRANSACTIONS", 1)])

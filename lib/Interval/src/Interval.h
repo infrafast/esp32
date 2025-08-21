@@ -714,41 +714,14 @@ void xTaskBackground(void *pvParameters);
 #include "HWManager.h"
 HardwareManager hwm;
 
-
-/*enum{
-  IDLE = CONNECTED+1,
-  CONNECTING,
-  SYNCING_SOFTWARE,
-  DEVICE_UNREACHABLE,
-  SOFTWARE_UNREACHABLE,
-  SEARCHING,
-  CONNECTFAILED,
-  SYNCING_DATA,
-  OFFLINE,
-  EOF_STATE
-};
-
-String stateNames[EOF_STATE]={
-  "disconnected",
-  "connected",
-  "idle",
-  "connecting",
-  "syncing software",
-  "device unreachable",
-  "software unreachable",
-  "searching",
-  "connect failed",
-  "syncing data",
-  "offline"
-};*/
-
 enum{
-  IF_STATE_NOT_READY,
-  IF_STATE_READY
+  IF_NOT_READY,
+  IF_READY
 };
+
 
 struct State{ // used by Strip and Interface
-  uint8_t code = IF_STATE_READY;
+  uint8_t code = IF_NOT_READY;
   String label = "stateLabel";
   String subLabel = "subStateLabel";
   String userInstructions = "userInstructions";
@@ -757,8 +730,16 @@ struct State{ // used by Strip and Interface
   bool stateChanged = false;
 };
 
-
 #include "GUIManager.h"
+
+class AnimationTaskParams{ 
+  public:
+    const String* text;
+    String icon = ICON_WAIT;
+    AnimationTaskParams(const String* t,String i = ICON_WAIT):text(t),icon(i){}
+};
+
+
 TFT_eSPI* GUI::tft = &hwm.tft;
 GUIManager gui(false);
 OpenFontRender* Label::ofr = &gui.labelOfr;
@@ -910,6 +891,84 @@ void gzFileServer(Request &req, Response &res) {
       res.end();          
     }      
 }*/
+
+static TaskHandle_t    hwaitingAnimationThread = nullptr;
+
+#define STEP_MS 500
+
+// ---------- Tâche d’animation ----------
+void waitingAnimationThread(void *param_type) {
+  DEBUG_PRINT("\nwaitingAnimationThread()");
+  AnimationTaskParams* params = static_cast<AnimationTaskParams*>(param_type);
+
+  #define ANIM_FONT_SIZE 40
+  int16_t x = TFT_WIDTH/2, y;
+  TFT_eSprite* sprite;
+  float bright = 0.0;
+
+  GUI::tft->fillScreen(GUI::defaultBcolor);
+  
+  y = TFT_HEIGHT-ANIM_FONT_SIZE;
+  Label message = Label(params->text, Align::Center, &x, &y, ANIM_FONT_SIZE , &GUI::defaultFcolor, &GUI::defaultBcolor, &GUI::screenBrightness);
+  message.refresh(true);
+  message.sprite->pushSprite(message.getX(),message.getY(),TFT_TRANSPARENT);        
+
+  DEBUG_PRINT("\n<<<<%s>>>>",params->text->c_str());
+
+  y = 5;
+  Icon icon = Icon(&params->icon,Align::Center,&x,&y,TFT_WIDTH/2,&GUI::defaultFcolor,&GUI::defaultBcolor, &bright);
+        
+  for (int i=0;;) {
+    // Vérifie si on nous demande d’arrêter (notification)
+    // 0 ms de délai = on ne bloque pas; on anime puis on revérifie à chaque tour
+    if (ulTaskNotifyTake(pdTRUE, 0) > 0) {
+      // Signale qu’on n’a plus de tâche active
+      hwaitingAnimationThread = nullptr;
+      vTaskDelete(nullptr); // termine la tâche
+    }
+    if (bright == 1.0) bright = 0.0;    // on fait clignoter l'icone en changeant son brightness de maniere binaire (total/zero)
+    else bright = 1.0;
+    vTaskDelay(pdMS_TO_TICKS(STEP_MS));
+    icon.refresh(true);  
+    icon.sprite->pushSprite(icon.getX(),icon.getY(),TFT_TRANSPARENT);
+  }
+}
+
+// ---------- Démarrer l’animation ----------
+void startAnimationThread(AnimationTaskParams* param) {
+  if (hwaitingAnimationThread == nullptr) {
+    // Pin sur le core 0 pour décharger loop() (généralement sur core 1)
+    xTaskCreatePinnedToCore(
+      waitingAnimationThread,
+      "waitingAnimationThread",
+      4096,        // stack
+      param,
+      3,           // priorité légère
+      &hwaitingAnimationThread,
+      0            // core 0
+    );
+  }
+}
+
+// ---------- Arrêter l’animation ----------
+void stopAnimationThread() {
+  if (hwaitingAnimationThread) {
+    // Envoie une notification; la tâche se nettoie puis s’auto-supprime
+    xTaskNotifyGive(hwaitingAnimationThread);
+    // Optionnel: attendre qu’elle se termine vraiment
+    // (petit spin-wait simple; vous pouvez raffiner avec un EventGroup)
+    const uint32_t t0 = millis();
+    app.triggerRedraw();            // we call for screen redraw
+    while (hwaitingAnimationThread && (millis() - t0 < 500)) {
+      vTaskDelay(pdMS_TO_TICKS(10));
+    }
+  }
+}
+
+
+
+
+
 
 void scanNetworksTaskWrapper(void * parameter){
   app.scanNetworksTask(parameter);
@@ -1324,7 +1383,7 @@ void bankScreenBuilder(uint8_t subScreen){
   //DEBUG_PRINT("\n--------------bankScreenBuilder exit-----------------");
 }
 
-void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* bottomLabel, String* icon){
+void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* bottomLabel, const String* icon){
   //DEBUG_PRINT("\naddFullScreenTextWithIcon(%s, %s, %s, %s)",topLabel->c_str(), midText->c_str(), bottomLabel->c_str(),icon->c_str());
   gui.add(new Label(topLabel, Align::Center,&midScreenHoriz, &topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
 

@@ -1300,7 +1300,7 @@ class WiFiEth : public Network{
         "PingTask",       // Nom de la tâche
         4096*2,             // Taille de la pile de la tâche
         params,           // Paramètres de la tâche (adresse IP et callbacks)
-        1,                // Priorité
+        2,                // Priorité
         &pingTaskHandle   // Handle de la tâche
       );
       DEBUG_PRINT("\nasyncPing task created");
@@ -1335,7 +1335,7 @@ class WiFiEth : public Network{
           "ConnectTask",         // Nom de la tâche
           4096*2,                  // Taille de la pile (en octets)
           clientParam,           // Paramètre passé à la tâche (ici, l'objet courant)
-          1,                     // Priorité de la tâche
+          3,                     // Priorité de la tâche élevée
           NULL, //&clientParam->taskHandle,       // Pointeur vers l'identifiant de la tâche (inutile ici)
           0                      // Utilisation du 1er cœur de l'ESP32, qui est different de la boucle principale afin de ne pas perturber l'affichage
       );

@@ -16,5 +16,7 @@
 "searching":"recherche",
 "connect failed":"échec connexion",
 "trying":"tentative",
-"offline":"appui court on/off = hors connexion"
+"offline":"appui court on/off = hors connexion",
+"ConnectMIDIsession":"Connectez la session midi ci dessous",
+"ReconNet":"Reconnexion, patientez svp..."
 }

@@ -383,7 +383,7 @@ class OSCInterface: public DeviceInterface{
                 "OSCPingTask",       
                 4096*2,             
                 params,           
-                1,                
+                2,                
                 NULL,   
                 APP_CPU_NUM  
             );

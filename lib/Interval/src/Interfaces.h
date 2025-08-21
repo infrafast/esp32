@@ -4,6 +4,12 @@
 #include <vector>
 #include "Interval.h"
 
+#define IF_STATE_DISCONNECTED "disconnected"
+#define IF_STATE_PENDING "pending"
+#define IF_STATE_CONNECTING "connecting"
+#define IF_STATE_CONNECTED "connected"
+
+
 class DeviceInterface {
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
@@ -13,12 +19,13 @@ class DeviceInterface {
   #define INTERFACE_GROUP       "group"
   #define INTERFACE_USENETWORK  "network"  
   #define INTERFACE_PROVIDER    "provider"
+  #define INTERFACE_ICON        "icon"
   
   public:
 
   State state;
 
-  String previousStateLabel = state.label;
+  String previousStateLabel;
   uint8_t previousStateCode = 0;
 
   String interfaceName; 
@@ -67,6 +74,7 @@ class DeviceInterface {
       config[INTERFACE_OFFLINE] = state.offline;
       config[INTERFACE_GROUP] = group;
       config[INTERFACE_PROVIDER] = getProviderName();      
+      config[INTERFACE_ICON] = icon;
     }
     derivedConfig(config);
 
@@ -199,8 +207,8 @@ class NetworkInterface{
       // detect if network is down
       if (hwm.network->refreshed){
         if (hwm.network->state == DISCONNECTED){
-          interface->state.code = IF_STATE_NOT_READY;
-          interface->state.label = "disconnected";
+          interface->state.code = IF_NOT_READY;
+          interface->state.label = IF_STATE_DISCONNECTED;
           interface->state.subLabel = hwm.network->SSID;
           interface->state.userInstructions = "Attempt";
         }
@@ -237,6 +245,8 @@ DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _
   interfaceRepo.interfaces.push_back(this);
   interfaceName = name;
   group = _group;
+  state.label = IF_STATE_DISCONNECTED;
+  previousStateLabel = state.label;
 }
 
 DeviceInterface::~DeviceInterface(){

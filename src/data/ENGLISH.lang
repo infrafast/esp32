@@ -10,5 +10,7 @@
 "searching":"recherche",
 "connect failed":"échec connexion",
 "trying":"tentative",
-"offline":"appui court on/off = hors connexion"
+"offline":"appui court on/off = hors connexion",
+"ConnectMIDIsession":"Connect your MIDI gateway to to the following Apple Midi session",
+"ReconNet":"Reconnecting network, wait few seconds..."
 }

@@ -133,6 +133,10 @@ public:
     static const uint16_t menuInactiveIconColor;
     static const uint16_t menuBackGroundColor;
 
+    // const icon
+    static const String iconMixEthWiFi;
+    static const String iconEth;
+
     // default luminance
     static const float fullBrightness;
     static float screenBrightness;
@@ -1539,5 +1543,8 @@ const int16_t GUI::center = TFT_WIDTH/2;
 const int16_t GUI::y1 = TOP2WIDGET_SIZE+1;
 
 AlteredColor GUI::glowingGoldColor = AlteredColor{.baseColor = GUI::gold, .value = &GUI::unUsedColor};
+
+const String GUI::iconMixEthWiFi = ICON_MIXETHWIFI;
+const String GUI::iconEth = ICON_ETH;
 
 #endif

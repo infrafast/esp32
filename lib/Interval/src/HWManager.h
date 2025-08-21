@@ -286,7 +286,7 @@ public:
       for(int i = 0; i < hwComponents.size(); i++) hwComponents.get(i)->init();
 
       tft.init(1);  //tft.invertDisplay(1);            
-      tft.fillScreen(TFT_BLACK);
+      tft.fillScreen(TFT_BLACK);  
 
       // the below code is equivalent to setting RST , which also works for W5500
       /*pinMode(D7, OUTPUT);
@@ -295,7 +295,7 @@ public:
       digitalWrite(D7,HIGH);
       delay(100);*/
    
-      xTaskCreatePinnedToCore(xTaskBackground, "OnOFFandGUI", 4096, NULL, 3, NULL, 0);
+      xTaskCreatePinnedToCore(xTaskBackground, "OnOFFandGUI", 4096, NULL, 1, NULL, 0);   // prio was 3 
       
       debounceTimer = millis();
       lastInterrupt = millis();
