@@ -22,7 +22,7 @@ typedef  struct  {
 
 class DataSet{
   public:
-    String name ="";
+    String name = "";
     Address address;
 
     String errorDatasetOverflow = "overflow";

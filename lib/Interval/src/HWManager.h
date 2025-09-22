@@ -24,86 +24,47 @@
 #include <EthernetUdp.h>
 #include "HWComponents.h"
 
+#include <Preferences.h>
+
 #include <driver/rtc_io.h>
+
+#include "MIDIUSB_shim.h"   // required by USB-MIDI.h
+#include <USB-MIDI.h>     // sysex but do not work
+
+#ifdef DEBUG
+  class USBMIDISimul{
+    public:
+      USBMIDISimul(){}
+      void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_PRINT("\nUSBMIDI::sendNoteOn(%d,%d,%d)",inNoteNumber,inVelocity,inChannel);}
+      void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_PRINT("\nUSBMIDI::sendNoteOff(%d,%d,%d)",inNoteNumber,inVelocity,inChannel);}
+      void sendProgramChange(DataByte inProgramNumber,Channel inChannel){DEBUG_PRINT("\nUSBMIDI::sendProgramChange(%d,%d)",inProgramNumber,inChannel);}
+      void sendControlChange(DataByte inControlNumber,DataByte inControlValue,Channel inChannel){DEBUG_PRINT("\nUSBMIDI::sendControlChange(%d,%d,%d)",inControlNumber,inControlValue,inChannel);}
+      void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries = false){DEBUG_PRINT("\nUSBMIDI::sendSysEx(%d,%s,%d)",inLength,inArray,inArrayContainsBoundaries);}
+      void setHandleSystemExclusive(SystemExclusiveCallback fptr) { DEBUG_PRINT("\nUSBMIDI::setHandleSystemExclusive(f*)");}
+      bool read(){}
+  }MIDI;
+#else
+  USBMIDI_CREATE_DEFAULT_INSTANCE();
+#endif
+
+#include <USB.h>
+#include <midiusb.h>     //tinyUSB , works but no sysex
+
+#ifndef ARDUINO_USB_MODE
+  #error This ESP32 SoC has no Native USB interface
+#elif ARDUINO_USB_MODE == 1
+  #warning This sketch should be used when USB is in OTG mode
+#endif
 
 #ifdef DEBUG
   #define MIDI_USB_NOTE_ON(arg1,arg2) DEBUG_PRINT("\nMIDI_USB_NOTE_ON(%d,%d)",arg1,arg2)
   #define MIDI_USB_NOTE_OFF(arg1) DEBUG_PRINT("\nMIDI_USB_NOTE_ON(%d,%d)",arg1)
-  #define MIDI_USB_BEGIN DEBUG_PRINT("\nMIDI_USB_BEGIN fake")
   #define MIDI_USB_CC(arg1,arg2,arg3) DEBUG_PRINT("\nMIDI_USB_CC(%d,%d,%d)",arg1,arg2,arg3)
 #else
-  #include <midiusb.h>
-  #include <USB.h>
-  MIDIusb USBmidi;
   #define MIDI_USB_NOTE_ON(arg1,arg2) USBmidi.noteON(arg1,arg2)
   #define MIDI_USB_NOTE_OFF(arg1) USBmidi.noteOFF(arg1)
   #define MIDI_USB_CC(arg1,arg2,arg3) USBmidi.controlChange(arg1,arg2,arg3)
-
-  #define MIDI_USB_BEGIN USBmidi.setBaseEP(2); USBmidi.begin();
-
 #endif
-
-
-
-/*#include <Control_Surface.h>
-
-
-// This class defines how to send and receive MIDI data using your custom
-// backend.
-struct MyUSBMIDIBackend {
-  MIDIusb midi;
-  // USB MIDI packages are 4 bytes.
-  using MIDIUSBPacket_t = AH::Array<uint8_t, 4>;
-  // This method is optional. It is called once upon initialization.
-  void begin() { midi.setBaseEP(2); midi.begin(); }
-  // Read a single packet. Return a packet of all zeros if there is no packet.
-  MIDIUSBPacket_t read() { return MIDIUSBPacket_t {}; }
-  // Write a single packet to the output buffer.
-  void write(MIDIUSBPacket_t p) { 
-    tud_midi_packet_write(p.data); //4bytes
-  }
-  // Transmit the output buffer immediately.
-  void sendNow() { midi.flush(); }
-  // Should the sendNow method be called after each message? Return false if
-  // your backend can send the data in the output buffer asynchronously and
-  // automatically. Return true if that's not the case, and an explicit call to
-  // sendNow is required.
-  bool preferImmediateSend() { return false; }
-};
-
-
-// This class defines how to send and receive MIDI data using your custom
-// backend.
-struct MyUSBMIDIBackend2 {
-  // USB MIDI packages are 4 bytes.
-  using MIDIUSBPacket_t = AH::Array<uint8_t, 4>;
-  // This method is optional. It is called once upon initialization.
-  void begin() { Serial.begin(115200); }
-  // Read a single packet. Return a packet of all zeros if there is no packet.
-  MIDIUSBPacket_t read() { return MIDIUSBPacket_t {}; }
-  // Write a single packet to the output buffer.
-  void write(MIDIUSBPacket_t p) { Serial << AH::HexDump(p.data) << endl; }
-  // Transmit the output buffer immediately.
-  void sendNow() { Serial.flush(); }
-  // Should the sendNow method be called after each message? Return false if
-  // your backend can send the data in the output buffer asynchronously and
-  // automatically. Return true if that's not the case, and an explicit call to
-  // sendNow is required.
-  bool preferImmediateSend() { return false; }
-};
-
-
- 
-// This is the actual MIDI interface that makes use of the backend defined above.
-struct MyUSBMIDI_Interface : GenericUSBMIDI_Interface<MyUSBMIDIBackend> {
-  MyUSBMIDI_Interface() = default;
-  using MIDIUSBPacket_t = MyUSBMIDIBackend::MIDIUSBPacket_t;
-};
-
-MyUSBMIDI_Interface midiZob;
-//HairlessMIDI_Interface midiZob;
-*/
-
 
 //////////////////////////////////////////////
 #define ANALOGB_PIN       (gpio_num_t)D0 //GPIO_NUM_1  
@@ -138,20 +99,20 @@ volatile unsigned int delayRepeatTime = 500;
 unsigned long lastInterrupt;
 
 void OnWiFiEvent(WiFiEvent_t event);
+void bootScreen(uint8_t);
 
-enum{
-  SYSTEM_OFF,
-  BATTERY_STARTUP,
-  NORMAL_STARTUP,
-  WIZARD_STARTUP,  
-  RESET_STARTUP,  
-  NO_FS_STARTUP,  
-};
 
 #define SHUTDOWN_PUSH_DELAY 1500    // how long to press the button to switchoff
 
+#define INVERTED_SCREEN_NO 1
+#define INVERTED_SCREEN_YES 3
+
 class HardwareManager : public GenericComponent {
 public:
+
+    Preferences persistants;
+    bool swapButton = false;
+
 
     TFT_eSPI tft = TFT_eSPI();  // Invoke library, pins defined in User_Setup.h
 
@@ -169,6 +130,8 @@ public:
 
     Network *network = nullptr;
     Network *configMedia = nullptr;    
+  
+    MIDIusb* USBmidi = nullptr;           // <===== tinyUSB
 
     String configURL;
 
@@ -220,7 +183,7 @@ public:
       ledcAttachPin(BUILTIN_LED, 0);   
       ledcWrite(0,255);
 
-      startupState = NORMAL_STARTUP; return;
+      startupState = NORMAL_STARTUP; //return;
 
 
       #define RESET_DELAY 10000
@@ -234,7 +197,7 @@ public:
           bool released = onOff.refresh();
           if (released){
             if (onOff.pushedTime>RESET_GRACE_PERIOD ){ 
-              startupState = WIZARD_STARTUP;
+              startupState = USB_CDC_AND_FWUPDATE_STARTUP; //WIZARD_STARTUP;
               //if (debug) DEBUG_PRINT("\nlong press");
             }else if (onOff.pushedTime>pressTime ){ 
               startupState = NORMAL_STARTUP;
@@ -265,21 +228,84 @@ public:
       }
     }
     
+    void setScreenAndButtonRotation(){
+      if (persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES){
+        //swap button
+        uint8_t oldLeftID = buttons[LEFTB]->getID();
+        buttons[LEFTB]->setID(buttons[RIGHTB]->getID());
+        buttons[RIGHTB]->setID(oldLeftID);
+      }else{
+        // by default we keep the button as they were initialized by the HWM
+        // however, in case user has rotated from the menu, we have to swap button
+        if (swapButton){
+          uint8_t oldRightID = buttons[RIGHTB]->getID();
+          buttons[RIGHTB]->setID(buttons[LEFTB]->getID());
+          buttons[LEFTB]->setID(oldRightID);
+        }
+      }  
+      tft.setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO));        
+    }
+
+    void useCDC(){
+      // activate the serial communication and deactivate MIDI
+      useUSBMidi = false;
+      #ifdef DEBUG
+        debugMon.begin(115200);             
+      #endif
+      USB.enableDFU();   // allow the interface to be seen as jtag and upload fw but still do not show the seriall log          
+      USB.begin();  // required to make the serial usb line working, but DO NOT PUT USB.begin() when using MIDI          
+      unsigned long start = millis();
+      while ((millis() - start < 1000 && !debugMon)) { // loop to allow user to see the usb logo indicating the device is in serial usb mode 
+        delay(1); // petite pause pour éviter de monopoliser la CPU
+      }                
+    }
+
+
+    void useMIDI(){
+      useUSBMidi = true;        // used to display appropriate icon for battery charging or cable
+
+      /*
+      USB.onEvent(usbEventCallback);
+      //USBSerial.onEvent(usbEventCallback);
+      MidiUSB.onEvent(usbEventCallback);
+
+      MidiUSB.begin();
+      //USBSerial.begin();
+      USB.begin();
+      */
+    
+      //USB.VID(0x6666);
+      //USB.PID(0x1234);
+      //USB.serialNumber("FS-1000");
+      //USB.firmwareVersion(0x0000);
+      //USB.usbVersion(0x0200);
+      /*USB.usbClass(TUSB_CLASS_AUDIO);
+      USB.usbSubClass(0x00);
+      USB.usbProtocol(0x00);
+      USB.usbAttributes(0x80);*/
+      //USB.usbPower(100);
+      //tinyusb_add_string_descriptor("MIDIUSB_ESP32_STR_DESC");
+
+      //USBmidi.begin();            // as long as we don't call these 2 begins, the USB is not visible        
+      
+      // with tinyUSB we initialize the USB midi stack, then MIDI HELPERS from Lathoud MIDIUSB will work
+      USBmidi = new MIDIusb;
+      USBmidi->setBaseEP(2);
+      USBmidi->begin();           
+    }
+
     virtual void init() {            
       GenericComponent::init();            
+      
+      persistants.begin("interval", false);     
+
       // init device that do not need power but are required for startup
       onOff.init();    
       powerRail.init();        
       // get the power
       wakeUp(500); // you have to press button for more than 500ms to wake up, otherwise we do not start.    
+
       setPowerRail(ON);        
-
-
-
-      MIDI_USB_BEGIN;    
-      
-      //Control_Surface.begin();
-
 
       //init all other devices      
 
@@ -287,6 +313,32 @@ public:
 
       tft.init(1);  //tft.invertDisplay(1);            
       tft.fillScreen(TFT_BLACK);  
+      tft.setSwapBytes(true);
+      setScreenAndButtonRotation();
+
+      USB.productName("FOOTSWITCH");
+      USB.manufacturerName("Interval");
+      USB.serialNumber("FS-1000");   // pas vide
+
+      if (!LittleFS.begin()){
+        startupState = NO_FS_STARTUP;
+      }
+
+      #ifdef DEBUG
+        // if we are in debug mode, we use the usb as a serial interface in all case, no matter the user boot up by long press or not
+        serialMutex = xSemaphoreCreateMutex();             
+        startupState = USB_CDC_AND_FWUPDATE_STARTUP;
+        useCDC();
+      #else
+        // in prod, the usage of the CDC (to update firmware) or MIDI depends on the startup state that was determined by the on/ff press duration at boot
+        if (startupState == USB_CDC_AND_FWUPDATE_STARTUP){
+          useCDC();
+        }else{        
+          useMIDI();
+        }
+      #endif
+
+      bootScreen(startupState); 
 
       // the below code is equivalent to setting RST , which also works for W5500
       /*pinMode(D7, OUTPUT);
@@ -310,14 +362,6 @@ public:
           }
         }
       }, RISING);             
-
-      //debugTFTSetup();      
-
-      if (!LittleFS.begin()){
-        startupState = NO_FS_STARTUP;
-      }
-
-      //tusb_init();
     
     }
 

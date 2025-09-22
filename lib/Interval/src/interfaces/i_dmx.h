@@ -25,19 +25,27 @@ class ArtnetDMXInterface: public DMXInterface, NetworkInterface{
       icon = "b";
     }
 
-    virtual void monitor(){}    
+    virtual void monitor(){
+      monitorNetwork();
+    }    
 
     virtual void derivedConfig(JsonObject& config){   
       config[CONFIG_ARTNET] = voidArtnetParam;   // fill any parameters that are required by sysex
     } 
 
-    virtual void restore(const JsonObject& config){
-      voidArtnetParam = config[CONFIG_ARTNET].as<String>();
+    virtual bool restore(const JsonObject& config){
+      bool changed = false;
+      if (config.containsKey(CONFIG_ARTNET)){
+        voidArtnetParam = config[CONFIG_ARTNET].as<String>();
+        changed = true;
+      }
+      return changed;
     }  
 
     virtual void* read(){return nullptr;}
 
     virtual void begin(){}
+    
     virtual void end(){}
 
     
@@ -62,13 +70,19 @@ class ThreePinDMXInterface: public DMXInterface{
       config[CONFIG_3PINDMX] = void3pinDMXParam;   // fill any parameters that are required by sysex
     } 
 
-    virtual void restore(const JsonObject& config){
-      void3pinDMXParam = config[CONFIG_3PINDMX].as<String>();
+    virtual bool restore(const JsonObject& config){
+      bool changed = false;
+      if (config.containsKey(CONFIG_3PINDMX)){
+        void3pinDMXParam = config[CONFIG_3PINDMX].as<String>();
+        changed = true;
+      }
+      return changed;
     }  
 
     virtual void* read(){return nullptr;}
 
     virtual void begin(){}
+
     virtual void end(){}
 
     

@@ -12,5 +12,7 @@
 "trying":"tentative",
 "offline":"appui court on/off = hors connexion",
 "ConnectMIDIsession":"Connect your MIDI gateway to to the following Apple Midi session",
-"ReconNet":"Reconnecting network, wait few seconds..."
+"ReconNet":"Reconnecting network, wait few seconds...",
+"PluginUSB":"Plugin your device USB MIDI cable",
+"restartUSB":"Restart to activate USB MIDI"
 }

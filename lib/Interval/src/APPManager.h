@@ -1,7 +1,6 @@
 #ifndef APPManager_h
 #define APPManager_h
 
-#include <Preferences.h>
 #include "nvs_flash.h" 
 #include <LinkedList.h>
 #include <ArduinoJson.h>
@@ -143,7 +142,6 @@ void defaultVoidDoubleInt(int i,int j){};
 void defaultVoidBool(bool state){}
 void defaultWizardScreenBuilder();
 void defaultWizardStepFlow();
-void defaultBootScreen();
 
 void info_item_selected(MenuComponent* p_menu_component);
 void config_menu_item_selected(MenuComponent* p_menu_component);
@@ -243,7 +241,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;    
     ReturnStringCallback userJsonPongCallback = defaultStringReturn;
     VoidCallback userWizardstepFlow = defaultWizardStepFlow;
-    VoidCallback bootScreen = defaultBootScreen;
     VoidDoubleIntCallback userScreenBuilder = defaultVoidDoubleInt;
 
     ///////////////////// STRIPS & BANKS CONTAINERS AND DEFINITION ////////////////////////
@@ -315,7 +312,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
       
-    Preferences persistants;
     Shortcuts shortcuts;
 
     ///////////////// INTERFACES ///////////////////
@@ -341,8 +337,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     String firmwareUpdateFilename="";
 
-    bool swapButton = false;
-
     // ADDRESSES DEFINITION
     
 
@@ -357,56 +351,38 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       gui = g;
       id = "ApplicationManager";
 
+      Log::init(this);
+
       wss = nullptr;      // this is to make sure the template is correctly void
 
-      networkOSCinterface = new NetworkOSC("99.98.97.96",10024,true); // true = configurable
-      
-      appleMIDIInterface = new AppleMIDIInterface(true);
-      AppleMIDIInterface::setInstance(appleMIDIInterface);
-
-      usbMIDIInterface = new USBMIDIInterface(true);
-      bleMIDIInterface = new BLEMIDIInterface(true);
-      dinMIDIInterface = new DINMIDIInterface(true);
-
-      artnetDMXInterface = new ArtnetDMXInterface(true);
-      threePinDMXInterface = new ThreePinDMXInterface(true);  
-
-      //MidiChannels midiChannels = ;
-
+      // *********************************
+      // SKELETONS
+      // *********************************
+      //
+      // general purposes / test skeletons
+      //
       stripTextSkel = new StripSkeleton(STRIP_TEXT,STRIP_DEFAULT_GROUP,textStripConstructorCallback,'*');        
-        stripTextSkel->registerDataSetAddress(&systemInterface.simpleText.address);
+        stripTextSkel->registerDataSetAddress(new Address{ADDRESS_SIMPLETEXT,INPUTTEXT} );
 
-      stripMidiSkel = new StripSkeleton(STRIP_MIDI,GROUP_INTERFACE_MIDI,midiStripConstructorCallback,'*');             
-        stripMidiSkel->registerDataSetAddress(&DSmidiChannels.address);
-        stripMidiSkel->registerDataSetAddress(&DSmidiMessages.address);
-        stripMidiSkel->registerDataSetAddress(&DSmidiValue.address);
+      //
+      // midi skeletons
+      //
+      stripMidiNoteSkel = new StripSkeleton(STRIP_MIDINOTE,GROUP_INTERFACE_MIDI,midiNoteStripConstructorCallback,'*');             
+        stripMidiNoteSkel->registerDataSetAddress(&dsMidiChannels.address);
+        stripMidiNoteSkel->registerDataSetAddress(&dsNotesOnOff.address);
+        stripMidiNoteSkel->registerDataSetAddress(&dsMidiValue1.address);
+        stripMidiNoteSkel->registerDataSetAddress(&dsMidiValue2.address);
 
+      freeTextStripSysexSkel = new StripSkeleton(STRIP_SYSEXTEXT,GROUP_INTERFACE_MIDI,freeSysexStripConstructorCallback,'*');             
+        freeTextStripSysexSkel->registerDataSetAddress(&dsfreeTextMidiSysex.address);
 
-      stripSysexSkel = new StripSkeleton(STRIP_SYSEX,GROUP_INTERFACE_MIDI,sysexStripConstructorCallback,'*');             
-        stripSysexSkel->registerDataSetAddress(&DSmidiChannels.address);
-        stripSysexSkel->registerDataSetAddress(&DSmidiSysex.address);
+      dropDownStripSysexSkel = new StripSkeleton(STRIP_SYSEXSELECT,GROUP_INTERFACE_MIDI,dropdownSysexStripConstructorCallback,'*');             
+        dropDownStripSysexSkel->registerDataSetAddress(&dsSysexMessages.address);
         
-      std::vector<String> groupesUniques;
-      /* register the interface names in the dataset of their group, without duplating the groups 
-          {"provider":"systemCfg","address":"/provider/Mixer/%s","values":["X+Mseries-Network(OSC)","MixingStation"]},
-          this is used by the webapp to populate the available interface for a defined strip 
-      */
-      for (const auto& interface : interfaceRepo.interfaces){
-        bool exists = false;
-        for (const String& g : groupesUniques) {
-          if (g == interface->group) {
-            exists = true;
-            break;
-          }
-        }
-        if (!exists) {
-          groupesUniques.push_back(interface->group);
-          new DynamicDataSet({ADDRESS_PROVIDER+interface->group+"/%s",INPUTSELECT},&systemInterface);
-        }
 
-      }
-
-
+      // *********************************
+      // CALLBACKS
+      // *********************************
       hwm->network->userInternetCallback = [this](bool* online) {
           this->internetCallBack(online);
       };         
@@ -438,8 +414,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void setBatIcon(){
       batIconColor = TFT_GREEN;
       switch(hwm->battery.batteryState){
-        case BAT_CHARGING:
-          batIcon = ICON_PLUG; //ICON_BAT_CHARGING
+        case BAT_USB_PLUGGED:          
+          if (useUSBMidi) batIcon = ICON_USBMIDI;       
+          else batIcon = ICON_PLUG; 
         break;
         case BAT_DISCHARGING:
         {
@@ -583,33 +560,51 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       LittleFS.remove(DEFAULT_CONFIG_FILE_NAME);
       // delete systemCfg settings
       LittleFS.remove(SYSTEM_FILE_NAME);
-      persistants.clear();
-      persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);      
-      persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    //default brightness 
+      hwm->persistants.clear();
+      hwm->persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);      
+      hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    //default brightness 
     }
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
 
-    void init(String _defaultUserConf="{}"){          
-      
+    void init(String _defaultUserConf="{}"){               
       defaultUserConf = _defaultUserConf;
-      #ifdef DEBUG
-        serialMutex = xSemaphoreCreateMutex();
-        //DEBUG is enabled so we don't use MIDI USB, the USB C is used for Serial printf debug
-        Serial.begin(115200);
-        /*unsigned long start = millis();
-        while (!Serial && (millis() - start < 1000)) {
-          delay(1); // petite pause pour éviter de monopoliser la CPU
-        }*/
-      #else
-        Serial.setDebugOutput(false);             
-      #endif
-
       GenericComponent::init();
 
-      LittleFS.begin();
+      hwm->init();
 
-      persistants.begin("interval", false);      
+      // interfaces that do not need the network have to be started manually
+      usbMIDIInterface = new USBMIDIInterface(true); usbMIDIInterface->begin();
+      bleMIDIInterface = new BLEMIDIInterface(true); bleMIDIInterface->begin();
+      dinMIDIInterface = new DINMIDIInterface(true); dinMIDIInterface->begin();
+      // interfaces that need the network will be started and stopped by app refresh when network change state
+      networkOSCinterface = new NetworkOSC("99.98.97.96",10024,true); // true = configurable
+      // DMX
+      artnetDMXInterface = new ArtnetDMXInterface(true);
+      threePinDMXInterface = new ThreePinDMXInterface(true);     
+      // RTPMIDI
+      appleMIDIInterface = new AppleMIDIInterface(true);
+      //AppleMIDIInterface::setInstance(appleMIDIInterface);
+
+      std::vector<String> groupesUniques;
+      /* register the interface names in the dataset of their group, without duplating the groups 
+          {"provider":"systemCfg","address":"/provider/Mixer/%s","values":["X+Mseries-Network(OSC)","MixingStation"]},
+          this is used by the webapp to populate the available interface for a defined strip 
+      */
+      for (const auto& interface : interfaceRepo.interfaces){
+        bool exists = false;
+        for (const String& g : groupesUniques) {
+          if (g == interface->group) {
+            exists = true;
+            break;
+          }
+        }
+        if (!exists) {
+          groupesUniques.push_back(interface->group);
+          new DynamicDataSet({ADDRESS_PROVIDER+interface->group+"/%s",INPUTSELECT},&systemInterface);
+        }
+
+      }
 
       systemCfg.load(SYSTEM_FILE_NAME,defaultSysConf);  
       applySystemSettings();
@@ -635,14 +630,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         DEBUG_PRINT("\n\n userLang:\t%s [...]",s.substring(0,180).c_str());                
       #endif
 
-      hwm->init();
-      
-      GUI::screenBrightness = persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
+     
+      GUI::screenBrightness = hwm->persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
       if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
       if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;      
 
       gui->init();              
-      setScreenAndButtonRotation();
 
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
             
@@ -721,28 +714,26 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
         break;
         case WIZARD_STARTUP:          
-          persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_WIZARD);
-          persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_LANG_STEP1);
-          startup();
+          hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_LANG_STEP1);
+          startup(SCREEN_WIZARD);
         break;
         case NORMAL_STARTUP:
-          persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
-          startup();
+        case USB_CDC_AND_FWUPDATE_STARTUP:          
+          startup(SCREEN_BANK);
         break;
       }
     }
 
-    void startup(){
-      // perform all application initialization
-      bootScreen();                
-      // we init banks and then go to banks or resume wizard
+    void startup(uint8_t startupScreen){          
+      hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);            
+      // we init banks and then go to banks or fail screen
       if (deserializeBanks(bankCfg.getString(C_BANKS)) == nullptr){
         menuTopText = *lang.getString("IntervalBank creation");
         menuBottomLabel = emptyString;
         byeIconColor = &GUI::red; byeIcon = &iconForbid;
         screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
-      }  
-      restoreScreen();      
+      }        
+      restoreScreen();       // restore the screen that persists
     }
 
     // EVENTS HANDLING
@@ -751,7 +742,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       ButtonEvent* btnEvt = (ButtonEvent*) event->data;
       switch(btnEvt->id){
         case IntervalButton::BUTTON_DOUBLE_CLIC:
-          
+
+          if (screen.id == SCREEN_BANK){
+            // toggle interface offline - online
+            if (focusedStrip != nullptr){
+              if (focusedStrip->interface->state.offline == true) focusedStrip->interface->state.offline = false;
+              else focusedStrip->interface->state.offline = true;
+            }
+          }        
+
         break;
         case IntervalButton::BUTTON_HOLD:
           
@@ -762,11 +761,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
         case IntervalButton::BUTTON_RELEASE_HOLD:
           
+
+
         break;
         case IntervalButton::BUTTON_SIMPLE_CLIC:
           simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
+          char* msg = "helloworld";
+          MIDI.sendSysEx(strlen(msg),(const byte*)msg);
+          MIDI.sendNoteOn(123,62,1);                                                                                                                                                                         
         break;
       }
+
+
       // propagate the event
       fireEvent(event);      
     }
@@ -1001,7 +1007,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
   void saveBrightness(){
     triggerRedraw();
-    persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    
+    hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    
   }
 
   void handleClicBrightnessButton(uint8_t buttonID){
@@ -1078,24 +1084,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
   }
 
-  void setScreenAndButtonRotation(){
-    if (persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES){
-      //swap button
-      uint8_t oldLeftID = hwm->buttons[LEFTB]->getID();
-      hwm->buttons[LEFTB]->setID(hwm->buttons[RIGHTB]->getID());
-      hwm->buttons[RIGHTB]->setID(oldLeftID);
-    }else{
-      // by default we keep the button as they were initialized by the HWM
-      // however, in case user has rotated from the menu, we have to swap button
-      if (swapButton){
-        uint8_t oldRightID = hwm->buttons[RIGHTB]->getID();
-        hwm->buttons[RIGHTB]->setID(hwm->buttons[LEFTB]->getID());
-        hwm->buttons[LEFTB]->setID(oldRightID);
-      }
-    }  
-    GUI::tft->setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO));        
-  }
-
   void refreshWiFiSignalIcon(){
     int8_t signalStrength = abs(WiFi.RSSI());
     if (signalStrength >=90) networkIcon = ICON_WIFI_STRENGTH_0;
@@ -1169,7 +1157,8 @@ void setup() {
       doc["langs"][0] = "francais"; 
       doc["langs"][1] = "english";       // change to "dir *.lang"
       doc["maxPOSTsize"] = MAX_POST_COMMAND_SIZE;
-      doc["wizard"] = (persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD)?true:false;
+      doc["safeScanfSpace"] = String(SAFE_SCANF_SPACE);
+      doc["wizard"] = (hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD)?true:false;
       doc["lang"] = *systemCfg.getString(S_LANG,"francais");  
       
       serializeJson(doc, *returnedJsonStringData);  
@@ -1212,8 +1201,8 @@ void setup() {
 
     void restoreScreen(){
       //DEBUG_PRINT("\nrestoreScreen():");
-      screen.id = persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
-      screen.state = persistants.getUChar(PERSISTANT_SCREEN_STATE,0);  
+      screen.id = hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
+      screen.state = hwm->persistants.getUChar(PERSISTANT_SCREEN_STATE,0);  
       //DEBUG_PRINT("\t read: id=%d / state:%d",screen.id,screen.state);
       // prevents wrong branching
       if (screen.id == SCREEN_BANK && screen.state > banks.size()-1) screen.state = 0; 
@@ -1525,8 +1514,10 @@ void setup() {
         //userNetworkChangeStateCallback(hwm->network->state);
 
         if (hwm->network->state == CONNECTED){    
-
-          appleMIDIInterface->begin();
+          // we start interfaces that uses the network
+          for (const auto& interface : interfaceRepo.interfaces){        
+            if (interface->useNetwork == true) interface->begin();
+          }          
 
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                   
@@ -1555,8 +1546,11 @@ void setup() {
 
           }
         }else{
-          // we disconnected , so we give back the priority on the WiFI connection list to  the last connected WiFi 
-          //hwm->setWiFi(&wiFiList,*systemCfg.getString(S_LAST_USED_SSID)); 
+          // we stop interfaces that uses the network
+          for (const auto& interface : interfaceRepo.interfaces){        
+            if (interface->useNetwork == true) interface->end();
+          }
+
         }
       }  
 
@@ -1585,7 +1579,7 @@ void setup() {
       // BATTERY LEVEL CHECK
       if (hwm->battery.refreshed){        
         setBatIcon();
-        if (hwm->battery.vBat<VBAT_CRIT && hwm->battery.batteryState != BAT_CHARGING){
+        if (hwm->battery.vBat<VBAT_CRIT && hwm->battery.batteryState != BAT_USB_PLUGGED){
           menuTopText = *lang.getString("Low Battery");
           menuBottomLabel = emptyString;
           goSleepCountdownStart = millis();
@@ -1602,7 +1596,7 @@ void setup() {
       for (const auto& interface : interfaceRepo.interfaces){        
         interfaceChangedState = interface->update();
         if (interfaceChangedState == true){
-          String if_change ="{\"interfaceState\":"+interface->serializeState()+"}";
+          String if_change ="{\"deviceState\":"+interface->serializeState()+"}";
           broadCast(if_change);
         }       
       }
@@ -1694,13 +1688,13 @@ void setup() {
             case STATE_WIZARD_LANG_STEP1:{
               jumpToMenu(langMenuString);   // jump to the lang menu
               screen.state = STATE_WIZARD_CONNECT_CONFIG_STEP2;
-              persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);    
-              persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_CONFIG_STEP2);    
+              hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);    
+              hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_CONFIG_STEP2);    
             }break;
             case STATE_WIZARD_CONNECT_CONFIG_STEP2:
               handleConfigConnection();
-              persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);    
-              persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_NETWORK_STEP3); 
+              hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);    
+              hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_NETWORK_STEP3); 
             break;
             case STATE_WIZARD_CONNECT_NETWORK_STEP3:
               if (!webAppConnected) screen.state = STATE_WIZARD_CONNECT_CONFIG_STEP2;
@@ -1796,7 +1790,7 @@ void setup() {
 
       if (webServer == nullptr) return; // no need to define websocket server if webserver has not been instanciated
 
-      AnimationTaskParams* param;
+      AnimationTaskParams* param = nullptr;
 
       if (wss != nullptr){
         // when you are connected to Eth, if you unplug the cable, the wifi connection goes back 
@@ -1804,7 +1798,7 @@ void setup() {
         // so we create thread that will take care of displaying a waiting message
         // Lance l’animation pendant que la tache principale travaille
         if (hwm->configMedia->media == WIFI_MEDIA){
-          param = new AnimationTaskParams(lang.getString("ReconNet"),ICON_MIXETHWIFI); 
+          param = new AnimationTaskParams(lang.getString("ReconNet"),&GUI::iconWiFi); 
           startAnimationThread(param);          
         }
         wss->shutdown();  // need the patch here: https://github.com/skaarj1989/mWebSockets/discussions/67#       
@@ -1817,9 +1811,11 @@ void setup() {
         wss = new EthernetWebSocketServer{};
       }else{
         DEBUG_PRINT("\nnew WiFiWebSocketServer{}");
-        wss = new WiFiWebSocketServer{};
-        stopAnimationThread();
-        delete param;        
+        wss = new WiFiWebSocketServer{};        
+        if (param != nullptr){
+          stopAnimationThread();
+          delete param;        
+        }
       }
 
 
@@ -1955,7 +1951,7 @@ void setup() {
         if(path == "/"){
           path = "/index.html.gz"; //path = "/index.html";      INDEX is the only exception were we process the gz here because we remap / to index
           #ifdef USE_NETWORK
-            if (persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD) path = "/wizard.html.gz"; //path = "/wizard.html";
+            if (hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD) path = "/wizard.html.gz"; //path = "/wizard.html";
           #endif
         }               
 
@@ -2021,7 +2017,7 @@ void setup() {
         //DEBUG_PRINT("\tPOST ");
         httpPost(req,res);
       }else{                    // GET IS USED TO TRANSFER MIME FILES
-        DEBUG_PRINT("\tGET ");
+        //DEBUG_PRINT("\tGET ");
         if(path == "/") path = "/index.html"; //path = "/index.html";      INDEX is the only exception were we process the gz here because we remap / to index
 
         bool fileIsCompressed = false;
@@ -2040,7 +2036,7 @@ void setup() {
 
         String fullPath = "/webapp"+String(path);   
 
-        DEBUG_PRINT("\t%s",fullPath.c_str());              
+        //DEBUG_PRINT("\t%s",fullPath.c_str());              
 
         if (!LittleFS.exists(fullPath)){
           res.sendStatus(404);   //send(404, "text/plain", "Not found");    
@@ -2054,7 +2050,7 @@ void setup() {
         
         File file = LittleFS.open(fullPath);
         if (file.isDirectory()){
-          DEBUG_PRINT("\tdirectory, quit.",fullPath.c_str());
+          //DEBUG_PRINT("\tdirectory, quit.",fullPath.c_str());
           res.end();
           return;
         }
@@ -2419,8 +2415,8 @@ void setup() {
           return nullptr;  // Early exit if the bank is not found
       } 
 
-      persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
-      persistants.putUChar(PERSISTANT_SCREEN_STATE,bankIndex);
+      hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
+      hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,bankIndex);
       restoreScreen();      
       
       return bank;        
@@ -2460,6 +2456,22 @@ void setup() {
     #define RET_SAVEBUTTON          "setSaveButton"
     #define RET_COMMANDERROR        "commandError"
     #define RET_MODALMESSAGE        "modalMessage"
+
+    void log(const char* originator, const char* message) {
+        const char* logLinePattern = "{\"logWebConsole\":{\"originator\":\"%s\",\"message\":\"%s\"}}";
+
+        // Calcul de la taille nécessaire
+        size_t needed = snprintf(nullptr, 0, logLinePattern, originator, message) + 1;
+
+        char* sendLine = (char*) malloc(needed);
+        if (!sendLine) return; // sécurité si malloc échoue
+
+        snprintf(sendLine, needed, logLinePattern, originator, message);
+
+        broadCast(sendLine); 
+        free(sendLine);
+    }
+
 
     String getConnectivityState(){
       return hwm->network->serialize();
@@ -2719,7 +2731,32 @@ void setup() {
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;
           jsonAnswer.value = *lang.getString("Save error");
-        }      
+        }
+      }else if (command == "deviceConfig"){
+        // {"command":"deviceConfig","param":{"MixingStation":{"offline":true,"oscIP":"999.999.999.999","oscPort":"99999"}}}
+        // Accès à l'objet "param"
+        JsonObject param = jsonInput["param"];
+        // Récupération du premier élément de "param"
+        JsonPair first = *param.begin();
+        // Nom de la clé
+        const char* interfaceName = first.key().c_str();    
+        DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);
+        if (interface->interfaceName == interfaceName){
+          // we found the right interface (we still have to test in case it returned SystemInterface)
+          // Valeur = parameters
+          JsonObject values = first.value().as<JsonObject>();
+          if (interface->restoreBase(values)){
+            jsonAnswer.callback = RET_SAVEBUTTON;
+            jsonAnswer.value = "1";  
+          }else{
+            jsonAnswer.callback=RET_COMMANDERROR;
+            jsonAnswer.value = *lang.getString("no interface change");            
+          }
+        }else{
+          jsonAnswer.callback=RET_COMMANDERROR;
+          jsonAnswer.value = *lang.getString("Wrong Interface")+":"+interfaceName;
+        }
+
       }else{
         //DEBUG_PRINT("\n\t\t\t\t\tCalling userParseJsonInputCallback...");
         JsonObject j = jsonInput.as<JsonObject>();
@@ -2853,7 +2890,7 @@ void setup() {
           size_t bytesToRead = min(PACKET_SIZE, compressedBuffer.available()); // Détermine le nombre d'octets à lire
           compressedBuffer.readBytes((char*)packet, bytesToRead);
           res.write(packet, bytesToRead);
-          DEBUG_PRINT("%dx...",bytesToRead);
+          //DEBUG_PRINT("%dx...",bytesToRead);
           yield(); // 
         }
 

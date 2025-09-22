@@ -18,5 +18,7 @@
 "trying":"tentative",
 "offline":"appui court on/off = hors connexion",
 "ConnectMIDIsession":"Connectez la session midi ci dessous",
-"ReconNet":"Reconnexion, patientez svp..."
+"ReconNet":"Reconnexion, patientez svp...",
+"PluginUSB":"Connectez le cable USB de votre dispositif MIDI",
+"restartUSB":"Redemarrez pour activer USB MIDI"
 }

@@ -27,7 +27,7 @@ using WSclientOnMessageCallback = std::function<void(const char*)>;
 ////////////////////////////////////////////////////////////////////
 ///                MIDI LAYER OBJECTS DECLARATION            ///////
 ////////////////////////////////////////////////////////////////////
-#include "interfaces\midiHelpers.h"
+#include "interfaces\appleMidiHelpers.h"
 #define MIDI_CHANNEL_OMNI 0
 /*#define APPLE_MIDIETHCLIENT_NAME  "interval"    
 #define APPLE_MIDIWIFICLIENT_NAME  "interval"    */
@@ -207,7 +207,7 @@ enum{
 
 enum BatteryState {
     BAT_CHECKING,  
-    BAT_CHARGING,
+    BAT_USB_PLUGGED,
     BAT_DISCHARGING,
 };
 
@@ -293,10 +293,10 @@ class BatteryMonitor : public HWComponent{
     unsigned long lastReadMillis = 0;
 
     BatteryState determineBatteryState(float currentVBat, float previousVBat, float threshold) {
-      if (vBat>VBAT_USB) return BAT_CHARGING;
+      if (vBat>VBAT_USB) return BAT_USB_PLUGGED;
       /*float delta = currentVBat - previousVBat;
       if (delta > threshold) {
-          return BAT_CHARGING;
+          return BAT_USB_PLUGGED;
       } else {
           return BAT_DISCHARGING;
       }*/

@@ -152,7 +152,7 @@ String stateNames[EOF_STATE]={
 #define UNSYNC_PATTERN "~"
 
 
-class DataSetSynced: public StaticDataSet{
+class DataSetSynced: public DataSet{
   public: 
     String* values = nullptr;
     uint16_t syncIndex = 0;
@@ -162,7 +162,7 @@ class DataSetSynced: public StaticDataSet{
     String defaultName="";
     String pattern="";
 
-    DataSetSynced(String _shortName, String addr,String obj, uint16_t _size,String defVal, int _offset) : StaticDataSet(addr,obj), shortName(_shortName){
+    DataSetSynced(String _shortName, String addr,String obj, uint16_t _size,String defVal, int _offset) : DataSet(addr,obj), shortName(_shortName){
       init(_size, defVal, _offset);
     }
 

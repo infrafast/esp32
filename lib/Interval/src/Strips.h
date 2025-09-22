@@ -489,10 +489,10 @@ class Strip {
       if (hwm.network->state != CONNECTED) iconState = &GUI::iconMixEthWiFi;
 
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
-        addFullScreenTextWithIcon(lang.getString(interface->state.label), lang.getString(interface->state.userInstructions), lang.getString(interface->state.subLabel), iconState);        
+        addFullScreenTextWithIcon(lang.getString(interface->state.label), lang.getString(interface->state.details), lang.getString(interface->state.subLabel), iconState);        
         
         //gui.add (new ProgressBarH(&hwm.network->wiFiConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                             
-        //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                            
+        //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                                  
 
       }else if (size == SHAPE1X4){
         pushSimpleText(layout, lang.getString(interface->state.label));
@@ -502,8 +502,7 @@ class Strip {
          pushSimpleText(layout, lang.getString(interface->state.label));
       }else{
 
-      }
-
+      }      
     }    
 
     virtual void composeWidgets(uint8_t layout){

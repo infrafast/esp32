@@ -12,16 +12,17 @@
 #include <ESP32-targz.h>
 
 #define INTERVAL_PRODUCT_NAME "interval"
+#define INTERVAL_MANUFACTURER "intervalgrp"
 
-//#include <miniz.h>    ==> works partially. produce gzip file but inflate seems not to be gzip format
-//#include <zlib.h> ==> incompatible with arm
+bool useUSBMidi = false;
 
 #ifdef DEBUG  //ets_printf(__VA_ARGS__) //
+  #define debugMon Serial  //  
   SemaphoreHandle_t serialMutex;
-  #define DEBUG_PRINT(...)   if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(500))) { Serial.printf(__VA_ARGS__); Serial.flush(); xSemaphoreGive(serialMutex);} else (void)0
-  //#define SerialMon Serial    //used by Midi
+  #define DEBUG_PRINT(...) if (!useUSBMidi) if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(500))) { debugMon.printf(__VA_ARGS__); debugMon.flush(); xSemaphoreGive(serialMutex);} else (void)0
 #else
   #define DEBUG_PRINT(...) 
+  #define debugMon 0
 #endif
 
 #define DEFAULT_STORAGE_TYPE_ESP32 STORAGE_LITTLEFS
@@ -31,6 +32,84 @@ typedef void (*VoidIntCallback)(int);
 typedef void (*VoidDoubleIntCallback)(int,int);
 typedef String (*ReturnStringCallback)();
 typedef std::function<void(bool*)> StdFunctionCallbackVoidBool; 
+
+enum{
+  SYSTEM_OFF,
+  BATTERY_STARTUP,
+  NORMAL_STARTUP,
+  WIZARD_STARTUP,
+  USB_CDC_AND_FWUPDATE_STARTUP,    
+  RESET_STARTUP,  
+  NO_FS_STARTUP,  
+};
+
+/*
+void usbEventCallback(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+{
+    if (event_base == ARDUINO_USB_EVENTS) {
+        arduino_usb_event_data_t *data = (arduino_usb_event_data_t *)event_data;
+        switch (event_id) {
+            case ARDUINO_USB_STARTED_EVENT:
+                debugMon.println("USB PLUGGED");
+                break;
+            case ARDUINO_USB_STOPPED_EVENT:
+                debugMon.println("USB UNPLUGGED");
+                break;
+            case ARDUINO_USB_SUSPEND_EVENT:
+                debugMon.printf("USB SUSPENDED: remote_wakeup_en: %u\n", data->suspend.remote_wakeup_en);
+                break;
+            case ARDUINO_USB_RESUME_EVENT:
+                debugMon.println("USB RESUMED");
+                break;
+
+            default:
+                break;
+        }
+    }
+    else if (event_base == ARDUINO_USB_CDC_EVENTS) {
+        arduino_usb_cdc_event_data_t *data = (arduino_usb_cdc_event_data_t *)event_data;
+        switch (event_id) {
+            case ARDUINO_USB_CDC_CONNECTED_EVENT:
+                debugMon.println("CDC CONNECTED");
+                break;
+            case ARDUINO_USB_CDC_DISCONNECTED_EVENT:
+                debugMon.println("CDC DISCONNECTED");
+                break;
+            case ARDUINO_USB_CDC_LINE_STATE_EVENT:
+                debugMon.printf("CDC LINE STATE: dtr: %u, rts: %u\n", data->line_state.dtr, data->line_state.rts);
+                break;
+            case ARDUINO_USB_CDC_LINE_CODING_EVENT:
+                debugMon.printf("CDC LINE CODING: bit_rate: %lu, data_bits: %u, stop_bits: %u, parity: %u\n", data->line_coding.bit_rate,
+                              data->line_coding.data_bits, data->line_coding.stop_bits, data->line_coding.parity);
+                break;
+            case ARDUINO_USB_CDC_RX_EVENT:
+                debugMon.printf("CDC RX [%u]:", data->rx.len);
+                {
+                    uint8_t buf[data->rx.len];
+                    size_t len = debugMon.read(buf, data->rx.len);
+                    debugMon.write(buf, len);
+                }
+                debugMon.println();
+                break;
+            case ARDUINO_USB_CDC_RX_OVERFLOW_EVENT:
+                debugMon.printf("CDC RX Overflow of %d bytes", data->rx_overflow.dropped_bytes);
+                break;
+
+            default:
+                break;
+        }
+    }
+    else if (event_base == ARDUINO_USB_MIDI_EVENTS) {
+        midiEventPacket_t *data = (midiEventPacket_t *)event_data;
+        switch (event_id) {
+            default:
+                debugMon.printf("MIDI EVENT:  ID=%d, DATA=%d\r\n", event_id, (uint32_t)data);
+                break;
+        }
+    }
+}
+*/
+
 
 //typedef void (BaseManager::*GUIScreenBuilderCallBack)(uint8_t);
 #define MAX_PACKET_SIZE 500
@@ -79,7 +158,7 @@ class GenericComponent{
     virtual bool refresh(bool force=false) = 0;  
     
     virtual void init(){
-      //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str()); 
+
     }
 
 };
@@ -253,7 +332,7 @@ size_t bufferToGz(String* buf, ByteBuffer* dest){
   // deflate!
   size_t outputSize = LZPacker::compress( (uint8_t*)data, len, dest );
   //size_t fileSize = fout.position();
-  DEBUG_PRINT("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
+  //DEBUG_PRINT("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
   return outputSize;
 }
 
@@ -327,6 +406,72 @@ size_t writeBufferToGzFile(String filename, String* buf){
 */
 
 void targzNullLoggerCallback(const char* format, ...){}
+
+#define SAFE_SCANF_SPACE '^'
+// Remplace tous les caractères 'from' par 'to' dans la chaîne donnée
+String replaceAllChars(String str, char from, char to) {
+    for (char &c : str) {
+        if (c == from) {
+            c = to;
+        }
+    }
+    return str;
+}
+
+
+// Convertit une chaîne hex en octets.
+// - Ignore espaces, tab, ':', '-', '_'.
+// - Accepte "0x" / "0X" au début ou avant chaque octet.
+// - N'écrit pas plus de outMax octets.
+// Retourne true si conversion complète et paire ; false sinon.
+// En cas d'échec, outLen = 0.
+bool hexStringToBytes(const String& in, uint8_t* out, size_t outMax, size_t& outLen) {
+  outLen = 0;
+  if (!out || outMax == 0) return false;
+
+  auto nibble = [](char c) -> int8_t {
+    if (c >= '0' && c <= '9') return (int8_t)(c - '0');
+    if (c >= 'a' && c <= 'f') return (int8_t)(c - 'a' + 10);
+    if (c >= 'A' && c <= 'F') return (int8_t)(c - 'A' + 10);
+    return -1;
+  };
+
+  bool haveHi = false;   // indique qu'on a stocké le demi-octet haut
+  uint8_t hi = 0;
+
+  for (size_t i = 0; i < (size_t)in.length(); ++i) {
+    char c = in[i];
+
+    // Sauter séparateurs usuels
+    if (c == ' ' || c == '\t' || c == ':' || c == '-' || c == '_') continue;
+
+    // Gérer préfixe 0x/0X (global ou par octet) uniquement en frontière d'octet
+    if (!haveHi && c == '0' && (i + 1) < (size_t)in.length()) {
+      char c2 = in[i + 1];
+      if (c2 == 'x' || c2 == 'X') { i++; continue; }
+    }
+
+    int8_t n = nibble(c);
+    if (n < 0) { outLen = 0; return false; }
+
+    if (!haveHi) {
+      hi = (uint8_t)n;
+      haveHi = true;
+    } else {
+      if (outLen >= outMax) { outLen = 0; return false; }  // débordement de buffer
+      out[outLen++] = (uint8_t)((hi << 4) | (uint8_t)n);
+      haveHi = false;
+    }
+  }
+
+  // Nombre impair de nibbles → erreur
+  if (haveHi) { outLen = 0; return false; }
+
+  return true;
+}
+
+
+
 
 
 // Fonction pour lire un fichier gz et remplir le buffer de bytes décompressés
@@ -724,7 +869,7 @@ struct State{ // used by Strip and Interface
   uint8_t code = IF_NOT_READY;
   String label = "stateLabel";
   String subLabel = "subStateLabel";
-  String userInstructions = "userInstructions";
+  String details = "userInstructions";
   bool offline = false;
   float progress = 0;
   bool stateChanged = false;
@@ -735,8 +880,8 @@ struct State{ // used by Strip and Interface
 class AnimationTaskParams{ 
   public:
     const String* text;
-    String icon = ICON_WAIT;
-    AnimationTaskParams(const String* t,String i = ICON_WAIT):text(t),icon(i){}
+    const String* icon;
+    AnimationTaskParams(const String* t,const String* i = &GUI::iconMixEthWiFi):text(t),icon(i){}
 };
 
 
@@ -747,10 +892,35 @@ OpenFontRender* Icon::ofr = &gui.iconOfr;
 
 #include "DataManagement.h"
 
+class ApplicationManager;
+
+class Log {
+public:
+    // Initialiser la classe avec une instance d'ApplicationManager
+    static void init(ApplicationManager* manager) {
+        am = manager;
+    }
+
+    // Déposer un message
+    static void drop(const char* originator, const char* message);
+
+private:
+    // Pointeur vers l'instance globale
+    static ApplicationManager* am;
+};
+
+ApplicationManager* Log::am = nullptr;
+
+
 #include "APPManager.h"
 
-ApplicationManager app(&hwm,&gui);
+void Log::drop(const char* originator, const char* message) {
+  if (am) {
+      am->log(originator, message);
+  }
+}
 
+ApplicationManager app(&hwm,&gui);
 
 
 
@@ -766,19 +936,15 @@ void goDeepSleep(){
   // and https://arduino.stackexchange.com/questions/43986/is-there-a-way-to-power-off-external-devices-during-deep-sleep
   // open question: reset the devices ? when back, it will take time to power them on again, how to sync it with the class creation, etc... ?
   //DEBUG_PRINT("\ngoDeepSleep");
+  unsigned long start = millis();
+  while (hwm.onOff.state == ON_OFF_TRIGGER && millis()-start < 4000) hwm.onOff.refresh(); //wait button to be released
+  
   hwm.setPowerRail(OFF);    
 
-  while (hwm.onOff.state == ON_OFF_TRIGGER) hwm.onOff.refresh(); //wait button to be released
-
-  #ifndef PROD
-    DEBUG_PRINT("\ngoDeepSleep()");
-    while(1);
-  #else
-    //DEBUG_PRINT(" SHUTTING DOWN");
-  #endif
+  delay(2000);
 
   esp_sleep_enable_ext0_wakeup(ONOFF_PIN,ON_OFF_TRIGGER); //1 = High, 0 = Low  s3    
-  esp_deep_sleep_start();  
+  esp_deep_sleep_start();      
 }
 
 void xTaskBackground(void *pvParameters){  
@@ -916,7 +1082,7 @@ void waitingAnimationThread(void *param_type) {
   DEBUG_PRINT("\n<<<<%s>>>>",params->text->c_str());
 
   y = 5;
-  Icon icon = Icon(&params->icon,Align::Center,&x,&y,TFT_WIDTH/2,&GUI::defaultFcolor,&GUI::defaultBcolor, &bright);
+  Icon icon = Icon(params->icon,Align::Center,&x,&y,TFT_WIDTH/2,&GUI::defaultFcolor,&GUI::defaultBcolor, &bright);
         
   for (int i=0;;) {
     // Vérifie si on nous demande d’arrêter (notification)
@@ -1160,10 +1326,10 @@ void save_profile_item_selected(MenuComponent* p_menu_component) {
 }
 
 void tft_rotation_item_selected(MenuComponent* p_menu_component) {
-  app.swapButton = true;
-  if (app.persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES) app.persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);
-  else app.persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_YES);
-  app.setScreenAndButtonRotation();
+  hwm.swapButton = true;
+  if (hwm.persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES) hwm.persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);
+  else hwm.persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_YES);
+  hwm.setScreenAndButtonRotation();
   back_menu_item_selected(p_menu_component);
 }
 
@@ -1302,10 +1468,13 @@ void bankOverlayBuilder(uint8_t BankIndex){
     #define CONFIG_TEXTAREA_MESSAGE_SIZE MENU_TITLE_SIZE/1.8
 
     int16_t topTextY = GUI::y1+TOP2WIDGET_SIZE;
+    
     int16_t iconY = topTextY + CONFIG_TEXTAREA_MESSAGE_SIZE;
     int16_t iconX = 0;
     int16_t textAreaX = (TFT_WIDTH/2) + (MODAL_SCREEN_TEXTAREA_WIDTH/2);
     int16_t bottomTextY = iconY + MODAL_SCREEN_ICON_SIZE;
+    #define TOGGLE_ONFFLINE_TEXT_SIZE 18
+    int16_t belowBottomTexty = bottomTextY+TOGGLE_ONFFLINE_TEXT_SIZE*1.1;
     int16_t scrollBarY = TFT_HEIGHT - NAV_HEIGHT*1.2 - MODAL_SCREEN_SCROLLBAR_HEIGHT;    
 
     const int16_t tenPixels = 10, midScreenHoriz = TFT_WIDTH/2, midScreenVertical = TFT_HEIGHT/2, bigWidgetMidY = midScreenVertical-WIDGET_BIG_WIDTH/2, iconMidY = midScreenVertical-ICON_MAX_SIZE/2 ;
@@ -1391,11 +1560,14 @@ void addFullScreenTextWithIcon(const String* topLabel, const String* midText, co
   iconX = TFT_WIDTH/2;
   if (*midText != emptyString){
     iconX -= MODAL_SCREEN_ICON_SIZE;
-    gui.add(new TextArea(midText, MODAL_SCREEN_TEXTAREA_WIDTH,Align::Center,Align::Center,&textAreaX,&iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));     
+    gui.add(new TextArea(midText, MODAL_SCREEN_TEXTAREA_WIDTH,Align::Left,Align::Center,&textAreaX,&iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));     
   }
 
   gui.add(new Icon(icon,Align::Center,&iconX, &iconY,MODAL_SCREEN_ICON_SIZE,&iconInterfaceColor,&GUI::defaultBcolor));   
   gui.add(new Label(bottomLabel, Align::Center,&midScreenHoriz, &bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
+
+  // move text below into composeInterfaceState
+  gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&midScreenHoriz, &belowBottomTexty,TOGGLE_ONFFLINE_TEXT_SIZE,&GUI::green,&GUI::defaultBcolor));    
 }    
 
 void addTopandBottomMenuLabel(){
@@ -1444,16 +1616,32 @@ void defaultWizardScreenBuilder(){
 void defaultWizardStepFlow(){
   //DEBUG_PRINT("\ndefaultWizardStepFlow(%i)");
   if (app.getButtonState(MIDDLEB)){
-    app.persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
+    hwm.persistants.putUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
     app.restoreScreen();
   } 
 }
 
-void defaultBootScreen(){
-  if (LittleFS.exists(CUSTOM_LOGO_FILE))
-    gui.drawJpg(0, 0, CUSTOM_LOGO_FILE);
-  else
-    gui.drawJpg(0, 0, "/logo.jpg");
+void bootScreen(uint8_t startupState){
+  switch(startupState){
+    case BATTERY_STARTUP:
+      GUI::tft->fillScreen(TFT_BLUE);
+    break;
+    case RESET_STARTUP:
+      GUI::tft->fillScreen(TFT_GREEN);
+    break;
+    case NO_FS_STARTUP:
+      GUI::tft->fillScreen(TFT_RED);
+    break;
+    case USB_CDC_AND_FWUPDATE_STARTUP:
+      gui.drawJpg(0, 62, "/fwboot.jpg");
+    break;
+    default :
+      if (LittleFS.exists(CUSTOM_LOGO_FILE))
+        gui.drawJpg(0, 62, CUSTOM_LOGO_FILE);
+      else
+        gui.drawJpg(0, 62, "/logo.jpg");
+    break;
+  }
 }
 
 void wizardScreenBuilder(uint8_t subScreen){
@@ -1575,7 +1763,7 @@ void utilsScreenBuilder(uint8_t state){
 
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
-      DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP");          
+      //DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP");          
     break;
     case STATE_UTILS_WEBAPPCONNECTED:         
       addLeftRightIcons();

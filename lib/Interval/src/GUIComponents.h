@@ -14,7 +14,6 @@
 #define ICON_ROLLING2         "#"
 #define ICON_LINK             "F"
 #define ICON_FOOTSWITCH       "&"
-#define ICON_MIXING_STATION   "W"
 #define ICON_INTERVAL         "V"
 #define ICON_AP               "!"
 #define ICON_MIXETHWIFI       "'"
@@ -27,7 +26,7 @@
 #define ICON_BAT_LEVEL_1      "7"
 #define ICON_BAT_LEVEL_2      "8"
 #define ICON_BAT_LEVEL_3      "9"
-#define ICON_BAT_CHARGING     "5"
+#define ICON_BAT_USB_PLUGGED     "5"
 #define ICON_PLUG             "0"
 #define ICON_NOTOK            "N"
 #define ICON_WAIT             "E"
@@ -48,6 +47,11 @@
 #define ICON_RIGHTDOT         "="
 #define ICON_FULLDOT          "A"
 #define ICON_TIMER            "B"
+#define ICON_WIFI             ":"
+#define ICON_USBMIDI          "f"
+#define ICON_DINMIDI          "c"
+#define ICON_APPLEMIDI        "d"
+#define ICON_BLEMIDI          "e"
 
 #ifndef TFT_BGCOLOR
   #define TFT_BGCOLOR TFT_BLACK
@@ -136,6 +140,7 @@ public:
     // const icon
     static const String iconMixEthWiFi;
     static const String iconEth;
+    static const String iconWiFi;
 
     // default luminance
     static const float fullBrightness;
@@ -981,7 +986,7 @@ class RingMeter : public Arc{
   #define START_ANGLE 30
   public:
     
-    RingMeter(const float *v, float mini, float maxi, uint8_t deci, const int16_t* posX, const int16_t* posY, uint16_t r, String* u,  const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool d=false):Arc(v,mini, maxi, posX, posY, r, fC, bC, START_ANGLE, _brightness,d){
+    RingMeter(const float *v, float mini, float maxi, uint8_t deci, const int16_t* posX, const int16_t* posY, uint16_t r, const String* u,  const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool d=false):Arc(v,mini, maxi, posX, posY, r, fC, bC, START_ANGLE, _brightness,d){
       unit = u; 
       id = "RingMeter"+String(*posX)+"x"+String(*posY);
       if (deci>1) deci = 1;
@@ -1546,5 +1551,6 @@ AlteredColor GUI::glowingGoldColor = AlteredColor{.baseColor = GUI::gold, .value
 
 const String GUI::iconMixEthWiFi = ICON_MIXETHWIFI;
 const String GUI::iconEth = ICON_ETH;
+const String GUI::iconWiFi = ICON_WIFI;
 
 #endif

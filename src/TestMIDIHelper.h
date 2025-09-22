@@ -2,7 +2,7 @@
 
 //#define ETHERNET3
 #include "ETH_Helper.h"       
-#define SerialMon Serial
+
 #include "interfaces\midiHelpers.h"
 #ifndef ETHERNET3
   #include <EthernetBonjour.h>  //for Eth registration

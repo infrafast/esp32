@@ -26,10 +26,6 @@ union ScreenUnion{
   };
 }screen;
 
-#define INVERTED_SCREEN_NO 1
-#define INVERTED_SCREEN_YES 3
-
-
 //#define USE_DMA
 
 typedef void (*GUIBuilderCallBack)(uint8_t);
@@ -110,15 +106,13 @@ class GUIManager : public GenericComponent {
     GUIManager(bool t=false,bool debug=false):GenericComponent(debug){
       transparency = t;
       id="GUIManager";      
+      TJpgDec.setCallback(tft_output);              
     }   
 
     virtual ~GUIManager(){}
 
     virtual void init() {      
       GenericComponent::init();
-      GUI::tft->fillScreen(TFT_BGCOLOR);
-      GUI::tft->setSwapBytes(true);
-      TJpgDec.setCallback(tft_output);        
       
       /*labelOfr.setDebugLevel( OFR_INFO | OFR_ERROR);
       iconOfr.setDebugLevel( OFR_INFO | OFR_ERROR);*/

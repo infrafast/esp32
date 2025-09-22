@@ -32,15 +32,27 @@ class NetworkOSC: public OSCInterface,NetworkInterface{
       config[CONFIG_OSCPORT] = OSC_port;         
     }
 
-    virtual void restore(const JsonObject& config){
-      OSC_IPaddress = config[CONFIG_OSCIP].as<String>();
-      OSC_port = config[CONFIG_OSCPORT];        
+    virtual bool restore(const JsonObject& config){
+      bool changed = false;
+      if (config.containsKey(CONFIG_OSCIP)){
+        OSC_IPaddress = config[CONFIG_OSCIP].as<String>();
+        changed = true;
+        DEBUG_PRINT("\n%s param: %s =>%s",interfaceName.c_str(),CONFIG_OSCIP, OSC_IPaddress.c_str());
+      }
+      if (config.containsKey(CONFIG_OSCPORT)){
+        OSC_port = config[CONFIG_OSCPORT];        
+        changed = true;
+        DEBUG_PRINT("\n%s param: %s =>%i",interfaceName.c_str(),CONFIG_OSCPORT, OSC_port);        
+      }
+      return changed;
     }        
 
     virtual void monitor(){}
+
     virtual void* read(){return nullptr;}
 
     virtual void begin(){}
+
     virtual void end(){}
 
 

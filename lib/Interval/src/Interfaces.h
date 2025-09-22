@@ -20,6 +20,7 @@ class DeviceInterface {
   #define INTERFACE_USENETWORK  "network"  
   #define INTERFACE_PROVIDER    "provider"
   #define INTERFACE_ICON        "icon"
+  #define INTERFACE_DETAILS     "details"
   
   public:
 
@@ -27,11 +28,12 @@ class DeviceInterface {
 
   String previousStateLabel;
   uint8_t previousStateCode = 0;
+  bool previousOffline = false;
 
   String interfaceName; 
 
   bool exposed = true;
-  bool network = false;  // by default an interface do not use betwork
+  bool useNetwork = false;  // by default an interface do not use betwork
   String group = "undef"; // used by the strip to define which deviceinterface they can connect
 
   String icon = ICON_LINK;
@@ -46,6 +48,8 @@ class DeviceInterface {
     
     doc[interfaceName][INTERFACE_STATE] = state.label;
     doc[interfaceName][INTERFACE_PROGRESS] = state.progress;
+    doc[interfaceName][INTERFACE_DETAILS] = state.details;
+    doc[interfaceName][INTERFACE_OFFLINE] = state.offline;
 
     doc.shrinkToFit();
     String output;
@@ -70,8 +74,7 @@ class DeviceInterface {
     if (mainNode == true){
       // that's the attribute we do not serialize in case of partial serialization
       config[INTERFACE_EXPOSED] = exposed;
-      config[INTERFACE_USENETWORK] = network;
-      config[INTERFACE_OFFLINE] = state.offline;
+      //config[INTERFACE_USENETWORK] = useNetwork;
       config[INTERFACE_GROUP] = group;
       config[INTERFACE_PROVIDER] = getProviderName();      
       config[INTERFACE_ICON] = icon;
@@ -87,6 +90,7 @@ class DeviceInterface {
   }  
 
   bool restoreFromString(const char* config){    
+    bool changed = false;
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, config);
     if (error) {
@@ -101,7 +105,7 @@ class DeviceInterface {
     //offline = false;
     //exposed = false;
 
-    restore(configJson);    
+    changed = restoreBase(configJson);    
 
     doc.shrinkToFit();
 
@@ -111,7 +115,7 @@ class DeviceInterface {
       //{"MixerOffline":{"config":{FILLED BY DERIVED CLASS}}}
       DEBUG_PRINT("\nrestoreFromString: %s",output.c_str());          
     #endif
-    return true;      
+    return changed;      
   }
 
   virtual void serialize(JsonDocument& interfaceDoc){
@@ -149,10 +153,12 @@ class DeviceInterface {
   }
 
   bool update(){      // return a boolean indicatin if the interface has changed its state
+    // reset change state
     state.stateChanged = false;
+
     // reset the flag so strips will not be updated and re-processed already consummed data
     dataAvailable = false;
-    // in case interface is offline, then easy: we do not waste time
+
     // report if state has changed
     if (state.label != previousStateLabel){
       state.stateChanged  = true;
@@ -162,31 +168,46 @@ class DeviceInterface {
       state.stateChanged  = true;
       previousStateCode = state.code;
     }    
+    if (state.offline != previousOffline){
+      state.stateChanged  = true;
+      previousOffline = state.offline;
+    }    
+
+    //do specific interface internal workflow
     if (state.offline != true){      
-      monitor();    //do specific interface internal workflow
+      monitor();
     }
     
-      return state.stateChanged;
+    return state.stateChanged;
   }
 
   bool available(){ // called by strip 
     return dataAvailable; 
   }
 
-  void goOffline(){
-    state.offline = true;
-  }
+  virtual bool restoreBase(const JsonObject& config){   
 
-  void goOnline(){
-    state.offline = false;
-  }
+    bool changed = false;
 
-  virtual void restore(const JsonObject& config) = 0;  
+    // this restore the base parameters common to all base class interface
+    if (config.containsKey(INTERFACE_OFFLINE)){
+      state.offline = config[INTERFACE_OFFLINE];
+      DEBUG_PRINT("\n%s offline=>%s",interfaceName.c_str(),state.offline?"true":"false");
+      changed = true;
+    }
+
+    // and then we call the specific part
+    changed |= restore(config);
+    if (changed) begin();    // begin is called when a parameter has changed, it means the interface may need to reconnect for instance
+    return changed;
+  }  
+
+  virtual bool restore(const JsonObject& config) = 0;  
   virtual void derivedConfig(JsonObject& config) = 0;  
   virtual void monitor() = 0; // => manage internal state and set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
   virtual void* read() = 0; // called by strip 
-  virtual void begin() = 0;
-  virtual void end() = 0;
+  virtual void begin() = 0;       // equivalent : connect()
+  virtual void end() = 0;     // equivalent disconnect();
 
   protected:
 
@@ -200,18 +221,21 @@ class NetworkInterface{
     DeviceInterface* interface;
     // this class override default one to overall encapsulate state management
     NetworkInterface(DeviceInterface* _if): interface(_if){
-      interface->network = true;
+      interface->useNetwork = true;
+      notReady();
     }
 
-    void computeNetworkState(){     
+    void notReady(){
+      interface->state.code = IF_NOT_READY;
+      interface->state.label = IF_STATE_DISCONNECTED;
+      interface->state.subLabel = hwm.network->SSID;
+      interface->state.details = "Attempt";      
+    }
+
+    void monitorNetwork(){     
       // detect if network is down
       if (hwm.network->refreshed){
-        if (hwm.network->state == DISCONNECTED){
-          interface->state.code = IF_NOT_READY;
-          interface->state.label = IF_STATE_DISCONNECTED;
-          interface->state.subLabel = hwm.network->SSID;
-          interface->state.userInstructions = "Attempt";
-        }
+        if (hwm.network->state == DISCONNECTED) notReady();
       }
     }
 
@@ -245,8 +269,9 @@ DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _
   interfaceRepo.interfaces.push_back(this);
   interfaceName = name;
   group = _group;
-  state.label = IF_STATE_DISCONNECTED;
-  previousStateLabel = state.label;
+  state.label = IF_STATE_DISCONNECTED;    
+  previousStateLabel = state.label;  
+  previousOffline = state.offline;
 }
 
 DeviceInterface::~DeviceInterface(){
@@ -285,7 +310,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
       return interfaceName;
     }
 
-    virtual void restore(const JsonObject& config){};  
+    virtual bool restore(const JsonObject& config){return false;}
     virtual void derivedConfig(JsonObject& config){};    
     virtual void monitor(){}
     virtual void* read(){return nullptr;}

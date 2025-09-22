@@ -23,9 +23,14 @@ class MixerInterface: public DeviceInterface{
       config[CONFIG_MIXERMODEL] = mixerModel;
     }   
     
-    virtual void restore(const JsonObject& config){
+    virtual bool restore(const JsonObject& config){
+      bool changed = false;
       //mixerName = config[CONFIG_MIXERNAME].as<String>(); // since mixerName is dynamically retrieved from mixer, we should not consider it
-      mixerModel = config[CONFIG_MIXERMODEL].as<String>();
+      if (config.containsKey(CONFIG_MIXERMODEL)){
+        mixerModel = config[CONFIG_MIXERMODEL].as<String>();
+        changed = true;
+      }
+      return changed;
     }      
 };
 
@@ -65,9 +70,11 @@ class OSCMixerInterface : public MixerInterface{
     virtual void* read(){return nullptr;}
 
 
-    virtual void restore(const JsonObject& config){
-      osc->restore(config);
-      MixerInterface::restore(config);
+    virtual bool restore(const JsonObject& config){
+      bool changed = false;
+      changed = osc->restore(config);
+      changed |= MixerInterface::restore(config);
+      return changed;
     }  
 };
 
@@ -97,12 +104,26 @@ class MixingStation: public OSCMixerInterface{
       //{"MixingStation":{"config":{"mixerName":"undef","model":"virtual","oscIP":"5.6.7.8","oscPort":3000,"mixerID":1,"restAPIport":8080,"autoConnect":false,"mixerIP":"1.1.1.1"}}}      
     }          
 
-    virtual void restore(const JsonObject& config){
-      autoConnectMixerID = config[MS_CONFIG_AUTOCONNECT_MIXERID];
-      RESTAPI_port = config[MS_CONFIG_AUTOCONNECT_APIPORT];
-      autoConnect = config[MS_CONFIG_AUTOCONNECT];
-      mixerIPaddress = config[MS_CONFIG_AUTOCONNECT_MIXERIP].as<String>();   
+    virtual bool restore(const JsonObject& config){
+      bool changed = false;
+      if (config.containsKey(MS_CONFIG_AUTOCONNECT_MIXERID)){ 
+        autoConnectMixerID = config[MS_CONFIG_AUTOCONNECT_MIXERID];
+         changed = true;
+      }
+      if (config.containsKey(MS_CONFIG_AUTOCONNECT_MIXERID)){ 
+        RESTAPI_port = config[MS_CONFIG_AUTOCONNECT_MIXERID];
+         changed = true;
+      }
+      if (config.containsKey(MS_CONFIG_AUTOCONNECT)){ 
+        autoConnect = config[MS_CONFIG_AUTOCONNECT];
+         changed = true;
+      }
+      if (config.containsKey(MS_CONFIG_AUTOCONNECT)){
+         mixerIPaddress = config[MS_CONFIG_AUTOCONNECT].as<String>();   
+         changed = true;
+      }
       OSCMixerInterface::restore(config);
+      return changed;
     }            
 
     virtual void begin(){}    
@@ -126,9 +147,14 @@ class BehringerXMR: public OSCMixerInterface{
       config[BEHRINGER_CONFIG_DISCOVERY] = discovery;      
     }          
 
-    virtual void restore(const JsonObject& config){
-      discovery = config[BEHRINGER_CONFIG_DISCOVERY];
-      OSCMixerInterface::restore(config);
+    virtual bool restore(const JsonObject& config){
+      bool changed = false;
+      if (config.containsKey(BEHRINGER_CONFIG_DISCOVERY)){
+        discovery = config[BEHRINGER_CONFIG_DISCOVERY];
+        changed = true;
+      }
+      changed |= OSCMixerInterface::restore(config);
+      return changed;
     }            
 };
 
