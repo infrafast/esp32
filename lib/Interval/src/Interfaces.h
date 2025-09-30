@@ -279,8 +279,8 @@ DeviceInterface::~DeviceInterface(){
 }
 
 #define MACRO_NUMBER_MAX      10
-#define ADDRESS_SIMPLETEXT    "/text/%s"
-#define ADDRESS_STRIPIDS      "/strip/id/%s"
+#define ADDRESS_dsText    "/text/%s"
+#define ADDRESS_dsStripIDs      "/strip/id/%s"
 #define ADDRESS_ACTION        "/action/%s"
   #define ADDRESS_ACTION_SIZE 5
 #define ADDRESS_MACRONAME     "/macro/name/%s"
@@ -291,10 +291,10 @@ class SystemInterface: public DeviceInterface, public DataProvider{
   #define GROUP_INTERFACE_SYSTEM "utils"
   public:    
 
-    DynamicDataSet simpleText = DynamicDataSet({ ADDRESS_SIMPLETEXT, INPUTTEXT },this);
-    DynamicDataSet stripIDs = DynamicDataSet({ADDRESS_STRIPIDS,INPUTSELECT},this);
-    DynamicDataSet dropDownActions = DynamicDataSet({ADDRESS_ACTION,INPUTSELECT},this);        
-    DynamicDataSet macroNames = DynamicDataSet({ADDRESS_MACRONAME,INPUTSELECT},this); 
+    DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_dsText, "free text", REGEX_NON_EMPTY_STRING),this);
+    DynamicDataSet dsStripIDs = DynamicDataSet(new DropDownAddress(ADDRESS_dsStripIDs),this);
+    DynamicDataSet dsDropDownActions = DynamicDataSet(new DropDownAddress(ADDRESS_ACTION),this);        
+    DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
 
 
     SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_SYSTEM,_configurable){
@@ -318,9 +318,9 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     virtual void end(){}     
 
     virtual uint16_t getSize(String addrr){
-      if (addrr == ADDRESS_SIMPLETEXT) return 1;
+      if (addrr == ADDRESS_dsText) return 1;
       
-      else if (addrr == ADDRESS_STRIPIDS) return 0;
+      else if (addrr == ADDRESS_dsStripIDs) return 0;       // 0 => means this is not an array of data but a javascript callback name
       else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
       else if (addrr == ADDRESS_MACRONAME) return MACRO_NUMBER_MAX;
       else{
@@ -348,16 +348,16 @@ class SystemInterface: public DeviceInterface, public DataProvider{
 
     
     virtual const String* getValuePtr(String addrr, uint16_t index){
-      if (addrr == ADDRESS_SIMPLETEXT){
+      if (addrr == ADDRESS_dsText){
         textValue = "hello"+String(index);
         return &textValue;
       }
-      else if (addrr == ADDRESS_STRIPIDS){
+      else if (addrr == ADDRESS_dsStripIDs){
         return &getStripID;         //javascript local function callback
       }else if (addrr == ADDRESS_ACTION){
-        return &dropDownActionsValues[index];   
+        return &dsDropDownActionsValues[index];   
       }else if (addrr == ADDRESS_MACRONAME){
-        return &macroNamesValues[index];      
+        return &dsMacroNamesValues[index];      
       }else{
         char group[64] = {0};
         //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
@@ -386,7 +386,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     // javascript function that generates the data locally
     String getStripID = "getStripID";
         
-    String dropDownActionsValues[ADDRESS_ACTION_SIZE] = {
+    String dsDropDownActionsValues[ADDRESS_ACTION_SIZE] = {
       "play",
       "pause",
       "stop",
@@ -394,7 +394,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
       "RW"      
     };   
     
-    String macroNamesValues[MACRO_NUMBER_MAX] = {
+    String dsMacroNamesValues[MACRO_NUMBER_MAX] = {
       "macro1",
       "macro2",
       "macro3",      

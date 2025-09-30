@@ -18,7 +18,7 @@ bool useUSBMidi = false;
 
 #ifdef DEBUG  //ets_printf(__VA_ARGS__) //
   #define debugMon Serial  //  
-  SemaphoreHandle_t serialMutex;
+  SemaphoreHandle_t serialMutex = xSemaphoreCreateMutex();
   #define DEBUG_PRINT(...) if (!useUSBMidi) if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(500))) { debugMon.printf(__VA_ARGS__); debugMon.flush(); xSemaphoreGive(serialMutex);} else (void)0
 #else
   #define DEBUG_PRINT(...) 
@@ -727,7 +727,6 @@ class JsonListFile : public JsonList{
       JsonListFile():JsonList(){};
 
       bool load(String f,String defaultValues=""){
-
         // We first clean up existing values
         /*while (keyValues.size()>0){
 
@@ -745,7 +744,7 @@ class JsonListFile : public JsonList{
         JsonDocument doc;
 
         if (!LittleFS.exists(filename)){
-
+          
         }else{
           File file = LittleFS.open(filename);
           DeserializationError error = deserializeJson(doc, file);      
@@ -895,7 +894,7 @@ OpenFontRender* Icon::ofr = &gui.iconOfr;
 class ApplicationManager;
 
 class Log {
-public:
+  public:
     // Initialiser la classe avec une instance d'ApplicationManager
     static void init(ApplicationManager* manager) {
         am = manager;

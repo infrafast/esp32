@@ -78,11 +78,25 @@ class StripSkeleton{
       jsonDocStripSkeleton[stripID] = group;
       jsonDocStripSkeleton[C_ICON] = icon;
 
+      JsonDocument property;
+
       properties = jsonDocStripSkeleton[STRIP_SKELETON_PROPERTIES].to<JsonArray>();     
       for (uint8_t i = 0; i < dataSetAddresses.size(); i++){
 
-        JsonObject kv = properties.add<JsonObject>();
-        kv[dataSetAddresses[i]->pattern] = dataSetAddresses[i]->object;
+        Address* address = dataSetAddresses[i];
+        if (address != nullptr){
+          DeserializationError err = deserializeJson(property,address->serialize()); // {"/midi/value1/%s": ["freetext","note", "0-126"]} or {"/midi/channel/%d": ["dropdown"]}
+          if (err) {
+            DEBUG_PRINT("\naddress properties serialization failed: %s",dataSetAddresses[i]->pattern.c_str());
+            continue;
+          }
+        }else{
+           DEBUG_PRINT("\naddress[%d] is null",i);
+        }
+
+        // doc contient maintenant ton objet JSON
+        JsonObject obj = property.as<JsonObject>();    
+        properties.add(property);
 
       }
       String data;

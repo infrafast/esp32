@@ -326,7 +326,7 @@ public:
 
       #ifdef DEBUG
         // if we are in debug mode, we use the usb as a serial interface in all case, no matter the user boot up by long press or not
-        serialMutex = xSemaphoreCreateMutex();             
+        //serialMutex = xSemaphoreCreateMutex();             
         startupState = USB_CDC_AND_FWUPDATE_STARTUP;
         useCDC();
       #else

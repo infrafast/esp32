@@ -216,7 +216,7 @@ class Shortcuts{
   public:
     void serialize(String* buffer){
 
-      *buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":\"dropdown\"}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":\"dropdown\"},{\"/macro/name/%s\":\"dropdown\"}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":\"freetext\"}]}]";
+      *buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":\"freetext\"}]}]";
 
       removeJsonQuote(buffer);
 
@@ -345,6 +345,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     //////////////////    MAIN CLASS START   //////////////////////
     //////////////////                       //////////////////////    
     ///////////////////////////////////////////////////////////////
+   
 
     ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true):GenericComponent(debug){
       hwm = h;
@@ -362,24 +363,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       // general purposes / test skeletons
       //
       stripTextSkel = new StripSkeleton(STRIP_TEXT,STRIP_DEFAULT_GROUP,textStripConstructorCallback,'*');        
-        stripTextSkel->registerDataSetAddress(new Address{ADDRESS_SIMPLETEXT,INPUTTEXT} );
+        stripTextSkel->registerDataSetAddress(systemInterface.dsText.address);
 
       //
       // midi skeletons
       //
-      stripMidiNoteSkel = new StripSkeleton(STRIP_MIDINOTE,GROUP_INTERFACE_MIDI,midiNoteStripConstructorCallback,'*');             
-        stripMidiNoteSkel->registerDataSetAddress(&dsMidiChannels.address);
-        stripMidiNoteSkel->registerDataSetAddress(&dsNotesOnOff.address);
-        stripMidiNoteSkel->registerDataSetAddress(&dsMidiValue1.address);
-        stripMidiNoteSkel->registerDataSetAddress(&dsMidiValue2.address);
+      midiNoteSkel = new StripSkeleton(STRIP_MIDINOTE,GROUP_INTERFACE_MIDI,midiNoteStripConstructorCallback,'*');             
+        midiNoteSkel->registerDataSetAddress(dsMidiChannels.address);
+        midiNoteSkel->registerDataSetAddress(dsNotesOnOff.address);
+        midiNoteSkel->registerDataSetAddress(dsMidiValue1.address);
+        midiNoteSkel->registerDataSetAddress(dsMidiValue2.address);      
 
-      freeTextStripSysexSkel = new StripSkeleton(STRIP_SYSEXTEXT,GROUP_INTERFACE_MIDI,freeSysexStripConstructorCallback,'*');             
-        freeTextStripSysexSkel->registerDataSetAddress(&dsfreeTextMidiSysex.address);
 
-      dropDownStripSysexSkel = new StripSkeleton(STRIP_SYSEXSELECT,GROUP_INTERFACE_MIDI,dropdownSysexStripConstructorCallback,'*');             
-        dropDownStripSysexSkel->registerDataSetAddress(&dsSysexMessages.address);
+      sysexSkel = new StripSkeleton(STRIP_SYSEX,GROUP_INTERFACE_MIDI,sysexStripConstructorCallback,'*');             
+        sysexSkel->registerDataSetAddress(dsSysexMessages.address);
         
-
       // *********************************
       // CALLBACKS
       // *********************************
@@ -601,7 +599,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         }
         if (!exists) {
           groupesUniques.push_back(interface->group);
-          new DynamicDataSet({ADDRESS_PROVIDER+interface->group+"/%s",INPUTSELECT},&systemInterface);
+          new DynamicDataSet(new DropDownAddress(ADDRESS_PROVIDER+interface->group+"/%s"),&systemInterface);
         }
 
       }
@@ -1174,22 +1172,28 @@ void setup() {
 
       doc["connectivity"] = getConnectivityState();
 
+      DEBUG_PRINT("\nserializing interfaces");
       JsonArray interfaces = doc["interfaces"].to<JsonArray>();  
       interfaceRepo.serialize(&interfaces);   
 
+      DEBUG_PRINT("\nserializing dataRepository");
       JsonArray ds = doc["datasets"].to<JsonArray>();  
       dataRepository.serialize(&ds); 
 
+      DEBUG_PRINT("\nserializing skeletons");
       JsonArray skel = doc["skeletons"].to<JsonArray>();
       stripFactory.serialize(&skel);  
 
+      DEBUG_PRINT("\nserializing shortcutsDef");
       shortcuts.serialize(&tempJsonString);
       doc["shortcutsDef"] = tempJsonString;
 
+      DEBUG_PRINT("\nserializing system");
       tempJsonString="";
       systemCfg.serialize(&tempJsonString);  
       doc["system"]=tempJsonString;
 
+      DEBUG_PRINT("\nserializing bankCfg");
       tempJsonString = serializeBanks();      
       bankCfg.setValue(C_BANKS,tempJsonString);
 
@@ -2944,7 +2948,7 @@ void setup() {
       "\""+String(S_SHORTCUTS)+"\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
     "}";
 
-    String defaultBanksConf = "{\"banks\":{\"bank2\":{\"strips\":[{\"type\":\"text\",\"size\":\"2x2\",\"color\":99,\"icon\":\"5\",\"interface\":\"default\",\"properties\":[\"/text/test\"],\"position\":{\"win\":1,\"x\":\"1\",\"y\":\"1\",\"id\":1}}],\"icon\":\"=\"}}  }";
+    String defaultBanksConf = "{\"banks\":{\"Test\":{\"currentLayout\":0,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":0,\"icon\":5,\"size\":\"1x4\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/helloworld\"]}]}}}";
     String defaultUserConf = "{}";
 
     ScreenUnion oldScreen;    

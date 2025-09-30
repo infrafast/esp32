@@ -5,7 +5,107 @@
 #include "Interval.h"
 #include "interfaces/i_midi.h"
 
-StripSkeleton *stripMidiNoteSkel, *freeTextStripSysexSkel, *dropDownStripSysexSkel;
+StripSkeleton *midiNoteSkel, *sysexSkel;
+
+    ///////////////////////////////////////////////////////////////
+    //////////////////                        /////////////////////
+    //////////////////    DATASETS           //////////////////////
+    //////////////////                       //////////////////////    
+    ///////////////////////////////////////////////////////////////
+
+#define ADDRESS_SYSEX "/sysex/%d"
+class SysexLibEntry : public DataSet, public JsonListFile{
+  public:
+    SysexLibEntry(Address* _address): DataSet(_address, GROUP_INTERFACE_MIDI){ 
+      #define DEFAULT_SYSEX_MSG_EXAMPLE "{\"sysexkey1\":\"00 01 02\",\"sysexkey2\":\"AA BB CC\"}"
+      if (!load("/sysexmsg.json", DEFAULT_SYSEX_MSG_EXAMPLE)) addValue(filename,"error");
+    }      
+
+    virtual const String* getValuePtr(uint16_t index){      
+      if (index>size()-1) return &errorDatasetOOR;      
+      return getString(getName(index));      
+    }  
+
+    virtual uint16_t getSize(){
+      return size();                //number of pair k/v loaded from the file
+    }
+
+}dsSysexMessages(new DropDownAddress(ADDRESS_SYSEX));
+
+
+class MidiChannels : public DataSet{
+  #define ADDRESS_MIDICHANNEL   "/channel/%d"
+  #define MIDI_CHANNEL_NUMBER   16
+  public:
+    //String channelNames[MIDI_CHANNEL_NUMBER] = {"Piano", "Basse", "Guitare", "Cordes","Cuivres", "Choeur", "Lead", "FX","Pad", "Batterie", "Percu 2", "Synth","Harmonie", "Ambiance", "Drone", "Autre"};
+    String channelNames[MIDI_CHANNEL_NUMBER] = {"channel1","channel2","channel3","channel4","channel5","channel6","channel7","channel8","channel9","channel10","channel11","channel12","channel13","channel14","channel15","channel16"};
+
+
+    MidiChannels(Address* _address): DataSet(_address, GROUP_INTERFACE_MIDI){}
+    virtual const String* getValuePtr(uint16_t index){
+      if (index>getSize()-1) return &errorDatasetOOR;
+      return &channelNames[index];    //local javascript function 
+    }  
+
+    virtual uint16_t getSize(){
+      return MIDI_CHANNEL_NUMBER;
+    }
+
+}dsMidiChannels(new DropDownAddress(ADDRESS_MIDICHANNEL));
+
+#define ADDRESS_MIDIVALUE2     "/value2/%s"
+#define ADDRESS_MIDIVALUE1     "/value1/%s"
+class MidiValue : public DataSet{
+  public:
+    String value="0123";
+    MidiValue(Address* adress, String name): DataSet(adress, name){}
+    
+    virtual const String* getValuePtr(uint16_t index){
+      return &value;     
+    }  
+    virtual uint16_t getSize(){
+      return 1;
+    }    
+}
+dsMidiValue1(new FreeTextAddress(ADDRESS_MIDIVALUE1,"note", REGEX_0to126),GROUP_INTERFACE_MIDI),
+dsMidiValue2(new FreeTextAddress(ADDRESS_MIDIVALUE2,"velocity", REGEX_0to126),GROUP_INTERFACE_MIDI);
+
+
+enum {
+  MIDI_NOTEOFF,
+  MIDI_NOTEON,
+  MIDI_NOTE_SIZE
+};
+
+String midiMessages[MIDI_NOTE_SIZE] = {
+  "Off",
+  "On",
+};  
+
+class MidiNotes : public DataSet{
+  #define ADDRESS_MIDINOTE   "/note/%s"
+  public:    
+     
+    MidiNotes(Address* adress, String name): DataSet(adress, name){}
+
+    virtual const String* getValuePtr(uint16_t index){
+      if (index>getSize()-1) return &errorDatasetOOR;
+      return &midiMessages[index];    
+    }  
+
+    virtual uint16_t getSize(){
+      return MIDI_NOTE_SIZE;
+    }  
+
+}dsNotesOnOff(new DropDownAddress(ADDRESS_MIDINOTE),GROUP_INTERFACE_MIDI);
+
+
+    ///////////////////////////////////////////////////////////////
+    //////////////////                        /////////////////////
+    //////////////////    STRIP DEF          //////////////////////
+    //////////////////                       //////////////////////    
+    ///////////////////////////////////////////////////////////////
+
 
 class OneValueMidiStrip : public TwoSelectStrip{
   public:
@@ -166,15 +266,15 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
 
 
 Strip* midiNoteStripConstructorCallback(){
-  return new MidiNoteStrip(stripMidiNoteSkel);
+  return new MidiNoteStrip(midiNoteSkel);
 }
 
 class SysexStrip : public Strip{
+  #define STRIP_SYSEX "Sysex"
   #define SYSEX_MAX_MESSAGE_LENGTH 256
 
   public:
     SysexStrip(StripSkeleton* s,bool debug=false):Strip(s){
-
     }
 
     ~SysexStrip(){};
@@ -268,85 +368,34 @@ class SysexStrip : public Strip{
       return success;
     }
 
+    virtual void serializeProperties(){
+      char* buf = (char*)malloc(strlen(ADDRESS_SYSEX)*sizeof(char*));
+      sprintf(buf,ADDRESS_SYSEX,sysexID);
+      properties.add(String(buf));
+      DEBUG_PRINT("\n************** ADDRESS_SYSEX");
+      delete buf;
+    }
+
+    virtual void deserializeProperty(String property){
+      if (sscanf(property.c_str(), ADDRESS_SYSEX, &sysexID)){
+        const String* sysexKeymsg = skeleton->getValuePtr(interface->getProviderName(),ADDRESS_SYSEX,sysexID-1);
+        //sysexMessage = *dsSysexMessages.getString(*sysexKeymsg);         // return the value corresponding to the key from the jsonfile library
+      }    
+    }
+
     virtual const String* getTopLabel(){return &type;}
     virtual const String* getBottomLabel(){return &sysexMessage;}      
        
   protected:
     String unitString = "dB";
     String sysexMessage="";
-
-};
-
-class FreeTextSysexStrip: public SysexStrip{
-  #define STRIP_SYSEXTEXT "SysexText"
-  public: 
-
-    FreeTextSysexStrip(StripSkeleton* s,bool debug=false):SysexStrip(s,debug){}
-
-    void serializeProperties(){
-      // "/midi/sysex/%s"     => DSmidiValue.address.pattern
-      char* buf = (char*)malloc( strlen(ADDRESS_SYSEXVALUE)*sizeof(char*)+SYSEX_MAX_MESSAGE_LENGTH);    // syex message length max
-      //in case sysexMessage contains space, they are copied as well so no need to replace them    
-      snprintf(buf, SYSEX_MAX_MESSAGE_LENGTH, dsfreeTextMidiSysex.address.pattern.c_str(),sysexMessage.c_str());  
-      // now we store the final string by removing again the SAFE_SCANF_SPACE from the generated full property
-      properties.add(buf);
-      delete buf;
-
-    }
-
-    virtual void deserializeProperty(String property)  {  
-      // sValue = "/midi/sysex/%s"     => dsfreeTextMidiSysex.address.pattern
-      // /midi/sysex/00 20 32 32 2F 78 69 6E 66 6F 20 => /midi/sysex/00~20~32~32~2F~78~69~6E~66~6F~20
-      // 
-      char buffer[SYSEX_MAX_MESSAGE_LENGTH];            
-      
-      // the scanf will not work if there are spaces in the string, hence we first transform the string by replacing all space by SPACE_REPLACER_TOKEN => ~
-      String noSpaceString = replaceAllChars(property,' ',SAFE_SCANF_SPACE);
-
-      if (sscanf(noSpaceString.c_str(), ADDRESS_SYSEXVALUE, buffer) == 1){
-        // now we store the value by putting back the space instead of the ~ in the final string
-        sysexMessage = replaceAllChars(buffer,SAFE_SCANF_SPACE,' ');
-      }
-    }
+    uint8_t sysexID = 0;
 
 };
 
 
-Strip* freeSysexStripConstructorCallback(){
-  return new FreeTextSysexStrip(freeTextStripSysexSkel);
-}
-
-
-
-class DropdownSysexStrip: public SysexStrip{
-  #define STRIP_SYSEXSELECT "SysexSelect"
-  public: 
-
-    DropdownSysexStrip(StripSkeleton* s,bool debug=false):SysexStrip(s,debug){
-    }
-
-    virtual void serializeProperties(){
-      char* buf = (char*)malloc(strlen(ADDRESS_SYSEXSELECT)*sizeof(char*));
-      sprintf(buf,ADDRESS_SYSEXSELECT,sysexID);
-      properties.add(String(buf));
-      DEBUG_PRINT("\n************** ADDRESS_SYSEXSELECT");
-      delete buf;
-    }
-
-    virtual void deserializeProperty(String property){
-      if (sscanf(property.c_str(), ADDRESS_SYSEXSELECT, &sysexID)){
-        const String* sysexKeymsg = skeleton->getValuePtr(interface->getProviderName(),ADDRESS_SYSEXSELECT,sysexID-1);
-        sysexMessage = *dsSysexMessages.getString(*sysexKeymsg);        
-      }
-    }  
-
-  private:
-    uint8_t sysexID=1; 
-
-};
-
-Strip* dropdownSysexStripConstructorCallback(){
-  return new DropdownSysexStrip(dropDownStripSysexSkel);
+Strip* sysexStripConstructorCallback(){
+  return new SysexStrip(sysexSkel);
 }
 
 
