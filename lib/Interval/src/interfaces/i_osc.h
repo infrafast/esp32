@@ -3,26 +3,24 @@
 
 #include "Interfaces.h"
 
-class OSCInterface: public DeviceInterface{
-  #define GROUP_INTERFACE_OSC "OSC"
+#define GROUP_INTERFACE_OSC "OSC"
+class OSCInterface{
   public:
-    OSCInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_OSC,_configurable){}
-
-    virtual String getProviderName(){
-      return GROUP_INTERFACE_OSC;        // the provider is common to all MIDI strips
-    }    
 };
 
-#define NETWORKOSC_INTERFACE "Network(OSC)"
-class NetworkOSC: public OSCInterface,NetworkInterface{
+class NetworkOSC: public OSCInterface, public NetworkDevice{
   #define CONFIG_OSCIP  "oscIP"
   #define CONFIG_OSCPORT  "oscPort"
   public:
     String OSC_IPaddress;
     int OSC_port;
 
-    NetworkOSC(String _OSC_IPaddress,int _OSC_port,bool _configurable=false):OSC_IPaddress(_OSC_IPaddress),OSC_port(_OSC_port), OSCInterface(_configurable),NetworkInterface(this){
-      interfaceName = NETWORKOSC_INTERFACE;
+    String getFilename(){
+      return interfaceName+"_if.cfg";
+    }
+
+    NetworkOSC(String name, String _OSC_IPaddress,int _OSC_port,bool _configurable=false):OSC_IPaddress(_OSC_IPaddress),OSC_port(_OSC_port), NetworkDevice(name, GROUP_INTERFACE_OSC,_configurable){
+      interfaceName = name;
       icon = "g";     
     }
 
@@ -51,9 +49,21 @@ class NetworkOSC: public OSCInterface,NetworkInterface{
 
     virtual void* read(){return nullptr;}
 
-    virtual void begin(){}
+    virtual bool derivedBegin(){
+      return false;
+    }
 
-    virtual void end(){}
+    virtual bool end(){
+      return false;
+    }
+
+    virtual bool derivedConnect(){
+      return false;
+    }
+
+    virtual bool derivedDisconnect(){
+      return false;
+    }
 
 
 };

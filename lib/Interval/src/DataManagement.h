@@ -46,13 +46,13 @@ class Address {
 
     String serialize(){      
       JsonDocument doc;
-      DEBUG_PRINT("\n%s.serialize() => ",pattern.c_str());
+      //DEBUG_PRINT("\n%s.serialize() => ",pattern.c_str());
       rules = doc[pattern].to<JsonArray>();     
       rules[(int)ADDRESS_TYPE] = object;             // base      
       serializeProperties();
       String data;
       serializeJson(doc, data);
-      DEBUG_PRINT("\t%s",data.c_str());
+      //DEBUG_PRINT("\t%s",data.c_str());
       return data;
     }
 
@@ -120,9 +120,9 @@ class DataRepository{
 
     void serialize(JsonArray* jsonDataSets){
       for (uint8_t i=0;i<dataSets.size();i++){        
-        DEBUG_PRINT("\nDataRepository::serialize(*): %d ",i);
+        //DEBUG_PRINT("\nDataRepository::serialize(*): %d ",i);
         DataSet* ds = dataSets[i];
-        DEBUG_PRINT("%s %s",ds == nullptr?"null":ds->name.c_str(),ds->address == nullptr?"null":ds->address->pattern.c_str());
+        //DEBUG_PRINT("%s %s",ds == nullptr?"null":ds->name.c_str(),ds->address == nullptr?"null":ds->address->pattern.c_str());
         jsonDataSets->add(ds->serialize());
       }
     }
@@ -178,7 +178,7 @@ String DataSet::serialize(){
   serializeJson(doc,data);
   removeJsonQuote(&data);      
 
-  DEBUG_PRINT("\nDataSet::serialize() <%s,%s> size:%d ==> %s",name.c_str(),doc["address"].as<String>().c_str(),n,data.c_str());
+  //DEBUG_PRINT("\nDataSet::serialize() <%s,%s> size:%d ==> %s",name.c_str(),doc["address"].as<String>().c_str(),n,data.c_str());
 
   return data;
 } 

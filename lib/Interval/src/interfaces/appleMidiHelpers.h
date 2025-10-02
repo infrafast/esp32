@@ -52,7 +52,7 @@ public:
   }
 
   virtual void begin(){
-    DEBUG_PRINT("\nmidiClient->begin()");
+    DEBUG_PRINT("\nmidiClient(%s)->begin()",session->getName());
     session->begin();    
   }
 

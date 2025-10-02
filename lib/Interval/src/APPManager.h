@@ -216,7 +216,7 @@ class Shortcuts{
   public:
     void serialize(String* buffer){
 
-      *buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":\"freetext\"}]}]";
+      *buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":[\"freetext\"]}]}]";
 
       removeJsonQuote(buffer);
 
@@ -337,9 +337,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     String firmwareUpdateFilename="";
 
-    // ADDRESSES DEFINITION
-    
-
+     
     ///////////////////////////////////////////////////////////////
     //////////////////                        /////////////////////
     //////////////////    MAIN CLASS START   //////////////////////
@@ -355,29 +353,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       Log::init(this);
 
       wss = nullptr;      // this is to make sure the template is correctly void
-
-      // *********************************
-      // SKELETONS
-      // *********************************
-      //
-      // general purposes / test skeletons
-      //
-      stripTextSkel = new StripSkeleton(STRIP_TEXT,STRIP_DEFAULT_GROUP,textStripConstructorCallback,'*');        
-        stripTextSkel->registerDataSetAddress(systemInterface.dsText.address);
-
-      //
-      // midi skeletons
-      //
-      midiNoteSkel = new StripSkeleton(STRIP_MIDINOTE,GROUP_INTERFACE_MIDI,midiNoteStripConstructorCallback,'*');             
-        midiNoteSkel->registerDataSetAddress(dsMidiChannels.address);
-        midiNoteSkel->registerDataSetAddress(dsNotesOnOff.address);
-        midiNoteSkel->registerDataSetAddress(dsMidiValue1.address);
-        midiNoteSkel->registerDataSetAddress(dsMidiValue2.address);      
-
-
-      sysexSkel = new StripSkeleton(STRIP_SYSEX,GROUP_INTERFACE_MIDI,sysexStripConstructorCallback,'*');             
-        sysexSkel->registerDataSetAddress(dsSysexMessages.address);
-        
+       
       // *********************************
       // CALLBACKS
       // *********************************
@@ -571,12 +547,34 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       hwm->init();
 
+      // *********************************
+      // SKELETONS & DATA SETS
+      // *********************************
+      //
+      // general purposes / test skeletons
+      //
+      stripTextSkel = new StripSkeleton(STRIP_TEXT,STRIP_DEFAULT_GROUP,textStripConstructorCallback,'*');        
+        stripTextSkel->registerDataSetAddress(systemInterface.dsText.address);
+
+      //
+      // midi skeletons
+      //
+      midiNoteSkel = new StripSkeleton(STRIP_MIDINOTE,GROUP_INTERFACE_MIDI,midiNoteStripConstructorCallback,'*');             
+        midiNoteSkel->registerDataSetAddress(dsMidiChannels.address);
+        midiNoteSkel->registerDataSetAddress(dsNotesOnOff.address);
+        midiNoteSkel->registerDataSetAddress(dsMidiValue1.address);
+        midiNoteSkel->registerDataSetAddress(dsMidiValue2.address);      
+
+      dsSysexMessages = new SysexLibEntry(new DropDownAddress(ADDRESS_SYSEX));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved
+      sysexSkel = new StripSkeleton(STRIP_SYSEX,GROUP_INTERFACE_MIDI,sysexStripConstructorCallback,'*');             
+        sysexSkel->registerDataSetAddress(dsSysexMessages->address);
+
       // interfaces that do not need the network have to be started manually
-      usbMIDIInterface = new USBMIDIInterface(true); usbMIDIInterface->begin();
-      bleMIDIInterface = new BLEMIDIInterface(true); bleMIDIInterface->begin();
-      dinMIDIInterface = new DINMIDIInterface(true); dinMIDIInterface->begin();
+      usbMIDIInterface = new USBMIDIInterface(true); 
+      bleMIDIInterface = new BLEMIDIInterface(true); 
+      dinMIDIInterface = new DINMIDIInterface(true); 
       // interfaces that need the network will be started and stopped by app refresh when network change state
-      networkOSCinterface = new NetworkOSC("99.98.97.96",10024,true); // true = configurable
+      networkOSCinterface = new NetworkOSC("sysOSC","99.98.97.96",10024,true); // true = configurable
       // DMX
       artnetDMXInterface = new ArtnetDMXInterface(true);
       threePinDMXInterface = new ThreePinDMXInterface(true);     
@@ -590,6 +588,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           this is used by the webapp to populate the available interface for a defined strip 
       */
       for (const auto& interface : interfaceRepo.interfaces){
+        
+        if (!interface->begin()){
+          
+        }
+        
         bool exists = false;
         for (const String& g : groupesUniques) {
           if (g == interface->group) {
@@ -1093,7 +1096,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
   String serializeBanks(){
     JsonDocument bankDoc;
-    //DynamicJsonDocument bankDoc(10000); 
+    
+    if (banks.size() ==0 ) return "{}";
+
     for (uint8_t i=0; i<banks.size(); i++){
       //DynamicJsonDocument jsonBank(JSON_BANK_SIZE); 
       JsonDocument jsonBank;
@@ -1101,8 +1106,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       String stringBank = bank->serialize();
       DeserializationError error = deserializeJson(jsonBank, stringBank);
       jsonBank.shrinkToFit();
-      if (error){
-        
+      if (error){        
         return "{}";
       }else{
         bankDoc[bank->name] = jsonBank;
@@ -1147,7 +1151,8 @@ void setup() {
 */
 
     #define MAX_POST_COMMAND_SIZE 4096 // Limite maximale pour éviter un abus de mémoire, utilisé par la fonction httpPost
-    
+  
+
     void getJsonStartup(String* returnedJsonStringData){
       JsonDocument doc;      
       String tempJsonString="";
@@ -1156,6 +1161,8 @@ void setup() {
       doc["langs"][1] = "english";       // change to "dir *.lang"
       doc["maxPOSTsize"] = MAX_POST_COMMAND_SIZE;
       doc["safeScanfSpace"] = String(SAFE_SCANF_SPACE);
+      doc["sysexLibFile"] = SYSEXLIB_FILENAME;
+      doc["oscLibFile"] = OSCLIB_FILENAME;
       doc["wizard"] = (hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD)?true:false;
       doc["lang"] = *systemCfg.getString(S_LANG,"francais");  
       
@@ -1214,10 +1221,14 @@ void setup() {
       //DEBUG_PRINT("\t => id=%d / state:%d",screen.id,screen.state);
       // branch the first available strip 
       if (focusedStrip == nullptr && screen.id == SCREEN_BANK){        
-        IntervalBank* bank = banks.get(screen.state);           
-        //DEBUG_PRINT("\tfixed");
-        if (bank->strips.size()>0){
-          focus(bank->strips[0], bank);          
+        if (banks.size()>0){
+          IntervalBank* bank = banks.get(screen.state);           
+          //DEBUG_PRINT("\tfixed");
+          if (bank->strips.size()>0){
+            focus(bank->strips[0], bank);          
+          }else{
+            focusedStrip = nullptr;
+          }
         }else{
           focusedStrip = nullptr;
         }
@@ -1518,10 +1529,14 @@ void setup() {
         //userNetworkChangeStateCallback(hwm->network->state);
 
         if (hwm->network->state == CONNECTED){    
-          // we start interfaces that uses the network
-          for (const auto& interface : interfaceRepo.interfaces){        
-            if (interface->useNetwork == true) interface->begin();
-          }          
+          
+          for (auto* dev : interfaceRepo.interfaces) {
+            if (dev->useNetwork) {
+              NetworkDevice* netDev = static_cast<NetworkDevice*>(dev);
+              DEBUG_PRINT("\n<%s> connect ",netDev->interfaceName.c_str());
+              netDev->connect();
+            }
+          }       
 
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                   
@@ -1552,7 +1567,11 @@ void setup() {
         }else{
           // we stop interfaces that uses the network
           for (const auto& interface : interfaceRepo.interfaces){        
-            if (interface->useNetwork == true) interface->end();
+            if (interface->useNetwork == true){              
+              if (!((NetworkInterface*)interface)->disconnect()){
+                DEBUG_PRINT("\n%s->disconnect() failed or is not implemented",interface->interfaceName.c_str());
+              }
+            }
           }
 
         }
@@ -1669,8 +1688,8 @@ void setup() {
         //DEBUG_PRINT("\nScreen rebuild done");
         #ifdef DEBUG
           // DEBUG INDICATORS OVERLAY
-          gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::three,16,&GUI::defaultFcolor,&GUI::defaultBcolor));    
-          gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::three,16,&GUI::defaultFcolor,&GUI::defaultBcolor));              
+          gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::three,16,5,&GUI::defaultFcolor,&GUI::defaultBcolor));    
+          gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::three,16,24,&GUI::defaultFcolor,&GUI::defaultBcolor));              
         #endif
         //DEBUG_PRINT("\nDEBUG DONE");
         //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
@@ -1838,20 +1857,6 @@ void setup() {
             webServer->setTimeout(3000);
             webServer->use(commonFileServerWrapper);                        
 
-
-            // aWOT routing
-            //webServer->get("/", commonFileServerWrapper);
-
-            // inventory zipped file
-            /*populateFileList("gz","/webapp",&webGZFiles,"/",false);              
-            for (uint8_t i=0;i<webGZFiles.size();i++){          
-              webServer->get(webGZFiles.get(i)->c_str(), &gzFileServer);
-              DEBUG_PRINT("\n ...... REGISTERING WEB GZ FILE: %s",webGZFiles.get(i)->c_str());
-            }*/
-
-            //populateFileList("*","/webapp",&webFiles,"/");  // prefill, maybe usefull if LittleFS is too slow
-            // any other file
-
             setWSServer();   // ==> websocket server is created and then changed by application refresh() in case the network medium is changed
             //webTaskhandle(WEB_START);
 
@@ -1930,85 +1935,6 @@ void setup() {
         };
 
 
-    /*bool webFileExists(String fileName){
-      //ets_printf("\nwebFileExists(%s)",fileName.c_str());
-      for (int i = 0; i < webFiles.size(); i++) {
-        //ets_printf("\n\t<> %s", webFiles.get(i)->c_str());
-        if (*webFiles.get(i) == fileName) return true; // Libérer la mémoire des objets String
-      }      
-      return false;
-    }*/
-
-    /*void commonFileServer2(Request &req, Response &res){      
-      httpServing = true;
-      //if (req.method() != Request::GET) return;
-      String path = req.path();
-
-      ets_printf("\t %s <---\t",path.c_str());
-
-      if(path=="/post/"){ 
-        
-        httpPost(req,res);
-
-      }else{
-
-        if(path == "/"){
-          path = "/index.html.gz"; //path = "/index.html";      INDEX is the only exception were we process the gz here because we remap / to index
-          #ifdef USE_NETWORK
-            if (hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD) path = "/wizard.html.gz"; //path = "/wizard.html";
-          #endif
-        }               
-
-        bool fileIsCompressed = false;
-
-        if (webFileExists(String(path)+".gz")){
-          path = path+".gz";
-          fileIsCompressed = true;
-        }
-        
-        String filenameRealExtension = path;
-
-        if (filenameRealExtension.endsWith(".gz")){
-          filenameRealExtension.replace(".gz","");
-          res.set("Content-Encoding", "gzip");
-        }
-
-        if (!fileIsCompressed){
-          if (!webFileExists(path)){
-            res.sendStatus(404);   //send(404, "text/plain", "Not found");    
-            res.set("Content-Type", "text/html");
-            res.print(path.c_str());
-            res.end();          
-            return;
-          }
-        }
-
-        String fullPath = "/webapp"+String(path);   
-        File file = LittleFS.open(fullPath);
-        if (file.isDirectory()) return;
-
-
-        String mimeType = mimeTypes[0][1];
-        for (uint8_t i=0;i<MIME_TYPES_MAX;i++){
-          if (filenameRealExtension.endsWith(mimeTypes[i][0])) mimeType = mimeTypes[i][1];
-        }
-
-        uint32_t free = ESP.getFreeHeap();
-
-        //if (debug) DEBUG_PRINT("\t\t\t\t REAL EXTENSION: \t\t\tt%s \t\t\tMIME:%s",filenameRealExtension.c_str(),mimeType.c_str());
-        ets_printf("\n\t\t<%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        
-        res.set("Content-Type", mimeType.c_str());
-
-       
-        res.set("Access-Control-Allow-Origin","*");
-
-        //if (hwm->network->media == WIFI_MEDIA) while (file.available()){ res.write(file.read()); vTaskDelay(1);}
-        //else
-          sendFileInChunks(&file,&res);
-        res.end();
-        httpServing = false;
-      }
-    }*/
 
     void commonFileServer(Request &req, Response &res){    
       httpServing = true;
@@ -2026,7 +1952,7 @@ void setup() {
 
         bool fileIsCompressed = false;
 
-        if (LittleFS.exists("/webapp"+String(path)+".gz")){
+        if (LittleFS.exists(WEBAPP_PATH+String(path)+".gz")){
           path = path+".gz";
           fileIsCompressed = true;
         }
@@ -2038,7 +1964,7 @@ void setup() {
           res.set("Content-Encoding", "gzip");
         }
 
-        String fullPath = "/webapp"+String(path);   
+        String fullPath = WEBAPP_PATH+String(path);   
 
         //DEBUG_PRINT("\t%s",fullPath.c_str());              
 
@@ -2459,6 +2385,7 @@ void setup() {
     #define RET_UNDPROCESSEDJSON   "undefinedCallBack"
     #define RET_SAVEBUTTON          "setSaveButton"
     #define RET_COMMANDERROR        "commandError"
+    #define RET_POPUP               "commandPopup"
     #define RET_MODALMESSAGE        "modalMessage"
 
     void log(const char* originator, const char* message) {
@@ -2504,10 +2431,11 @@ void setup() {
 
         if (param == "startup"){         
           getJsonStartup(&jsonAnswer.value);
-        }else if(param == "fullConfig"){
-          serialize(&jsonAnswer.value);
         }else if (param == "connectivity"){
           jsonAnswer.value = getConnectivityState();
+        }else if(param == "fullConfig"){
+          jsonAnswer.callback = "bulkConfig";          
+          serialize(&jsonAnswer.value);
         }
       }else if (command == "set"){
         //{"command":"set","param":{"section":"system","id":"pushDelay","value":"3"}}
@@ -2613,18 +2541,21 @@ void setup() {
             Strip* currentStrip = bank->getStrip(bank->selector);          
             if (currentStrip !=nullptr){
               if (bank->trash(stripToDelete)){   
-                updatePositions(bank,jsonInput["param"][C_POSITIONS]);              
-                jsonAnswer.callback = RET_SAVEBUTTON;
-                jsonAnswer.value = "1";   
-                // we check if we delete the strip which is currently focused
-                if (indexToDelete == currentStrip->index){                   
-                  //DEBUG_PRINT("\nDELETED FOCUSED STRIP");
-                  bank->resetStripNav();
-                }else{
-                  // since updatePositions has shifted the index, the selector points to a strip that is not the one which was preivously displayed, we restore it
-                  bank->selector = currentStrip->index;                 
-                  //bank->nav.window = currentStrip->win;
-                }
+
+                  updatePositions(bank,jsonInput["param"][C_POSITIONS]);              
+                  jsonAnswer.callback = RET_SAVEBUTTON;
+                  jsonAnswer.value = "1";   
+                  // we check if we delete the strip which is currently focused
+                  if (indexToDelete == currentStrip->index){                   
+                    DEBUG_PRINT("\nDELETED FOCUSED STRIP");
+                    focusedStrip = nullptr;
+                    restoreScreen();
+                  }else{
+                    // since updatePositions has shifted the index, the selector points to a strip that is not the one which was preivously displayed, we restore it
+                    bank->selector = currentStrip->index;                 
+                    //bank->nav.window = currentStrip->win;
+                  }
+
                 triggerRedraw(); // force refresh 
               }else{
                 jsonAnswer.value=*lang.getString(ERRDEL_STRIP_MSG); 
@@ -2680,14 +2611,12 @@ void setup() {
           banks.remove(bankIndex);  // this will shift bank index but we have saved the one currently displayed
           delete bankToDelete;
           if (bankIndex == screen.state || screen.id == SCREEN_BANK_SWITCH){
-
             //DEBUG_PRINT("\nDELETE CURRENT BANK");
-
             if (banks.size()>0){
               jumpToBank(banks.get(0)->name);  // go to first bank in case we delete the current displayed or we are showing menu switch
             }else{
-              //DEBUG_PRINT("\nLAST BANK WAS TRASHED");
-              
+              DEBUG_PRINT("\nLAST BANK WAS TRASHED");          
+              focusedStrip = nullptr;    
             }
           }else{
             getBank(currentBank->name,&screen.state); // restore the bank
@@ -2708,6 +2637,7 @@ void setup() {
         if (bank != nullptr){
           ret = true;
           jumpToBank(bank->name);
+          triggerRedraw();
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value = "1";            
         }else jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
@@ -2745,22 +2675,70 @@ void setup() {
         // Nom de la clé
         const char* interfaceName = first.key().c_str();    
         DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);
+        
         if (interface->interfaceName == interfaceName){
-          // we found the right interface (we still have to test in case it returned SystemInterface)
+          // we found the right interface 
           // Valeur = parameters
           JsonObject values = first.value().as<JsonObject>();
           if (interface->restoreBase(values)){
-            jsonAnswer.callback = RET_SAVEBUTTON;
-            jsonAnswer.value = "1";  
+            if (interface->save()){
+              jsonAnswer.callback=RET_POPUP;
+              jsonAnswer.value = "saved";  
+              interface->begin(); // force interface disconnect so it reconnects with the new parameters
+            }else{
+              jsonAnswer.callback=RET_COMMANDERROR;
+              jsonAnswer.value = "interface save error";                
+            }
           }else{
             jsonAnswer.callback=RET_COMMANDERROR;
-            jsonAnswer.value = *lang.getString("no interface change");            
+            jsonAnswer.value ="no interface change";            
           }
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;
           jsonAnswer.value = *lang.getString("Wrong Interface")+":"+interfaceName;
         }
 
+      }else if (command == "saveLibrary"){
+        // {"command":"saveLibrary","param":{"file":"sysexlib.json","entries":{"abc":"aa bb","key2":"01bb","key3":"1ef0","ghijk":"12 34 56"}}}}
+        String fileName = jsonInput["param"]["file"];
+        String entries = jsonInput["param"]["entries"];       
+
+        //write the data with compression
+        if (writeBufferToGzFile(WEBAPP_PATH"/"+fileName+".gz",entries.c_str()) != 0){         
+
+          // reload the datasets
+          if (fileName == SYSEXLIB_FILENAME){
+            if (!dsSysexMessages->reload()){
+              jsonAnswer.callback=RET_POPUP;
+              jsonAnswer.value = "Data reload error";
+            }else{
+              // then resend the banks with updated datasets
+
+              //{bulkConfig:{$datasets,$banks}}';
+              jsonAnswer.callback = "bulkConfig";          
+
+              JsonDocument doc;      
+
+              JsonArray ds = doc["datasets"].to<JsonArray>();  
+              dataRepository.serialize(&ds); 
+
+              String banksString = serializeBanks();      
+              doc["banks"]=banksString;
+                  
+              serializeJson(doc, jsonAnswer.value);  
+              removeJsonQuote(&jsonAnswer.value);              
+              
+              serialize(&jsonAnswer.value);
+
+
+            }
+          } 
+          //do the same for osc messages here
+
+        }else{
+          jsonAnswer.callback=RET_COMMANDERROR;
+          jsonAnswer.value = "File Error";
+        }                
       }else{
         //DEBUG_PRINT("\n\t\t\t\t\tCalling userParseJsonInputCallback...");
         JsonObject j = jsonInput.as<JsonObject>();
@@ -2792,6 +2770,14 @@ void setup() {
       jsonOutput.shrinkToFit();
       return jsonString;
 
+    }    
+
+    bool writeStringtoFile(const String &filename, String& entries) {
+      File file = LittleFS.open(filename, "w");
+      if (!file) return false;
+      file.print(entries);
+      file.close();
+      return true;
     }    
     
     void scanNetworksTask(void * parameter) {

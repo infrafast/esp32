@@ -14,24 +14,35 @@ StripSkeleton *midiNoteSkel, *sysexSkel;
     ///////////////////////////////////////////////////////////////
 
 #define ADDRESS_SYSEX "/sysex/%d"
+#define SYSEXLIB_FILENAME "sysexlib.json"
+
+#define OSCLIB_FILENAME "osclib.json"  
+
 class SysexLibEntry : public DataSet, public JsonListFile{
   public:
     SysexLibEntry(Address* _address): DataSet(_address, GROUP_INTERFACE_MIDI){ 
-      #define DEFAULT_SYSEX_MSG_EXAMPLE "{\"sysexkey1\":\"00 01 02\",\"sysexkey2\":\"AA BB CC\"}"
-      if (!load("/sysexmsg.json", DEFAULT_SYSEX_MSG_EXAMPLE)) addValue(filename,"error");
+      reload();      
     }      
+
+    bool reload(){      
+      clean();      
+      bool success = load(WEBAPP_PATH"/"SYSEXLIB_FILENAME".gz");
+      if (!success) addValue(filename,"error");      
+      return success;
+    }
 
     virtual const String* getValuePtr(uint16_t index){      
       if (index>size()-1) return &errorDatasetOOR;      
-      return getString(getName(index));      
+      //return getString(getName(index));       // return the valuenof the jkey   
+      return getName(index);                
     }  
 
     virtual uint16_t getSize(){
       return size();                //number of pair k/v loaded from the file
     }
+};
 
-}dsSysexMessages(new DropDownAddress(ADDRESS_SYSEX));
-
+SysexLibEntry* dsSysexMessages;
 
 class MidiChannels : public DataSet{
   #define ADDRESS_MIDICHANNEL   "/channel/%d"
@@ -355,7 +366,7 @@ class SysexStrip : public Strip{
       if (hexStringToBytes(sysexMessage, buffer, outMax, length)) {
         // TODO: protéger broadCast/sendSysEx par mutex si ressource partagée
 
-        ((MIDIInterface*)interface)->sendSysEx(length, buffer, false);
+        ((MIDIInterface*)interface)->sysexSend(length, buffer, false);
         //Log::drop(interface->interfaceName.c_str(), (const char*)buffer);  // => for SOME REASON THIS CREATE A DISCONNECTION OF WEBSOCKET...MAYBE THE GENERATED FRAME IS INCORRECT?
         success = true;          
 
@@ -372,23 +383,23 @@ class SysexStrip : public Strip{
       char* buf = (char*)malloc(strlen(ADDRESS_SYSEX)*sizeof(char*));
       sprintf(buf,ADDRESS_SYSEX,sysexID);
       properties.add(String(buf));
-      DEBUG_PRINT("\n************** ADDRESS_SYSEX");
       delete buf;
     }
 
     virtual void deserializeProperty(String property){
       if (sscanf(property.c_str(), ADDRESS_SYSEX, &sysexID)){
-        const String* sysexKeymsg = skeleton->getValuePtr(interface->getProviderName(),ADDRESS_SYSEX,sysexID-1);
-        //sysexMessage = *dsSysexMessages.getString(*sysexKeymsg);         // return the value corresponding to the key from the jsonfile library
+        sysexKey = *skeleton->getValuePtr(interface->getProviderName(),ADDRESS_SYSEX,sysexID-1);
+        sysexMessage = *dsSysexMessages->getString(sysexKey);         // return the value corresponding to the key from the jsonfile library        
       }    
     }
 
     virtual const String* getTopLabel(){return &type;}
-    virtual const String* getBottomLabel(){return &sysexMessage;}      
+    virtual const String* getBottomLabel(){return &sysexKey;}      
        
   protected:
     String unitString = "dB";
     String sysexMessage="";
+    String sysexKey="";
     uint8_t sysexID = 0;
 
 };

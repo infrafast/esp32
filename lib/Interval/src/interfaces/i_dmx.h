@@ -3,25 +3,22 @@
 
 #include "Interfaces.h"
 
-class DMXInterface: public DeviceInterface{
-  #define GROUP_INTERFACE_DMX "DMX"
-  public:
-  
-    DMXInterface(const String& name, bool _configurable):DeviceInterface(name,GROUP_INTERFACE_DMX,_configurable){}
-
-    virtual String getProviderName(){
-      return GROUP_INTERFACE_DMX;        // the provider is common to all MIDI strips
-    }    
+#define GROUP_INTERFACE_DMX "DMX"
+class DMXInterface{
 
 };
 
 #define ARTNETDMX_INTERFACE "Artnet"
-class ArtnetDMXInterface: public DMXInterface, NetworkInterface{
+class ArtnetDMXInterface: public DMXInterface, NetworkDevice{
   #define CONFIG_ARTNET "voidArtnetparam" 
   public:
     String voidArtnetParam = "artnet123";
 
-    ArtnetDMXInterface(bool _configurable):DMXInterface(ARTNETDMX_INTERFACE,_configurable), NetworkInterface(this){
+    String getFilename(){
+      return ARTNETDMX_INTERFACE"_if.cfg";
+    }    
+
+    ArtnetDMXInterface(bool _configurable):NetworkDevice(ARTNETDMX_INTERFACE, GROUP_INTERFACE_DMX, _configurable){
       icon = "b";
     }
 
@@ -44,23 +41,39 @@ class ArtnetDMXInterface: public DMXInterface, NetworkInterface{
 
     virtual void* read(){return nullptr;}
 
-    virtual void begin(){}
+    virtual bool derivedBegin(){
+      return false;
+    }
     
-    virtual void end(){}
+    virtual bool end(){
+      return false;      
+    }
+
+    virtual bool derivedConnect(){
+      return false;
+    }
+
+    virtual bool derivedDisconnect(){
+      return false;
+    }
 
     
 };
 
 
 #define THREEEPINDMX_INTERFACE "3PinDMX"
-class ThreePinDMXInterface: public DMXInterface{
+class ThreePinDMXInterface: public DMXInterface, public DeviceInterface{
   #define CONFIG_3PINDMX "void3PinDMXparam" 
   public:
     String void3pinDMXParam = "3pin123";
 
-    ThreePinDMXInterface(bool _configurable):DMXInterface(THREEEPINDMX_INTERFACE,_configurable){
+    ThreePinDMXInterface(bool _configurable):DeviceInterface(THREEEPINDMX_INTERFACE,GROUP_INTERFACE_DMX, _configurable){
       icon = "a";
     }
+
+    String getFilename(){
+      return THREEEPINDMX_INTERFACE"_if.cfg";
+    }   
 
     virtual void monitor(){
 
@@ -81,9 +94,13 @@ class ThreePinDMXInterface: public DMXInterface{
 
     virtual void* read(){return nullptr;}
 
-    virtual void begin(){}
+    virtual bool derivedBegin(){
+      return false;
+    }
 
-    virtual void end(){}
+    virtual bool end(){
+      return false;
+    }
 
     
 };

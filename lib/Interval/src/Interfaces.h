@@ -24,190 +24,248 @@ class DeviceInterface {
   
   public:
 
-  State state;
+    State state;
 
-  String previousStateLabel;
-  uint8_t previousStateCode = 0;
-  bool previousOffline = false;
+    String previousStateLabel;
+    uint8_t previousStateCode = 0;
+    bool previousOffline = false;
 
-  String interfaceName; 
+    String interfaceName; 
 
-  bool exposed = true;
-  bool useNetwork = false;  // by default an interface do not use betwork
-  String group = "undef"; // used by the strip to define which deviceinterface they can connect
+    bool exposed = true;
+    bool useNetwork = false;  // by default an interface do not use betwork
+    String group = "undef"; // used by the strip to define which deviceinterface they can connect
 
-  String icon = ICON_LINK;
+    String icon = ICON_LINK;
 
-  virtual String getProviderName() = 0;
-
-  DeviceInterface(const String&, const String&, bool);
-  ~DeviceInterface();
-
-  String serializeState(){
-    JsonDocument doc;
-    
-    doc[interfaceName][INTERFACE_STATE] = state.label;
-    doc[interfaceName][INTERFACE_PROGRESS] = state.progress;
-    doc[interfaceName][INTERFACE_DETAILS] = state.details;
-    doc[interfaceName][INTERFACE_OFFLINE] = state.offline;
-
-    doc.shrinkToFit();
-    String output;
-    serializeJson(doc, output);    
-    //{"MixerOffline":{"state":"disconnected","progress":0}}
-    //DEBUG_PRINT("\n<%s> serializeState: %s",interfaceName.c_str(),output.c_str());          
-    return output;
-  }  
-
-  String serializeConfig(bool mainNode = true){
-    // by default we serialize the full content (main node)
-    // but if an interface uses another one, it will only partially serialize 
-    // means we don't include somes attributes
-    JsonDocument doc;
-    //JsonObject config = doc[interfaceName].createNestedObject(/*INTERFACE_CONFIG*/);
-    JsonObject config;
-
-    if (exposed) 
-      config = doc.createNestedObject(interfaceName);
-    else config = doc.to<JsonObject>();
-
-    if (mainNode == true){
-      // that's the attribute we do not serialize in case of partial serialization
-      config[INTERFACE_EXPOSED] = exposed;
-      //config[INTERFACE_USENETWORK] = useNetwork;
-      config[INTERFACE_GROUP] = group;
-      config[INTERFACE_PROVIDER] = getProviderName();      
-      config[INTERFACE_ICON] = icon;
+    virtual String getProviderName(){
+      return group;
     }
-    derivedConfig(config);
 
-    doc.shrinkToFit();
-    String output;
-    serializeJson(doc, output);    
-    //{"MixerOffline":{"config":{FILLED BY DERIVED CLASS}}}
-    //DEBUG_PRINT("\nserializeConfig: %s",output.c_str());          
-    return output;
-  }  
+    DeviceInterface(const String&, const String&, bool);
+    ~DeviceInterface();
 
-  bool restoreFromString(const char* config){    
-    bool changed = false;
-    JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, config);
-    if (error) {
-      DEBUG_PRINT("\n%s restoreFromString %s",interfaceName.c_str(),error.c_str());
-      return false;
-    }
-    JsonObject configJson = doc.as<JsonObject>();
+    String serializeState(){
+      JsonDocument doc;
+      
+      doc[interfaceName][INTERFACE_STATE] = state.label;
+      doc[interfaceName][INTERFACE_PROGRESS] = state.progress;
+      doc[interfaceName][INTERFACE_DETAILS] = state.details;
+      doc[interfaceName][INTERFACE_OFFLINE] = state.offline;
 
-    //by default a used interface (which means it had a partial serialization) 
-    // is not exposed and is online, this can be overwritten by the deserialization 
-    // of a full interface
-    //offline = false;
-    //exposed = false;
+      doc.shrinkToFit();
+      String output;
+      serializeJson(doc, output);    
+      //{"MixerOffline":{"state":"disconnected","progress":0}}
+      //DEBUG_PRINT("\n<%s> serializeState: %s",interfaceName.c_str(),output.c_str());          
+      return output;
+    }  
 
-    changed = restoreBase(configJson);    
+    String serializeConfig(bool mainNode = true){
+      // by default we serialize the full content (main node)
+      // but if an interface uses another one, it will only partially serialize 
+      // means we don't include somes attributes
+      JsonDocument doc;
+      //JsonObject config = doc[interfaceName].createNestedObject(/*INTERFACE_CONFIG*/);
+      JsonObject config;
 
-    doc.shrinkToFit();
+      if (exposed) 
+        config = doc.createNestedObject(interfaceName);
+      else config = doc.to<JsonObject>();
 
-    #ifdef DEBUG
+      config[INTERFACE_OFFLINE] = state.offline;      // common attribute
+
+      if (mainNode == true){
+        // that's the attribute we do not serialize in case of partial serialization
+        config[INTERFACE_EXPOSED] = exposed;
+        config[INTERFACE_GROUP] = group;
+        config[INTERFACE_PROVIDER] = getProviderName();      
+        config[INTERFACE_ICON] = icon;
+      }
+      derivedConfig(config);
+
+      doc.shrinkToFit();
       String output;
       serializeJson(doc, output);    
       //{"MixerOffline":{"config":{FILLED BY DERIVED CLASS}}}
-      DEBUG_PRINT("\nrestoreFromString: %s",output.c_str());          
-    #endif
-    return changed;      
-  }
+      //DEBUG_PRINT("\nserializeConfig: %s",output.c_str());          
+      return output;
+    }  
 
-  virtual void serialize(JsonDocument& interfaceDoc){
-    //start with the config
-    deserializeJson(interfaceDoc, serializeConfig());      
-    JsonDocument interfaceState;
-    // use another document to grab the state
-    deserializeJson(interfaceState, serializeState());
-    // fuzion the two, we have to do this on object as otherwise, key content would be overwritteb
-    // on utilise le nom de l'interface (qui est la clef commune aux deux documents)
-    //const char* interfaceName = interfaceDoc.as<JsonObject>().begin()->key().c_str();
-    JsonObject state = interfaceState[interfaceName];
-    JsonObject fullDoc = interfaceDoc[interfaceName];
-    for (JsonPair kv : state) {
-      fullDoc[kv.key()] = kv.value();  // Ajoute ou écrase les clés dans name1
+    bool restoreFromString(const char* config){    
+      bool changed = false;
+      JsonDocument doc;
+      DeserializationError error = deserializeJson(doc, config);
+      if (error) {
+        DEBUG_PRINT("\n%s restoreFromString %s",interfaceName.c_str(),error.c_str());
+        return false;
+      }
+      JsonObject configJson = doc.as<JsonObject>();
+
+      //by default a used interface (which means it had a partial serialization) 
+      // is not exposed and is online, this can be overwritten by the deserialization 
+      // of a full interface
+      //offline = false;
+      //exposed = false;
+
+      changed = restoreBase(configJson);    
+
+      doc.shrinkToFit();
+
+      #ifdef DEBUG
+        String output;
+        serializeJson(doc, output);    
+        //{"MixerOffline":{"config":{FILLED BY DERIVED CLASS}}}
+        DEBUG_PRINT("\nrestoreFromString: %s",output.c_str());          
+      #endif
+      return changed;      
     }
 
-    // in case the "top level" interface is not exposed we have to put back the interface name as the key
-    // as it was filtered in the serializeConfig
-    if (!exposed){
+    virtual void serialize(JsonDocument& interfaceDoc){
+      //start with the config
+      deserializeJson(interfaceDoc, serializeConfig());      
+      JsonDocument interfaceState;
+      // use another document to grab the state
+      deserializeJson(interfaceState, serializeState());
+      // fuzion the two, we have to do this on object as otherwise, key content would be overwritteb
+      // on utilise le nom de l'interface (qui est la clef commune aux deux documents)
+      //const char* interfaceName = interfaceDoc.as<JsonObject>().begin()->key().c_str();
+      JsonObject state = interfaceState[interfaceName];
+      JsonObject fullDoc = interfaceDoc[interfaceName];
+      for (JsonPair kv : state) {
+        fullDoc[kv.key()] = kv.value();  // Ajoute ou écrase les clés dans name1
+      }
 
-      // Sauvegarder l'ancien contenu dans un objet temporaire
-      JsonObject oldContent = interfaceDoc.as<JsonObject>();
-      JsonDocument temp;
-      temp.set(oldContent);
+      // in case the "top level" interface is not exposed we have to put back the interface name as the key
+      // as it was filtered in the serializeConfig
+      if (!exposed){
 
-      // Vider le document original
-      interfaceDoc.clear();
+        // Sauvegarder l'ancien contenu dans un objet temporaire
+        JsonObject oldContent = interfaceDoc.as<JsonObject>();
+        JsonDocument temp;
+        temp.set(oldContent);
 
-      // Créer une nouvelle clé contenant l'ancien contenu
-      interfaceDoc[interfaceName].set(temp);
+        // Vider le document original
+        interfaceDoc.clear();
+
+        // Créer une nouvelle clé contenant l'ancien contenu
+        interfaceDoc[interfaceName].set(temp);
+
+      }
 
     }
 
-  }
+    bool update(){      // return a boolean indicatin if the interface has changed its state
+      // reset change state
+      state.stateChanged = false;
 
-  bool update(){      // return a boolean indicatin if the interface has changed its state
-    // reset change state
-    state.stateChanged = false;
+      // reset the flag so strips will not be updated and re-processed already consummed data
+      dataAvailable = false;
 
-    // reset the flag so strips will not be updated and re-processed already consummed data
-    dataAvailable = false;
+      // report if state has changed
+      if (state.label != previousStateLabel){
+        state.stateChanged  = true;
+        previousStateLabel = state.label;
+      }
+      if (state.code != previousStateCode){
+        state.stateChanged  = true;
+        previousStateCode = state.code;
+      }    
+      if (state.offline != previousOffline){
+        state.stateChanged  = true;
+        previousOffline = state.offline;
+      }    
 
-    // report if state has changed
-    if (state.label != previousStateLabel){
-      state.stateChanged  = true;
-      previousStateLabel = state.label;
-    }
-    if (state.code != previousStateCode){
-      state.stateChanged  = true;
-      previousStateCode = state.code;
-    }    
-    if (state.offline != previousOffline){
-      state.stateChanged  = true;
-      previousOffline = state.offline;
-    }    
-
-    //do specific interface internal workflow
-    if (state.offline != true){      
-      monitor();
-    }
-    
-    return state.stateChanged;
-  }
-
-  bool available(){ // called by strip 
-    return dataAvailable; 
-  }
-
-  virtual bool restoreBase(const JsonObject& config){   
-
-    bool changed = false;
-
-    // this restore the base parameters common to all base class interface
-    if (config.containsKey(INTERFACE_OFFLINE)){
-      state.offline = config[INTERFACE_OFFLINE];
-      DEBUG_PRINT("\n%s offline=>%s",interfaceName.c_str(),state.offline?"true":"false");
-      changed = true;
+      //do specific interface internal workflow
+      if (state.offline != true){      
+        monitor();
+      }
+      
+      return state.stateChanged;
     }
 
-    // and then we call the specific part
-    changed |= restore(config);
-    if (changed) begin();    // begin is called when a parameter has changed, it means the interface may need to reconnect for instance
-    return changed;
-  }  
+    bool available(){ // called by strip 
+      return dataAvailable; 
+    }
 
-  virtual bool restore(const JsonObject& config) = 0;  
-  virtual void derivedConfig(JsonObject& config) = 0;  
-  virtual void monitor() = 0; // => manage internal state and set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
-  virtual void* read() = 0; // called by strip 
-  virtual void begin() = 0;       // equivalent : connect()
-  virtual void end() = 0;     // equivalent disconnect();
+    virtual bool restoreBase(const JsonObject& config){   
+
+      bool changed = false;
+
+      // this restore the base parameters common to all base class interface
+      if (config.containsKey(INTERFACE_OFFLINE)){
+        state.offline = config[INTERFACE_OFFLINE];
+        DEBUG_PRINT("\n%s offline=>%s",interfaceName.c_str(),state.offline?"true":"false");
+        changed = true;
+      }
+
+      // and then we call the specific part
+      changed |= restore(config);
+      if (changed) begin();    // begin is called when a parameter has changed, it means the interface may need to reconnect for instance
+      return changed;
+    }  
+
+    #define IF_CFG_FILE_PATH "/"
+
+    bool restoreFromFile() {
+      // Ouvrir le fichier
+      File file = LittleFS.open(IF_CFG_FILE_PATH+getFilename(), "r");
+      if (!file) {
+        DEBUG_PRINT("\t%s::restoreFromFile : impossible d'ouvrir %s\t",interfaceName.c_str(), getFilename().c_str());
+        return false;
+      }
+
+      // Lire tout le contenu dans une String
+      String content = file.readString();
+      file.close();
+
+      if (content.length() == 0) {
+        DEBUG_PRINT("\t%s::restoreFromFile %s vide\t",interfaceName.c_str(), getFilename().c_str());
+        return false;
+      }
+
+      // Appeler la fonction de restauration
+      return restoreFromString(content.c_str());
+    }
+
+    bool save(){
+      File file = LittleFS.open(IF_CFG_FILE_PATH+getFilename(), "w");
+      if (!file) {
+        DEBUG_PRINT("\t%s::save : impossible d'ouvrir %s en écriture\t", interfaceName.c_str(),getFilename().c_str());
+        return false;
+      }
+
+      String content = serializeConfig();
+
+      size_t written = file.print(content);
+      file.close();
+
+      if (written != content.length()) {
+        DEBUG_PRINT("\t%s::save : seulement %d/%d octets écrits dans %s\t", interfaceName.c_str(),written, content.length(), getFilename().c_str());
+        return false;
+      }    
+
+      return true;
+
+    }
+
+    virtual bool derivedBegin() = 0;
+
+    virtual bool begin(){
+      DEBUG_PRINT("\n%s->begin()...",interfaceName.c_str());
+      bool success = end();
+      success |= restoreFromFile();
+      success |= derivedBegin();
+      DEBUG_PRINT("\t%s",success?"ok":"failed or is not implemented");    
+      return success;
+    }
+
+    virtual bool restore(const JsonObject& config) = 0;  
+    virtual void derivedConfig(JsonObject& config) = 0;  
+    virtual void monitor() = 0; // => manage internal state and set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
+    virtual void* read() = 0; // called by strip 
+    virtual bool end() = 0;     
+    virtual String getFilename() = 0;
 
   protected:
 
@@ -217,19 +275,52 @@ class DeviceInterface {
 };
 
 class NetworkInterface{
+
   public:
-    DeviceInterface* interface;
-    // this class override default one to overall encapsulate state management
-    NetworkInterface(DeviceInterface* _if): interface(_if){
-      interface->useNetwork = true;
+    virtual bool connect() = 0;
+    virtual bool disconnect() = 0;
+
+  protected:
+    virtual bool derivedDisconnect() = 0;
+    virtual bool derivedConnect() = 0;
+
+};
+
+
+class NetworkDevice : public NetworkInterface , public DeviceInterface{
+
+  public:
+    
+    NetworkDevice(const String& name, const String& _group,bool _configurable = true):DeviceInterface(name, _group, _configurable){
+      useNetwork = true;
       notReady();
     }
 
+    virtual bool connect(){
+
+      if (state.offline){
+        DEBUG_PRINT("\n%s->connect(OFFLINE) ignored",interfaceName.c_str());  
+        return true;
+      }
+
+      bool success = derivedConnect();
+      DEBUG_PRINT("\n%s->connect(ONLINE)...%s",success?"ok":"failed or is not implemented");
+      
+      return success;
+    }
+
+    
+    virtual bool disconnect(){
+      DEBUG_PRINT("\n%s->disconnect()",interfaceName.c_str());
+      notReady();      
+      return derivedDisconnect();
+    }
+
     void notReady(){
-      interface->state.code = IF_NOT_READY;
-      interface->state.label = IF_STATE_DISCONNECTED;
-      interface->state.subLabel = hwm.network->SSID;
-      interface->state.details = "Attempt";      
+      state.code = IF_NOT_READY;
+      state.label = IF_STATE_DISCONNECTED;
+      state.subLabel = hwm.network->SSID;
+      state.details = "Attempt";      
     }
 
     void monitorNetwork(){     
@@ -238,7 +329,6 @@ class NetworkInterface{
         if (hwm.network->state == DISCONNECTED) notReady();
       }
     }
-
 };
 
 class InterfaceRepository{
@@ -301,11 +391,6 @@ class SystemInterface: public DeviceInterface, public DataProvider{
       state.code = CONNECTED;
     }
 
-    //SystemInterface uses himself as data provider
-    virtual String getProviderName(){
-      return interfaceName;
-    }
-
     virtual String getDataSetName(){
       return interfaceName;
     }
@@ -313,9 +398,20 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     virtual bool restore(const JsonObject& config){return false;}
     virtual void derivedConfig(JsonObject& config){};    
     virtual void monitor(){}
+    
     virtual void* read(){return nullptr;}
-    virtual void begin(){}
-    virtual void end(){}     
+    
+    virtual bool derivedBegin(){
+      return true;
+    }
+    
+    virtual bool end(){
+      return true;
+    }     
+
+    String getFilename(){
+      return "system_if.cfg";
+    }
 
     virtual uint16_t getSize(String addrr){
       if (addrr == ADDRESS_dsText) return 1;
@@ -343,9 +439,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
       DEBUG_PRINT("\nDataSet getSize(%s) is not implemented",addrr.c_str());
       return 0;
 
-    }
-    
-
+    }    
     
     virtual const String* getValuePtr(String addrr, uint16_t index){
       if (addrr == ADDRESS_dsText){
@@ -406,7 +500,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
       "macro9",
       "macro10"
     };            
-  
+    
 }systemInterface(false);
 
 DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){

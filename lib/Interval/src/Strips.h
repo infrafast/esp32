@@ -395,30 +395,34 @@ class Strip {
 
       return delta;      
     }
-
+    
+    #define SIMPLE_TEXT_MAX_LEN 20
     void pushSimpleText(uint8_t layout, const String* text){
       // this is a utility function which display the text provided as parameter into the strip 
       // to take its full size, it is essentially used to display the strip state when not connected
       // or used by utility strips
       uint16_t fontSize;
       int16_t angle = 0;
+      uint8_t len = text->substring(0,SIMPLE_TEXT_MAX_LEN).length();
       //DEBUG_PRINT("\npushText(%s) %s layout:%i",text->c_str(),size.c_str(), layout);
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         textX = renderX + WIDGET4X4W/2;
-        textY = renderY + WIDGET4X4H/4;    
-        fontSize = WIDGET4X4W / text->length() * 3.3;
+        textY = renderY + WIDGET4X4H/4;        
+
+        fontSize = WIDGET4X4W / len * 3.3;
       }
       else if (size == SHAPE1X4){
-        textX = renderX + WIDGET1X4W*1.6;
+        textX = renderX + WIDGET1X4W*1.2;
         textY = renderY + WIDGET1X4H/7;    
-        fontSize = WIDGET1X4H / text->length() * 3.3;
+
+        fontSize = WIDGET1X4W / len * 4;
         // put it vertically
         angle = 90;
       }
       else if (size == SHAPE2X2){
         textX = renderX + WIDGET2X2W/2;
         textY = renderY + WIDGET2X2H/4;    
-        fontSize = WIDGET2X2W / text->length() * 3.3;
+        fontSize = WIDGET2X2W / len * 3.3;
       }
       else if (size == SHAPE4X1){
         textX = renderX + WIDGET4X1W/2;
@@ -426,7 +430,7 @@ class Strip {
         fontSize = 40;     
       }
 
-      Label* label = new Label(text, Align::Center,&textX,&textY,fontSize,&frontColor,&backColor,&brightness);
+      Label* label = new Label(text, Align::Center,&textX,&textY,fontSize,SIMPLE_TEXT_MAX_LEN,&frontColor,&backColor,&brightness);
       label->angle = angle;
       gui.add(label);
 

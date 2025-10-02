@@ -1144,7 +1144,7 @@ class WiFiEth : public Network{
                 //next  credential to attempt
                 wiFiIndex = (wiFiIndex + 1) % wiFiList->size();
                 if (wiFiIndex == 0) setConnectTimeout(); 
-                SSID = wiFiList->getName(wiFiIndex);              
+                SSID = *wiFiList->getName(wiFiIndex);              
               }            
 
             }
@@ -1250,7 +1250,7 @@ class WiFiEth : public Network{
             wsEthClient->onClose(socketClientOnClose);            
           }
           //checkInternet();
-          DEBUG_PRINT("\t...all begin() done");
+          DEBUG_PRINT("\n...all network component begin() done");
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
             // common destruction

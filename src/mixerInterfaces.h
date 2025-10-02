@@ -14,7 +14,7 @@ class MixerInterface: public DeviceInterface{
     
    
     virtual String getProviderName(){
-      return interfaceName;        // mixers have their own provider as MixingStation dropdown will not be the same as X32
+      return interfaceName;        // mixers do not belong to the group dataset interface name but have their own provider as MixingStation dropdown will not be the same as X32
     }      
 
     virtual void derivedConfig(JsonObject& config){
@@ -45,7 +45,7 @@ class OSCMixerInterface : public MixerInterface{
       //{"mixerName":"software","model":"virtual"}
 
       // we retrieve the config of the OSCInterface instance which is specific
-      String usesConf = osc->serializeConfig(false); // false : we partially serialize 
+      String usesConf = "{}"; //osc->serializeConfig(false); // false : we partially serialize 
       JsonDocument oscConf;
 
       // convert it back to an object that can be attached to the parent config 
@@ -72,13 +72,13 @@ class OSCMixerInterface : public MixerInterface{
 
     virtual bool restore(const JsonObject& config){
       bool changed = false;
-      changed = osc->restore(config);
+      //changed = osc->restore(config);
       changed |= MixerInterface::restore(config);
       return changed;
     }  
 };
 
-
+#define MIXINGSTATION_INTERFACE "MixingStation"
 class MixingStation: public OSCMixerInterface{
   #define MS_CONFIG_AUTOCONNECT "autoConnect"
   #define MS_CONFIG_AUTOCONNECT_MIXERIP "mixerIP"
@@ -91,7 +91,11 @@ class MixingStation: public OSCMixerInterface{
     bool autoConnect = false;    
 
     MixingStation(OSCInterface* osc):OSCMixerInterface("undef","virtual",osc){
-      interfaceName = "MixingStation";
+      interfaceName = MIXINGSTATION_INTERFACE;
+    }
+
+    String getFilename(){
+      return MIXINGSTATION_INTERFACE"_if.cfg";
     }
 
     virtual void derivedConfig(JsonObject& config){      
@@ -126,9 +130,13 @@ class MixingStation: public OSCMixerInterface{
       return changed;
     }            
 
-    virtual void begin(){}    
+    virtual bool derivedBegin(){
+      return false;
+    }    
 
-    virtual void end(){}         
+    virtual bool end(){
+      return false;
+    }         
 };
 
 class BehringerXMR: public OSCMixerInterface{
@@ -138,7 +146,7 @@ class BehringerXMR: public OSCMixerInterface{
     bool discovery = false;
 
     BehringerXMR(OSCInterface* osc):OSCMixerInterface("X32Emul","X32",osc){
-      interfaceName = "X+Mseries-"+osc->interfaceName;
+      interfaceName = "X+Mseries-"; //+osc->interfaceName;
     }
 
     virtual void derivedConfig(JsonObject& config){

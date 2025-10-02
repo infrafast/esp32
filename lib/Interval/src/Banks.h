@@ -257,7 +257,7 @@ class BankNavigator: public Widget{
       //drawStripID(canva);
 
       // Display bank name
-      Label* label = new Label(&bank->name, Align::Right, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, &fC, &bC, brightness, debug);
+      Label* label = new Label(&bank->name, Align::Right, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, 12, &fC, &bC, brightness, debug);
       label->refresh(true);
       width += label->width;
       height = max(label->height, canva->height);
@@ -328,7 +328,7 @@ class BankNavigator: public Widget{
 
     void drawStripID(Canva* canva){
       String idStr = String(bank->selector);
-      Label* uniqueID = new Label(&idStr, Align::Center, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, &GUI::white,&GUI::defaultBcolor);
+      Label* uniqueID = new Label(&idStr, Align::Center, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, 2, &GUI::white,&GUI::defaultBcolor);
       uniqueID->refresh(true);
       uniqueID->sprite->pushToSprite(canva->sprite, canva->width / 2 - NAV_HEIGHT / 2, -5);
       delete uniqueID;

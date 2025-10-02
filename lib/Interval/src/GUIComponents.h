@@ -388,10 +388,15 @@ class Canva : public Widget{
 // workflow
 // https://boxy-svg.com/app/disk:uSMcdhhJG4 -> https://icomoon.io/app -> https://products.aspose.app/font/generator/ttf-to-ttf -> https://notisrac.github.io/FileToCArray/          ---> preview: https://tophix.com/font-tools/font-editor
 //                                                                    -> https://everythingfonts.com/subsetter
+
+#define LIMIT_TEXT_RENDERING_LENGTH 255    // on affiche pas plus de 15 caracteres sinon le texte est illisible;
+
 class Font : public Widget{  
   public:    
  
-    Font(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint16_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=true):Widget(posX, posY, fC, bC, _brightness, d){
+    uint8_t maxLen = LIMIT_TEXT_RENDERING_LENGTH;
+
+    Font(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint16_t s, uint8_t _len = LIMIT_TEXT_RENDERING_LENGTH, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=true):Widget(posX, posY, fC, bC, _brightness, d), maxLen(_len){
       value = v; 
       init(a,posX,posY,s);
       //if (d) DEBUG_PRINT("\nnew %s(<%s>)",id.c_str(),value->c_str());    => cause problem as value may not be initialized when call from AnimatedIcon
@@ -421,9 +426,11 @@ class Font : public Widget{
           //if (*value != oldValue) DEBUG_PRINT("\n%s changed value from '%s' to '%s'", this->id.c_str(), oldValue.c_str(), value->c_str());
         }
 
+        String limitedValue = value->substring(0,maxLen).c_str();  //only display first characters
+        if (limitedValue.length() >= maxLen) limitedValue+="...";  // string concatenation = source of memory leak
 
         FT_BBox boundaries1 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,oldValue.c_str());
-        FT_BBox boundaries2 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,value->c_str());
+        FT_BBox boundaries2 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,limitedValue.c_str());
         // add 2 pixels for surrounding animation move to right/left
         width = max(boundaries1.xMax,boundaries2.xMax)+1; 
         height = max(boundaries1.yMax,boundaries2.yMax)+1;
@@ -472,7 +479,7 @@ class Font : public Widget{
         else if (align == Align::Right)
           getOfr()->rprintf(value->c_str());           
           */
-        getOfr()->cprintf(value->c_str());        
+        getOfr()->cprintf(limitedValue.c_str());        
 
         //getOfr()->unloadFont();
 
@@ -480,7 +487,7 @@ class Font : public Widget{
 
         delete sprite;*/
         
-        oldValue = *value;            
+        oldValue = limitedValue;            
 
         refreshed = true;          // and return the info that we did a refresh
       }
@@ -499,7 +506,7 @@ class Font : public Widget{
 class Label : public Font{
   public:
       static OpenFontRender* ofr; 
-      Label(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint16_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Font(v, a, posX, posY, s, fC , bC ,_brightness, d){
+      Label(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint16_t s, uint8_t _len = LIMIT_TEXT_RENDERING_LENGTH, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Font(v, a, posX, posY, s, _len, fC , bC ,_brightness, d){
         id = "Label";
       };
 
@@ -574,7 +581,7 @@ class TextArea : public Widget{
         int16_t offsetY = 0;
         //height = size * lbi.lines;
         //height = Label::ofr->getTextHeight(text->c_str())*lbi.lines;
-        Label l = Label(text,phraseAlign,&GUI::zero,&GUI::zero,size,fColor,bColor,brightness, debug);
+        Label l = Label(text,phraseAlign,&GUI::zero,&GUI::zero,size,LIMIT_TEXT_RENDERING_LENGTH, fColor,bColor,brightness, debug);
         l.refresh(true);    // the only way to know the maximum height of a line is to draw it (without rendering)
         height = l.height * lbi.lines;
         createSprite();
@@ -583,7 +590,7 @@ class TextArea : public Widget{
           //if (debug) DEBUG_PRINT("\n%s",nextPhrase.c_str());
           //tft.drawString(nextPhrase, 0, offsetY, FONT4);
 
-          Label* label = new Label(&nextPhrase,phraseAlign,&GUI::zero,&GUI::zero,size,fColor,bColor,brightness,debug);
+          Label* label = new Label(&nextPhrase,phraseAlign,&GUI::zero,&GUI::zero,size,LIMIT_TEXT_RENDERING_LENGTH,fColor,bColor,brightness,debug);
           label->refresh(true);
           label->sprite->pushToSprite(sprite,getAlignedX(label->width),offsetY);     
           offsetY += label->height;
@@ -738,7 +745,7 @@ class TextArea : public Widget{
 
 class NumericLabel : public Label{
   public:
-    NumericLabel(const float* n,uint8_t dec, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, String _unit="", int _alter = 1, bool d=false):number(n), decimal(dec),alter(_alter),unit(_unit), Label(&convertedNumber,  a,  posX, posY, s,fC, bC, _brightness, d){      
+    NumericLabel(const float* n,uint8_t dec, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, String _unit="", int _alter = 1, bool d=false):number(n), decimal(dec),alter(_alter),unit(_unit), Label(&convertedNumber,  a,  posX, posY, s,12,fC, bC, _brightness, d){      
       id = "NumericLabel"+String(*posX)+"x"+String(*posY); 
     }
 
@@ -773,7 +780,7 @@ class Icon : public Font{
   public:
     static OpenFontRender* ofr; 
     
-    Icon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool d=false):Font(v, a, posX, posY, s, fC , bC , _brightness, d){
+    Icon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool d=false):Font(v, a, posX, posY, s,12, fC , bC , _brightness, d){
       id = "Icon"+String(*posX)+"x"+String(*posY)+"~"+*v;   
       //if (debug) DEBUG_PRINT("\n new %s[%s]",id.c_str(),v->c_str()); // => cause problem as value may not be initialized when call from AnimatedIcon
     };
@@ -1029,7 +1036,7 @@ class RingMeter : public Arc{
       uint8_t unitFontSize = (2 * radius*0.7) / (unit->length());
       uint16_t color = widgetInnerColor;
       color = GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255);
-      label = new Label(unit,Align::Center,&GUI::zero,&GUI::zero,unitFontSize,&widgetSubLabelColor,&color,brightness,debug);
+      label = new Label(unit,Align::Center,&GUI::zero,&GUI::zero,unitFontSize,12, &widgetSubLabelColor,&color,brightness,debug);
       label->refresh(true);
       label->sprite->pushToSprite(sprite,width/2-label->width/2,height/2+(radius-unitFontSize/1.1));     //height/2+valueLabelHeight/3
       delete label;         
@@ -1059,6 +1066,8 @@ class RingMeter : public Arc{
     }  
 
 };
+
+#define TOGGLE_CHAR_MAX_LEN 20
 
 class Toggle : public Widget{
   public:
@@ -1100,7 +1109,7 @@ class Toggle : public Widget{
         if (!*revert) sprite->drawRoundRect(0,0, width, height, height/5, GUI::luminance(color,*brightness * GUI::screenBrightness * 255));
 
         uint16_t transparent = TFT_TRANSPARENT;
-        Label* label = new Label(text,Align::Center,&GUI::zero,&GUI::zero,height*1.4,&textColor,&transparent,  brightness, debug);
+        Label* label = new Label(text,Align::Center,&GUI::zero,&GUI::zero,height*1.4,TOGGLE_CHAR_MAX_LEN, &textColor,&transparent,  brightness, debug);
         label->refresh(true);
         label->sprite->pushToSprite(sprite,width/2-label->width/2,0,TFT_TRANSPARENT);    //center
         delete label;       
@@ -1460,7 +1469,7 @@ class Top1Toggle1Label : public CompositeWidget {
       topBool = topReverse; bColor2 =bC2;
        
       topToggle = new Toggle(topString,&GUI::zero,&GUI::un,TOP2WIDGET_SIZE,topBool,fColor,bColor,  brightness, debug);        
-      bottomLabel = new Label(bottomString, Align::Center,&GUI::center, &GUI::y1,(TOP2WIDGET_SIZE)*1.2,fC2,bC2,brightness, debug);        
+      bottomLabel = new Label(bottomString, Align::Center,&GUI::center, &GUI::y1,(TOP2WIDGET_SIZE)*1.2,TOGGLE_CHAR_MAX_LEN, fC2,bC2,brightness, debug);        
 
       width = max(topToggle->width,bottomLabel->width);
       height = topToggle->height+(TOP2WIDGET_SIZE)*1.2; // BE CAREFUL !! /!\ /!\ /!\ The lqbel height is determined zhen rendering; hence we DO AN APPROXIMANTE BASED ON THE REQUESTED FONT SIZE BUT THIS MAY NOT BE THE FINAL RIGHT HEIGHT

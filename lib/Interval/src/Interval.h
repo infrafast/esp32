@@ -14,6 +14,8 @@
 #define INTERVAL_PRODUCT_NAME "interval"
 #define INTERVAL_MANUFACTURER "intervalgrp"
 
+#define WEBAPP_PATH "/webapp"
+
 bool useUSBMidi = false;
 
 #ifdef DEBUG  //ets_printf(__VA_ARGS__) //
@@ -289,9 +291,6 @@ struct ByteBuffer : public Stream {
   }
 };
 
-
-
-
 // buffer pour stocker les données décompressées
 ByteBuffer* uncompressedByteBuffer;
 
@@ -324,7 +323,6 @@ size_t writeBufferToGzFile(String filename, const char* data){
 }
 
 
-
 size_t bufferToGz(String* buf, ByteBuffer* dest){
   // using miniz (does not work)
   const char* data = buf->c_str();
@@ -335,75 +333,6 @@ size_t bufferToGz(String* buf, ByteBuffer* dest){
   //DEBUG_PRINT("\nCompressed %d input bytes to %u raw bytes\n", len, outputSize);
   return outputSize;
 }
-
-/*
-size_t writeBufferToGzFile(String filename, String* buf){
-  // using miniz (does not work)
-  const char* data = buf->c_str();
-  size_t dataLength = strlen(data);
-
-  // Buffer pour les données compressées
-  size_t bufferSize = compressBound(dataLength) + 18; // Ajout de la taille pour l'en-tête et le footer GZIP
-  uint8_t* compressedData = (uint8_t*)malloc(bufferSize);
-  if (!compressedData) {
-      Serial.println("Erreur d'allocation mémoire !");
-      return 0;
-  }
-
-  // Création de l'en-tête GZIP
-  uint8_t gzipHeader[10] = {
-      0x1f, 0x8b, // Signature GZIP
-      0x08,       // Compression DEFLATE
-      0x00,       // Flags
-      0x00, 0x00, 0x00, 0x00, // Timestamp
-      0x00,       // Extra flags
-      0x03        // OS (Unix)
-  };
-
-  // Ajout de l'en-tête au tampon
-  memcpy(compressedData, gzipHeader, sizeof(gzipHeader));
-  size_t offset = sizeof(gzipHeader);
-
-  // Compression avec zlib
-  uLongf compressedSize = bufferSize - offset - 8; // Enlever la taille de l'en-tête et du footer
-  int result = compress2(&compressedData[offset], &compressedSize, (const uint8_t*)data, dataLength, Z_BEST_COMPRESSION);
-
-  if (result != Z_OK) {
-      Serial.printf("Erreur de compression : %d\n", result);
-      free(compressedData);
-      return 0;
-  }
-
-  // Mise à jour de l'offset
-  offset += compressedSize;
-
-  // Ajout du footer GZIP (CRC32 + taille non compressée)
-  uint32_t crc = crc32(0L, Z_NULL, 0); // Initialisation du CRC32
-  crc = crc32(crc, (const uint8_t*)data, dataLength); // Calcul du CRC32
-  memcpy(&compressedData[offset], &crc, 4); // CRC32
-  offset += 4;
-  memcpy(&compressedData[offset], &dataLength, 4); // Taille originale
-  offset += 4;
-
-  // Écriture des données compressées dans LittleFS
-  File file = LittleFS.open("/data.gz", "w");
-  if (!file) {
-      Serial.println("Impossible d'ouvrir le fichier !");
-      free(compressedData);
-      return 0;
-  }
-
-  file.write(compressedData, offset);
-  file.close();
-
-  Serial.printf("Données compressées et sauvegardées au format GZIP (%d octets) !\n", offset);
-
-  // Nettoyage
-  free(compressedData);
-
-  return 1;
-}
-*/
 
 void targzNullLoggerCallback(const char* format, ...){}
 
@@ -689,11 +618,11 @@ class JsonList{
       return -1;
     }    
 
-    String getName(uint8_t index){
-      if (index>keyValues.size()) return "";
+    String* getName(uint8_t index){
+      if (index>keyValues.size()) return &noToken;
       else{
         KeyValue* kv = keyValues.get(index);
-        return kv->key;
+        return &kv->key;
       }
     }    
     
@@ -726,37 +655,61 @@ class JsonListFile : public JsonList{
 
       JsonListFile():JsonList(){};
 
-      bool load(String f,String defaultValues=""){
+      void clean(){
         // We first clean up existing values
-        /*while (keyValues.size()>0){
-
+        while (keyValues.size()>0){
           KeyValue* kv = keyValues.shift();
-
           delete(kv);
-        }*/
-        bool success = false;
+        }
+      }
+
+      bool load(String f,String defaultValues=""){
+        bool success = true;
 
         if (defaultValues != "") deserialize(defaultValues);
 
         filename = f;
-        // we try to allocate maximum memory and keep 20K free for security
-        //DynamicJsonDocument doc(getMaxAlloc());
-        JsonDocument doc;
-
+        
         if (!LittleFS.exists(filename)){
-          
+          success = false;     
+          DEBUG_PRINT("\nJsonListFile::file %s doesnt exit",filename.c_str());
         }else{
-          File file = LittleFS.open(filename);
-          DeserializationError error = deserializeJson(doc, file);      
-          if (!error){
-            jsonToKeyValues(&doc);
-            success = true;
+
+          JsonDocument doc;
+          DeserializationError error;
+
+          if (filename.endsWith(".gz")){
+            // compressed file
+            ByteBuffer decompressedJson;
+            size_t dataSize = 0;
+
+            dataSize = readGzFileToBuffer(filename.c_str(),&decompressedJson);
+
+            if (dataSize == 0){ // uncompress failed
+              DEBUG_PRINT("\nJsonListFile::readGzFileToBuffer(%s) failed",filename.c_str());
+              success = false;
+            }else{
+              // Désérialiser les données JSON
+              error = deserializeJson(doc, decompressedJson.buffer);
+              if (error) success = false;
+            }    
+
           }else{
-
+            // regular file
+            File file = LittleFS.open(filename);
+            error = deserializeJson(doc, file);    
+            if (error) success = false;
           }
-          doc.shrinkToFit();   
 
-        }
+          if (success){
+              doc.shrinkToFit();   
+              jsonToKeyValues(&doc);
+          }else{
+            DEBUG_PRINT("\nJsonListFile::load(%s) failed",filename.c_str());
+          }
+
+        }        
+
         return success;      
       }
 
@@ -1017,46 +970,6 @@ void commonFileServerWrapperPost(Request &req, Response &res) {
   app.httpPost(req,res);
 }
 
-
-// Tâche pour gérer un client dans son propre thread
-/*void handleWebEthClientTask(void* parameter) {
-  DEBUG_PRINT("\nhandleWebEthClientTask()");
-  EthernetClient* client = (EthernetClient*)parameter;
-
-  if (client && client->connected()) {
-    app.webServer->process(client);  // Thread-safe car chaque client est isolé
-  }
-
-  client->stop();
-  delete client; // important : éviter les fuites mémoire
-  app.activeClients--;
-  vTaskDelete(NULL); // terminer la tâche
-}*/
-
-
-
-/*
-void gzFileServer(Request &req, Response &res) {
-    const char * path = req.path();
-    res.set("Content-Encoding", "gzip");
-    String fullPath = "/webapp"+String(path)+".gz";  
-
-    uint32_t free = ESP.getFreeHeap();
-
-    //DEBUG_PRINT("\nserving <gz> [%d] ->%s",free, fullPath.c_str());
-    if (LittleFS.exists(fullPath)){
-      File file = LittleFS.open(fullPath);
-      //while (file.available()) res.write(file.read());
-      app.sendFileInChunks(&file,&res);
-      res.end();
-    }else{
-      res.sendStatus(404);   //send(404, "text/plain", "Not found");    
-      res.set("Content-Type", "text/html");
-      res.print(fullPath.c_str());
-      res.end();          
-    }      
-}*/
-
 static TaskHandle_t    hwaitingAnimationThread = nullptr;
 
 #define STEP_MS 500
@@ -1074,7 +987,7 @@ void waitingAnimationThread(void *param_type) {
   GUI::tft->fillScreen(GUI::defaultBcolor);
   
   y = TFT_HEIGHT-ANIM_FONT_SIZE;
-  Label message = Label(params->text, Align::Center, &x, &y, ANIM_FONT_SIZE , &GUI::defaultFcolor, &GUI::defaultBcolor, &GUI::screenBrightness);
+  Label message = Label(params->text, Align::Center, &x, &y, ANIM_FONT_SIZE , 5, &GUI::defaultFcolor, &GUI::defaultBcolor, &GUI::screenBrightness);
   message.refresh(true);
   message.sprite->pushSprite(message.getX(),message.getY(),TFT_TRANSPARENT);        
 
@@ -1553,7 +1466,7 @@ void bankScreenBuilder(uint8_t subScreen){
 
 void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* bottomLabel, const String* icon){
   //DEBUG_PRINT("\naddFullScreenTextWithIcon(%s, %s, %s, %s)",topLabel->c_str(), midText->c_str(), bottomLabel->c_str(),icon->c_str());
-  gui.add(new Label(topLabel, Align::Center,&midScreenHoriz, &topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
+  gui.add(new Label(topLabel, Align::Center,&midScreenHoriz, &topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));    
 
   // if we have empty textfield, we don't display it and center the icon
   iconX = TFT_WIDTH/2;
@@ -1563,15 +1476,15 @@ void addFullScreenTextWithIcon(const String* topLabel, const String* midText, co
   }
 
   gui.add(new Icon(icon,Align::Center,&iconX, &iconY,MODAL_SCREEN_ICON_SIZE,&iconInterfaceColor,&GUI::defaultBcolor));   
-  gui.add(new Label(bottomLabel, Align::Center,&midScreenHoriz, &bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::gold,&GUI::defaultBcolor));    
+  gui.add(new Label(bottomLabel, Align::Center,&midScreenHoriz, &bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));    
 
   // move text below into composeInterfaceState
-  gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&midScreenHoriz, &belowBottomTexty,TOGGLE_ONFFLINE_TEXT_SIZE,&GUI::green,&GUI::defaultBcolor));    
+  gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&midScreenHoriz, &belowBottomTexty,TOGGLE_ONFFLINE_TEXT_SIZE,40,&GUI::green,&GUI::defaultBcolor));    
 }    
 
 void addTopandBottomMenuLabel(){
   gui.add(new TextArea(&app.menuTopText, TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-  gui.add(new Label(&app.menuBottomLabel, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(&app.menuBottomLabel, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,32, &GUI::defaultFcolor,&GUI::defaultBcolor));
 }
 
 void addMenuWidgets(){
@@ -1656,7 +1569,7 @@ void wizardScreenBuilder(uint8_t subScreen){
     break;      
     case STATE_WIZARD_CONNECT_NETWORK_STEP3:
       GUI::cls();
-      gui.add(new Label(lang.getString("Waiting network"), Align::Center,&midScreenHoriz, &midScreenVertical,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));   
+      gui.add(new Label(lang.getString("Waiting network"), Align::Center,&midScreenHoriz, &midScreenVertical,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));   
     break;    
     case STATE_WIZARD_USER_STEP4:
       app.userScreenBuilder(SCREEN_WIZARD, STATE_WIZARD_USER_STEP4);
@@ -1714,7 +1627,7 @@ void buildNetworkScreen(){
   gui.add(new Icon(&app.leftIcon, Align::Right,&hquarter2xPos,&menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
   gui.add(new Icon(&app.rightIcon, Align::Left,&hquarter3xPos,&menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
 
-  gui.add(new Label(&hwm.configMedia->SSID, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(&hwm.configMedia->SSID, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));
 }
 
 int16_t brightYpos = menuIconYpos*1.2;
@@ -1727,7 +1640,7 @@ void utilsScreenBuilder(uint8_t state){
       //DEBUG_PRINT("\nSTATE_UTILS_BRIGHTNESS");
       GUI::cls();
       //gui.add(new ProgressBarH(&GUI::screenBrightness /*v*/, BRIGHTNESS_MIN /*min*/,BRIGHTNESS_MAX /*max*/, &GUI::zero /*x*/, &app.menuIconYpos /*y*/, TFT_WIDTH /*w*/, TFT_HEIGHT/6 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::gold /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
-      gui.add(new Label(lang.getString("BRIGHTNESS"), Align::Center,&midScreenHoriz, &GUI::three,MENU_TITLE_SIZE*0.8,&GUI::defaultFcolor,&GUI::defaultBcolor));            
+      gui.add(new Label(lang.getString("BRIGHTNESS"), Align::Center,&midScreenHoriz, &GUI::three,MENU_TITLE_SIZE*0.8,16,&GUI::defaultFcolor,&GUI::defaultBcolor));            
       gui.add(new Arc(&GUI::screenBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &midScreenHoriz, &midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
       gui.add(new Icon(&app.brightIcon, Align::Center,&midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
       gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
@@ -1743,7 +1656,7 @@ void utilsScreenBuilder(uint8_t state){
 
       gui.add(new TextArea(lang.getString("!\"#$%%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&midScreenHoriz,&midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
-      gui.add(new Label(&app.vBatLabel, Align::Center,&midScreenHoriz, &tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
+      gui.add(new Label(&app.vBatLabel, Align::Center,&midScreenHoriz, &tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,16,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
     break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_CONNECTCONFIGMEDIA:
@@ -1758,7 +1671,7 @@ void utilsScreenBuilder(uint8_t state){
       app.iconPending[1] = " ";
       //gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
       gui.add(new TextArea(lang.getString("Open browser"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      gui.add(new Label(&hwm.configURL, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));      
+      gui.add(new Label(&hwm.configURL, Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
@@ -1773,7 +1686,7 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&midScreenHoriz, &midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
 
       gui.add(new TextArea(lang.getString("Press button"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      gui.add(new Label(lang.getString("Connected"), Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));      
+      gui.add(new Label(lang.getString("Connected"), Align::Center,&midScreenHoriz, &menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
