@@ -356,20 +356,16 @@ class SysexStrip : public Strip{
         return false;
       }
 
-      uint8_t* buffer = (uint8_t*)malloc(outMax);
+      byte* buffer = (byte*)malloc(outMax);
       if (!buffer) {
         Log::drop(interface->interfaceName.c_str(), "Invalid sysex: OOM");
         return false;
       }
 
-      size_t length = 0;
-      if (hexStringToBytes(sysexMessage, buffer, outMax, length)) {
-        // TODO: protéger broadCast/sendSysEx par mutex si ressource partagée
-
-        ((MIDIInterface*)interface)->sysexSend(length, buffer, false);
+      size_t length = hexStringToBytes(sysexMessage, buffer, outMax);
+      if (length>0) {
+        success = ((MIDIInterface*)interface)->sendSysExDebug(length, buffer, false);
         //Log::drop(interface->interfaceName.c_str(), (const char*)buffer);  // => for SOME REASON THIS CREATE A DISCONNECTION OF WEBSOCKET...MAYBE THE GENERATED FRAME IS INCORRECT?
-        success = true;          
-
       } else {
         String err = String("Invalid sysex: ") + sysexMessage; // garder l'objet en vie
         Log::drop(interface->interfaceName.c_str(), err.c_str());

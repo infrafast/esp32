@@ -354,9 +354,8 @@ String replaceAllChars(String str, char from, char to) {
 // - N'écrit pas plus de outMax octets.
 // Retourne true si conversion complète et paire ; false sinon.
 // En cas d'échec, outLen = 0.
-bool hexStringToBytes(const String& in, uint8_t* out, size_t outMax, size_t& outLen) {
-  outLen = 0;
-  if (!out || outMax == 0) return false;
+size_t hexStringToBytes(const String& in, uint8_t* out, size_t outMax) {
+  if (!out || outMax == 0) return 0;
 
   auto nibble = [](char c) -> int8_t {
     if (c >= '0' && c <= '9') return (int8_t)(c - '0');
@@ -365,39 +364,41 @@ bool hexStringToBytes(const String& in, uint8_t* out, size_t outMax, size_t& out
     return -1;
   };
 
-  bool haveHi = false;   // indique qu'on a stocké le demi-octet haut
-  uint8_t hi = 0;
+  const char* p   = in.c_str();
+  const char* end = p + in.length();
 
-  for (size_t i = 0; i < (size_t)in.length(); ++i) {
-    char c = in[i];
+  bool haveHi = false;
+  uint8_t hi  = 0;
+  size_t outLen = 0;
 
-    // Sauter séparateurs usuels
-    if (c == ' ' || c == '\t' || c == ':' || c == '-' || c == '_') continue;
+  while (p < end) {
+    char c = *p++;
 
-    // Gérer préfixe 0x/0X (global ou par octet) uniquement en frontière d'octet
-    if (!haveHi && c == '0' && (i + 1) < (size_t)in.length()) {
-      char c2 = in[i + 1];
-      if (c2 == 'x' || c2 == 'X') { i++; continue; }
-    }
+    // Ignorer les séparateurs usuels
+    if (c == ' ' || c == '\t' || c == ':' || c == '-' || c == '_' || c == ',') continue;
+
+    // Gérer préfixe 0x/0X en frontière d’octet
+    if (!haveHi && c == '0' && p < end && (*p == 'x' || *p == 'X')) { ++p; continue; }
 
     int8_t n = nibble(c);
-    if (n < 0) { outLen = 0; return false; }
+    if (n < 0) return 0;  // caractère non hex
 
     if (!haveHi) {
       hi = (uint8_t)n;
       haveHi = true;
     } else {
-      if (outLen >= outMax) { outLen = 0; return false; }  // débordement de buffer
+      if (outLen >= outMax) return 0;  // débordement
       out[outLen++] = (uint8_t)((hi << 4) | (uint8_t)n);
       haveHi = false;
     }
   }
 
-  // Nombre impair de nibbles → erreur
-  if (haveHi) { outLen = 0; return false; }
+  // Nibble orphelin → erreur
+  if (haveHi) return 0;
 
-  return true;
+  return outLen;
 }
+
 
 
 

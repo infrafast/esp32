@@ -13,7 +13,7 @@ class MixerInterface: public DeviceInterface{
     MixerInterface(String _name, String _model):mixerModel(_model),DeviceInterface(_name,GROUP_INTERFACE_MIXER){}
     
    
-    virtual String getProviderName(){
+    virtual const String& getProviderName(){
       return interfaceName;        // mixers do not belong to the group dataset interface name but have their own provider as MixingStation dropdown will not be the same as X32
     }      
 

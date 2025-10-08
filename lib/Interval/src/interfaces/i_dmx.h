@@ -22,10 +22,6 @@ class ArtnetDMXInterface: public DMXInterface, NetworkDevice{
       icon = "b";
     }
 
-    virtual void monitor(){
-      monitorNetwork();
-    }    
-
     virtual void derivedConfig(JsonObject& config){   
       config[CONFIG_ARTNET] = voidArtnetParam;   // fill any parameters that are required by sysex
     } 
@@ -49,11 +45,13 @@ class ArtnetDMXInterface: public DMXInterface, NetworkDevice{
       return false;      
     }
 
-    virtual bool derivedConnect(){
+    virtual void derivedMonitor(){}
+
+    virtual bool connect(){
       return false;
     }
 
-    virtual bool derivedDisconnect(){
+    virtual bool disconnect(){
       return false;
     }
 

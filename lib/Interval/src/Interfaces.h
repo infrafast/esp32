@@ -14,7 +14,6 @@ class DeviceInterface {
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
   #define INTERFACE_EXPOSED     "exposed"
-  #define INTERFACE_CONFIGZ     "config"
   #define INTERFACE_OFFLINE     "offline"
   #define INTERFACE_GROUP       "group"
   #define INTERFACE_USENETWORK  "network"  
@@ -33,12 +32,12 @@ class DeviceInterface {
     String interfaceName; 
 
     bool exposed = true;
-    bool useNetwork = false;  // by default an interface do not use betwork
+
     String group = "undef"; // used by the strip to define which deviceinterface they can connect
 
     String icon = ICON_LINK;
 
-    virtual String getProviderName(){
+    virtual const String& getProviderName(){
       return group;
     }
 
@@ -155,7 +154,7 @@ class DeviceInterface {
 
     }
 
-    bool update(){      // return a boolean indicatin if the interface has changed its state
+    virtual bool update(){      // return a boolean indicatin if the interface has changed its state
       // reset change state
       state.stateChanged = false;
 
@@ -254,8 +253,8 @@ class DeviceInterface {
     virtual bool begin(){
       DEBUG_PRINT("\n%s->begin()...",interfaceName.c_str());
       bool success = end();
-      success |= restoreFromFile();
-      success |= derivedBegin();
+      success &= restoreFromFile();
+      success &= derivedBegin();
       DEBUG_PRINT("\t%s",success?"ok":"failed or is not implemented");    
       return success;
     }
@@ -279,11 +278,6 @@ class NetworkInterface{
   public:
     virtual bool connect() = 0;
     virtual bool disconnect() = 0;
-
-  protected:
-    virtual bool derivedDisconnect() = 0;
-    virtual bool derivedConnect() = 0;
-
 };
 
 
@@ -292,30 +286,11 @@ class NetworkDevice : public NetworkInterface , public DeviceInterface{
   public:
     
     NetworkDevice(const String& name, const String& _group,bool _configurable = true):DeviceInterface(name, _group, _configurable){
-      useNetwork = true;
       notReady();
     }
 
-    virtual bool connect(){
-
-      if (state.offline){
-        DEBUG_PRINT("\n%s->connect(OFFLINE) ignored",interfaceName.c_str());  
-        return true;
-      }
-
-      bool success = derivedConnect();
-      DEBUG_PRINT("\n%s->connect(ONLINE)...%s",success?"ok":"failed or is not implemented");
-      
-      return success;
-    }
-
+    virtual void derivedMonitor() = 0;
     
-    virtual bool disconnect(){
-      DEBUG_PRINT("\n%s->disconnect()",interfaceName.c_str());
-      notReady();      
-      return derivedDisconnect();
-    }
-
     void notReady(){
       state.code = IF_NOT_READY;
       state.label = IF_STATE_DISCONNECTED;
@@ -323,11 +298,23 @@ class NetworkDevice : public NetworkInterface , public DeviceInterface{
       state.details = "Attempt";      
     }
 
-    void monitorNetwork(){     
-      // detect if network is down
+    virtual void monitor(){         
       if (hwm.network->refreshed){
-        if (hwm.network->state == DISCONNECTED) notReady();
+        bool success = false;
+        if (hwm.network->state == CONNECTED){
+          if (state.offline){
+            DEBUG_PRINT("\n%s->connect<OFFLINE>() ignored",interfaceName.c_str());  
+          }else{
+            success = connect();
+            DEBUG_PRINT("\n%s->connect<ONLINE>()...%s",interfaceName.c_str(),success?"ok":"failed or is not implemented");                    
+          }
+        }else{
+          notReady();    
+          success = disconnect();
+          DEBUG_PRINT("\n%s->disconnect()...%s",interfaceName.c_str(),success?"ok":"failed or is not implemented");
+        }
       }
+      derivedMonitor();
     }
 };
 

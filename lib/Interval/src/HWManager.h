@@ -39,7 +39,7 @@
       void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendNoteOff(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
       void sendProgramChange(DataByte inProgramNumber,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendProgramChange(%d,%d)\t",inProgramNumber,inChannel);}
       void sendControlChange(DataByte inControlNumber,DataByte inControlValue,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendControlChange(%d,%d,%d)\t",inControlNumber,inControlValue,inChannel);}
-      void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries = false){DEBUG_PRINT("\tUSBMIDI::sendSysEx(%d,%s,%d)\t",inLength,inArray,inArrayContainsBoundaries);}
+      bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries = false){DEBUG_PRINT("\tUSBMIDI::sendSysEx(%d,%s,%d)\t",inLength,inArray,inArrayContainsBoundaries);}
       void setHandleSystemExclusive(SystemExclusiveCallback fptr) { DEBUG_PRINT("\tUSBMIDI::setHandleSystemExclusive(f*)\t");}
       bool read(){}
   }MIDI;

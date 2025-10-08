@@ -7,26 +7,29 @@
 class MIDIInterface{
   #define GROUP_INTERFACE_MIDI "MIDI"
   public:
-    virtual void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
-    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
-    virtual void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
+    virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
+    virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
+    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
     virtual void handleSysex(byte* data, unsigned length) = 0;
     virtual void handleChangeControl(byte channel, byte number, byte value)  = 0;
 
-    void sysexSend(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){   // used this one to trace
-      sendSysEx(inLength,inArray,inArrayContainsBoundaries);
-      DEBUG_PRINT("\nMIDIInterface::sendSysex ");
+    bool sendSysExDebug(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){   // used this one to trace
+      DEBUG_PRINT("\nMIDIInterface::sendSysExDebug(%i) ",inLength);
       for (uint16_t i = 0; i < inLength; i++) DEBUG_PRINT("%02X ",inArray[i]);
+      DEBUG_PRINT("\n[%p] sendSysExDebug", this);
+      bool success = sendSysEx(inLength,inArray,inArrayContainsBoundaries);      
+      DEBUG_PRINT("\n[%p] sendSysEx done", this);
+      return success;      
     }
 
     static void handleSysexStatic(byte* data, unsigned length) {
-        if (baseInstancePtr) {
-            baseInstancePtr->handleSysex(data,length);
-        }
+      if (baseInstancePtr) {
+          baseInstancePtr->handleSysex(data,length);
+      }
     }
 
     void baseMidi(){
-      baseInstancePtr = this; // do not forget otherwise callback function will crash      
+      baseInstancePtr = this;
     }
 
 
@@ -84,9 +87,13 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
       return changed;
     }  
 
-    virtual void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){}
-    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){};
-    virtual void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){};
+    virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
+      DEBUG_PRINT("\nBLEMIDIInterface::sendSysex(%i) ",inLength);
+      return false;
+    }
+
+    virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};
+    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};
     virtual void handleSysex(byte* data, unsigned length){}
     virtual void handleChangeControl(byte channel, byte number, byte value){}
 
@@ -156,16 +163,20 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
       return false;
     }     
 
-    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){      
+    virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){      
       MIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);
+      return true;
     }  
 
-    virtual void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
+    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
       MIDI.sendNoteOff(inNoteNumber,inVelocity,inChannel);
+      return true;
     }
 
-    virtual void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){    
+    virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){    
+      DEBUG_PRINT("\nUSBMIDI::sendSysex(%i) ",inLength);      
       MIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);
+      return true;
     }    
 
     virtual void handleSysex(byte* data, unsigned length){}
@@ -211,9 +222,15 @@ class DINMIDIInterface: public MIDIInterface, public DeviceInterface{
 
     virtual bool end(){return false;}     
 
-    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){};    
-    virtual void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){};
-    virtual void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){}
+    virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};    
+    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};
+
+    virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
+      DEBUG_PRINT("\nDINMIDI::sendSysex(%i) ",inLength);
+      return false;
+    }
+
+
     virtual void handleSysex(byte* data, unsigned length){}
     virtual void handleChangeControl(byte channel, byte number, byte value){}    
 
@@ -241,13 +258,12 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       return  NetworkDevice::begin();;
     }    
 
-    virtual void monitor(){      
-      monitorNetwork();
+    virtual void derivedMonitor(){
       
       if (hwm.network->state == CONNECTED){
 
         if (hwm.network->midiClient != nullptr){
-          hwm.network->midiClient->read();          //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time
+          hwm.network->midiClient->read();                        //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time
         }
                 
         if (hwm.network->refreshed) setStatePendingSession();    // network has just connected so we now wait for a session to connect
@@ -256,9 +272,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
 
     }
 
-    void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){            
-
-      hwm.network->midiClient->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
+    virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override{                  
+      DEBUG_PRINT("\n[%p] sendSysEx(derived)(%i)", this, inLength);
+      if (state.code == IF_READY) hwm.network->midiClient->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
+      else return false;
+      return true; 
     }
     
     char getSysExStatus(const byte* data, uint16_t length)
@@ -273,12 +291,18 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
         return 'E'; // End of SysEx-Segment
     }
 
-    virtual void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-        hwm.network->midiClient->sendNoteOn(inNoteNumber,inVelocity, inChannel);
+    virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
+      if (hwm.network->midiClient != nullptr) hwm.network->midiClient->sendNoteOn(inNoteNumber,inVelocity, inChannel);
+      else return false;
+      return true;       
+        
     };
 
-    virtual void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-        hwm.network->midiClient->sendNoteOff(inNoteNumber,inVelocity, inChannel);
+    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){        
+      if (hwm.network->midiClient != nullptr) hwm.network->midiClient->sendNoteOff(inNoteNumber,inVelocity, inChannel);
+      else return false;
+      return true;       
+
     };
 
     virtual void derivedConfig(JsonObject& config){   
@@ -370,6 +394,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       DEBUG_PRINT("\nConnected to session: %s\n", name);
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
+      state.details = String(name) + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
     }    
 
     void handleDisconnected(const ssrc_t& ssrc) {
@@ -388,6 +413,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
 
 
     void setStatePendingSession(){
+      // network is connected but not the session
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
       state.subLabel =  hwm.network->midiClient->getName() +String(" (or ")+hwm.network->IP.toString() + String(", port: ")+hwm.network->midiClient->getPort()+ String(")");
@@ -395,33 +421,32 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
     }
 
     virtual bool derivedBegin(){      
+      //DEBUG_PRINT("\tAppleMIDIInterface::derivedBegin()");
       appleInstancePtr = this;   // do not forget otherwise callback function will crash
       return disconnect();      
     }
 
     virtual bool end(){
-      DEBUG_PRINT("\n\tAppleMIDIInterface->end()...");
+      //DEBUG_PRINT("\n\tAppleMIDIInterface->end()...");
       return true;
     }
 
-    virtual bool derivedConnect(){
-      MidiClient* midiClient = hwm.network->midiClient;
-      const char* midiname = midiClient->getName();
-      DEBUG_PRINT("\t(%s)\t",midiname);
-      if (midiClient != nullptr){
-        midiClient->setHandleDisconnected(handleDisconnectedStatic);
-        midiClient->setHandleConnected(handleConnectedStatic);
-        midiClient->setHandleException(OnAppleMidiExceptionStatic);
-        midiClient->setHandleSystemExclusive(handleSysexStatic);
-        midiClient->setHandleControlChange(handleChangeControlStatic);
-      }else{
+    virtual bool connect(){
+      //DEBUG_PRINT("\tAppleMIDIInterface::connect()");
+      MidiClient* midiClient = hwm.network->midiClient;      
+      if (midiClient == nullptr){
         DEBUG_PRINT("\t(nullptr)\t");
         return false;
       }
+      midiClient->setHandleDisconnected(handleDisconnectedStatic);
+      midiClient->setHandleConnected(handleConnectedStatic);
+      midiClient->setHandleException(OnAppleMidiExceptionStatic);
+      midiClient->setHandleSystemExclusive(handleSysexStatic);
+      midiClient->setHandleControlChange(handleChangeControlStatic);
       return true;
     }
 
-    virtual bool derivedDisconnect(){
+    virtual bool disconnect(){
       return true;
     }
 
@@ -445,7 +470,8 @@ class MIDIOSC: public OSCInterface{
     };
 
     ~MIDIOSC(){
-      delete midiTransport;
+        //if (midiTransport && std::find(interfaceRepo.interfaces.begin(), interfaceRepo.interfaces.end(), midiTransport) == interfaceRepo.interfaces.end())
+          delete midiTransport; // => check double free in repo ?
     }
 
     void instantiate(String midiInterface, bool _configurable){

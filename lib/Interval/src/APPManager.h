@@ -1048,7 +1048,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // at the moment, this is hard coded
     if (buttonID == hwm->buttons[MIDDLEB]->getID()){
       if (!stripAction(IntervalButton::BUTTON_SIMPLE_CLIC)){
-        
+        DEBUG_PRINT("\nstripAction failed");
         // code if execution fails: example: popup a message with the error
       }
     }
@@ -1506,18 +1506,25 @@ void setup() {
     }
 
     bool refresh(bool force=false){
+
       yield();
       
       refreshed = force;
 
+      // ********************************
+      // PERFORM ALL REFRESH AND UPDATES
+      // ********************************
+      hwm->refresh();         
+      processBroadcastQueue();
+      handleWeb(nullptr);
+      if (hwm->ap != nullptr){if (hwm->ap->refreshed) setAPandNetIcons();}      
+      if (hwm->network->state == CONNECTED && hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();       // real time signal strength display
 
       //------------------
       //
       // MANAGE NETWORK
       //
-      //------------------     
-      hwm->refresh();      
-
+      //------------------
       if (hwm->network->refreshed){ // network changed its statusset
         
         setNetworkIcon();
@@ -1529,15 +1536,7 @@ void setup() {
         //userNetworkChangeStateCallback(hwm->network->state);
 
         if (hwm->network->state == CONNECTED){    
-          
-          for (auto* dev : interfaceRepo.interfaces) {
-            if (dev->useNetwork) {
-              NetworkDevice* netDev = static_cast<NetworkDevice*>(dev);
-              DEBUG_PRINT("\n<%s> connect ",netDev->interfaceName.c_str());
-              netDev->connect();
-            }
-          }       
-
+           
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                   
 
@@ -1565,33 +1564,11 @@ void setup() {
 
           }
         }else{
-          // we stop interfaces that uses the network
-          for (const auto& interface : interfaceRepo.interfaces){        
-            if (interface->useNetwork == true){              
-              if (!((NetworkInterface*)interface)->disconnect()){
-                DEBUG_PRINT("\n%s->disconnect() failed or is not implemented",interface->interfaceName.c_str());
-              }
-            }
-          }
+
 
         }
       }  
-
-      if (hwm->ap != nullptr){
-        if (hwm->ap->refreshed) setAPandNetIcons();
-      }
-
-      processBroadcastQueue();
-
-      // real time signal strength display
-      if (hwm->network->state == CONNECTED && hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();
-    
-      //------------------
-      //
-      // MANAGE WEBAPP
-      //
-      //------------------
-      handleWeb(nullptr);
+        
 
       //------------------
       //
@@ -1617,11 +1594,7 @@ void setup() {
       //------------------
       bool interfaceChangedState = false;
       for (const auto& interface : interfaceRepo.interfaces){        
-        interfaceChangedState = interface->update();
-        if (interfaceChangedState == true){
-          String if_change ="{\"deviceState\":"+interface->serializeState()+"}";
-          broadCast(if_change);
-        }       
+        if (interface->update()) broadCast("{\"deviceState\":"+interface->serializeState()+"}"); // inform web interface
       }
 
       //------------------
@@ -1783,18 +1756,18 @@ void setup() {
     }
 
     void broadCast(String msg){
-      if (webAppConnected && hwm->configMedia->state == CONNECTED) 
-        broadcastQueue.push_back(msg);      
+      if (webAppConnected) broadcastQueue.push_back(msg);      
     }
 
     void processBroadcastQueue() {
       while (!broadcastQueue.empty()) {
         String msg = broadcastQueue.front();  // lire le 1er message
         broadcastQueue.erase(broadcastQueue.begin());  // le retirer de la file
-
-        if (webAppConnected && hwm->configMedia->state == CONNECTED){
-          wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());  
-          DEBUG_PRINT("\n\n\t\t * * * * broadCast(%s) * * * ",msg.c_str());
+        if (hwm->configMedia != nullptr){
+          if (webAppConnected && hwm->configMedia->state == CONNECTED){
+            wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());  
+            DEBUG_PRINT("\n\n\t\t * * * * broadCast(%s) * * * ",msg.c_str());
+          }
         }
       }
     }

@@ -45,7 +45,7 @@ class NetworkOSC: public OSCInterface, public NetworkDevice{
       return changed;
     }        
 
-    virtual void monitor(){}
+    virtual void derivedMonitor(){}
 
     virtual void* read(){return nullptr;}
 
@@ -57,11 +57,11 @@ class NetworkOSC: public OSCInterface, public NetworkDevice{
       return false;
     }
 
-    virtual bool derivedConnect(){
+    virtual bool connect(){
       return false;
     }
 
-    virtual bool derivedDisconnect(){
+    virtual bool disconnect(){
       return false;
     }
 
