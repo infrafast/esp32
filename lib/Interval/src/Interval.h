@@ -673,7 +673,7 @@ class JsonListFile : public JsonList{
         
         if (!LittleFS.exists(filename)){
           success = false;     
-          DEBUG_PRINT("\nJsonListFile::file %s doesnt exit",filename.c_str());
+          DEBUG_PRINT("\nJsonListFile::file %s doesnt exit\n",filename.c_str());
         }else{
 
           JsonDocument doc;
@@ -706,7 +706,7 @@ class JsonListFile : public JsonList{
               doc.shrinkToFit();   
               jsonToKeyValues(&doc);
           }else{
-            DEBUG_PRINT("\nJsonListFile::load(%s) failed",filename.c_str());
+            DEBUG_PRINT("\nJsonListFile::load(%s) failed\n",filename.c_str());
           }
 
         }        

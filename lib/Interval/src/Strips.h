@@ -237,7 +237,7 @@ class Strip {
     // it will usually drop a command to the interface which outcome be lately read by the process() method
     // is called from the focus() method so to force data to be updated in case some whre missed
     virtual const String* getTopLabel()=0;
-    virtual const String* getBottomLabel()=0;
+    virtual const char* getBottomLabel()=0;
     virtual void update() = 0;  // // this code is called by process()
     // it assign the GUI values the values that were acquired or processed in the process() method
     // basedon its internal state, it will set the redraw flag 
@@ -573,7 +573,7 @@ class TwoSelectStrip : public Strip{
     }  
 
     virtual const String* getTopLabel(){return &type;}
-    virtual const String* getBottomLabel(){return select2Content;}     
+    virtual const char* getBottomLabel(){return select2Content->c_str();}     
  
   protected:
     Top1Toggle1Label* topLabels;
@@ -613,7 +613,7 @@ class ThreeSelectStrip: public TwoSelectStrip{
     }  
 
     virtual const String* getTopLabel(){return select2Content;}
-    virtual const String* getBottomLabel(){return select3Content;}      
+    virtual const char* getBottomLabel(){return select3Content->c_str();}      
 
   protected:
     uint8_t select3ID=1; 

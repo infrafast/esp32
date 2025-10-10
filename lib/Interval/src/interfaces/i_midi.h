@@ -13,15 +13,6 @@ class MIDIInterface{
     virtual void handleSysex(byte* data, unsigned length) = 0;
     virtual void handleChangeControl(byte channel, byte number, byte value)  = 0;
 
-    bool sendSysExDebug(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){   // used this one to trace
-      DEBUG_PRINT("\nMIDIInterface::sendSysExDebug(%i) ",inLength);
-      for (uint16_t i = 0; i < inLength; i++) DEBUG_PRINT("%02X ",inArray[i]);
-      DEBUG_PRINT("\n[%p] sendSysExDebug", this);
-      bool success = sendSysEx(inLength,inArray,inArrayContainsBoundaries);      
-      DEBUG_PRINT("\n[%p] sendSysEx done", this);
-      return success;      
-    }
-
     static void handleSysexStatic(byte* data, unsigned length) {
       if (baseInstancePtr) {
           baseInstancePtr->handleSysex(data,length);
@@ -394,7 +385,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       DEBUG_PRINT("\nConnected to session: %s\n", name);
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
-      state.details = String(name) + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
+      state.details = String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
     }    
 
     void handleDisconnected(const ssrc_t& ssrc) {

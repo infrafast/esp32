@@ -52,7 +52,7 @@ class TextStrip : public Strip{
     } 
 
     virtual const String* getTopLabel(){return &type;}
-    virtual const String* getBottomLabel(){return &emptyString;}  
+    virtual const char* getBottomLabel(){return emptyString.c_str();}  
 
 
     virtual float increaseCallback(unsigned long time,uint8_t trigger){return true;}

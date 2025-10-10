@@ -15,15 +15,6 @@ using namespace APPLEMIDI_NAMESPACE;
 class Utilities for creating a generic pointer to AppleMIDISession and MidiInterface
 from a WiFiUDP or EThernetUDP (template) and be able to manipulate it as a generic instance
 
-fix in applemidisession:
-
-#ifdef KEEP_SESSION_NAME
-    char            sessionName[24 + 1];
-#endif
-
-and  make getParticipantBySSRC public
-
-
 */
 
 
@@ -38,7 +29,7 @@ public:
   virtual void setHandleException(void (*fptr)(const ssrc_t &, const Exception &, const int32_t value))=0;
   virtual void setHandleSystemExclusive(void (*fptr)(byte* , unsigned )) = 0;
   virtual void setHandleControlChange(void (*fptr)(byte , byte , byte )) = 0;
-  virtual String getParticipantDetails(const ssrc_t& ssrc) = 0;
+  //virtual String getParticipantDetails(const ssrc_t& ssrc) = 0;
   virtual const char *getName() = 0;
   virtual const uint16_t getPort() = 0;
   virtual void begin() = 0;
@@ -61,10 +52,18 @@ public:
     midi = new MidiInterface<AppleMIDISession<UdpType>, AppleMIDISettings>(*session);
   }
 
-  virtual String getParticipantDetails(const ssrc_t& ssrc){
+  /*virtual String getParticipantDetails(const ssrc_t& ssrc){
+    fix in applemidisession:
+
+    #ifdef KEEP_SESSION_NAME
+        char            sessionName[24 + 1];
+    #endif
+
+    and  make getParticipantBySSRC public
+
     Participant<AppleMIDISettings>* p = (Participant<AppleMIDISettings>*)session->getParticipantBySSRC(ssrc);
     return p->remoteIP.toString();
-  }
+  }*/
 
   void stop(){
   }
@@ -115,7 +114,9 @@ public:
   }
 
   void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
+    DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sensSysex ");
     midi->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
+    for (uint16_t i = 0; i < inLength; i++) DEBUG_PRINT("%02X ",inArray[i]);    
   }
 
   ~AppleMidiWithInterfaceWrapper() {

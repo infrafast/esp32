@@ -565,7 +565,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         midiNoteSkel->registerDataSetAddress(dsMidiValue1.address);
         midiNoteSkel->registerDataSetAddress(dsMidiValue2.address);      
 
-      dsSysexMessages = new SysexLibEntry(new DropDownAddress(ADDRESS_SYSEX));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved
+      dsSysexMessages = new SysexLib(new DropDownAddress(ADDRESS_SYSEX));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved
       sysexSkel = new StripSkeleton(STRIP_SYSEX,GROUP_INTERFACE_MIDI,sysexStripConstructorCallback,'*');             
         sysexSkel->registerDataSetAddress(dsSysexMessages->address);
 
@@ -615,20 +615,20 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       #ifdef DEBUG
         String s;
         systemCfg.serialize(&s);
-        DEBUG_PRINT("\n\n systemCfg:\t%s [...]",s.substring(0,180).c_str());
+        DEBUG_PRINT("\n\n systemCfg:\t%s [...]",s.substring(0,300).c_str());
         s="";
         bankCfg.serialize(&s);
-        DEBUG_PRINT("\n\n bankCfg:\t%s [...]",s.substring(0,180).c_str());
+        DEBUG_PRINT("\n\n bankCfg:\t%s [...]",s.substring(0,300).c_str());
         s="";
         userCfg.serialize(&s);
-        DEBUG_PRINT("\n\n userCfg:\t%s [...]",s.substring(0,180).c_str());        
+        DEBUG_PRINT("\n\n userCfg:\t%s [...]",s.substring(0,300).c_str());        
         s="";
         lang.serialize(&s);
-        DEBUG_PRINT("\n\n langfile:\t%s [...]",s.substring(0,180).c_str());        
+        DEBUG_PRINT("\n\n langfile:\t%s [...]",s.substring(0,300).c_str());        
         DEBUG_PRINT("\nexample of langfile token: Connect:<%s>",lang.getString("Connect")->c_str());        
         s="";
         userLang.serialize(&s);
-        DEBUG_PRINT("\n\n userLang:\t%s [...]",s.substring(0,180).c_str());                
+        DEBUG_PRINT("\n\n userLang:\t%s [...]",s.substring(0,300).c_str());                
       #endif
 
      
@@ -1152,7 +1152,6 @@ void setup() {
 
     #define MAX_POST_COMMAND_SIZE 4096 // Limite maximale pour éviter un abus de mémoire, utilisé par la fonction httpPost
   
-
     void getJsonStartup(String* returnedJsonStringData){
       JsonDocument doc;      
       String tempJsonString="";
@@ -1164,7 +1163,9 @@ void setup() {
       doc["sysexLibFile"] = SYSEXLIB_FILENAME;
       doc["oscLibFile"] = OSCLIB_FILENAME;
       doc["wizard"] = (hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD)?true:false;
-      doc["lang"] = *systemCfg.getString(S_LANG,"francais");  
+      doc["lang"] = *systemCfg.getString(S_LANG,"francais"); 
+      JsonArray configs = doc.createNestedArray("configNames");
+      configs.add("default"); // parse the file list and add all entries found, at the moment it's empty
       
       serializeJson(doc, *returnedJsonStringData);  
       removeJsonQuote(returnedJsonStringData);      

@@ -13,14 +13,14 @@ StripSkeleton *midiNoteSkel, *sysexSkel;
     //////////////////                       //////////////////////    
     ///////////////////////////////////////////////////////////////
 
-#define ADDRESS_SYSEX "/sysex/%d"
+#define ADDRESS_SYSEX "/sysex/%s"
 #define SYSEXLIB_FILENAME "sysexlib.json"
 
 #define OSCLIB_FILENAME "osclib.json"  
 
-class SysexLibEntry : public DataSet, public JsonListFile{
+class SysexLib : public DataSet, public JsonListFile{
   public:
-    SysexLibEntry(Address* _address): DataSet(_address, GROUP_INTERFACE_MIDI){ 
+    SysexLib(Address* _address): DataSet(_address, GROUP_INTERFACE_MIDI){ 
       reload();      
     }      
 
@@ -42,7 +42,7 @@ class SysexLibEntry : public DataSet, public JsonListFile{
     }
 };
 
-SysexLibEntry* dsSysexMessages;
+SysexLib* dsSysexMessages;
 
 class MidiChannels : public DataSet{
   #define ADDRESS_MIDICHANNEL   "/channel/%d"
@@ -193,6 +193,7 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
 
   #define STRIP_MIDINOTE "Note"
   public:
+    String note = midiMessages[MIDI_NOTEON];      
 
     MidiNoteStrip(StripSkeleton* s,bool debug=false):TwoValuesMidiStrip(s,debug){}
 
@@ -267,12 +268,31 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
     } 
 
     virtual bool actionCallback(uint8_t trigger){
-      if (note == midiMessages[MIDI_NOTEON]) ((MIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
-      else if (note == midiMessages[MIDI_NOTEOFF]) ((MIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);   // TO BE IMPLEMENTED
+      bool success = false;
+      if (note == midiMessages[MIDI_NOTEON]){
+        // polymorphism doesnt work
+        if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
+        else if (interface->interfaceName == USBMIDI_INTERFACE) success = ((USBMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
+        else if (interface->interfaceName == DINMIDI_INTERFACE) success = ((DINMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
+        else if (interface->interfaceName == APPLEMIDI_INTERFACE) success = ((AppleMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
+        else{
+          DEBUG_PRINT("\n%s invalid interface",type.c_str());
+        }
+      }
+      else if (note == midiMessages[MIDI_NOTEOFF]){
+        // polymorphism doesnt work
+        if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
+        else if (interface->interfaceName == USBMIDI_INTERFACE) success = ((USBMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
+        else if (interface->interfaceName == DINMIDI_INTERFACE) success = ((DINMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
+        else if (interface->interfaceName == APPLEMIDI_INTERFACE) success = ((AppleMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
+        else{
+          DEBUG_PRINT("\n%s invalid interface",type.c_str());
+        }
+      }
       return false;
     }    
 
-    String note = midiMessages[MIDI_NOTEON];
+    
 };
 
 
@@ -282,6 +302,7 @@ Strip* midiNoteStripConstructorCallback(){
 
 class SysexStrip : public Strip{
   #define STRIP_SYSEX "Sysex"
+  #define SYSEX_MAX_KEY_LENGTH 64
   #define SYSEX_MAX_MESSAGE_LENGTH 256
 
   public:
@@ -364,7 +385,14 @@ class SysexStrip : public Strip{
 
       size_t length = hexStringToBytes(sysexMessage, buffer, outMax);
       if (length>0) {
-        success = ((MIDIInterface*)interface)->sendSysExDebug(length, buffer, false);
+        // polymorphism doesnt work
+        if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendSysEx(length, buffer, false);
+        else if (interface->interfaceName == USBMIDI_INTERFACE) success = ((USBMIDIInterface*)interface)->sendSysEx(length, buffer, false);
+        else if (interface->interfaceName == DINMIDI_INTERFACE) success = ((DINMIDIInterface*)interface)->sendSysEx(length, buffer, false);
+        else if (interface->interfaceName == APPLEMIDI_INTERFACE) success = ((AppleMIDIInterface*)interface)->sendSysEx(length, buffer, false);
+        else{
+          DEBUG_PRINT("\n%s invalid interface",type.c_str());
+        }
         //Log::drop(interface->interfaceName.c_str(), (const char*)buffer);  // => for SOME REASON THIS CREATE A DISCONNECTION OF WEBSOCKET...MAYBE THE GENERATED FRAME IS INCORRECT?
       } else {
         String err = String("Invalid sysex: ") + sysexMessage; // garder l'objet en vie
@@ -376,27 +404,27 @@ class SysexStrip : public Strip{
     }
 
     virtual void serializeProperties(){
-      char* buf = (char*)malloc(strlen(ADDRESS_SYSEX)*sizeof(char*));
-      sprintf(buf,ADDRESS_SYSEX,sysexID);
-      properties.add(String(buf));
+      char* buf = (char*)malloc((strlen(ADDRESS_SYSEX)+strlen(sysexKey))*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_SYSEX,sysexKey);
+      properties.add(String(buf)); //force la copie
+      DEBUG_PRINT("\nserializeProperties: %s",buf);
       delete buf;
     }
 
     virtual void deserializeProperty(String property){
-      if (sscanf(property.c_str(), ADDRESS_SYSEX, &sysexID)){
-        sysexKey = *skeleton->getValuePtr(interface->getProviderName(),ADDRESS_SYSEX,sysexID-1);
-        sysexMessage = *dsSysexMessages->getString(sysexKey);         // return the value corresponding to the key from the jsonfile library        
+      if (sscanf(property.c_str(), ADDRESS_SYSEX, &sysexKey)){
+        DEBUG_PRINT("\ndeserializeProperty: %s = %s",property.c_str(),sysexKey);
+        sysexMessage = *dsSysexMessages->getString(sysexKey,"undef sysex");         // return the value corresponding to the key from the jsonfile library        
       }    
     }
 
     virtual const String* getTopLabel(){return &type;}
-    virtual const String* getBottomLabel(){return &sysexKey;}      
+    virtual const char* getBottomLabel(){return sysexKey;}      
        
   protected:
     String unitString = "dB";
     String sysexMessage="";
-    String sysexKey="";
-    uint8_t sysexID = 0;
+    char sysexKey[SYSEX_MAX_KEY_LENGTH];
 
 };
 
