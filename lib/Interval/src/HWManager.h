@@ -28,43 +28,9 @@
 
 #include <driver/rtc_io.h>
 
-#include "MIDIUSB_shim.h"   // required by USB-MIDI.h
-#include <USB-MIDI.h>     // sysex but do not work
-
-#ifdef DEBUG
-  class USBMIDISimul{
-    public:
-      USBMIDISimul(){}
-      void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendNoteOn(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
-      void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendNoteOff(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
-      void sendProgramChange(DataByte inProgramNumber,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendProgramChange(%d,%d)\t",inProgramNumber,inChannel);}
-      void sendControlChange(DataByte inControlNumber,DataByte inControlValue,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendControlChange(%d,%d,%d)\t",inControlNumber,inControlValue,inChannel);}
-      bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries = false){DEBUG_PRINT("\tUSBMIDI::sendSysEx(%d,%s,%d)\t",inLength,inArray,inArrayContainsBoundaries);}
-      void setHandleSystemExclusive(SystemExclusiveCallback fptr) { DEBUG_PRINT("\tUSBMIDI::setHandleSystemExclusive(f*)\t");}
-      bool read(){}
-  }MIDI;
-#else
-  USBMIDI_CREATE_DEFAULT_INSTANCE();
-#endif
-
 #include <USB.h>
-#include <midiusb.h>     //tinyUSB , works but no sysex
+#include <midiusb.h>     //tinyUSB
 
-#ifndef ARDUINO_USB_MODE
-  #error This ESP32 SoC has no Native USB interface
-#elif ARDUINO_USB_MODE == 1
-  #warning This sketch should be used when USB is in OTG mode
-#endif
-
-#ifdef DEBUG
-  #define MIDI_USB_NOTE_ON(arg1,arg2) DEBUG_PRINT("\nMIDI_USB_NOTE_ON(%d,%d)",arg1,arg2)
-  #define MIDI_USB_NOTE_OFF(arg1) DEBUG_PRINT("\nMIDI_USB_NOTE_ON(%d,%d)",arg1)
-  #define MIDI_USB_CC(arg1,arg2,arg3) DEBUG_PRINT("\nMIDI_USB_CC(%d,%d,%d)",arg1,arg2,arg3)
-#else
-  #define MIDI_USB_NOTE_ON(arg1,arg2) USBmidi.noteON(arg1,arg2)
-  #define MIDI_USB_NOTE_OFF(arg1) USBmidi.noteOFF(arg1)
-  #define MIDI_USB_CC(arg1,arg2,arg3) USBmidi.controlChange(arg1,arg2,arg3)
-#endif
 
 //////////////////////////////////////////////
 #define ANALOGB_PIN       (gpio_num_t)D0 //GPIO_NUM_1  
@@ -131,7 +97,7 @@ public:
     Network *network = nullptr;
     Network *configMedia = nullptr;    
   
-    MIDIusb* USBmidi = nullptr;           // <===== tinyUSB
+    MIDIusb* tinyMIDIusb = nullptr;           // <===== tinyUSB
 
     String configURL;
 
@@ -286,12 +252,12 @@ public:
       //USB.usbPower(100);
       //tinyusb_add_string_descriptor("MIDIUSB_ESP32_STR_DESC");
 
-      //USBmidi.begin();            // as long as we don't call these 2 begins, the USB is not visible        
+      //tinyMIDIusb.begin();            // as long as we don't call these 2 begins, the USB is not visible        
       
       // with tinyUSB we initialize the USB midi stack, then MIDI HELPERS from Lathoud MIDIUSB will work
-      USBmidi = new MIDIusb;
-      USBmidi->setBaseEP(2);
-      USBmidi->begin();           
+      tinyMIDIusb = new MIDIusb;
+      tinyMIDIusb->setBaseEP(2);
+      tinyMIDIusb->begin();           
     }
 
     virtual void init() {            

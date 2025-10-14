@@ -11,8 +11,8 @@
 #define DEST_FS_USES_LITTLEFS // filesystem object will be available as "tarGzFS"
 #include <ESP32-targz.h>
 
-#define INTERVAL_PRODUCT_NAME "interval"
-#define INTERVAL_MANUFACTURER "intervalgrp"
+#define INTERVAL_PRODUCT_NAME "footswitch"
+#define INTERVAL_MANUFACTURER "interval"
 
 #define WEBAPP_PATH "/webapp"
 

@@ -767,9 +767,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
         case IntervalButton::BUTTON_SIMPLE_CLIC:
           simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
-          char* msg = "helloworld";
-          MIDI.sendSysEx(strlen(msg),(const byte*)msg);
-          MIDI.sendNoteOn(123,62,1);                                                                                                                                                                         
+          /*char* msg = "helloworld";
+          USBMIDI.sendSysEx(strlen(msg),(const byte*)msg);
+          USBMIDI.sendNoteOn(123,62,1);*/                                                                                                                                                                         
         break;
       }
 

@@ -45,11 +45,11 @@ template <typename UdpType>
 class AppleMidiWithInterfaceWrapper : public MidiClient {
 public:
   AppleMIDISession<UdpType>* session;
-  MidiInterface<AppleMIDISession<UdpType>, AppleMIDISettings>* midi;
+  MidiInterface<AppleMIDISession<UdpType>, AppleMIDISettings>* appleMIDI;
 
   AppleMidiWithInterfaceWrapper<UdpType>(const char* sessionName, uint16_t port){
     session = new AppleMIDISession<UdpType>(sessionName, port);
-    midi = new MidiInterface<AppleMIDISession<UdpType>, AppleMIDISettings>(*session);
+    appleMIDI = new MidiInterface<AppleMIDISession<UdpType>, AppleMIDISettings>(*session);
   }
 
   /*virtual String getParticipantDetails(const ssrc_t& ssrc){
@@ -74,7 +74,7 @@ public:
   }
 
   void read() override {
-    midi->read();
+    appleMIDI->read();
   }  
 
   virtual const char *getName(){
@@ -98,32 +98,32 @@ public:
   }
 
   virtual void setHandleSystemExclusive(void (*fptr)(byte* , unsigned )){
-    midi->setHandleSystemExclusive(fptr);
+    appleMIDI->setHandleSystemExclusive(fptr);
   }
 
   virtual void setHandleControlChange(void (*fptr)(byte , byte , byte )){
-    midi->setHandleControlChange(fptr);
+    appleMIDI->setHandleControlChange(fptr);
   }
   /////////////////////////
   void sendNoteOn(byte note, byte velocity, byte channel) override {
     DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sendNoteOn(%d,%d,%d)",note, velocity, channel);
-    midi->sendNoteOn(note, velocity, channel);
+    appleMIDI->sendNoteOn(note, velocity, channel);
   }
 
   void sendNoteOff(byte note, byte velocity, byte channel) override {
     DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sendNoteOff(%d,%d,%d)",note, velocity, channel);
-    midi->sendNoteOff(note, velocity, channel);    
+    appleMIDI->sendNoteOff(note, velocity, channel);    
   }
 
   void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
     DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sendSysex ");
-    midi->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
+    appleMIDI->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
     for (uint16_t i = 0; i < inLength; i++) DEBUG_PRINT("%02X ",inArray[i]);    
   }
 
   ~AppleMidiWithInterfaceWrapper() {
     stop();
-    delete midi;
+    delete appleMIDI;
     delete session;
   }
 

@@ -4,14 +4,67 @@
 #include "Interfaces.h"
 #include "i_osc.h"
 
+#include <BLEMIDI_Transport.h>
+//#include <hardware/BLEMIDI_ESP32_NimBLE.h>
+#include <hardware/BLEMIDI_ESP32.h>
+//#include <hardware/BLEMIDI_ArduinoBLE.h>
+
+#include "MIDIUSB_shim.h"   // required by USB-MIDI.h
+#include <USB-MIDI.h>     // sysex but do not work
+
+enum{
+  MIDI_CC,
+  MIDI_SYSEX,
+  MIDI_NOTE,
+  MIDI_PITCH
+  //...
+};
+
+typedef struct MidiData{
+  uint8_t type = MIDI_CC;
+  byte channel = 0;
+  byte number = 0;
+  byte value = 0;
+  byte* data = nullptr;
+};
+
+#ifdef DEBUG
+  class USBMIDISimul{
+    public:
+      USBMIDISimul(){}
+      void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendNoteOn(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
+      void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendNoteOff(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
+      void sendProgramChange(DataByte inProgramNumber,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendProgramChange(%d,%d)\t",inProgramNumber,inChannel);}
+      void sendControlChange(DataByte inControlNumber,DataByte inControlValue,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendControlChange(%d,%d,%d)\t",inControlNumber,inControlValue,inChannel);}
+      bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries=false){
+        DEBUG_PRINT("\tUSBMIDI::sendSysEx(%u,[", inLength);
+        for (unsigned i=0;i<inLength;i++) DEBUG_PRINT("%02X", inArray[i]);
+        DEBUG_PRINT("],%d)\t", inArrayContainsBoundaries ? 1 : 0);
+        return true;
+      }
+      void setHandleSystemExclusive(SystemExclusiveCallback fptr) { DEBUG_PRINT("\tUSBMIDI::setHandleSystemExclusive(f*)\t");}
+      bool read(){return false;}
+  }usbMIDI;
+#else
+  //USBMIDI_CREATE_DEFAULT_INSTANCE();
+  //USBMIDI_CREATE_INSTANCE(0,usbMIDI);
+  USBMIDI_NAMESPACE::usbMidiTransport usbMIDI2(0);
+  MIDI_NAMESPACE::MidiInterface<USBMIDI_NAMESPACE::usbMidiTransport> usbMIDI((USBMIDI_NAMESPACE::usbMidiTransport&)usbMIDI2);
+
+#endif
+
+
 class MIDIInterface{
   #define GROUP_INTERFACE_MIDI "MIDI"
   public:
+
+    MidiData midiData;
+
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
-    virtual void handleSysex(byte* data, unsigned length) = 0;
-    virtual void handleChangeControl(byte channel, byte number, byte value)  = 0;
+
+    virtual DeviceInterface* getDevice() = 0;
 
     static void handleSysexStatic(byte* data, unsigned length) {
       if (baseInstancePtr) {
@@ -19,8 +72,60 @@ class MIDIInterface{
       }
     }
 
-    void baseMidi(){
+    static void handleChangeControlStatic(byte channel, byte number, byte value){
+        if (baseInstancePtr) {
+            baseInstancePtr->handleChangeControl(channel,number,value);
+        }      
+    }
+
+    virtual void handleChangeControl(byte channel, byte number, byte value){
+      DEBUG_PRINT("\nhandleChangeControl channel:%i, number:%i value:%i",channel,number,value);
+      // FEED the midi data structure with data
+      midiData.type = MIDI_CC;
+      midiData.channel = channel;
+      midiData.number = number;
+      midiData.value = value;
+      // and indicate how much is available
+      getDevice()->dataAvailable = 1;
+    }
+
+    virtual void handleSysex(byte* sysexdata, unsigned length){
+      DEBUG_PRINT("\nhandleSysex: %c, %i bytes: ",getSysExStatus(sysexdata, length),length);
+      for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",sysexdata[i]);
+      // FEED the midi data structure with data
+
+      midiData.type = MIDI_SYSEX;
+      // Libère l'ancien buffer si nécessaire
+      if (midiData.data != nullptr) {
+          delete[] midiData.data;
+          midiData.data = nullptr;
+      }
+      // Allocation du nouveau buffer
+      if (length > 0) {
+        midiData.data = new byte[length];
+        if (midiData.data != nullptr) {
+            memcpy(midiData.data, sysexdata, length);
+        }
+      }
+
+      // and indicate how much is available
+      getDevice()->dataAvailable = length;
+    }    
+
+
+    char getSysExStatus(const byte* data, uint16_t length){
+      if (!data || length==0) return 'E';
+      if (data[0]==0xF0 && data[length-1]==0xF7) return 'F';
+      if (data[0]==0xF0) return 'S';
+      if (data[length-1]==0xF7) return 'E';
+      return 'M';
+    }    
+
+    void init(){
       baseInstancePtr = this;
+      // set the interface data pointer to the midi data structure
+      getDevice()->data = &midiData;
+      
     }
 
 
@@ -30,6 +135,9 @@ class MIDIInterface{
 };
 
 
+#define BLE_CONNECTION_NAME INTERVAL_MANUFACTURER
+BLEMIDI_CREATE_INSTANCE(BLE_CONNECTION_NAME, bleMIDI);
+
 #define BLEMIDI_INTERFACE "BLEMIDI"
 class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
   #define CONFIG_BLE "voidBLEparam" 
@@ -38,6 +146,7 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
 
     BLEMIDIInterface(bool _configurable):DeviceInterface(BLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_BLEMIDI;
+      handleDisconnected();
     }
 
     String getFilename(){
@@ -52,12 +161,52 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
       return &emptyString;
     }
 
-    virtual void monitor(){}
+    DeviceInterface* getDevice() override { return this; }
 
-    virtual void* read(){return nullptr;}
+    virtual void monitor(){
+      if (state.label == IF_STATE_CONNECTED) 
+        bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
+    }
 
-    virtual bool derivedBegin(){      
+    virtual bool derivedBegin(){    
+      init();  
+      bleInstancePtr = this;   // do not forget otherwise callback function will crash
+
+      BLEbleMIDI.setHandleConnected(handleConnectedStatic);
+      BLEbleMIDI.setHandleDisconnected(handleDisconnectedStatic);
+      
+      bleMIDI.setHandleSystemExclusive(handleSysexStatic);
+
+      bleMIDI.begin();
+
       return true;
+    }
+
+    void handleConnected() {
+      DEBUG_PRINT("\nBLEMidi connected\n");
+      state.code = IF_READY;
+      state.label = IF_STATE_CONNECTED;
+      state.details = ""; //String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
+    }    
+
+    void handleDisconnected() {
+      DEBUG_PRINT("\nBLEMidi disconnected\n");
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_PENDING;
+      state.subLabel =  BLE_CONNECTION_NAME;
+      state.details = "connectBT";  
+    }
+
+    static void handleConnectedStatic() {
+        if (bleInstancePtr) {
+            bleInstancePtr->handleConnected();
+        }
+    }
+
+    static void handleDisconnectedStatic() {
+        if (bleInstancePtr) {
+            bleInstancePtr->handleDisconnected();
+        }
     }
 
     virtual bool end(){
@@ -80,14 +229,16 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
       DEBUG_PRINT("\nBLEMIDIInterface::sendSysex(%i) ",inLength);
-      return false;
+      if (state.code == IF_READY) bleMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);
+      else return false;
+      return true; 
     }
 
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};
-    virtual void handleSysex(byte* data, unsigned length){}
-    virtual void handleChangeControl(byte channel, byte number, byte value){}
 
+  private:
+    static inline BLEMIDIInterface* bleInstancePtr = nullptr;    
 
 };
 
@@ -105,6 +256,8 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
       return USBMIDI_INTERFACE"_if.cfg";
     }
 
+    DeviceInterface* getDevice() override { return this; }
+
     virtual void monitor(){
       if (useUSBMidi){  // only if USB is active
         if (hwm.battery.refreshed){
@@ -119,7 +272,7 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
             state.details = "";
           }
         }
-        MIDI.read();
+        usbMIDI.read();
       }
     }
 
@@ -136,11 +289,10 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
       return changed;
     }      
 
-    virtual void* read(){return nullptr;}
-
     virtual bool derivedBegin(){
+      init();
       state.subLabel = "";
-      MIDI.setHandleSystemExclusive(handleSysexStatic);
+      usbMIDI.setHandleSystemExclusive(handleSysexStatic);
       // if the fooswtich has started in FW update or debug mode, USB MIDI is not active, hence we set the status once for all
       if (!useUSBMidi){
         state.code = IF_NOT_READY;
@@ -155,24 +307,20 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
     }     
 
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){      
-      MIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);
+      usbMIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);
       return true;
     }  
 
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-      MIDI.sendNoteOff(inNoteNumber,inVelocity,inChannel);
+      usbMIDI.sendNoteOff(inNoteNumber,inVelocity,inChannel);
       return true;
     }
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){    
       DEBUG_PRINT("\nUSBMIDI::sendSysex(%i) ",inLength);      
-      MIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);
+      usbMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);
       return true;
     }    
-
-    virtual void handleSysex(byte* data, unsigned length){}
-
-    virtual void handleChangeControl(byte channel, byte number, byte value){}
 
 };
 
@@ -207,9 +355,12 @@ class DINMIDIInterface: public MIDIInterface, public DeviceInterface{
       return changed;
     }      
 
-    virtual void* read(){return nullptr;}
+    DeviceInterface* getDevice() override { return this; }
 
-    virtual bool derivedBegin(){return true;}
+    virtual bool derivedBegin(){
+      init();
+      return true;
+    }
 
     virtual bool end(){return false;}     
 
@@ -220,10 +371,7 @@ class DINMIDIInterface: public MIDIInterface, public DeviceInterface{
       DEBUG_PRINT("\nDINMIDI::sendSysex(%i) ",inLength);
       return false;
     }
-
-
-    virtual void handleSysex(byte* data, unsigned length){}
-    virtual void handleChangeControl(byte channel, byte number, byte value){}    
+ 
 
 };
 
@@ -242,25 +390,21 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
     String getFilename(){
       return APPLEMIDI_INTERFACE"_if.cfg";
     }
-    
-    virtual bool begin(){
-      DEBUG_PRINT("\nMIDIInterface::begin()");
-      baseMidi();
-      return  NetworkDevice::begin();;
-    }    
+
+    DeviceInterface* getDevice() override { return this; }
 
     virtual void derivedMonitor(){
       
       if (hwm.network->state == CONNECTED){
-
+        // the read trigger callback like connection, hence it has to be called independantly from being connected or not, only network count
         if (hwm.network->midiClient != nullptr){
           hwm.network->midiClient->read();                        //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time
         }
                 
         if (hwm.network->refreshed) setStatePendingSession();    // network has just connected so we now wait for a session to connect
 
-      }      
-
+      } 
+      
     }
 
     // Méthode de l'instance réellement appelée
@@ -275,16 +419,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       DEBUG_PRINT("\nDisconnected from session\n");
       setStatePendingSession();
     }
-
-    virtual void handleChangeControl(byte channel, byte number, byte value){
-        DEBUG_PRINT("\nhandleChangeControl channel:%i, number:%i value:%i",channel,number,value);
-    }
-
-    virtual void handleSysex(byte* data, unsigned length){
-      DEBUG_PRINT("\nhandleSysex: %c, %i bytes: ",getSysExStatus(data, length),length);
-      for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",data[i]);
-    }
-
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override{                  
       if (state.code == IF_READY) hwm.network->midiClient->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
@@ -320,20 +454,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       return changed;
     }        
 
-    virtual void* read(){return nullptr;}
-
-    char getSysExStatus(const byte* data, uint16_t length)
-    {
-      if (data[0] == 0xF0 && data[length - 1] == 0xF7)
-        return 'F'; // Full SysEx Command
-      else if (data[0] == 0xF0 && data[length - 1] != 0xF7)
-        return 'S'; // Start of SysEx-Segment
-      else if (data[0] != 0xF0 && data[length - 1] != 0xF7)
-        return 'M'; // Middle of SysEx-Segment
-      else
-        return 'E'; // End of SysEx-Segment
-    }    
-
     static void handleConnectedStatic(const ssrc_t& ssrc, const char* name) {
         if (appleInstancePtr) {
             appleInstancePtr->handleConnected(ssrc, name);
@@ -351,12 +471,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
             appleInstancePtr->OnAppleMidiException(ssrc,e,value);
         }      
     }    
-
-    static void handleChangeControlStatic(byte channel, byte number, byte value){
-        if (appleInstancePtr) {
-            appleInstancePtr->handleChangeControl(channel,number,value);
-        }      
-    }
 
     void OnAppleMidiException(const ssrc_t& ssrc, const Exception& e, const int32_t value ) {
       switch (e){
@@ -413,6 +527,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
 
     virtual bool derivedBegin(){      
       //DEBUG_PRINT("\tAppleMIDIInterface::derivedBegin()");
+      init();
       appleInstancePtr = this;   // do not forget otherwise callback function will crash
       return disconnect();      
     }

@@ -30,6 +30,9 @@ class DeviceInterface {
     bool previousOffline = false;
 
     String interfaceName; 
+    
+    int dataAvailable;
+    void* data;
 
     bool exposed = true;
 
@@ -159,7 +162,7 @@ class DeviceInterface {
       state.stateChanged = false;
 
       // reset the flag so strips will not be updated and re-processed already consummed data
-      dataAvailable = false;
+      dataAvailable = 0;
 
       // report if state has changed
       if (state.label != previousStateLabel){
@@ -183,7 +186,7 @@ class DeviceInterface {
       return state.stateChanged;
     }
 
-    bool available(){ // called by strip 
+    int available(){ // called by strip 
       return dataAvailable; 
     }
 
@@ -248,6 +251,10 @@ class DeviceInterface {
 
     }
 
+    void* read(){
+      return data;
+    }
+
     virtual bool derivedBegin() = 0;
 
     virtual bool begin(){
@@ -261,27 +268,16 @@ class DeviceInterface {
 
     virtual bool restore(const JsonObject& config) = 0;  
     virtual void derivedConfig(JsonObject& config) = 0;  
-    virtual void monitor() = 0; // => manage internal state and set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
-    virtual void* read() = 0; // called by strip 
+    // monitor manage internal state and set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
+    // do not need to care about offline state as it is managed by update method
+    virtual void monitor() = 0; 
+    
     virtual bool end() = 0;     
     virtual String getFilename() = 0;
 
-  protected:
-
-    bool dataAvailable;
-
-
 };
 
-class NetworkInterface{
-
-  public:
-    virtual bool connect() = 0;
-    virtual bool disconnect() = 0;
-};
-
-
-class NetworkDevice : public NetworkInterface , public DeviceInterface{
+class NetworkDevice : public DeviceInterface{
 
   public:
     
@@ -290,6 +286,8 @@ class NetworkDevice : public NetworkInterface , public DeviceInterface{
     }
 
     virtual void derivedMonitor() = 0;
+    virtual bool connect() = 0;
+    virtual bool disconnect() = 0;    
     
     void notReady(){
       state.code = IF_NOT_READY;

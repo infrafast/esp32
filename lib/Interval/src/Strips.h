@@ -238,7 +238,7 @@ class Strip {
     // is called from the focus() method so to force data to be updated in case some whre missed
     virtual const String* getTopLabel()=0;
     virtual const char* getBottomLabel()=0;
-    virtual void update() = 0;  // // this code is called by process()
+    virtual void update() = 0;  // // this code is called by process() if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure
     // it assign the GUI values the values that were acquired or processed in the process() method
     // basedon its internal state, it will set the redraw flag 
     
@@ -247,7 +247,7 @@ class Strip {
     // some strip may do some backgroud tasks (like playing sample or executing a macro), other will only do this if they have focus         
       redraw = false;
       if (interface->state.stateChanged) redraw = true;
-      if (interface->available()) update();
+      if (interface->available()) update();   //update is called if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure
       return redraw;      
     }; 
 

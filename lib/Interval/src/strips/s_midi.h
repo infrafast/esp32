@@ -300,7 +300,7 @@ Strip* midiNoteStripConstructorCallback(){
   return new MidiNoteStrip(midiNoteSkel);
 }
 
-class SysexStrip : public Strip{
+class SysexStrip : public Strip{  // should inherit from MidiStrip before so methode like data read castng are common
   #define STRIP_SYSEX "Sysex"
   #define SYSEX_MAX_KEY_LENGTH 64
   #define SYSEX_MAX_MESSAGE_LENGTH 256
@@ -346,8 +346,13 @@ class SysexStrip : public Strip{
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
 
-    virtual void update(){ // this code is called by process()
+    virtual void update(){
+      ////update is called if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure
+      MidiData* midiData = static_cast<MidiData*>(interface->read()); // WARNING CAREFULLY TEST IF POLYMORPHISM WORKS
+      // check if the data is for me
+      if (midiData->type == MIDI_SYSEX){
 
+      }
     }  
 
     virtual void queryInterface(){ // this code is called by focus() to send a command that will be executed, 
