@@ -206,7 +206,7 @@ class StripHeaderWidget: public Top2Toggles{
       topFcolor = strip->frontColor;
   
       bottomReverse = strip->toggle2;
-      bottomLabel = *strip->getBottomLabel();
+      bottomLabel = String(strip->getBottomLabel());
       topBcolor = strip->backColor;      
     }    
 };

@@ -263,34 +263,45 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
 
     }
 
+    // Méthode de l'instance réellement appelée
+    void handleConnected(const ssrc_t& ssrc, const char* name) {
+      DEBUG_PRINT("\nConnected to session: %s\n", name);
+      state.code = IF_READY;
+      state.label = IF_STATE_CONNECTED;
+      state.details = String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
+    }    
+
+    void handleDisconnected(const ssrc_t& ssrc) {
+      DEBUG_PRINT("\nDisconnected from session\n");
+      setStatePendingSession();
+    }
+
+    virtual void handleChangeControl(byte channel, byte number, byte value){
+        DEBUG_PRINT("\nhandleChangeControl channel:%i, number:%i value:%i",channel,number,value);
+    }
+
+    virtual void handleSysex(byte* data, unsigned length){
+      DEBUG_PRINT("\nhandleSysex: %c, %i bytes: ",getSysExStatus(data, length),length);
+      for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",data[i]);
+    }
+
+
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override{                  
-      DEBUG_PRINT("\n[%p] sendSysEx(derived)(%i)", this, inLength);
       if (state.code == IF_READY) hwm.network->midiClient->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
       else return false;
       return true; 
     }
     
-    char getSysExStatus(const byte* data, uint16_t length)
-    {
-      if (data[0] == 0xF0 && data[length - 1] == 0xF7)
-        return 'F'; // Full SysEx Command
-      else if (data[0] == 0xF0 && data[length - 1] != 0xF7)
-        return 'S'; // Start of SysEx-Segment
-      else if (data[0] != 0xF0 && data[length - 1] != 0xF7)
-        return 'M'; // Middle of SysEx-Segment
-      else
-        return 'E'; // End of SysEx-Segment
-    }
 
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-      if (hwm.network->midiClient != nullptr) hwm.network->midiClient->sendNoteOn(inNoteNumber,inVelocity, inChannel);
+      if (state.code == IF_READY) hwm.network->midiClient->sendNoteOn(inNoteNumber,inVelocity, inChannel);
       else return false;
       return true;       
         
     };
 
-    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){        
-      if (hwm.network->midiClient != nullptr) hwm.network->midiClient->sendNoteOff(inNoteNumber,inVelocity, inChannel);
+    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){     
+      if (state.code == IF_READY) hwm.network->midiClient->sendNoteOff(inNoteNumber,inVelocity, inChannel);
       else return false;
       return true;       
 
@@ -311,6 +322,17 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
 
     virtual void* read(){return nullptr;}
 
+    char getSysExStatus(const byte* data, uint16_t length)
+    {
+      if (data[0] == 0xF0 && data[length - 1] == 0xF7)
+        return 'F'; // Full SysEx Command
+      else if (data[0] == 0xF0 && data[length - 1] != 0xF7)
+        return 'S'; // Start of SysEx-Segment
+      else if (data[0] != 0xF0 && data[length - 1] != 0xF7)
+        return 'M'; // Middle of SysEx-Segment
+      else
+        return 'E'; // End of SysEx-Segment
+    }    
 
     static void handleConnectedStatic(const ssrc_t& ssrc, const char* name) {
         if (appleInstancePtr) {
@@ -379,28 +401,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
           break;
       }
     }    
-
-    // Méthode de l'instance réellement appelée
-    void handleConnected(const ssrc_t& ssrc, const char* name) {
-      DEBUG_PRINT("\nConnected to session: %s\n", name);
-      state.code = IF_READY;
-      state.label = IF_STATE_CONNECTED;
-      state.details = String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
-    }    
-
-    void handleDisconnected(const ssrc_t& ssrc) {
-      DEBUG_PRINT("\nDisconnected from session\n");
-      setStatePendingSession();
-    }
-
-    virtual void handleChangeControl(byte channel, byte number, byte value){
-        DEBUG_PRINT("\nhandleChangeControl channel:%i, number:%i value:%i",channel,number,value);
-    }
-
-    void handleSysex(byte* data, unsigned length){
-      DEBUG_PRINT("\nhandleSysex: %c, %i bytes: ",getSysExStatus(data, length),length);
-      for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",data[i]);
-    }
 
 
     void setStatePendingSession(){

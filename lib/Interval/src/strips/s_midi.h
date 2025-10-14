@@ -289,7 +289,7 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
           DEBUG_PRINT("\n%s invalid interface",type.c_str());
         }
       }
-      return false;
+      return success;
     }    
 
     
@@ -395,7 +395,7 @@ class SysexStrip : public Strip{
         }
         //Log::drop(interface->interfaceName.c_str(), (const char*)buffer);  // => for SOME REASON THIS CREATE A DISCONNECTION OF WEBSOCKET...MAYBE THE GENERATED FRAME IS INCORRECT?
       } else {
-        String err = String("Invalid sysex: ") + sysexMessage; // garder l'objet en vie
+        String err = String("Invalid sysex: ") + sysexMessage; 
         Log::drop(interface->interfaceName.c_str(), err.c_str());
       }
 

@@ -106,15 +106,17 @@ public:
   }
   /////////////////////////
   void sendNoteOn(byte note, byte velocity, byte channel) override {
+    DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sendNoteOn(%d,%d,%d)",note, velocity, channel);
     midi->sendNoteOn(note, velocity, channel);
   }
 
   void sendNoteOff(byte note, byte velocity, byte channel) override {
+    DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sendNoteOff(%d,%d,%d)",note, velocity, channel);
     midi->sendNoteOff(note, velocity, channel);    
   }
 
   void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
-    DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sensSysex ");
+    DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sendSysex ");
     midi->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
     for (uint16_t i = 0; i < inLength; i++) DEBUG_PRINT("%02X ",inArray[i]);    
   }
