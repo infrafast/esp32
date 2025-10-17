@@ -280,11 +280,13 @@ public:
 // Base class
 // #########################################################################
 class Widget : public GUI{
+  
   public:
     uint16_t width=1;
     uint16_t height=1; 
     TFT_eSprite* sprite = nullptr;    
     const float* brightness = &GUI::fullBrightness;
+    const uint16_t *fColor = nullptr, *bColor = nullptr;
     float oldBrightness = 0;
     int16_t angle = 0;
 
@@ -348,8 +350,7 @@ class Widget : public GUI{
 
   private:    
 
-  protected:    
-    const uint16_t *fColor = nullptr, *bColor = nullptr;
+  protected:        
     const int16_t *x = nullptr ,*y = nullptr;
     int16_t oldX=-1,oldY=-1;
     uint16_t oldfColor, oldbColor;
@@ -1072,6 +1073,7 @@ class RingMeter : public Arc{
 class Toggle : public Widget{
   public:
     const bool* revert;
+    const String* text;
 
     Toggle(const String* v, const int16_t* posX, const int16_t* posY, uint8_t h, const bool* p, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness, bool d=true):Widget(posX, posY, fC, bC, _brightness,d){
       width = TFT_WIDTH;
@@ -1088,9 +1090,10 @@ class Toggle : public Widget{
 
         uint16_t fillColor, textColor;
 
-        if (debug) DEBUG_PRINT("\n%s refreshed(%s,%d) force:%i",id.c_str(),*text, *revert,force);
+        if (debug) 
+          DEBUG_PRINT("\n%s refreshed(%s,%d) force:%i",id.c_str(),*text, *revert,force);
 
-        if(*revert == false) {
+        if(*revert) {
           //DEBUG_PRINT("\nFlip");
           fillColor    = TFT_RED;
           textColor    = TFT_WHITE;
@@ -1098,13 +1101,12 @@ class Toggle : public Widget{
           //DEBUG_PRINT("\nFlop");
           fillColor    = GUI::defaultBcolor;
           textColor    = *fColor;
-        }
-
-        
+        }      
 
         createSprite(GUI::defaultBcolor);        
 
         sprite->fillSmoothRoundRect(0,0 , width, height, height/5, GUI::luminance(fillColor,*brightness * GUI::screenBrightness * 255));
+        
         uint16_t color = *bColor;
         if (!*revert) sprite->drawRoundRect(0,0, width, height, height/5, GUI::luminance(color,*brightness * GUI::screenBrightness * 255));
 
@@ -1124,8 +1126,7 @@ class Toggle : public Widget{
     }
 
   private:    
-    bool oldRevert;
-    const String* text;
+    bool oldRevert;    
     String oldText;
 
 };
@@ -1435,12 +1436,9 @@ class Top2Toggles : public CompositeWidget {
   public:
     Top2Toggles(const String* topLabel, const String* bottomLabel, const bool* topReverse = &GUI::off, const bool* bottomReverse = &GUI::off, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint16_t *fC2 = &GUI::defaultFcolor, const uint16_t *bC2 = &GUI::silver, const float* _brightness = &GUI::fullBrightness,bool debug=false) : CompositeWidget(&GUI::zero,&GUI::zero,fC, bC, _brightness,debug){
       id = "Top2Toggles";
-
-      topString = topLabel; bottomString = bottomLabel; fColor2 = fC2;
-      topBool = topReverse; bottomBool = bottomReverse; bColor2 =bC2;
-       
-      topToggle = new Toggle(topString,&GUI::zero,&GUI::un,TOP2WIDGET_SIZE,topBool,fColor,bColor, brightness, debug);        
-      bottomToggle = new Toggle(bottomString,&GUI::zero,&GUI::y1,TOP2WIDGET_SIZE,bottomBool,fColor2, bColor2, brightness, debug);        
+      
+      topToggle = new Toggle(topLabel,&GUI::zero,&GUI::un,TOP2WIDGET_SIZE,topReverse,fC,bC, brightness, debug);        
+      bottomToggle = new Toggle(bottomLabel,&GUI::zero,&GUI::y1,TOP2WIDGET_SIZE,bottomReverse,fC2, bC2, brightness, debug);        
       
       guiList.add(topToggle);
       guiList.add(bottomToggle);         
@@ -1449,14 +1447,28 @@ class Top2Toggles : public CompositeWidget {
       height = topToggle->height + bottomToggle->height + 1;    // HEIGHT = SUM OF ALL WIDGET HEIGHT + 1 pixel in between
  
     }    
- 
+    
+    void setPointers(
+      const String* topString,
+      const String* bottomString,
+      bool* topBool,
+      bool* bottomBool,
+      uint16_t* fColor,
+      uint16_t* bColor
+    )
+    {
+      topToggle->text = topString;
+      topToggle->revert = topBool;
+      topToggle->fColor = fColor;
+      topToggle->bColor = bColor;
+      
+      bottomToggle->text = bottomString;
+      bottomToggle->revert = bottomBool;
+    }    
 
-  private:
-    const String *topString, *bottomString; 
-    const bool *topBool, *bottomBool;
+  protected:
     Toggle *topToggle, *bottomToggle;
 
-    const uint16_t *fColor2, *bColor2;
 };
 
 
@@ -1539,6 +1551,7 @@ const float GUI::fullBrightness = 1.0;
 #define DEFAULT_BRIGHTNESS 0.7
 #define BRIGHTNESS_MAX 1.0
 #define BRIGHTNESS_MIN 0.2
+#define BRIGHTNESS_NOFOCUS 0.5
 float GUI::screenBrightness = DEFAULT_BRIGHTNESS;
 
 uint16_t GUI::widgetInnerColor = GUI::luminance(DARKER_GREY,120);

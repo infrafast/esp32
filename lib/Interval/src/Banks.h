@@ -17,7 +17,7 @@ namespace Interval {
   
     public:
       uint8_t selector=1; 
-      uint8_t oldSelector=0;
+      //uint8_t oldSelector=0;
    
       //uint8_t numberOfStrips = 0;
       //uint8_t maxWindow = 0;
@@ -37,24 +37,18 @@ namespace Interval {
         deserialize(value);
       }
   
-      ~Bank(){
-        for (uint8_t i=0; i<strips.size(); i++){
-          if (strips[i] != nullptr ) delete strips[i];
-        }      
+      ~Bank() {
+        for (auto& s : strips) {
+          delete s;
+          s = nullptr;
+        }
+        strips.clear();
       }
   
-      void resetStripNav(){
-        selector = 1;
-        /*if (strips.size() > 0){   //bank is not empty
-          // find the strip which has the lower index;
-          for (uint8_t i=0;i<strips.size();i++) nav.selector = min(nav.selector,strips[i]->index);  
-          nav.window = strips[nav.selector]->win;
-        }else nav.selector = 1;*/
-      }
   
       void init(){
         //set stripIndex to the first available strip
-        resetStripNav();
+        selector = 1;
       }
   
       /*uint8_t getMaxWindow(){
@@ -145,7 +139,7 @@ namespace Interval {
         if (id>strips.size()) return nullptr;
   
         // retrieve strip at given position
-        
+      
         for (const auto& strip : strips) {
           if (strip->index == id) return strip;
         }
@@ -153,19 +147,16 @@ namespace Interval {
         return nullptr;
       }
   
-      bool trash(Strip* strip){
-        bool success = false;
-        for (uint8_t i=0;i<strips.size();i++){
-          if (strips[i] == strip){
-  
-            //strips.remove(i);
-            strips.erase(std::remove(strips.begin(), strips.end(), strip), strips.end());          
-            delete strip;
-            success = true;
-            break;
+      bool trash(Strip* s) {
+        for (auto it = strips.begin(); it != strips.end(); ++it) {
+          if (*it == s) {
+            delete *it;           // détruire l’objet pointé
+            *it = nullptr;        // sécuriser le pointeur dans le vecteur
+            strips.erase(it);     // retirer l’entrée du vecteur
+            return true;
           }
         }
-        return success;
+        return false;
       }
   
       String serialize(){

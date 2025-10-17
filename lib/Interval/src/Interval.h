@@ -1302,7 +1302,9 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
 
 void switchToBank_item_selected(MenuComponent* p_menu_component){
   //DEBUG_PRINT("\n%s",p_menu_component->get_name());
-  app.jumpToBank(p_menu_component->get_name());
+  uint8_t index;
+  IntervalBank* bank = app.getBank(p_menu_component->get_name(),&index);
+  app.jumpToStrip(bank->selector,bank->name);
 }
 
 void menu_selected(MenuComponent* p_menu_component){
@@ -1431,7 +1433,7 @@ void bankScreenBuilder(uint8_t subScreen){
 
     uint8_t layout = bank->currentLayout;
 
-    Strip* strip = app.focusedStrip;
+    Strip* strip = app.getFocusedStrip();
 
     if (strip != nullptr){
     
@@ -1448,10 +1450,7 @@ void bankScreenBuilder(uint8_t subScreen){
       } 
       
       app.stripHeader = new StripHeaderWidget(strip);      
-      gui.add(app.stripHeader);      
-          
-      app.focus(strip,bank); // give focus to the strip
-      
+      gui.add(app.stripHeader);                    
       
     }else{
       //DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");

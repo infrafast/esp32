@@ -192,7 +192,7 @@ class Strip {
 
     bool toggle1 = false;
     bool toggle2 = false;
-    bool updated = false;
+    //bool updated = false;
     uint16_t frontColor, backColor;    
 
     String iconInterfaceConnect = ICON_FOOTSWITCH;
@@ -214,7 +214,7 @@ class Strip {
 
     //GUIManager* gui;
 
-    float brightness = 1.0;
+    float brightness = BRIGHTNESS_NOFOCUS;
 
     Strip(StripSkeleton* s){
       skeleton = s;
@@ -237,7 +237,7 @@ class Strip {
     // it will usually drop a command to the interface which outcome be lately read by the process() method
     // is called from the focus() method so to force data to be updated in case some whre missed
     virtual const String* getTopLabel()=0;
-    virtual const char* getBottomLabel()=0;
+    virtual const String* getBottomLabel()=0;
     virtual void update() = 0;  // // this code is called by process() if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure
     // it assign the GUI values the values that were acquired or processed in the process() method
     // basedon its internal state, it will set the redraw flag 
@@ -253,12 +253,15 @@ class Strip {
 
 
     void focus(bool f=true){
+      //DEBUG_PRINT("\nStrip(%d)",index);
       if (f){
-        brightness = 1.0;
+        brightness = BRIGHTNESS_MAX;
         // we get the latest data if they are available        
         queryInterface();
+        //DEBUG_PRINT(" has focus");
       }else{
-        brightness = 0.5;
+        brightness = BRIGHTNESS_NOFOCUS;
+        //DEBUG_PRINT(" lost focus");
       }
     }
 
@@ -502,12 +505,8 @@ class Strip {
     }
 
     virtual void composeInterfaceState(uint8_t layout){
-      const String* iconState = &interface->icon; // take the interface icon
-      // unless network is not connected
-      if (hwm.network->state != CONNECTED) iconState = &GUI::iconMixEthWiFi;
-
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
-        addFullScreenTextWithIcon(lang.getString(interface->state.label), lang.getString(interface->state.details), lang.getString(interface->state.subLabel), iconState);        
+        addFullScreenTextWithIcon(lang.getString(interface->state.label), lang.getString(interface->state.details), lang.getString(interface->state.subLabel),interface->getIcon());        
         
         //gui.add (new ProgressBarH(&hwm.network->wiFiConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                             
         //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                                  
@@ -573,7 +572,7 @@ class TwoSelectStrip : public Strip{
     }  
 
     virtual const String* getTopLabel(){return &type;}
-    virtual const char* getBottomLabel(){return select2Content->c_str();}     
+    virtual const String* getBottomLabel(){return select2Content;}     
  
   protected:
     Top1Toggle1Label* topLabels;
@@ -613,7 +612,7 @@ class ThreeSelectStrip: public TwoSelectStrip{
     }  
 
     virtual const String* getTopLabel(){return select2Content;}
-    virtual const char* getBottomLabel(){return select3Content->c_str();}      
+    virtual const String* getBottomLabel(){return select3Content;}      
 
   protected:
     uint8_t select3ID=1; 

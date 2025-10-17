@@ -38,8 +38,6 @@ class DeviceInterface {
 
     String group = "undef"; // used by the strip to define which deviceinterface they can connect
 
-    String icon = ICON_LINK;
-
     virtual const String& getProviderName(){
       return group;
     }
@@ -275,6 +273,13 @@ class DeviceInterface {
     virtual bool end() = 0;     
     virtual String getFilename() = 0;
 
+    virtual const String* getIcon(){
+      return &icon;
+    }
+
+  protected:
+    String icon = ICON_LINK;
+
 };
 
 class NetworkDevice : public DeviceInterface{
@@ -314,6 +319,11 @@ class NetworkDevice : public DeviceInterface{
       }
       derivedMonitor();
     }
+
+    virtual const String* getIcon(){
+      if (hwm.network->state == CONNECTED) return &icon;
+      else return &GUI::iconMixEthWiFi;
+    }    
 };
 
 class InterfaceRepository{

@@ -409,7 +409,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
     }
 
     virtual void serializeProperties(){
-      char* buf = (char*)malloc((strlen(ADDRESS_SYSEX)+strlen(sysexKey))*sizeof(char*)+1);
+      char* buf = (char*)malloc((strlen(ADDRESS_SYSEX)+sysexKey.length())*sizeof(char*)+1);
       sprintf(buf,ADDRESS_SYSEX,sysexKey);
       properties.add(String(buf)); //force la copie
       DEBUG_PRINT("\nserializeProperties: %s",buf);
@@ -417,19 +417,21 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
     }
 
     virtual void deserializeProperty(String property){
-      if (sscanf(property.c_str(), ADDRESS_SYSEX, &sysexKey)){
-        DEBUG_PRINT("\ndeserializeProperty: %s = %s",property.c_str(),sysexKey);
+      char sysexKeyBuf[SYSEX_MAX_KEY_LENGTH];
+      if (sscanf(property.c_str(), ADDRESS_SYSEX, &sysexKeyBuf)){
+        sysexKey = sysexKeyBuf;
+        DEBUG_PRINT("\ndeserializeProperty: %s = %s",property.c_str(),sysexKey.c_str());
         sysexMessage = *dsSysexMessages->getString(sysexKey,"undef sysex");         // return the value corresponding to the key from the jsonfile library        
       }    
     }
 
     virtual const String* getTopLabel(){return &type;}
-    virtual const char* getBottomLabel(){return sysexKey;}      
+    virtual const String* getBottomLabel(){return &sysexKey;}      
        
   protected:
     String unitString = "dB";
     String sysexMessage="";
-    char sysexKey[SYSEX_MAX_KEY_LENGTH];
+    String sysexKey ="";
 
 };
 
