@@ -1353,14 +1353,14 @@ void bankOverlayBuilder(uint8_t BankIndex){
   //we do not display the bankNavigator if user deactivate the bank screen display
   if (app.disabledBankRendering == true) return;
 
-  Interval::Bank* bank = app.banks.get(BankIndex);
+  Interval::Bank* bank = app.banks[BankIndex];
   if (bank != nullptr){
     //DEBUG_PRINT("\n\n\n--------------------------------- bankOverlayBuilder %s ---------------------------------\n\n ",bank->name.c_str());
     uint8_t layout = bank->currentLayout;
     BankNavigator* navBar = new BankNavigator(layout,bank,true);   
     gui.add(navBar);
   }else{
-    //DEBUG_PRINT("\nbankOverlayBuilder NULL BANK");
+    DEBUG_PRINT("\nbankOverlayBuilder NULL BANK");
   }
 }
 
@@ -1422,42 +1422,36 @@ void bankScreenBuilder(uint8_t subScreen){
   GUI::defaultBcolor = TFT_BGCOLOR;
   GUI::defaultFcolor = TFT_FCOLOR;
   GUI::cls();
-
-  /*app.,SCREEN_BANK);
-  app.persistants.putUChar(PERSISTANT_SCREEN_STATE,subScreen);*/
-    
-  Interval::Bank* bank = app.banks.get(subScreen);
-  //DEBUG_PRINT("\n\n\n---------------------------------bankScreenBuilder ");
+  
+  Interval::Bank* bank = app.banks[subScreen];
+  DEBUG_PRINT("\n\n\n---------------------------------bankScreenBuilder ");
 
   if (bank != nullptr){
-
-    uint8_t layout = bank->currentLayout;
 
     Strip* strip = app.getFocusedStrip();
 
     if (strip != nullptr){
     
-      if (layout == LAYOUT_ZOOM){
-        //DEBUG_PRINT("\naffiche uniquement un strip qui est celui selectionné avec focus dessus");
-        strip->pushToGUI(LAYOUT_ZOOM);    
-      }else{
-        for (const auto& winstrip : bank->strips) {
-          //DEBUG_PRINT("\naffiche tous les strips de la fenetre courante");
-          if (winstrip->win == strip->win){            
-            winstrip->pushToGUI(LAYOUT_DETAILS);
-          }
+      for (const auto& winstrip : bank->strips) {
+        if (bank->currentLayout == LAYOUT_DETAILS){        
+          // affiche les strips de la fentre courant et les rends "visible"
+          if (winstrip->win == strip->win) winstrip->pushToGUI(LAYOUT_DETAILS);
+        }else{
+          // ou uniquement un strip
+          if (winstrip->index == strip->index) winstrip->pushToGUI(LAYOUT_ZOOM);          
+          else winstrip->visible = false;
         }
-      } 
-      
+      }
+        
       app.stripHeader = new StripHeaderWidget(strip);      
-      gui.add(app.stripHeader);                    
+      gui.add(app.stripHeader);            
       
     }else{
-      //DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
+      DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
       gui.add(new TextArea(lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
     }
   }else{
-      //DEBUG_PRINT("\nNO BANK");
+      DEBUG_PRINT("\nNO BANK");
       gui.add(new TextArea(lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&midScreenHoriz,&tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   }
   
@@ -1476,7 +1470,7 @@ void addFullScreenTextWithIcon(const String* topLabel, const String* midText, co
   }
 
   gui.add(new Icon(icon,Align::Center,&iconX, &iconY,MODAL_SCREEN_ICON_SIZE,&iconInterfaceColor,&GUI::defaultBcolor));   
-  gui.add(new Label(bottomLabel, Align::Center,&midScreenHoriz, &bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));    
+  gui.add(new Label(bottomLabel, Align::Center,&midScreenHoriz, &bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,48, &GUI::gold,&GUI::defaultBcolor));    
 
   // move text below into composeInterfaceState
   gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&midScreenHoriz, &belowBottomTexty,TOGGLE_ONFFLINE_TEXT_SIZE,40,&GUI::green,&GUI::defaultBcolor));    

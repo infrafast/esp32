@@ -45,7 +45,17 @@ namespace Interval {
         strips.clear();
       }
   
-  
+      bool update(){
+        bool redraw = false;
+        for (const auto& strip : strips) {         
+          // we ask each strip of the bank to process itself
+          // it's up to him to determine if he refreshes it's internal data
+          // some may only do that if they are visible        
+          if (strip->process() && strip->visible) redraw = true;
+        }
+        return redraw;
+      }
+
       void init(){
         //set stripIndex to the first available strip
         selector = 1;

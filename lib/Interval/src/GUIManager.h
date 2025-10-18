@@ -219,21 +219,56 @@ class GUIManager : public GenericComponent {
           if (sprite != nullptr){
             // when using transparency, widget sprite are pushed to the screen buffer instead of the screen directly
             
-            if (widget->angle == 0){
-              // no rotation, push the sprite at widget requested x and y location
-              if (transparency) sprite->pushToSprite(&screenBuffer,widget->getX(),widget->getY(),TFT_BGCOLOR);
-              else sprite->pushSprite(widget->getX(),widget->getY(),TFT_TRANSPARENT);              
-            }else{
-              sprite->setPivot(0,0);              
-              if (transparency){
-                // this code was not tested and need to be reviewed
-                screenBuffer.setPivot(widget->getX(),widget->getY());
-                sprite->pushRotated(&screenBuffer,widget->angle,TFT_BGCOLOR);
-              }else{
-                GUI::tft->setPivot(widget->getX(),widget->getY());
-                sprite->pushRotated(widget->angle,TFT_TRANSPARENT);
+            if (widget->angle == 0) {
+              // Pas de rotation → affichage direct (x,y = coin haut-gauche)
+              if (transparency)
+                sprite->pushToSprite(&screenBuffer, widget->getX(), widget->getY(), TFT_BGCOLOR);
+              else
+                sprite->pushSprite(widget->getX(), widget->getY(), TFT_TRANSPARENT);
+
+            } else {
+              // Rotation → sprite intermédiaire 16 bits, pivot centré
+              const int w = sprite->width();
+              const int h = sprite->height();
+              const float a = deg2rad((float)widget->angle);
+
+              const float ca = cosf(a);
+              const float sa = sinf(a);
+
+              // Bounding box après rotation (arrondi vers le haut pour éviter la coupe de bords)
+              const int rotW = (int)ceilf(fabsf(w * ca) + fabsf(h * sa));
+              const int rotH = (int)ceilf(fabsf(w * sa) + fabsf(h * ca));
+
+              // Sprite intermédiaire 16 bits
+              TFT_eSprite rotatedSprite(GUI::tft);
+              rotatedSprite.setColorDepth(16);
+              rotatedSprite.createSprite(rotW, rotH);
+              rotatedSprite.fillSprite(TFT_TRANSPARENT);
+
+              // Pivots centrés
+              sprite->setPivot(w / 2, h / 2);
+              rotatedSprite.setPivot(rotW / 2, rotH / 2);
+
+              // Rotation : on pousse "sprite" dans "rotatedSprite"
+              sprite->pushRotated(&rotatedSprite, widget->angle, TFT_TRANSPARENT);
+
+              // Destination : widget->getX()/getY() est le PIVOT (centre à l’écran/buffer)
+              const int dstX = widget->getX() - rotW / 2;
+              const int dstY = widget->getY() - rotH / 2;
+
+              if (transparency) {
+                // Vers screenBuffer (coin haut-gauche calculé)
+                rotatedSprite.pushToSprite(&screenBuffer, dstX, dstY, TFT_BGCOLOR);
+              } else {
+                // Directement vers l’écran
+                rotatedSprite.pushSprite(dstX, dstY, TFT_TRANSPARENT);
               }
+
+              rotatedSprite.deleteSprite(); // libère la RAM
             }
+
+
+            
             delete sprite;        
             widget->sprite = nullptr;            
           }
@@ -278,6 +313,8 @@ class GUIManager : public GenericComponent {
 
       return refreshed;
     }
+
+    float deg2rad(float deg) { return deg * 0.017453292519943295f; }
 
     uint16_t getSinVal(uint16_t range){
       return sin( (float)sinI * 6.28 / 360.0) * (range/2) + range/2;  

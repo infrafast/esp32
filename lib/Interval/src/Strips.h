@@ -202,6 +202,8 @@ class Strip {
     String interfaceName = SYSTEM_INTERFACE; //
     DeviceInterface* interface = nullptr;
 
+    bool visible = false;
+
     // logical position
     uint8_t x, y, win, index;
     
@@ -245,8 +247,7 @@ class Strip {
     virtual bool process(){ // this code is requesting the strip to update its state (values, etc...) using data from the interface (with read())
     // process() is called from main app on all strip: the strip decide then if he has to do the query (for instance if it is focused) as       
     // some strip may do some backgroud tasks (like playing sample or executing a macro), other will only do this if they have focus         
-      redraw = false;
-      if (interface->state.stateChanged) redraw = true;
+      redraw = interface->state.stateChanged;
       if (interface->available()) update();   //update is called if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure
       return redraw;      
     }; 
@@ -259,6 +260,7 @@ class Strip {
         // we get the latest data if they are available        
         queryInterface();
         //DEBUG_PRINT(" has focus");
+        visible = true;
       }else{
         brightness = BRIGHTNESS_NOFOCUS;
         //DEBUG_PRINT(" lost focus");
@@ -441,6 +443,8 @@ class Strip {
 
     virtual void pushToGUI(uint8_t layout){
       
+      visible == true;
+
       renderError = false;
 
       frontColor = colorMap[colorID].fColor;
