@@ -3,7 +3,7 @@
 
 #include "Interval.h"
 
-#define C_CURRENTLAYOUT     "currentLayout"
+#define C_CURRENTLAYOUT     "layout"
 #define C_POSSIBLELAYOUT    "possibleLayout"
 #define C_BANKS             "banks"
   #define C_STRIPS          "strips" 
@@ -25,7 +25,7 @@ namespace Interval {
       String name;
       unsigned char icon=' ';
   
-      uint8_t currentLayout;
+      uint8_t layout = LAYOUT_DETAILS;
       
       //LinkedList<Strip*> strips;
       std::vector<Strip*> strips; // Vecteur de strips
@@ -82,9 +82,8 @@ namespace Interval {
   
         }else{
   
-          currentLayout = bank[C_CURRENTLAYOUT];
-          icon = bank[C_ICON].as<unsigned char>();
-          
+          layout = LAYOUT_DETAILS; //bank[C_CURRENTLAYOUT];
+          icon = bank[C_ICON].as<unsigned char>();          
   
           JsonArray stripArray = bank[C_STRIPS];
           for (int i=0; i<stripArray.size() && i<BANK_MAX_STRIPS; i++){        
@@ -145,15 +144,22 @@ namespace Interval {
       }
   
       Strip* getStrip(uint8_t id){
-  
-        if (id>strips.size()) return nullptr;
+        //DEBUG_PRINT("\n%s:getStrip(%d)=>",name.c_str(),id); 
+        if (id>strips.size()){
+          //DEBUG_PRINT("nullptr"); 
+          return nullptr;
+        }
   
         // retrieve strip at given position
       
         for (const auto& strip : strips) {
-          if (strip->index == id) return strip;
+          if (strip->index == id){
+            //DEBUG_PRINT("%p",strip); 
+            return strip;
+          }
         }
-  
+        
+        //DEBUG_PRINT("nullptr"); 
         return nullptr;
       }
   
@@ -173,7 +179,7 @@ namespace Interval {
         //DynamicJsonDocument doc(JSON_STRIP_TEMPLATE_SIZE*BANK_MAX_STRIPS);   
         JsonDocument doc;
   
-        doc[C_CURRENTLAYOUT] = currentLayout;
+        doc[C_CURRENTLAYOUT] = layout;
         doc[C_ICON] = icon;
   
         //JsonArray jsonStrips = doc.createNestedArray(C_STRIPS);            
@@ -200,15 +206,26 @@ namespace Interval {
 
 using IntervalBank = Interval::Bank;  
 
+// Define UI sizes
+#define NAV_HEIGHT OVERLAY_ICON_SIZE
+#define WIN_WIDTH (OVERLAY_ICON_SIZE * 1.6)
+#define YPADDING 1
+#define XPADDING 2
+#define SPACE_BETWEEN_WIN  3
+#define NAV_WIDTH ((WIN_WIDTH * BANK_MAXWINDOW) + (SPACE_BETWEEN_WIN * BANK_MAXWINDOW))
+#define CELL_WIDTH (WIN_WIDTH / STRIP_PER_WINDOW)
+#define CELL_HEIGHT (NAV_HEIGHT / STRIP_PER_WINDOW)
+#define CANVA_VS_BANKNAME_SPACE 2
+
 class BankNavigator: public Widget{
   //#define BANK_NAME_SIZE TFT_WIDTH/15
   public:
+    IntervalBank *bank = nullptr;
 
-    uint8_t layout = LAYOUT_DETAILS;
-
-    BankNavigator(uint8_t _layout, IntervalBank* b/*, LinkedList<Widget*>* w*/, bool debug = false):layout(_layout), bank(b), Widget(&xPos, &yPos, &fC, &bC, &GUI::fullBrightness, debug){      
+    BankNavigator(IntervalBank* b/*, LinkedList<Widget*>* w*/, bool debug = false):bank(b), oldBank(b), Widget(&xPos, &yPos, &fC, &bC, &GUI::fullBrightness, debug){      
       //widgetList = w;
       oldSelector = bank->selector - 1; //this is to force first refresh
+      oldBankName = bank->name;
       width = TFT_WIDTH/2; height = OVERLAY_ICON_SIZE;
       id = "BankNavigator"+String(xPos)+"x"+String(yPos); 
     }
@@ -216,36 +233,40 @@ class BankNavigator: public Widget{
     virtual bool refresh(bool force = false) {
       refreshed = force;
       Widget::refresh(force);
-
-      if (bank == nullptr) return false;
-
+          
       // Check if an update is needed
-      bool bankChanged = (bank->selector != oldSelector) || 
-                        (bank->strips.size() != oldNumberOfStrips) || 
-                        (id != bank->name) || refreshed;
+      if (oldBank != bank){
+        oldBank = bank;
+        refreshed = true;
+      }else{
+        refreshed = (bank->selector != oldSelector) || 
+                    (bank->strips.size() != oldNumberOfStrips) ||
+                    (bank->name != oldBankName);
+      }
 
-      if (!bankChanged) return false;
+      if (!refreshed) return false;
 
-      refreshed = true;
+      Canva* canva;
+
+      if (refreshed && bank == nullptr){
+        DEBUG_PRINT("\nCreating an empty BankNavigator");
+        width = NAV_WIDTH; height = NAV_HEIGHT;
+        Canva* canva = new Canva(&GUI::zero, &GUI::zero, width, height, &GUI::defaultBcolor, &GUI::defaultBcolor);
+        canva->refresh();
+        createSprite();
+        canva->sprite->pushToSprite(sprite, 0, 2);
+        delete canva;
+        return refreshed;
+      }
+      
       oldNumberOfStrips = bank->strips.size();
-      id = bank->name;
       oldSelector = bank->selector;
-
-      // Define UI sizes
-      #define NAV_HEIGHT OVERLAY_ICON_SIZE
-      #define WIN_WIDTH (OVERLAY_ICON_SIZE * 1.6)
-      #define YPADDING 1
-      #define XPADDING 2
-      #define SPACE_BETWEEN_WIN  3
-      #define NAV_WIDTH ((WIN_WIDTH * BANK_MAXWINDOW) + (SPACE_BETWEEN_WIN * BANK_MAXWINDOW))
-      #define CELL_WIDTH (WIN_WIDTH / STRIP_PER_WINDOW)
-      #define CELL_HEIGHT (NAV_HEIGHT / STRIP_PER_WINDOW)
-      #define CANVA_VS_BANKNAME_SPACE 2
+      oldBankName = bank->name;
 
       uint16_t navFrameColor = GUI::luminance(GUI::gold, 100);
       
       // Create a canvas for the navigation UI
-      Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &GUI::defaultBcolor, &GUI::defaultBcolor);
+      canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &GUI::defaultBcolor, &GUI::defaultBcolor);
       canva->refresh(true);
 
       // Draw each strip on the navigation UI
@@ -274,7 +295,7 @@ class BankNavigator: public Widget{
       // Clean up dynamically allocated objects
       delete canva;
       delete label;
-
+      DEBUG_PRINT("\nBankNavigator refreshed");
       return refreshed;
     }
 
@@ -292,7 +313,7 @@ class BankNavigator: public Widget{
         Strip* strip = bank->strips[i];
         if (strip == nullptr) continue;
 
-        if (layout == LAYOUT_DETAILS){
+        if (bank->layout == LAYOUT_DETAILS){
           // Calculate strip position
           cellX = (strip->x * CELL_WIDTH) + (strip->win * WIN_WIDTH) + (SPACE_BETWEEN_WIN * strip->win);
           cellY = strip->y * CELL_HEIGHT;
@@ -336,11 +357,12 @@ class BankNavigator: public Widget{
     }
 
   protected:
-    IntervalBank* bank;
+    IntervalBank *oldBank;
     //LinkedList<Widget*>* widgetList;
     uint8_t oldSelector=255;
     int8_t oldNumberOfStrips = 0;    
     uint16_t oldWidth=0;
+    String oldBankName="";
 
     //int16_t xPos = TFT_WIDTH/2, yPos = TFT_HEIGHT-OVERLAY_ICON_SIZE;
     int16_t xPos = OVERLAY_ICON_SIZE*2 , yPos = TFT_HEIGHT-OVERLAY_ICON_SIZE-3;

@@ -12,6 +12,8 @@
 #include "MIDIUSB_shim.h"   // required by USB-MIDI.h
 #include <USB-MIDI.h>     // sysex but do not work
 
+#include "tusb.h"     //tinyUSB for tud_mounted detection
+
 enum{
   MIDI_CC,
   MIDI_SYSEX,
@@ -46,8 +48,7 @@ typedef struct MidiData{
       bool read(){return false;}
   }usbMIDI;
 #else
-  //USBMIDI_CREATE_DEFAULT_INSTANCE();
-  //USBMIDI_CREATE_INSTANCE(0,usbMIDI);
+
   USBMIDI_NAMESPACE::usbMidiTransport usbMIDI2(0);
   MIDI_NAMESPACE::MidiInterface<USBMIDI_NAMESPACE::usbMidiTransport> usbMIDI((USBMIDI_NAMESPACE::usbMidiTransport&)usbMIDI2);
 
@@ -260,7 +261,7 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
 
     virtual void monitor(){
       if (useUSBMidi){  // only if USB is active
-        if (hwm.battery.refreshed){
+        /*if (hwm.battery.refreshed){
           // a better way would be to use callback function from USB.onEvent(...)
           if (hwm.battery.batteryState != BAT_USB_PLUGGED){
             state.code = IF_NOT_READY;
@@ -271,7 +272,21 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
             state.label = IF_STATE_CONNECTED;
             state.details = "";
           }
+        }*/
+
+        if (tud_mounted() && state.code == IF_NOT_READY) {
+          state.code = IF_READY;
+          state.label = IF_STATE_CONNECTED;
+          state.details = "";
         }
+
+        if (!tud_mounted() && state.code == IF_READY) {
+          state.code = IF_NOT_READY;
+          state.label = IF_STATE_DISCONNECTED;
+          state.details = "Plugin USB-MIDI";
+        }
+
+
         usbMIDI.read();
       }
     }

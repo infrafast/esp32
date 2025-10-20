@@ -161,7 +161,7 @@ void handleConfigConnection();  //
 
 class StripHeaderWidget: public Top2Toggles{
   public:    
-
+    Strip* strip = nullptr;
     StripHeaderWidget(Strip* s, bool debug=false): strip(s),
         Top2Toggles(s->getTopLabel(),s->getBottomLabel(),&s->toggle1,&s->toggle2,&s->frontColor,&s->backColor,
                     &GUI::defaultFcolor, &GUI::silver, &GUI::fullBrightness, debug)
@@ -180,6 +180,7 @@ class StripHeaderWidget: public Top2Toggles{
         //strip->updated = false; // we acknowledge the strip change
         oldStrip = strip;
         refreshed = true;
+        setStripPointer(strip);
       }
 
       Top2Toggles::refresh(refreshed);
@@ -187,11 +188,15 @@ class StripHeaderWidget: public Top2Toggles{
       return refreshed;
     }
 
-    void setStrip(Strip* s) {
-      if (s == nullptr) return;
+    void setStripPointer(Strip* s) {
+      //DEBUG_PRINT("\nsetStripPointer(");
+      if (s == nullptr){
+        //DEBUG_PRINT("nullptr)");
+        return;
+      }
       else strip = s;
 
-      Top2Toggles::setPointers(
+      setPointers(
         strip->getTopLabel(),
         strip->getBottomLabel(),
         &strip->toggle1,
@@ -199,11 +204,12 @@ class StripHeaderWidget: public Top2Toggles{
         &strip->frontColor,
         &strip->backColor
       );
+      //DEBUG_PRINT("%p)",strip);
     }
 
   private:    
     Strip* oldStrip = nullptr; 
-    Strip* strip = nullptr;
+  
 
 
 };
@@ -274,7 +280,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     bool disabledBankRendering = false;   // this is to stop rendering the bank
   
-    //Strip* getFocusedStrip() = nullptr;
+    //Strip* getSelectedStrip() = nullptr;
     StripHeaderWidget* stripHeader = nullptr;
 
     int16_t rightScreen = TFT_WIDTH;
@@ -311,6 +317,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
       
     Shortcuts shortcuts;
+    BankNavigator* navBar = nullptr;
 
     ///////////////// INTERFACES ///////////////////
     //OSCInterface osc;
@@ -376,10 +383,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       } 
     }*/
 
-    Strip* getFocusedStrip(){
-      IntervalBank* bank = banks[screen.state];  
-      if (bank == nullptr) return nullptr;  
-      return bank->getStrip(bank->selector);          
+    Strip* getSelectedStrip(){
+     if (screen.state >= banks.size()) return nullptr;
+      IntervalBank* bank = banks[screen.state];
+      if (bank == nullptr) return nullptr;
+      return bank->getStrip(bank->selector);
     }
 
     void internetCallBack(bool* online){
@@ -392,8 +400,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       batIconColor = TFT_GREEN;
       switch(hwm->battery.batteryState){
         case BAT_USB_PLUGGED:          
-          if (useUSBMidi) batIcon = ICON_USBMIDI;       
-          else batIcon = ICON_PLUG; 
+          batIcon = ICON_PLUG; 
         break;
         case BAT_DISCHARGING:
         {
@@ -732,7 +739,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);            
       // we init banks and then go to banks or fail screen
       if (deserializeBanks(bankCfg.getString(C_BANKS)) == nullptr){
-        menuTopText = *lang.getString("IntervalBank creation");
+        menuTopText = *lang.getString("Bank creation");
         menuBottomLabel = emptyString;
         byeIconColor = &GUI::red; byeIcon = &iconForbid;
         screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
@@ -749,9 +756,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
           if (screen.id == SCREEN_BANK){
             // toggle interface offline - online
-            if (getFocusedStrip() != nullptr){
-              if (getFocusedStrip()->interface->state.offline == true) getFocusedStrip()->interface->state.offline = false;
-              else getFocusedStrip()->interface->state.offline = true;
+            if (getSelectedStrip() != nullptr){
+              if (getSelectedStrip()->interface->state.offline == true) getSelectedStrip()->interface->state.offline = false;
+              else getSelectedStrip()->interface->state.offline = true;
             }
           }        
 
@@ -960,7 +967,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           }
         break;
         case SCREEN_BANK:
-          switchBankLayout();
+          if (buttonID == hwm->buttons[MIDDLEB]->getID()) switchBankLayout();
         break;
       }  
     }
@@ -1062,11 +1069,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
 
   void switchBankLayout(){
-    Interval::Bank* bank = banks[screen.state];          
-    if (bank != nullptr){
-      if (bank->currentLayout == LAYOUT_DETAILS) bank->currentLayout = LAYOUT_ZOOM;
-      else bank->currentLayout = LAYOUT_DETAILS;
-    }          
+    if (screen.state < banks.size()){
+      Interval::Bank* bank = banks[screen.state];
+      if (bank != nullptr){
+        if (bank->layout == LAYOUT_DETAILS) bank->layout = LAYOUT_ZOOM;
+        else bank->layout = LAYOUT_DETAILS;
+      }
+    }      
     triggerRedraw();
   }
 
@@ -1103,9 +1112,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     if (banks.size() ==0 ) return "{}";
 
     for (uint8_t i=0; i<banks.size(); i++){
-      //DynamicJsonDocument jsonBank(JSON_BANK_SIZE); 
       JsonDocument jsonBank;
       IntervalBank* bank = banks[i];
+      if (bank == nullptr) continue;      
       String stringBank = bank->serialize();
       DeserializationError error = deserializeJson(jsonBank, stringBank);
       jsonBank.shrinkToFit();
@@ -1224,7 +1233,7 @@ void setup() {
       if (screen.id == SCREEN_WIZARD && screen.state > STATE_WIZARD_USER_STEP4) screen.state = STATE_WIZARD_LANG_STEP1;       
       //DEBUG_PRINT("\t => id=%d / state:%d",screen.id,screen.state);
       // branch the first available strip 
-      //DEBUG_PRINT("\tgetFocusedStrip():%s, id:%i",getFocusedStrip() == nullptr?"null":getFocusedStrip()->getTopLabel()->c_str(),getFocusedStrip() == nullptr?0:getFocusedStrip()->index);
+      //DEBUG_PRINT("\tgetFocusedStrip():%s, id:%i",getSelectedStrip() == nullptr?"null":getSelectedStrip()->getTopLabel()->c_str(),getSelectedStrip() == nullptr?0:getSelectedStrip()->index);
     }
 
     void restoreMenu(){
@@ -1492,7 +1501,7 @@ void setup() {
 
     void triggerRedraw(){
       // this forces the GUI to be rebuild at next refresh
-      //DEBUG_PRINT("\ntriggerRedraw()");
+      DEBUG_PRINT("\ntriggerRedraw()");
       screen.focus = screen.focus - 1;      
     }
 
@@ -1593,8 +1602,8 @@ void setup() {
       // MANAGE BANKS STRIPS
       //
       //------------------      
-      for (const auto& bank : banks) {  
-        if (bank->update() && screen.id == SCREEN_BANK) triggerRedraw();
+      for (const auto& bank : banks) {
+        if (bank != nullptr && bank->update() && screen.id == SCREEN_BANK) triggerRedraw();
       }
 
       //------------------
@@ -2046,35 +2055,39 @@ void setup() {
       Menu const* menu = bankMenu->get_current_menu();
       uint8_t numItem = menu->get_num_components();  
 
-      MenuComponent const* cp_m_comp;
-      cp_m_comp = menu->get_current_component();
-      const char* menuString = cp_m_comp->get_name();
-    
-      uint8_t selection = menu->get_current_component_num();    
-      IntervalBank* bank = banks[selection];      
+      uint8_t selection = menu->get_current_component_num();
+      IntervalBank* bank = (selection < banks.size()) ? banks[selection] : nullptr;      
 
       if (bank != nullptr){
         menuBottomLabel = bank->name;
         menuItemIcon[1] = bank->icon;
 
+        auto iconOrEmpty = [this](uint8_t index) -> String {
+          if (index < banks.size()){
+            IntervalBank* candidate = banks[index];
+            if (candidate != nullptr) return String(candidate->icon);
+          }
+          return String(" ");
+        };
+
         if (selection == numItem-1){ // last item
           // left icon = -1, right icon = first item
-          menuItemIcon[0] = banks[selection-1]->icon;
-          menuItemIcon[2] = banks[0]->icon;
+          menuItemIcon[0] = iconOrEmpty(selection > 0 ? selection-1 : selection);
+          menuItemIcon[2] = iconOrEmpty(0);
         }else if (selection == 0){ // first item
           // left icon = last item, right icon = +1
-          menuItemIcon[0] = banks[numItem-1]->icon;
-          menuItemIcon[2] = banks[selection+1]->icon;
+          menuItemIcon[0] = iconOrEmpty(numItem>0 ? numItem-1 : 0);
+          menuItemIcon[2] = iconOrEmpty(selection+1);
         }else{ // any item in between
           // normal case, we take the -1 and +1 item
-          menuItemIcon[0] = banks[selection-1]->icon;
-          menuItemIcon[2] = banks[selection+1]->icon;
+          menuItemIcon[0] = iconOrEmpty(selection-1);
+          menuItemIcon[2] = iconOrEmpty(selection+1);          
         }  
       }else{
         menuBottomLabel = *lang.getString("No bank");
-        menuItemIcon[1] = ICON_QUIT;        
-        menuItemIcon[0] = " ";        
-        menuItemIcon[2] = " ";        
+        menuItemIcon[0] = " ";
+        menuItemIcon[1] = ICON_QUIT;
+        menuItemIcon[2] = " ";       
       }      
     }
 
@@ -2145,12 +2158,12 @@ void setup() {
     ///////////////////////////////////////////////////////////////////////
     bool stripScroll(uint8_t direction) {
         
+      if (screen.state >= banks.size()) return false;      
+      
       IntervalBank* bank = banks[screen.state];
       
       if (bank == nullptr) return false;
       if (bank->strips.size()<=1) return false; 
-
-      //bank->oldSelector = bank->selector;
 
       uint8_t stripID = bank->selector;
 
@@ -2161,8 +2174,34 @@ void setup() {
         if (stripID == 1) stripID = bank->strips.size();
         else stripID--;
       }
+      
       //DEBUG_PRINT("\t scroll(%i/%i):",stripID,bank->nav.window);
-      return jumpToStrip(stripID,bank->name);
+
+      Strip* targetStrip = bank->getStrip(stripID);
+      if ( targetStrip == nullptr) return false;
+      
+      Strip* currentStrip = getSelectedStrip();
+      currentStrip->focus(false);
+
+      bank->selector = stripID;      
+      targetStrip->focus(true);
+
+      // drop command to query strip state
+      targetStrip->queryInterface();
+
+      //DEBUG_PRINT("\n==> %s %p" ,targetBank->name.c_str(),targetStrip);
+      if (stripHeader != nullptr) stripHeader->strip = targetStrip;
+
+      // Force screen redraw if we changed the window or the bank OR if we are displaying full size strip
+      if (
+          currentStrip->win != targetStrip->win || 
+          targetStrip->size == SHAPE4X4 ||
+          bank->layout == LAYOUT_ZOOM
+      ){
+        triggerRedraw(); // force refresh 
+      }
+      return true;
+
     }
 
 
@@ -2210,6 +2249,7 @@ void setup() {
       DEBUG_PRINT("\nbank->stripIndex:%i changedwindow:%i",bank->stripIndex, changedWindow);*/
 
     bool stripAction(uint8_t trigger) {    
+      if (screen.state >= banks.size()) return false;
       IntervalBank* bank = banks[screen.state];
       if (bank != nullptr){
         Strip* strip = bank->getStrip(bank->selector);
@@ -2220,51 +2260,17 @@ void setup() {
 
     void stripChangeValue(uint8_t direction, unsigned long time, uint8_t trigger){
       
+      if (screen.state >= banks.size()) return;           
       IntervalBank* bank = banks[screen.state];    
       if (bank == nullptr) return;
-
-      if (direction == hwm->buttons[RIGHTB]->getID()){ bank->getStrip(bank->selector)->increaseCallback(time, trigger);}      
-      else if (direction == hwm->buttons[LEFTB]->getID()){ bank->getStrip(bank->selector)->decreaseCallback(time, trigger);}      
-
-    }
-
-    bool jumpToStrip(uint8_t id, const String& bankName) {
-      // memorize where we are before jumping so we know if we have to do a full refresh
-      Strip* oldStrip = getFocusedStrip();
-      IntervalBank* oldBank = banks[screen.state];        
-
-      uint8_t targetBankIndex = 0;
-      IntervalBank* targetBank = getBank(bankName,&targetBankIndex);
-      if (targetBank == nullptr) return false;
-      Strip* targetStrip = targetBank->getStrip(id);
-      if ( targetStrip == nullptr) return false;
-
-      if (oldStrip == nullptr) oldStrip = targetStrip;    // oldStrip may be 
-
-      screen.id = SCREEN_BANK;
-      screen.state = targetBankIndex;
-      targetBank->selector = id;
-
-      hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,screen.id);
-      hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state);
       
-      oldStrip->focus(false);
-      targetStrip->focus(true);
+      Strip* strip = bank->getStrip(bank->selector);
+      if (strip == nullptr) return;
 
-      stripHeader->setStrip(targetStrip); 
+      if (direction == hwm->buttons[RIGHTB]->getID()){ strip->increaseCallback(time, trigger);}
+      else if (direction == hwm->buttons[LEFTB]->getID()){ strip->decreaseCallback(time, trigger);}
 
-      // Force screen redraw if we changed the window or the bank OR if we are displaying full size strip
-      if (
-          (oldStrip->win != targetStrip->win && targetBank->currentLayout == LAYOUT_DETAILS)
-          || oldBank != targetBank
-          || targetStrip->size == SHAPE4X4
-          || targetBank->currentLayout == LAYOUT_ZOOM
-      ){
-        triggerRedraw(); // force refresh 
-        //DEBUG_PRINT("\nFORCE REFRESH STRIP!!!!!");
-      }
-      DEBUG_PRINT("\njumpToStrip(%i,%s)",id,bankName.c_str());
-      return true;
+
     }
 
     bool updatePositions(IntervalBank* bank, JsonArray positions){
@@ -2430,9 +2436,10 @@ void setup() {
           if (strip != nullptr){
             updatePositions(bank,jsonInput["param"][C_POSITIONS]);
             // put the focus on the strip
-            uint8_t selector = strip->index;
-            jumpToStrip(selector,bank->name);    //jsonAnswer should be : {"restoreStrip":{"bank":"BANK j3","strip":{"type":"text","selector":"7","x":"3","y":"0","size":"1x4","color":3,"icon":"Z","properties":["/text/"]}}}         
-            triggerRedraw();    // force refresh as jumpToStrip only refresh if you change window or bank, but here we may update a strip which is the currently displayed one
+            bank->selector = strip->index;
+            getBank(bank->name,&screen.state);
+            screen.id = SCREEN_BANK;            
+            triggerRedraw();   
             jsonAnswer.callback = RET_SAVEBUTTON;
             jsonAnswer.value = "1";  
           }else{
@@ -2453,7 +2460,7 @@ void setup() {
           Strip* stripToDelete = bank->getStrip(x,y,window);
           if (stripToDelete != nullptr){                    
             uint8_t indexToDelete = stripToDelete->index;
-            Strip* currentStrip = getFocusedStrip();         
+            Strip* currentStrip = getSelectedStrip();         
             if (currentStrip !=nullptr){
               if (bank->trash(stripToDelete)){   
 
@@ -2518,23 +2525,36 @@ void setup() {
         String bankName = jsonInput["param"]["name"];
         //DEBUG_PRINT("\ntrashBank %s",bankName);
         uint8_t bankIndex;
-        IntervalBank* bankToDelete = getBank(bankName,&bankIndex);  // get the bank and its index
+        IntervalBank* bankToDelete = getBank(bankName, &bankIndex);  // get the bank and its index
 
-        if (bankToDelete != nullptr){
-          banks.erase(banks.begin() + bankIndex);  // this will shift bank index but we have saved the one currently displayed
-          delete bankToDelete;
-          bankToDelete = nullptr;
-          if (bankIndex == screen.state || screen.id == SCREEN_BANK_SWITCH){
+        if (bankToDelete != nullptr) {
+
+          // 1. Libérer l'objet AVANT d'effacer son pointeur du vecteur
+          delete banks[bankIndex];
+          banks[bankIndex] = nullptr;
+
+          // 2. Retirer l'entrée du vecteur
+          banks.erase(banks.begin() + bankIndex);
+
+          // 3. Gérer l'affichage ou la banque active
+          if (bankIndex == screen.state || screen.id == SCREEN_BANK_SWITCH) {
             DEBUG_PRINT("\nDELETE CURRENT BANK, jumping to bank 0");
             screen.state = 0;
-          }else{
+          } else {
             DEBUG_PRINT("\nBank deleted");
-            //getBank(currentBank->name,&screen.state); // restore the bank
           }
+
+          if (banks.size() == 0){
+            DEBUG_PRINT("\t was the last => informing bankNavigator");
+            navBar->bank = nullptr;
+          }
+
           refreshBankMenu();   // rebuild the bank switch menu
+
           jsonAnswer.callback = RET_SAVEBUTTON;
-          jsonAnswer.value = "1";            
-        }else{
+          jsonAnswer.value = "1";
+
+        } else {
           jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
         }
 
@@ -2545,11 +2565,8 @@ void setup() {
         IntervalBank* bank = deserializeBanks(&jsonBankstring);
         if (bank != nullptr){
           ret = true;
-          if (bank->strips.size()>0){
-            jumpToStrip(1,bank->name);
-          }else{
-            getBank(bank->name,&screen.state);
-          }
+          getBank(bank->name,&screen.state);
+          triggerRedraw();
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value = "1";            
         }else jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
@@ -2732,17 +2749,17 @@ void setup() {
 
 
     IntervalBank* getBank(const String& name, uint8_t* index) {
-        if (banks.size()<1) return nullptr;  // Prevents accessing an empty list
+        if (banks.empty()) return nullptr;
 
-        for (uint8_t i = 0; i < banks.size(); i++) {  
+        for (uint8_t i = 0; i < banks.size(); i++) {
+            // Avec unique_ptr on accède au pointeur via get()
             IntervalBank* bank = banks[i];
-            if (bank && bank->name == name) {  // Ensure bank is valid before using it
-                *index = i;
-                return bank;
+            if (bank && bank->name == name) {
+                if (index) *index = i;
+                return bank; // OK : pointeur non possédé, juste une vue
             }
         }
-        
-        return nullptr;  // Not found
+        return nullptr;
     }
 
     void httpPost(Request &req, Response &res){
@@ -2847,7 +2864,7 @@ void setup() {
       "\""+String(S_SHORTCUTS)+"\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
     "}";
 
-    String defaultBanksConf = "{\"banks\":{\"Test\":{\"currentLayout\":0,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":0,\"icon\":5,\"size\":\"1x4\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/helloworld\"]}]}}}";
+    String defaultBanksConf = "{\"banks\":{\"Test\":{\"layout\":0,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":0,\"icon\":5,\"size\":\"1x4\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/helloworld\"]}]}}}";
     String defaultUserConf = "{}";
 
     ScreenUnion oldScreen;    
@@ -2911,7 +2928,7 @@ void setup() {
           const char* bankName = banks[i]->name.c_str();
           bankMenu->get_root_menu().add_item(new MenuItem(bankName, &switchToBank_item_selected));                
           if (debug){
-            DEBUG_PRINT("\nadded bank switch item entry: %s",bankName);           
+            //DEBUG_PRINT("\nadded bank switch item entry: %s",bankName);           
           }
         }
       }else{        

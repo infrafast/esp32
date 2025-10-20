@@ -257,8 +257,6 @@ class Strip {
       //DEBUG_PRINT("\nStrip(%d)",index);
       if (f){
         brightness = BRIGHTNESS_MAX;
-        // we get the latest data if they are available        
-        queryInterface();
         //DEBUG_PRINT(" has focus");
         visible = true;
       }else{
@@ -288,6 +286,9 @@ class Strip {
         interface = interfaceRepo.retrieve(interfaceName);
 
         if (colorID>MAX_COLOR_ID-1) colorID = 0;
+        frontColor = colorMap[colorID].fColor;
+        backColor = colorMap[colorID].bColor;  
+
         icon = jsonStrip[C_ICON];//.as<unsigned char>();
         properties = jsonStrip[C_PROPERTIES];
         for (uint8_t i = 0; i< properties.size(); i++){
@@ -444,11 +445,9 @@ class Strip {
     virtual void pushToGUI(uint8_t layout){
       
       visible == true;
-
+      focus(false);
       renderError = false;
 
-      frontColor = colorMap[colorID].fColor;
-      backColor = colorMap[colorID].bColor;       
 
       if (x>3 || y>3){
         renderError = true;
@@ -473,7 +472,7 @@ class Strip {
         if (interface->state.offline == true){
           // if offline , we may want to add a widget indicating it in addition to all the rest which is displayed
           gui.add(new Canva(&GUI::zero, &GUI::zero, TFT_WIDTH, TFT_HEIGHT, &GUI::red, &GUI::transparentColor,&brightness));  
-          DEBUG_PRINT("\nStrip %s(%i) is offline",type.c_str(),index);
+          DEBUG_PRINT("\nStrip[%i] %s is offline",index,type.c_str());
         }        
         // go ahead with normal rendering
         composeWidgets(layout);
@@ -486,6 +485,7 @@ class Strip {
     }
 
     bool determineTopLeft(uint8_t layout){
+      DEBUG_PRINT("\nstrip[%d] %s topLeft=",index,type.c_str());
       // retrieve the corner of the strip where we can start drawing, which is renderX, renderY
       if (layout == LAYOUT_ZOOM || size == SHAPE4X4){
         renderX = 0;
@@ -505,6 +505,7 @@ class Strip {
       }else{
         return false;
       }         
+      DEBUG_PRINT("(%i,%i)",renderX,renderY);
       return true;
     }
 
@@ -527,10 +528,10 @@ class Strip {
     }    
 
     virtual void composeWidgets(uint8_t layout){
-      defaultFrame(layout);
+      drawWidgetsFrames(layout);
     } 
 
-    void defaultFrame(uint8_t layout){
+    void drawWidgetsFrames(uint8_t layout){
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) gui.add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &frontColor,&brightness));  
       else if ( size == SHAPE1X4) gui.add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &frontColor,&brightness));
       else if (size == SHAPE2X2) gui.add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &frontColor,&brightness));  

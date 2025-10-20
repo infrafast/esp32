@@ -233,26 +233,15 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
         w = WIDGET4X4W;
         renderY += h/2; 
         gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }
-      else if (size == SHAPE1X4){
-        w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
-        h = WIDGET1X4H;
-        renderX += w/2;           
-        gui.add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }
-      else if (size == SHAPE2X2){
-        w = WIDGET2X2W;   // width of the bar is 2 time less big than the full width of the cell
-        h = WIDGET2X2H;
-        renderX += w/2;   
-        renderY += h/2;      
-        RingMeter* ringMeter = new RingMeter(&value, valueMin, valueMax, 1, &renderX,&renderY, h/2, &emptyString,&GUI::blue,&GUI::transparentColor,&brightness);
-        gui.add(ringMeter);
-      }
-      else if (size == SHAPE4X1){
-        h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
-        w = WIDGET4X1W;
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }     
+      }else if (size == SHAPE1X4){
+        pushSimpleText(layout, lang.getString("SHAPE1X4 note"));
+      }else if (size ==SHAPE2X2 ){
+         pushSimpleText(layout, lang.getString("SHAPE2X2 note"));
+      }else if (size == SHAPE4X1){
+         pushSimpleText(layout, lang.getString("SHAPE4X1 note"));
+      }else{
+
+      } 
 
       //DEBUG_PRINT("\nchGainStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
 
@@ -315,31 +304,21 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
 
       uint16_t h = 0, w = 0;
 
-      if (size == SHAPE4X4){
+      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
         w = WIDGET4X4W;
         renderY += h/2; 
         gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }
-      else if (size == SHAPE1X4){
-        w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
-        h = WIDGET1X4H;
-        renderX += w/2;           
-        gui.add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }
-      else if (size == SHAPE2X2){
-        w = WIDGET2X2W;   // width of the bar is 2 time less big than the full width of the cell
-        h = WIDGET2X2H;
-        renderX += w/2;   
-        renderY += h/2;      
-        RingMeter* ringMeter = new RingMeter(&value, valueMin, valueMax, 1, &renderX,&renderY, h/2, &unitString,&GUI::blue,&GUI::transparentColor,&brightness);
-        gui.add(ringMeter);
-      }
-      else if (size == SHAPE4X1){
-        h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
-        w = WIDGET4X1W;
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
-      }     
+      }else if (size == SHAPE1X4){
+        pushSimpleText(layout, lang.getString("SHAPE1X4 SYSEX"));
+      }else if (size ==SHAPE2X2 ){
+         pushSimpleText(layout, lang.getString("SHAPE2X2 SYSEX"));
+      }else if (size == SHAPE4X1){
+         pushSimpleText(layout, lang.getString("SHAPE4X1 SYSEX"));
+      }else{
+
+      }         
+
 
       //DEBUG_PRINT("\nchGainStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
 
@@ -358,15 +337,6 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
     virtual void queryInterface(){ // this code is called by focus() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
-
-    virtual float increaseCallback(unsigned long time,uint8_t trigger){
-      return 0.0;
-    }
-
-    virtual float decreaseCallback(unsigned long time,uint8_t trigger){
-      return 0.0;
-    }
-
 
     virtual bool actionCallback(uint8_t trigger) {
       bool success = false;
@@ -412,7 +382,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       char* buf = (char*)malloc((strlen(ADDRESS_SYSEX)+sysexKey.length())*sizeof(char*)+1);
       sprintf(buf,ADDRESS_SYSEX,sysexKey);
       properties.add(String(buf)); //force la copie
-      DEBUG_PRINT("\nserializeProperties: %s",buf);
+      //DEBUG_PRINT("\nserializeProperties: %s",buf);
       delete buf;
     }
 
@@ -420,7 +390,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       char sysexKeyBuf[SYSEX_MAX_KEY_LENGTH];
       if (sscanf(property.c_str(), ADDRESS_SYSEX, &sysexKeyBuf)){
         sysexKey = sysexKeyBuf;
-        DEBUG_PRINT("\ndeserializeProperty: %s = %s",property.c_str(),sysexKey.c_str());
+        //DEBUG_PRINT("\ndeserializeProperty: %s = %s",property.c_str(),sysexKey.c_str());
         sysexMessage = *dsSysexMessages->getString(sysexKey,"undef sysex");         // return the value corresponding to the key from the jsonfile library        
       }    
     }

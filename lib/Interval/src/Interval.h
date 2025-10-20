@@ -1302,9 +1302,12 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
 
 void switchToBank_item_selected(MenuComponent* p_menu_component){
   //DEBUG_PRINT("\n%s",p_menu_component->get_name());
-  uint8_t index;
-  IntervalBank* bank = app.getBank(p_menu_component->get_name(),&index);
-  app.jumpToStrip(bank->selector,bank->name);
+  
+  // retrieve the bank by its name and assign its index as the screen substate 
+  app.getBank(p_menu_component->get_name(),&screen.state);
+  // and jump to the bank
+  screen.id = SCREEN_BANK;  
+
 }
 
 void menu_selected(MenuComponent* p_menu_component){
@@ -1354,14 +1357,11 @@ void bankOverlayBuilder(uint8_t BankIndex){
   if (app.disabledBankRendering == true) return;
 
   Interval::Bank* bank = app.banks[BankIndex];
-  if (bank != nullptr){
-    //DEBUG_PRINT("\n\n\n--------------------------------- bankOverlayBuilder %s ---------------------------------\n\n ",bank->name.c_str());
-    uint8_t layout = bank->currentLayout;
-    BankNavigator* navBar = new BankNavigator(layout,bank,true);   
-    gui.add(navBar);
-  }else{
-    DEBUG_PRINT("\nbankOverlayBuilder NULL BANK");
-  }
+  
+  DEBUG_PRINT("\n\n\n--------------------------------- bankOverlayBuilder %s ---------------------------------\n\n ",bank == nullptr?"nullptr":bank->name.c_str());
+  app.navBar = new BankNavigator(bank,true);   
+  gui.add(app.navBar);
+
 }
 
 
@@ -1419,6 +1419,8 @@ void bankScreenBuilder(uint8_t subScreen){
 
   if (app.disabledBankRendering == true) return;
 
+  if (subScreen >= app.banks.size()) return;
+
   GUI::defaultBcolor = TFT_BGCOLOR;
   GUI::defaultFcolor = TFT_FCOLOR;
   GUI::cls();
@@ -1428,21 +1430,25 @@ void bankScreenBuilder(uint8_t subScreen){
 
   if (bank != nullptr){
 
-    Strip* strip = app.getFocusedStrip();
+    Strip* strip = app.getSelectedStrip();
 
     if (strip != nullptr){
     
       for (const auto& winstrip : bank->strips) {
-        if (bank->currentLayout == LAYOUT_DETAILS){        
+        
+        winstrip->visible = false;
+        
+        if (bank->layout == LAYOUT_DETAILS){        
           // affiche les strips de la fentre courant et les rends "visible"
           if (winstrip->win == strip->win) winstrip->pushToGUI(LAYOUT_DETAILS);
         }else{
           // ou uniquement un strip
           if (winstrip->index == strip->index) winstrip->pushToGUI(LAYOUT_ZOOM);          
-          else winstrip->visible = false;
         }
       }
-        
+      
+      strip->focus(true);
+      
       app.stripHeader = new StripHeaderWidget(strip);      
       gui.add(app.stripHeader);            
       

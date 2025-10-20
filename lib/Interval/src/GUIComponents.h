@@ -307,13 +307,14 @@ class Widget : public GUI{
     virtual bool refresh(bool force=false){
       refreshed = force;      
       if (oldX != *x || oldY != *y || oldfColor != *fColor || oldbColor != *bColor || oldBrightness != *brightness || refreshed ){
-        /*if (debug){
-          DEBUG_PRINT("\n%s.refreshed()",id.c_str());
+        if (debug){
+          /*DEBUG_PRINT("\n%s.refreshed()",id.c_str());
+          if (oldBrightness != *brightness) DEBUG_PRINT("\tbrightness %.2f=>%.2f",oldBrightness,*brightness);
           if (oldfColor != *fColor) DEBUG_PRINT("\tfColor %i=>%i",this->id.c_str(),oldfColor,*fColor);
           if (oldbColor != *bColor) DEBUG_PRINT("\tbColor %i=>%i",this->id.c_str(),oldbColor,*bColor);
           if (oldX != *x) DEBUG_PRINT("\tx %i=>%i",this->id.c_str(),oldX,*x);
-          if (oldY != *y) DEBUG_PRINT("\ty %i=>%i",this->id.c_str(),oldY,*y);
-        }*/
+          if (oldY != *y) DEBUG_PRINT("\ty %i=>%i",this->id.c_str(),oldY,*y);*/
+        }
         oldBrightness = *brightness;
         oldX=*x; oldY=*y;
         oldfColor = *fColor; oldbColor = *bColor;
