@@ -51,7 +51,7 @@ namespace Interval {
           // we ask each strip of the bank to process itself
           // it's up to him to determine if he refreshes it's internal data
           // some may only do that if they are visible        
-          if (strip->process() && strip->visible) redraw = true;
+          if (strip != nullptr && strip->process() && strip->visible) redraw = true;
         }
         return redraw;
       }
@@ -223,10 +223,8 @@ class BankNavigator: public Widget{
     IntervalBank *bank = nullptr;
 
     BankNavigator(IntervalBank* b/*, LinkedList<Widget*>* w*/, bool debug = false):bank(b), oldBank(b), Widget(&xPos, &yPos, &fC, &bC, &GUI::fullBrightness, debug){      
-      //widgetList = w;
-      oldSelector = bank->selector - 1; //this is to force first refresh
-      oldBankName = bank->name;
-      width = TFT_WIDTH/2; height = OVERLAY_ICON_SIZE;
+      //widgetList = w;      
+      if (bank != nullptr) oldSelector = bank->selector - 1; //this is to force first refresh
       id = "BankNavigator"+String(xPos)+"x"+String(yPos); 
     }
 
@@ -234,31 +232,28 @@ class BankNavigator: public Widget{
       refreshed = force;
       Widget::refresh(force);
           
-      // Check if an update is needed
-      if (oldBank != bank){
-        oldBank = bank;
-        refreshed = true;
-      }else{
-        refreshed = (bank->selector != oldSelector) || 
-                    (bank->strips.size() != oldNumberOfStrips) ||
-                    (bank->name != oldBankName);
-      }
-
-      if (!refreshed) return false;
-
-      Canva* canva;
-
-      if (refreshed && bank == nullptr){
-        DEBUG_PRINT("\nCreating an empty BankNavigator");
-        width = NAV_WIDTH; height = NAV_HEIGHT;
-        Canva* canva = new Canva(&GUI::zero, &GUI::zero, width, height, &GUI::defaultBcolor, &GUI::defaultBcolor);
-        canva->refresh();
-        createSprite();
-        canva->sprite->pushToSprite(sprite, 0, 2);
-        delete canva;
+      if (bank == nullptr){
         return refreshed;
+        /*if (oldBank != bank){
+          // clear the bankNavigator
+          oldBank = bank;
+          Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &GUI::defaultBcolor, &GUI::defaultBcolor);
+          canva->refresh();
+          width = NAV_WIDTH; height = NAV_HEIGHT;
+          createSprite();
+          canva->sprite->pushToSprite(sprite, 0, 2);
+          delete canva;
+          refreshed = true;
+        }
+        return refreshed;*/
       }
       
+      refreshed = (bank->selector != oldSelector) || 
+                  (bank->strips.size() != oldNumberOfStrips) ||
+                  (bank->name != oldBankName);                    
+
+      if (!refreshed) return false;
+     
       oldNumberOfStrips = bank->strips.size();
       oldSelector = bank->selector;
       oldBankName = bank->name;
@@ -266,7 +261,7 @@ class BankNavigator: public Widget{
       uint16_t navFrameColor = GUI::luminance(GUI::gold, 100);
       
       // Create a canvas for the navigation UI
-      canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &GUI::defaultBcolor, &GUI::defaultBcolor);
+      Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &GUI::defaultBcolor, &GUI::defaultBcolor);
       canva->refresh(true);
 
       // Draw each strip on the navigation UI

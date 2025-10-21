@@ -1359,8 +1359,10 @@ void bankOverlayBuilder(uint8_t BankIndex){
   Interval::Bank* bank = app.banks[BankIndex];
   
   DEBUG_PRINT("\n\n\n--------------------------------- bankOverlayBuilder %s ---------------------------------\n\n ",bank == nullptr?"nullptr":bank->name.c_str());
-  app.navBar = new BankNavigator(bank,true);   
-  gui.add(app.navBar);
+  if (bank != nullptr){
+    app.navBar = new BankNavigator(bank,true);   
+    gui.add(app.navBar);
+  }
 
 }
 
@@ -1419,7 +1421,7 @@ void bankScreenBuilder(uint8_t subScreen){
 
   if (app.disabledBankRendering == true) return;
 
-  if (subScreen >= app.banks.size()) return;
+  bool oversize = (subScreen >= app.banks.size());
 
   GUI::defaultBcolor = TFT_BGCOLOR;
   GUI::defaultFcolor = TFT_FCOLOR;
@@ -1428,7 +1430,7 @@ void bankScreenBuilder(uint8_t subScreen){
   Interval::Bank* bank = app.banks[subScreen];
   DEBUG_PRINT("\n\n\n---------------------------------bankScreenBuilder ");
 
-  if (bank != nullptr){
+  if (bank != nullptr && !oversize){
 
     Strip* strip = app.getSelectedStrip();
 

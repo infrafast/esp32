@@ -314,6 +314,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     const char* shutdownMenuString{ICON_POWER":OFF"};
     const char* brightnessMenuString{ICON_BRIGHTNESS":BRIGHTNESS"};
 
+    #define NO_BANK_MENU_ITEM "No bank"
+
     ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
       
     Shortcuts shortcuts;
@@ -1646,7 +1648,11 @@ void setup() {
         //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
         if (gui->transparency) gui->clearScreenBuffer();
         oldScreen.value = screen.value;      
-        // these are the only screens that can be recall after startup
+        // save the bank to restore in case of restoreScreen
+        if (screen.id == SCREEN_BANK){
+          hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_BANK);    
+          hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state);         
+        }
       }
       gui->refresh(force);
 
@@ -2084,7 +2090,7 @@ void setup() {
           menuItemIcon[2] = iconOrEmpty(selection+1);          
         }  
       }else{
-        menuBottomLabel = *lang.getString("No bank");
+        menuBottomLabel = *lang.getString(NO_BANK_MENU_ITEM);
         menuItemIcon[0] = " ";
         menuItemIcon[1] = ICON_QUIT;
         menuItemIcon[2] = " ";       
@@ -2181,8 +2187,10 @@ void setup() {
       if ( targetStrip == nullptr) return false;
       
       Strip* currentStrip = getSelectedStrip();
-      currentStrip->focus(false);
-
+      if (currentStrip != nullptr) {
+        currentStrip->focus(false);
+      }
+  
       bank->selector = stripID;      
       targetStrip->focus(true);
 
@@ -2194,7 +2202,7 @@ void setup() {
 
       // Force screen redraw if we changed the window or the bank OR if we are displaying full size strip
       if (
-          currentStrip->win != targetStrip->win || 
+          currentStrip->win != targetStrip->win ||
           targetStrip->size == SHAPE4X4 ||
           bank->layout == LAYOUT_ZOOM
       ){
@@ -2435,7 +2443,10 @@ void setup() {
           }else strip = nullptr;
           if (strip != nullptr){
             updatePositions(bank,jsonInput["param"][C_POSITIONS]);
-            // put the focus on the strip
+            // remove focus on selected strip
+            Strip* currentStrip = getSelectedStrip();
+            if (currentStrip != nullptr) currentStrip->focus(false);
+            // and put the focus on the new strip
             bank->selector = strip->index;
             getBank(bank->name,&screen.state);
             screen.id = SCREEN_BANK;            
@@ -2540,13 +2551,9 @@ void setup() {
           if (bankIndex == screen.state || screen.id == SCREEN_BANK_SWITCH) {
             DEBUG_PRINT("\nDELETE CURRENT BANK, jumping to bank 0");
             screen.state = 0;
+            triggerRedraw();
           } else {
             DEBUG_PRINT("\nBank deleted");
-          }
-
-          if (banks.size() == 0){
-            DEBUG_PRINT("\t was the last => informing bankNavigator");
-            navBar->bank = nullptr;
           }
 
           refreshBankMenu();   // rebuild the bank switch menu
@@ -2795,7 +2802,7 @@ void setup() {
             continue; // Ignorer cette itération
         }        
         
-        DEBUG_PRINT("\nhttpPost <%><%s>\n",name,options);
+        DEBUG_PRINT("\nhttpPost <%s><%s>\n",name,options);
 
         String jsonAnswer = parseJsonInput(name);        
 
@@ -2934,9 +2941,10 @@ void setup() {
       }else{        
         if (banks.size() == 1){
           bankMenu->get_root_menu().add_item(new MenuItem(banks[0]->name.c_str(), &switchToBank_item_selected));               
-          //DEBUG_PRINT("\nBank menu list: %s",banks[0]->name.c_str());  
+          DEBUG_PRINT("\nMenu bank one item: %s",banks[0]->name.c_str());  
         }else{
-          //DEBUG_PRINT("\nEmpty menu bank");
+          bankMenu->get_root_menu().add_item(new MenuItem(lang.getString(NO_BANK_MENU_ITEM)->c_str(),&back_menu_item_selected));                         
+          DEBUG_PRINT("\nEmpty menu bank");
         }
       }
     }    

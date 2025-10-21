@@ -1106,7 +1106,7 @@ class WiFiEth : public Network{
                     EthernetBonjour.addServiceRecord(midiName.c_str(), midiClient->getPort(),MDNSServiceUDP);
                     EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
                   }else{
-                     DEBUG_PRINT("\nEthernetBonjour registration <%> failed", systemCfg.getString(S_AP_NAME)->c_str());
+                     DEBUG_PRINT("\nEthernetBonjour registration <%s> failed", systemCfg.getString(S_AP_NAME)->c_str());
                   }   
 
                   DEBUG_PRINT("\t...all Eth object instantiated\n");                  
@@ -1169,7 +1169,7 @@ class WiFiEth : public Network{
                 MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", midiClient->getPort());
                 MDNS.addService("http", "tcp", 80);                
               }else{
-                DEBUG_PRINT("\nMDNS registration <%> failed",midiClient->getName());
+                DEBUG_PRINT("\nMDNS registration <%s> failed",midiClient->getName());
               }
               xSemaphoreGive(networkBusy);
             }else{
