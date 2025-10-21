@@ -403,7 +403,7 @@ class Strip {
     }
     
     #define SIMPLE_TEXT_MAX_LEN 20
-    void pushSimpleText(uint8_t layout, const String* text){
+    void pushSimpleTextOrig(uint8_t layout, const String* text){
       // this is a utility function which display the text provided as parameter into the strip 
       // to take its full size, it is essentially used to display the strip state when not connected
       // or used by utility strips
@@ -413,13 +413,13 @@ class Strip {
       //DEBUG_PRINT("\npushText(%s) %s layout:%i",text->c_str(),size.c_str(), layout);
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         textX = renderX + WIDGET4X4W/2;
-        textY = renderY + WIDGET4X4H/4;        
+        textY = renderY + WIDGET4X4H/3.5;        
 
         fontSize = WIDGET4X4W / len * 3.3;
       }
       else if (size == SHAPE1X4){
         textX = renderX + WIDGET1X4W*1.2;
-        textY = renderY + WIDGET1X4H/7;    
+        textY = renderY + WIDGET1X4H/4;    
 
         fontSize = WIDGET1X4W / len * 4;
         // put it vertically
@@ -441,6 +441,105 @@ class Strip {
       gui.add(label);
 
     }
+
+    void pushSimpleText3(uint8_t layout, const String* textOriginal) {
+  String text = textOriginal->substring(0, SIMPLE_TEXT_MAX_LEN);
+  int16_t angle = 0;
+  uint16_t fontSize;
+  uint16_t areaW = 0, areaH = 0;
+
+  // Définir la zone d'affichage selon la forme
+  if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) {
+    areaW = WIDGET4X4W;
+    areaH = WIDGET4X4H;
+  } else if (size == SHAPE1X4) {
+    areaW = WIDGET1X4W;
+    areaH = WIDGET1X4H;
+    angle = 90;
+  } else if (size == SHAPE2X2) {
+    areaW = WIDGET2X2W;
+    areaH = WIDGET2X2H;
+  } else if (size == SHAPE4X1) {
+    areaW = WIDGET4X1W;
+    areaH = WIDGET4X1H;
+  }
+
+  // Calcul dynamique de police
+  uint8_t len = text.length();
+  float estimatedFont = (angle == 90)
+      ? (areaH / (float)len) * 1.2
+      : (areaW / (float)len) * 1.2;
+
+  fontSize = constrain((uint16_t)estimatedFont, 28, 60);
+
+  // Centrage
+  textX = renderX + areaW / 2;
+  textY = renderY + areaH / 2 - fontSize / 4;
+
+  // Création du label
+  Label* label = new Label(textOriginal, Align::Center, &textX, &textY,
+                           fontSize, SIMPLE_TEXT_MAX_LEN,
+                           &frontColor, &backColor, &brightness);
+  label->angle = angle;
+  gui.add(label);
+}
+
+    #define MIN_SIMPLETEXT_SIZE 40
+    void pushSimpleText(uint8_t layout, const String* textOriginal) {
+      // texte limité par SIMPLE_TEXT_MAX_LEN
+      int16_t angle = 0;
+      uint16_t areaW = 0, areaH = 0;
+      uint8_t maxLen = 28;
+
+      // déterminer la zone selon la forme
+      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) {
+        areaW = WIDGET4X4W;
+        areaH = WIDGET4X4H;
+      } else if (size == SHAPE1X4) {
+        areaW = WIDGET1X4H;
+        areaH = WIDGET1X4W;
+        angle = 90;
+        maxLen = 13;
+      } else if (size == SHAPE2X2) {
+        areaW = WIDGET2X2W;
+        areaH = WIDGET2X2H;
+        maxLen = 13;
+      } else if (size == SHAPE4X1) {
+        areaW = WIDGET4X1W;
+        areaH = WIDGET4X1H;
+      }
+
+      int len = textOriginal->length();
+
+      #define FONT_SIZE_RATIO 1.5
+      int fontSize = areaH * FONT_SIZE_RATIO ;  // affect the maximum size of font possible, which is the widget height
+
+      // Réduire la taille jusqu'à tenir, ou jusqu'à MIN
+      while (fontSize > MIN_SIMPLETEXT_SIZE) {
+        float charWidth = 0.4f * fontSize;
+        float estimatedWidth = charWidth * len;
+
+        if (estimatedWidth <= areaW) break;  // ça rentre, on s'arrête
+        fontSize -= 2;                    
+      }
+
+      textX = renderX + areaW / 2;
+      textY = renderY + (areaH/2) - (fontSize/3);
+
+      if (size == SHAPE1X4 && layout != LAYOUT_ZOOM) {
+        // special treatment for vertical widget where text is rotated
+        textX = renderX + WIDGET1X4W/2;   // exactly middle
+        textY = renderY + WIDGET1X4H/2.5; // we want middle but for some reason we have to give it some margin
+      }
+      // Label GUI
+      Label* label = new Label(textOriginal, Align::Center, &textX, &textY,
+                              fontSize, maxLen,
+                              &frontColor, &backColor, &brightness);
+      label->angle = angle;
+      gui.add(label);
+    }
+
+
 
     virtual void pushToGUI(uint8_t layout){
       

@@ -252,9 +252,12 @@ class GUIManager : public GenericComponent {
               // Rotation : on pousse "sprite" dans "rotatedSprite"
               sprite->pushRotated(&rotatedSprite, widget->angle, TFT_TRANSPARENT);
 
-              // Destination : widget->getX()/getY() est le PIVOT (centre à l’écran/buffer)
-              const int dstX = widget->getX() - rotW / 2;
-              const int dstY = widget->getY() - rotH / 2;
+              // ✅ Correction pour afficher le coin haut-gauche à getX/getY
+              const int offsetX = (rotW - w) / 2;
+              const int offsetY = (rotH - h) / 2;
+
+              const int dstX = widget->getX() - offsetX;
+              const int dstY = widget->getY() - offsetY;     
 
               if (transparency) {
                 // Vers screenBuffer (coin haut-gauche calculé)

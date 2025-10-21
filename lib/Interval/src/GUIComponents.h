@@ -428,11 +428,11 @@ class Font : public Widget{
           //if (*value != oldValue) DEBUG_PRINT("\n%s changed value from '%s' to '%s'", this->id.c_str(), oldValue.c_str(), value->c_str());
         }
 
-        String limitedValue = value->substring(0,maxLen).c_str();  //only display first characters
-        if (limitedValue.length() >= maxLen) limitedValue+="...";  // string concatenation = source of memory leak
+        String truncatedValue = value->substring(0,maxLen).c_str();  //only display first characters
+        if (truncatedValue.length() == maxLen) truncatedValue+="...";  // string concatenation = source of memory leak
 
-        FT_BBox boundaries1 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,oldValue.c_str());
-        FT_BBox boundaries2 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,limitedValue.c_str());
+        FT_BBox boundaries1 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,oldValue.substring(0,maxLen).c_str());
+        FT_BBox boundaries2 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,truncatedValue.c_str());
         // add 2 pixels for surrounding animation move to right/left
         width = max(boundaries1.xMax,boundaries2.xMax)+1; 
         height = max(boundaries1.yMax,boundaries2.yMax)+1;
@@ -481,7 +481,7 @@ class Font : public Widget{
         else if (align == Align::Right)
           getOfr()->rprintf(value->c_str());           
           */
-        getOfr()->cprintf(limitedValue.c_str());        
+        getOfr()->cprintf(truncatedValue.c_str());        
 
         //getOfr()->unloadFont();
 
@@ -489,7 +489,7 @@ class Font : public Widget{
 
         delete sprite;*/
         
-        oldValue = limitedValue;            
+        oldValue = *value;            
 
         refreshed = true;          // and return the info that we did a refresh
       }

@@ -20,6 +20,7 @@ class TextStrip : public Strip{
 
     virtual void composeWidgets(uint8_t layout) override{
       pushSimpleText(layout, &text);
+      //drawWidgetsFrames(layout);
     }
 
     #define TEXT_MAX_LENGHT 64
