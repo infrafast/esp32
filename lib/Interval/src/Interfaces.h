@@ -4,11 +4,7 @@
 #include <vector>
 #include "Interval.h"
 
-#define IF_STATE_DISCONNECTED "disconnected"
-#define IF_STATE_PENDING "pending"
-#define IF_STATE_CONNECTING "connecting"
-#define IF_STATE_CONNECTED "connected"
-
+#include "interfaces/i_states.h"
 
 class DeviceInterface {
   #define INTERFACE_STATE       "state"
@@ -20,14 +16,17 @@ class DeviceInterface {
   #define INTERFACE_PROVIDER    "provider"
   #define INTERFACE_ICON        "icon"
   #define INTERFACE_DETAILS     "details"
+  #define INTERFACE_LED         "led"
   
   public:
 
     State state;
 
     String previousStateLabel;
+    String previousLed = "";
     uint8_t previousStateCode = 0;
     bool previousOffline = false;
+    float previousProgress = -1;
 
     String interfaceName; 
     
@@ -52,7 +51,15 @@ class DeviceInterface {
       doc[interfaceName][INTERFACE_PROGRESS] = state.progress;
       doc[interfaceName][INTERFACE_DETAILS] = state.details;
       doc[interfaceName][INTERFACE_OFFLINE] = state.offline;
-
+      
+      if(state.offline == true){
+        //we force the GUI to be black
+        doc[interfaceName][INTERFACE_LED] = "black";
+      }else{
+        //we adopt the state gui
+        doc[interfaceName][INTERFACE_LED] = state.led;  
+      }
+      
       doc.shrinkToFit();
       String output;
       serializeJson(doc, output);    
@@ -175,6 +182,14 @@ class DeviceInterface {
         state.stateChanged  = true;
         previousOffline = state.offline;
       }    
+      if (state.progress != previousProgress){
+        state.stateChanged  = true;
+        previousProgress = state.progress;
+      }
+      if (state.led != previousLed){
+        state.stateChanged  = true;
+        previousLed = state.led;
+      }
 
       //do specific interface internal workflow
       if (state.offline != true){      
@@ -186,6 +201,10 @@ class DeviceInterface {
 
     int available(){ // called by strip 
       return dataAvailable; 
+    }
+
+    virtual void goOffline(bool _offline){
+      state.offline = _offline;
     }
 
     virtual bool restoreBase(const JsonObject& config){   
@@ -287,37 +306,50 @@ class NetworkDevice : public DeviceInterface{
   public:
     
     NetworkDevice(const String& name, const String& _group,bool _configurable = true):DeviceInterface(name, _group, _configurable){
-      notReady();
+      networkDown();
     }
 
     virtual void derivedMonitor() = 0;
     virtual bool connect() = 0;
     virtual bool disconnect() = 0;    
     
-    void notReady(){
+    void networkDown(){
       state.code = IF_NOT_READY;
       state.label = IF_STATE_DISCONNECTED;
-      state.subLabel = hwm.network->SSID;
-      state.details = "Attempt";      
+      state.details = "networkDown";      
+      state.led = "red medium";
+      state.progress = -1;
     }
+
+    void networkUp(){
+      state.code = IF_NOT_READY;
+      state.label = IF_STATE_DISCONNECTED;
+      state.details = "networkUp";      
+      state.led = "red";
+      state.progress = -1;
+    }    
+    
 
     virtual void monitor(){         
       if (hwm.network->refreshed){
         bool success = false;
         if (hwm.network->state == CONNECTED){
           if (state.offline){
-            DEBUG_PRINT("\n%s->connect<OFFLINE>() ignored",interfaceName.c_str());  
+            DEBUG_PRINT("\n%s->connect<OFFLINE>() ignored",interfaceName.c_str());
+            return;
           }else{
+            networkUp();
             success = connect();
             DEBUG_PRINT("\n%s->connect<ONLINE>()...%s",interfaceName.c_str(),success?"ok":"failed or is not implemented");                    
           }
         }else{
-          notReady();    
+          networkDown();    
           success = disconnect();
           DEBUG_PRINT("\n%s->disconnect()...%s",interfaceName.c_str(),success?"ok":"failed or is not implemented");
         }
       }
-      derivedMonitor();
+      // we only monitor networkdevices when network is on
+      if (hwm.network->state == CONNECTED) derivedMonitor();
     }
 
     virtual const String* getIcon(){
@@ -354,7 +386,6 @@ DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _
   interfaceRepo.interfaces.push_back(this);
   interfaceName = name;
   group = _group;
-  state.label = IF_STATE_DISCONNECTED;    
   previousStateLabel = state.label;  
   previousOffline = state.offline;
 }

@@ -1531,6 +1531,149 @@ class SliderWidget{
 //https://forum.arduino.cc/t/tft-espi-example-slider-demo-code-need-help-please/1144640/5
 };
 
+
+class Led : public Widget{
+
+  public:
+    Led(const int16_t* posX, const int16_t* posY, uint16_t rad, const String* props, const float* _brightness = &GUI::fullBrightness, bool d=false):Widget(posX, posY, &ledBaseColor, &GUI::transparentColor, _brightness, d), properties(props), radius(rad){
+      id = "Led"+String(*posX)+"x"+String(*posY);
+      width = rad*2;
+      height = rad*2;
+      parseProperties();
+      oldProperties = *properties;
+    }
+
+    virtual bool refresh(bool force=false){
+      refreshed = force;
+      bool baseNeedsRefresh = Widget::refresh(force);
+      bool propertyChanged = false;
+
+      if (*properties != oldProperties){
+        parseProperties();
+        oldProperties = *properties;
+        propertyChanged = true;
+      }
+
+      bool blinkChanged = updateBlink(force);
+
+      if (baseNeedsRefresh || propertyChanged || blinkChanged || force){
+        drawLed();
+        refreshed = true;
+      }
+
+      return refreshed;
+    }
+
+  private:
+    static const uint16_t FLASH_MEDIUM_INTERVAL = 1000;
+    static const uint16_t FLASH_FAST_INTERVAL = 250;
+    static const uint16_t FLASH_SLOW_INTERVAL = 2000;
+
+    const String* properties;
+    String oldProperties;
+    uint16_t ledBaseColor = TFT_RED;
+    uint16_t radius;
+    bool flashEnabled = false;
+    uint16_t flashInterval = FLASH_MEDIUM_INTERVAL;
+    bool ledOn = true;
+    unsigned long lastToggle = 0;
+
+    void parseProperties(){
+      String lower = *properties;
+      lower.trim();
+      lower.toLowerCase();
+
+      if (lower.length() == 0) lower = "red";
+
+      ledBaseColor = TFT_RED;
+      bool flashRequested = false;
+
+      while (lower.length() > 0){
+        int spaceIndex = lower.indexOf(' ');
+        String token = (spaceIndex == -1) ? lower : lower.substring(0, spaceIndex);
+        if (spaceIndex == -1) lower = "";
+        else{
+          lower = lower.substring(spaceIndex + 1);
+          lower.trim();
+        }
+
+        if (token.length() == 0) continue;
+
+        if (token == "red") ledBaseColor = TFT_RED;
+        else if (token == "black") ledBaseColor = TFT_BLACK;
+        else if (token == "yellow") ledBaseColor = TFT_YELLOW;
+        else if (token == "blue") ledBaseColor = TFT_BLUE;
+        else if (token == "green") ledBaseColor = TFT_GREEN;
+        else if (token == "grey" || token == "gray") ledBaseColor = TFT_GREY;
+        else if (token == "fast"){
+          flashRequested = true;
+          flashInterval = FLASH_FAST_INTERVAL;
+        }else if (token == "medium"){
+          flashRequested = true;
+          flashInterval = FLASH_MEDIUM_INTERVAL;
+        }
+        else if (token == "low" || token == "slow"){
+          flashRequested = true;
+          flashInterval = FLASH_SLOW_INTERVAL;
+        }
+      }
+
+      flashEnabled = flashRequested;
+      if (!flashEnabled){
+        ledOn = true;
+      }
+      lastToggle = millis();
+    }
+
+    bool updateBlink(bool force){
+      if (!flashEnabled){
+        if (!ledOn){
+          ledOn = true;
+          return true;
+        }
+        return false;
+      }
+
+      unsigned long now = millis();
+      if (force){
+        ledOn = true;
+        lastToggle = now;
+        return true;
+      }
+
+      if (now - lastToggle >= flashInterval){
+        ledOn = !ledOn;
+        lastToggle = now;
+        return true;
+      }
+
+      return false;
+    }
+
+    void drawLed(){
+      //createSprite(getClearColor());
+      createSprite(*bColor);
+
+      int16_t centerX = width / 2;
+      int16_t centerY = height / 2;
+      int16_t mainRadius = (min(width, height) / 2) - 1;
+      if (mainRadius < 2) mainRadius = 2;
+
+      uint16_t innerColor = ledOn ? ledBaseColor : TFT_DARKGREY;
+      uint16_t rimColor = GUI::luminance(TFT_WHITE,*brightness * GUI::screenBrightness * 255);
+
+      sprite->drawCircle(centerX, centerY, mainRadius, rimColor);
+      sprite->drawCircle(centerX, centerY, mainRadius-1, TFT_BLACK);
+
+      int16_t innerRadius = mainRadius - 2;
+      if (innerRadius > 1){
+        sprite->fillCircle(centerX, centerY, innerRadius, GUI::luminance(innerColor,*brightness * GUI::screenBrightness * 255));
+      }
+
+    }
+};
+
+
 bool GUI::off = false;
 uint16_t GUI::defaultFcolor = TFT_FCOLOR;
 uint16_t GUI::defaultBcolor = TFT_BGCOLOR;

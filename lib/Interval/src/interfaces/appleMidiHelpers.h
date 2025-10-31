@@ -29,6 +29,7 @@ public:
   virtual void setHandleException(void (*fptr)(const ssrc_t &, const Exception &, const int32_t value))=0;
   virtual void setHandleSystemExclusive(void (*fptr)(byte* , unsigned )) = 0;
   virtual void setHandleControlChange(void (*fptr)(byte , byte , byte )) = 0;
+  virtual void endSession() = 0;
   //virtual String getParticipantDetails(const ssrc_t& ssrc) = 0;
   virtual const char *getName() = 0;
   virtual const uint16_t getPort() = 0;
@@ -76,6 +77,10 @@ public:
   void read() override {
     appleMIDI->read();
   }  
+
+  virtual void endSession(){
+    session->sendEndSession();
+  }
 
   virtual const char *getName(){
     return session->getName();

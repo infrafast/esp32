@@ -2,7 +2,8 @@
 "Connect":"Connect your computer/mobile to the WiFi indicated below or plug an Ethernet cable to the Footswitch",
 "Open browser":"Open a browser on your computer/mobile at the below address. Care http and not https.",
 "Press button":"You alreay have a browser connected to the footswitch. Press a button to exit."
-"Attempt":"Tentative de connexion WiFi (ou branchez cable ethernet)",
+"networkDown":"Attempt to connect WiFi (or plug eth cable)",
+"networkUp":"Device is disconnected from network",
 "disconnected":"déconnecté",
 "connected":"connecté",
 "idle":"attente connexion",
@@ -11,7 +12,6 @@
 "connect failed":"échec connexion",
 "trying":"tentative",
 "offline":"appui court on/off = hors connexion",
-"ConnectMIDIsession":"Connect your MIDI gateway to to the following Apple Midi session",
 "ReconNet":"Reconnecting network, wait few seconds...",
 "PluginUSB":"Plugin your device USB MIDI cable",
 "restartUSB":"Restart to activate USB MIDI"

@@ -1,0 +1,12 @@
+#ifndef IF_STATES
+#define IF_STATES
+
+#define IF_STATE_DISCONNECTED "disconnected"
+#define IF_STATE_PENDING "pending"
+#define IF_STATE_CONNECTING "connecting"
+#define IF_STATE_CONNECTED "connected"
+#define IF_STATE_DISABLED "disabled"
+#define IF_STATE_UNAVAILABLE "unavailable"
+
+
+#endif

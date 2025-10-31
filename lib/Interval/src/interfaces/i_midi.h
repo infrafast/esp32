@@ -169,6 +169,24 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
 
+    virtual void goOffline(bool _offline){
+      DeviceInterface::goOffline(_offline);
+      if (_offline){
+        disconnectBleMidi();
+      }else{
+
+      }
+    }
+
+    void disconnectBleMidi() {
+        DEBUG_PRINT("\nbleMIDI disconnected");
+        auto transport = bleMIDI.getTransport();  // ✅ On récupère le transport BLE
+        if (transport) {
+            transport->end();
+        }
+    }
+
+
     virtual bool derivedBegin(){    
       init();  
       bleInstancePtr = this;   // do not forget otherwise callback function will crash
@@ -188,14 +206,17 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
       state.details = ""; //String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
+      state.led = "blue";
+      state.progress = -1;
     }    
 
     void handleDisconnected() {
       DEBUG_PRINT("\nBLEMidi disconnected\n");
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
-      state.subLabel =  BLE_CONNECTION_NAME;
-      state.details = "connectBT";  
+      state.details = *lang.getString("Connect Blutooth") + " " + BLE_CONNECTION_NAME;  
+      state.led = "blue medium";
+      state.progress = -1;      
     }
 
     static void handleConnectedStatic() {
@@ -278,12 +299,16 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
           state.code = IF_READY;
           state.label = IF_STATE_CONNECTED;
           state.details = "";
+          state.led = "green";
+          state.progress = -1;          
         }
 
         if (!tud_mounted() && state.code == IF_READY) {
           state.code = IF_NOT_READY;
           state.label = IF_STATE_DISCONNECTED;
           state.details = "Plugin USB-MIDI";
+          state.led = "red";
+          state.progress = -1;
         }
 
 
@@ -306,13 +331,14 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
 
     virtual bool derivedBegin(){
       init();
-      state.subLabel = "";
       usbMIDI.setHandleSystemExclusive(handleSysexStatic);
       // if the fooswtich has started in FW update or debug mode, USB MIDI is not active, hence we set the status once for all
       if (!useUSBMidi){
         state.code = IF_NOT_READY;
-        state.label = IF_STATE_DISCONNECTED;
+        state.label = IF_STATE_DISABLED;
         state.details = "restartUSB";
+        state.led = "black";
+        state.progress = -1;
       }
       return true;
     }
@@ -410,16 +436,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
 
     virtual void derivedMonitor(){
       
-      if (hwm.network->state == CONNECTED){
-        // the read trigger callback like connection, hence it has to be called independantly from being connected or not, only network count
-        if (hwm.network->midiClient != nullptr){
-          hwm.network->midiClient->read();                        //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time
-        }
-                
-        if (hwm.network->refreshed) setStatePendingSession();    // network has just connected so we now wait for a session to connect
+      if (hwm.network->midiClient != nullptr){
+        // the read trigger callback like connection, hence it has to be called independantly from being connected to a session or not
+        hwm.network->midiClient->read();                        //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time
+      }
+             
+      if (hwm.network->refreshed && hwm.network->state == CONNECTED) setStatePendingSession();    // network has just connected so we now wait for a session to connect
 
-      } 
-      
     }
 
     // Méthode de l'instance réellement appelée
@@ -428,6 +451,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
       state.details = String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
+      state.progress = -1;
+      state.led = "green";
     }    
 
     void handleDisconnected(const ssrc_t& ssrc) {
@@ -531,13 +556,24 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       }
     }    
 
+    virtual void goOffline(bool _offline){
+      NetworkDevice::goOffline(_offline);      
+      disconnect();     // force disconnect in all case: either you will reconnect 
+      // maybe add a if (_offline) {} else {}
+    }
+
 
     void setStatePendingSession(){
       // network is connected but not the session
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
-      state.subLabel =  hwm.network->midiClient->getName() +String(" (or ")+hwm.network->IP.toString() + String(", port: ")+hwm.network->midiClient->getPort()+ String(")");
-      state.details = "ConnectMIDIsession";          
+      String midiSessionName = "null";
+      if (hwm.network->midiClient != nullptr){
+          midiSessionName = hwm.network->midiClient->getName();
+      }
+      state.details = *lang.getString("Connect MIDI session") +" "+ midiSessionName +String(" (")+hwm.network->IP.toString() + String(", port: ")+hwm.network->midiClient->getPort()+ String(")");;          
+      state.led = "green medium";
+      state.progress = -1;
     }
 
     virtual bool derivedBegin(){      
@@ -568,6 +604,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
     }
 
     virtual bool disconnect(){
+      DEBUG_PRINT("\nAppleMIDIInterface::disconnect()");
+      MidiClient* midiClient = hwm.network->midiClient; 
+      if (midiClient == nullptr){
+        DEBUG_PRINT("\t(nullptr)\t");
+        return false;
+      }
+      midiClient->endSession();
       return true;
     }
 

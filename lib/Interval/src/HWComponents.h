@@ -1167,7 +1167,7 @@ class WiFiEth : public Network{
               if (midiClient == nullptr) midiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(/*APPLE_MIDIWIFICLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);             
               if (MDNS.begin(systemCfg.getString(S_AP_NAME)->c_str())){
                 MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", midiClient->getPort());
-                MDNS.addService("http", "tcp", 80);                
+                MDNS.addService("http", "tcp", 80);                                
               }else{
                 DEBUG_PRINT("\nMDNS registration <%s> failed",midiClient->getName());
               }

@@ -817,14 +817,15 @@ enum{
   IF_READY
 };
 
+#include "interfaces/i_states.h"
 
 struct State{ // used by Strip and Interface
   uint8_t code = IF_NOT_READY;
-  String label = "stateLabel";
-  String subLabel = "subStateLabel";
-  String details = "userInstructions";
+  String label = IF_STATE_UNAVAILABLE;
+  String details = "Interface not implemented";
+  String led = "black";
   bool offline = false;
-  float progress = 0;
+  float progress = -1;
   bool stateChanged = false;
 };
 
@@ -1466,8 +1467,7 @@ void bankScreenBuilder(uint8_t subScreen){
   //DEBUG_PRINT("\n--------------bankScreenBuilder exit-----------------");
 }
 
-void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* bottomLabel, const String* icon){
-  //DEBUG_PRINT("\naddFullScreenTextWithIcon(%s, %s, %s, %s)",topLabel->c_str(), midText->c_str(), bottomLabel->c_str(),icon->c_str());
+void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* icon, const String* state){
   gui.add(new Label(topLabel, Align::Center,&midScreenHoriz, &topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));    
 
   // if we have empty textfield, we don't display it and center the icon
@@ -1477,11 +1477,14 @@ void addFullScreenTextWithIcon(const String* topLabel, const String* midText, co
     gui.add(new TextArea(midText, MODAL_SCREEN_TEXTAREA_WIDTH,Align::Left,Align::Center,&textAreaX,&iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));     
   }
 
-  gui.add(new Icon(icon,Align::Center,&iconX, &iconY,MODAL_SCREEN_ICON_SIZE,&iconInterfaceColor,&GUI::defaultBcolor));   
-  gui.add(new Label(bottomLabel, Align::Center,&midScreenHoriz, &bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,48, &GUI::gold,&GUI::defaultBcolor));    
+  //gui.add(new Icon(icon,Align::Center,&iconX, &iconY,MODAL_SCREEN_ICON_SIZE,&iconInterfaceColor,&GUI::defaultBcolor));   
+  gui.add(new Led(&iconX, &iconX, 26, state));
 
   // move text below into composeInterfaceState
   gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&midScreenHoriz, &belowBottomTexty,TOGGLE_ONFFLINE_TEXT_SIZE,40,&GUI::green,&GUI::defaultBcolor));    
+
+  
+
 }    
 
 void addTopandBottomMenuLabel(){

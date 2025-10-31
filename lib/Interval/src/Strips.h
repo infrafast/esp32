@@ -4,7 +4,8 @@
 #include "Interval.h"
 using IntervalButton = Interval::Button;
 
-void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* bottomLabel, const String* icon);
+// common utility function 
+void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* icon, const String* state);
 //-------------------------
 
 #define C_PROPERTIES    "properties"
@@ -227,7 +228,7 @@ class Strip {
 
     virtual ~Strip(){
     }
-   
+  
     virtual uint8_t getNumberOfProperties(){
       return skeleton->dataSetAddresses.size();      
     }
@@ -610,7 +611,7 @@ class Strip {
 
     virtual void composeInterfaceState(uint8_t layout){
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
-        addFullScreenTextWithIcon(lang.getString(interface->state.label), lang.getString(interface->state.details), lang.getString(interface->state.subLabel),interface->getIcon());        
+        addFullScreenTextWithIcon(lang.getString(interface->state.label), lang.getString(interface->state.details), interface->getIcon(),&interface->state.led );        
         
         //gui.add (new ProgressBarH(&hwm.network->wiFiConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                             
         //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                                  

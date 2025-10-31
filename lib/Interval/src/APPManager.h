@@ -759,8 +759,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           if (screen.id == SCREEN_BANK){
             // toggle interface offline - online
             if (getSelectedStrip() != nullptr){
-              if (getSelectedStrip()->interface->state.offline == true) getSelectedStrip()->interface->state.offline = false;
-              else getSelectedStrip()->interface->state.offline = true;
+              bool offline = getSelectedStrip()->interface->state.offline;
+              getSelectedStrip()->interface->goOffline(!offline); // toggle offline state
+
             }
           }        
 
@@ -1815,13 +1816,7 @@ void setup() {
             webServer->use(commonFileServerWrapper);                        
 
             setWSServer();   // ==> websocket server is created and then changed by application refresh() in case the network medium is changed
-            //webTaskhandle(WEB_START);
-
-            /* Initialize mDNS => doesnt work for ethernet so we give up and keep IP address
-            if (debug) DEBUG_PRINT("\nstarting mdns: %s",bankCfg.getString(S_AP_NAME)->c_str());
-            if (!MDNS.begin(*bankCfg.getString(S_AP_NAME))) {   // Set the hostname to "esp32.local"
-              if (debug) DEBUG_PRINT("Error setting up MDNS responder!");
-            } */                       
+            //webTaskhandle(WEB_START);                   
           }
           hwm->configURL = "http://"+*systemCfg.getString(S_AP_NAME)+".local"; // hwm->configMedia->IP.toString();          
           DEBUG_PRINT("\nWebserver serving on %s",hwm->configURL.c_str() );
@@ -2619,8 +2614,8 @@ void setup() {
           JsonObject values = first.value().as<JsonObject>();
           if (interface->restoreBase(values)){
             if (interface->save()){
-              jsonAnswer.callback=RET_POPUP;
-              jsonAnswer.value = "saved";  
+              jsonAnswer.callback = RET_SAVEBUTTON;
+              jsonAnswer.value ="1";
               interface->begin(); // force interface disconnect so it reconnects with the new parameters
             }else{
               jsonAnswer.callback=RET_COMMANDERROR;
