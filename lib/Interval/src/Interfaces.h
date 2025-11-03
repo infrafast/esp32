@@ -3,6 +3,7 @@
 
 #include <vector>
 #include "Interval.h"
+#include <StringConcat.h>
 
 #include "interfaces/i_states.h"
 
@@ -476,7 +477,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     
     virtual const String* getValuePtr(String addrr, uint16_t index){
       if (addrr == ADDRESS_dsText){
-        textValue = "hello"+String(index);
+        textValue = concatStrings("hello", index);
         return &textValue;
       }
       else if (addrr == ADDRESS_dsStripIDs){

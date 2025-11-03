@@ -2,6 +2,7 @@
 #define MixerInterface_h
 
 #include <Arduino.h>
+#include <StringConcat.h>
 #include "Interfaces.h"
 #include <ArduinoJson.h>
 #include <vector>
@@ -193,7 +194,7 @@ class DataSetSynced: public DataSet{
       }
      
       for (int i = 0; i < size; ++i) {
-          values[i] = defVal+String(i);
+          values[i] = concatStrings(defVal, i);
       }
     }
 
@@ -205,7 +206,7 @@ class DataSetSynced: public DataSet{
 
     /*virtual String serialize(){
       JsonDocument doc;
-      doc[address]["getDS"+shortName] = size;  // function name that is called by javascript to populate the data by indicating the size example: getDSCh(32)  //{"/ch/%d/config/name": {"getDSCh":32}}
+      doc[address][concatStrings("getDS", shortName)] = size;  // function name that is called by javascript to populate the data by indicating the size example: getDSCh(32)  //{"/ch/%d/config/name": {"getDSCh":32}}
       String data;
       serializeJson(doc,data);
       return data;
@@ -276,7 +277,7 @@ class MixerInterface: public DeviceInterface{
       ByteBuffer decompressedJson;
       size_t dataSize = 0;
 
-      String interfaceFileNameGz = INTERFACES_FILENAME+String(".gz");      
+      String interfaceFileNameGz = concatStrings(INTERFACES_FILENAME, ".gz");
       dataSize = readGzFileToBuffer(interfaceFileNameGz.c_str(),&decompressedJson);
       if (dataSize == 0){ // uncompress failed
         //DEBUG_PRINT("\nFailed to decompress JSON interface file %s, using non compressed file",INTERFACES_FILENAME);
@@ -616,7 +617,7 @@ class MixerOfflineInterface: public MixerInterface {
       //DEBUG_PRINT("\n\nNew MixerOfflineInterface(<%s>)\n\n",model.c_str());
       name="Offline";
       interfaceState = DISCONNECTED;
-      for (uint8_t i=0;i<ADDR_MAX-1;i++) addresses[i] = "address"+String(i);
+      for (uint8_t i=0;i<ADDR_MAX-1;i++) addresses[i] = concatStrings("address", i);
     }
 
     bool read(JsonObject& data){
@@ -646,8 +647,8 @@ class MixerOfflineInterface: public MixerInterface {
 
     /*virtual String getValue(String addrr, uint16_t index){
       String v="";
-      if (addrr == ADDRESS_CHNAME) v="ch"+String(index);
-      else if (addrr == ADDRESS_BUSNAME) v="bus"+String(index);
+      if (addrr == ADDRESS_CHNAME) v = concatStrings("ch", index);
+      else if (addrr == ADDRESS_BUSNAME) v = concatStrings("bus", index);
       return v;
     }*/
 
@@ -877,7 +878,7 @@ class MixingStation : public OSCMixerInterface {
     }
 
     String _OSCprefix(String command){
-      return String(OSC_MS_PRE)+command;
+      return concatStrings(OSC_MS_PRE, command);
     }
 
 
@@ -1326,14 +1327,14 @@ class MixingStation : public OSCMixerInterface {
 
     /*virtual String getValue(String addrr, uint16_t index){
       String value="";
-      
+
       if (addrr == ADDRESS_CHNAME){
-        value="CHMS"+String(index);
+        value = concatStrings("CHMS", index);
         index += chOffset;
-      } 
+      }
       else if (addrr == ADDRESS_BUSNAME){
-        value="BUSMS"+String(index);
-        index += busOffset;        
+        value = concatStrings("BUSMS", index);
+        index += busOffset;
       }
 
       // /con/n/ch.18.cfg.name,s,newname8

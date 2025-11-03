@@ -4,6 +4,7 @@
 #include "Strips.h"
 #include "Interval.h"
 #include "interfaces/i_midi.h"
+#include <StringConcat.h>
 
 StripSkeleton *midiNoteSkel, *sysexSkel;
 
@@ -370,7 +371,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
         }
         //Log::drop(interface->interfaceName.c_str(), (const char*)buffer);  // => for SOME REASON THIS CREATE A DISCONNECTION OF WEBSOCKET...MAYBE THE GENERATED FRAME IS INCORRECT?
       } else {
-        String err = String("Invalid sysex: ") + sysexMessage; 
+        String err = concatStrings("Invalid sysex: ", sysexMessage);
         Log::drop(interface->interfaceName.c_str(), err.c_str());
       }
 

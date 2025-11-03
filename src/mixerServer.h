@@ -2,6 +2,7 @@
 #define MixerServer_h
 
 #include <OSCMessage.h>           //https://github.com/CNMAT/OSC  lib 1.3.5
+#include <StringConcat.h>
 
 #include "HWComponents.h"
 #include "mixerInterface.h"
@@ -316,7 +317,7 @@ class MixerServer: public HWComponent2State{
     }
 
     void initInterface(const char* _name){
-      String udpLogString="instantiate "+String(_name)+" interface";
+      String udpLogString = concatStrings("instantiate ", _name, " interface");
       //DEBUG_PRINT("\n%s",udpLogString.c_str());
       state = CONNECTED;      
       LogUDP::sendLog(udpLogString.c_str(),hwm.network->udp);

@@ -8,8 +8,9 @@
 
 #include <TFT_eSPI.h>
 //#define SPIFFS LittleFS           // this is to force TJpg_Decoder to use LittleFS, compile conflict for esp32
-#include <TJpg_Decoder.h>   
+#include <TJpg_Decoder.h>
 #include <LinkedList.h>
+#include <StringConcat.h>
 #include "GUIComponents.h"
 
 #include "fonts.h"
@@ -286,8 +287,8 @@ class GUIManager : public GenericComponent {
         t1 = micros(); 
         roundTrip = t1-t0;
 
-        count = "~"+String(++renderLoop)+"~";
-        count2 = String(roundTrip)+"uS";
+        count = concatStrings("~", ++renderLoop, "~");
+        count2 = concatStrings(roundTrip, "uS");
 
         #define RTRIP 50000UL
 

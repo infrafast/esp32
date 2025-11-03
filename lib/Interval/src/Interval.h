@@ -8,6 +8,7 @@
 #include <vector>
 #include <FS.h>
 #include <LittleFS.h>
+#include <StringConcat.h>
 #define DEST_FS_USES_LITTLEFS // filesystem object will be available as "tarGzFS"
 #include <ESP32-targz.h>
 
@@ -1088,7 +1089,7 @@ void connectHTTPTask(void *parameter) {
 
     if (clientObj->method == HTTP_METHOD_GET) clientObj->post = ""; 
 
-    //String result="{\""+String(API_ORIGIN)+"\":\""+clientObj->URL+"\",";
+    //String result = concatStrings("{\"", String(API_ORIGIN), "\":\"", clientObj->URL, "\",");
 
     JsonDocument doc;        
     doc[API_ORIGIN] = clientObj->URL;
@@ -1149,7 +1150,7 @@ void connectHTTPTask(void *parameter) {
         doc[API_STATUS] = API_ERROR;
     }
 
-    //result += "\"status\":"+String(status)+",\"data\":"+String(payload)+"}";
+    //result += concatStrings("\"status\":", String(status), ",\"data\":", String(payload), "}");
     //result ="{\"origin\":\"/app/state\",\"status\":1,\"data\":{\"progress\": 0,\"state\": \"connected\"}}";
 
     //DEBUG_PRINT("\nsend => %s",result.c_str());
@@ -1289,7 +1290,7 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
   String langName = app.getNameFromString(menuString);
   // load should return a boolean which indicate if the lanugage file has been loaded correctly to 
   // process the semantic return and update the menu title accordingly if it was loaded or not
-  if (lang.load("/"+langName+".lang")){
+  if (lang.load(concatStrings("/", langName, ".lang"))){
     systemCfg.setValue(S_LANG,langName);
     /*app.menuActiveIconColor = TFT_GREEN;
     GUI::glowingGoldColor.value = &GUI::unUsedColor;*/
