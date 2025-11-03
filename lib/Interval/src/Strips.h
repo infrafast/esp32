@@ -405,7 +405,7 @@ class Strip {
     
     virtual void pushToGUI(uint8_t layout){
       
-      visible == true;
+      visible = true;
       focus(false);
       renderError = false;
 
@@ -526,7 +526,7 @@ class Strip {
       // Label GUI
       Label* label = new Label(textOriginal, Align::Center, &simpleTextX, &simpleTextY,
                               fontSize, maxLen,
-                              &frontColor, &backColor, &brightness);
+                              &GUI::white, &backColor, &brightness);
       label->angle = angle;
       gui.add(label);
     }

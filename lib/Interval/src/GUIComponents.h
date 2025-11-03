@@ -1692,7 +1692,7 @@ class Led : public Widget{
       if (mainRadius < 2) mainRadius = 2;
 
       uint16_t innerColor = ledOn ? ledBaseColor : TFT_DARKGREY;
-      uint16_t rimColor = GUI::luminance(TFT_WHITE,*brightness * GUI::screenBrightness * 255);
+      uint16_t rimColor = GUI::luminance(TFT_GREY,*brightness * GUI::screenBrightness * 255);
 
       sprite->drawCircle(centerX, centerY, mainRadius, rimColor);
       sprite->drawCircle(centerX, centerY, mainRadius-1, TFT_BLACK);
