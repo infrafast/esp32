@@ -722,7 +722,7 @@ class Network : public HWComponent2State{
     WebSocketClient<WiFiClient> *wsWiFiClient{ nullptr };
     WebSocketClient<EthernetClient> *wsEthClient{ nullptr };
 
-    float wiFiConnectAttemptProgress = 0;
+    float networkConnectAttemptProgress = 0.0;
 
     SemaphoreHandle_t networkBusy;
 
@@ -782,7 +782,7 @@ class Network : public HWComponent2State{
       lastConnectedSSID = SSID;
     }
 
-    uint16_t wiFiTimeout = 7000;
+
 
     void setWifiPower(){
       //#define WIFI_POWER WIFI_POWER_MINUS_1dBm // Set WiFi RF power output to lowest level      
@@ -793,19 +793,16 @@ class Network : public HWComponent2State{
       //WiFi.setTxPower(WIFI_POWER); // maximum power => https://github.com/G6EJD/ESP32-8266-Adjust-WiFi-RF-Power-Output/ 
     }
 
-    void setConnectTimeout() {
-        // Plage définie entre 2000 ms et 8999 ms
-        const uint16_t minTimeout = 2000;
-        const uint16_t maxTimeout = 9000;
+    #define minTimeout 3000
+    #define maxTimeout 9000
 
-        // Initialisation ou incrémentation
-        wiFiTimeout = (wiFiTimeout + 1000) % maxTimeout;
+    uint16_t wiFiTimeout = minTimeout;
 
-        // Assurer que la valeur est dans la plage valide
-        if (wiFiTimeout < minTimeout) 
+    void shiftConnectTimeout() {
+        wiFiTimeout += 3000;
+        if (wiFiTimeout > maxTimeout) {
             wiFiTimeout = minTimeout;
-
-        //DEBUG_PRINT("\nsetWiFiConnectTimeout(): %i",wiFiTimeout);
+        }
     }
 
     String serialize(){
@@ -1073,22 +1070,28 @@ class WiFiEth : public Network{
         // first try to connect eth
         if (cable == LinkON){       // ethernet is enabled  
           #define ETH_BEGIN_RETRY_DELAY 1000
-          if (millis()-lastEthAttempt>ETH_BEGIN_RETRY_DELAY){
+          unsigned long delta = millis()-lastEthAttempt;                    
+          if (delta >= ETH_BEGIN_RETRY_DELAY){
+              media = CABLE_MEDIA;
               lastEthAttempt = millis();
-
+              // toggle the progress indicator
+              if (networkConnectAttemptProgress == 1.0) networkConnectAttemptProgress = 0.0;
+              else networkConnectAttemptProgress = 1.0;
+             
               bool success;
-              
-                /* IF CONFIG = STATIC IP {
-                  IP = config.getIP();
-                  success = Ethernet.begin(mac, IP, gateway, gateway, subnet);
-                  }
-                  else
-                  */
+              /* IF CONFIG = STATIC IP {
+              IP = config.getIP();
+                SSID = "Static IP: "+IP;
+                success = Ethernet.begin(mac, IP, gateway, gateway, subnet);
+              }
+              else
+              */
+              SSID = "Connecting DHCP";
               success = Ethernet.begin(ethMac,100,100);
+
               if (success){  // as it take 100ms, we only do it every ETH_BEGIN_RETRY_DELAY otherwise it really slows down the loop
                 state = CONNECTED;
-                media = CABLE_MEDIA;
-
+                
                 if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
                   // save power    
                   disconnectWifi();
@@ -1115,7 +1118,7 @@ class WiFiEth : public Network{
                   DEBUG_PRINT("\nETH CONNECT: networkBusy\n"); 
                 }
               }else{
-                //DEBUG_PRINT(".");
+                DEBUG_PRINT(".");
               }
           }
         }else{
@@ -1137,13 +1140,13 @@ class WiFiEth : public Network{
               }              
 
               unsigned long delta = millis()-lastWiFiAttempt;
-              wiFiConnectAttemptProgress = scaleValue(delta,0,wiFiTimeout,0.0,100.0);
+              networkConnectAttemptProgress = scaleValue(delta,0,wiFiTimeout,0.0,1.0);
 
-              if (wiFiConnectAttemptProgress >= 100.0){
+              if (networkConnectAttemptProgress >= 1.0){
                 _newWifiAttempt = true;
                 //next  credential to attempt
                 wiFiIndex = (wiFiIndex + 1) % wiFiList->size();
-                if (wiFiIndex == 0) setConnectTimeout(); 
+                if (wiFiIndex == 0) shiftConnectTimeout(); 
                 SSID = *wiFiList->getName(wiFiIndex);              
               }            
 
@@ -1154,7 +1157,7 @@ class WiFiEth : public Network{
             state = CONNECTED;
             media = WIFI_MEDIA;
             // save power and disconnect ethernet driver
-            // TBC 
+            // TBC            
 
             if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
               IP = WiFi.localIP();
@@ -1224,6 +1227,8 @@ class WiFiEth : public Network{
         DEBUG_PRINT("\n%s changed state => cable:%i, media:%i",id.c_str(),cable,media);
         
         if (state == CONNECTED){
+          // reset the progress indicator
+          networkConnectAttemptProgress = -1;
           // initialiser of common object to both Wifi and Ethernet goes here
           
           if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888
@@ -1264,7 +1269,7 @@ class WiFiEth : public Network{
             if (midiClient != nullptr){ delete midiClient; midiClient = nullptr;}
             
             // specific destruction to WIFI or ETH
-            if (media == CABLE_MEDIA){
+            if (media == CABLE_MEDIA){              
               // eth
               EthernetBonjour.stop();
             }else{

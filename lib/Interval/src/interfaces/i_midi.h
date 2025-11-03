@@ -205,6 +205,7 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
       DEBUG_PRINT("\nBLEMidi connected\n");
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
+      state.subState = IF_STATE_CONNECTED;
       state.details = ""; //String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
       state.led = "blue";
       state.progress = -1;
@@ -213,7 +214,8 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
     void handleDisconnected() {
       DEBUG_PRINT("\nBLEMidi disconnected\n");
       state.code = IF_NOT_READY;      
-      state.label = IF_STATE_PENDING;
+      state.label = IF_STATE_PAIRING;
+      state.subState = IF_STATE_PAIRING;
       state.details = *lang.getString("Connect Blutooth") + " " + BLE_CONNECTION_NAME;  
       state.led = "blue medium";
       state.progress = -1;      
@@ -298,6 +300,7 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
         if (tud_mounted() && state.code == IF_NOT_READY) {
           state.code = IF_READY;
           state.label = IF_STATE_CONNECTED;
+          state.subState = IF_STATE_CONNECTED;
           state.details = "";
           state.led = "green";
           state.progress = -1;          
@@ -306,6 +309,7 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
         if (!tud_mounted() && state.code == IF_READY) {
           state.code = IF_NOT_READY;
           state.label = IF_STATE_DISCONNECTED;
+          state.subState = IF_STATE_DISCONNECTED;
           state.details = "Plugin USB-MIDI";
           state.led = "red";
           state.progress = -1;
@@ -336,6 +340,7 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
       if (!useUSBMidi){
         state.code = IF_NOT_READY;
         state.label = IF_STATE_DISABLED;
+        state.subState = IF_STATE_DISABLED;
         state.details = "restartUSB";
         state.led = "black";
         state.progress = -1;
@@ -450,6 +455,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       DEBUG_PRINT("\nConnected to session: %s\n", name);
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
+      state.subState = IF_STATE_CONNECTED;
       state.details = String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
       state.progress = -1;
       state.led = "green";
@@ -571,8 +577,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       if (hwm.network->midiClient != nullptr){
           midiSessionName = hwm.network->midiClient->getName();
       }
+      state.subState = midiSessionName;      
       state.details = *lang.getString("Connect MIDI session") +" "+ midiSessionName +String(" (")+hwm.network->IP.toString() + String(", port: ")+hwm.network->midiClient->getPort()+ String(")");;          
-      state.led = "green medium";
+      state.led = "green slow";
       state.progress = -1;
     }
 

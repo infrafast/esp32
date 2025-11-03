@@ -231,8 +231,8 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
         w = WIDGET4X4W;
-        renderY += h/2; 
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+        topY += h/2; 
+        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topX /*x*/, &topY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }else if (size == SHAPE1X4){
         pushSimpleText(layout, lang.getString("SHAPE1X4 note"));
       }else if (size ==SHAPE2X2 ){
@@ -243,7 +243,7 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
 
       } 
 
-      //DEBUG_PRINT("\nchGainStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
+      //DEBUG_PRINT("\nchGainStrip topX: %d, topY: %d, w: %d, h: %d",topX,topY,w,h);
 
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
@@ -307,8 +307,8 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
         w = WIDGET4X4W;
-        renderY += h/2; 
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &renderX /*x*/, &renderY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+        topY += h/2; 
+        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topX /*x*/, &topY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }else if (size == SHAPE1X4){
         pushSimpleText(layout, lang.getString("SHAPE1X4 SYSEX"));
       }else if (size ==SHAPE2X2 ){
@@ -320,7 +320,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       }         
 
 
-      //DEBUG_PRINT("\nchGainStrip renderX: %d, renderY: %d, w: %d, h: %d",renderX,renderY,w,h);
+      //DEBUG_PRINT("\nchGainStrip topX: %d, topY: %d, w: %d, h: %d",topX,topY,w,h);
 
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }

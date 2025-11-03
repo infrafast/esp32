@@ -165,6 +165,7 @@ class DeviceInterface {
     virtual bool update(){      // return a boolean indicatin if the interface has changed its state
       // reset change state
       state.stateChanged = false;
+      state.progressChanged = false;
 
       // reset the flag so strips will not be updated and re-processed already consummed data
       dataAvailable = 0;
@@ -183,8 +184,10 @@ class DeviceInterface {
         previousOffline = state.offline;
       }    
       if (state.progress != previousProgress){
-        state.stateChanged  = true;
-        previousProgress = state.progress;
+        // a progress change is captured but is not a state change
+        // indeed, a state change would trigger redraw which we do not want
+        state.progressChanged = true;        
+        previousProgress = state.progress;        
       }
       if (state.led != previousLed){
         state.stateChanged  = true;
@@ -315,16 +318,15 @@ class NetworkDevice : public DeviceInterface{
     
     void networkDown(){
       state.code = IF_NOT_READY;
-      state.label = IF_STATE_DISCONNECTED;
-      state.details = "networkDown";      
+      state.label = IF_STATE_DISCONNECTED;           
       state.led = "red medium";
-      state.progress = -1;
+      state.details = *lang.getString("networkDown");                // connect Eth cable or attempt to connect a previous SSID
     }
 
     void networkUp(){
       state.code = IF_NOT_READY;
       state.label = IF_STATE_DISCONNECTED;
-      state.details = "networkUp";      
+      state.details = *lang.getString("networkUp");      
       state.led = "red";
       state.progress = -1;
     }    
@@ -350,12 +352,17 @@ class NetworkDevice : public DeviceInterface{
       }
       // we only monitor networkdevices when network is on
       if (hwm.network->state == CONNECTED) derivedMonitor();
+      // otherwise we report on progress and the network we try to connect 
+      else{
+        state.progress = hwm.network->networkConnectAttemptProgress;
+        state.subState = hwm.network->SSID;
+      }
     }
 
-    virtual const String* getIcon(){
+    /*virtual const String* getIcon(){
       if (hwm.network->state == CONNECTED) return &icon;
       else return &GUI::iconMixEthWiFi;
-    }    
+    } */   
 };
 
 class InterfaceRepository{

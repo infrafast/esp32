@@ -2,10 +2,10 @@
 #define STRIPSDEF_h
 
 #include "Interval.h"
+#include "GUIComponents.h"
+
 using IntervalButton = Interval::Button;
 
-// common utility function 
-void addFullScreenTextWithIcon(const String* topLabel, const String* midText, const String* icon, const String* state);
 //-------------------------
 
 #define C_PROPERTIES    "properties"
@@ -208,8 +208,8 @@ class Strip {
     // logical position
     uint8_t x, y, win, index;
     
-    // position on TFT screen
-    int16_t renderX, renderY;
+    // top left corner position on TFT screen
+    int16_t topX, topY;
     
     String size;
     unsigned char icon = 0x21;
@@ -403,145 +403,6 @@ class Strip {
       return delta;      
     }
     
-    #define SIMPLE_TEXT_MAX_LEN 20
-    void pushSimpleTextOrig(uint8_t layout, const String* text){
-      // this is a utility function which display the text provided as parameter into the strip 
-      // to take its full size, it is essentially used to display the strip state when not connected
-      // or used by utility strips
-      uint16_t fontSize;
-      int16_t angle = 0;
-      uint8_t len = text->substring(0,SIMPLE_TEXT_MAX_LEN).length();
-      //DEBUG_PRINT("\npushText(%s) %s layout:%i",text->c_str(),size.c_str(), layout);
-      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
-        textX = renderX + WIDGET4X4W/2;
-        textY = renderY + WIDGET4X4H/3.5;        
-
-        fontSize = WIDGET4X4W / len * 3.3;
-      }
-      else if (size == SHAPE1X4){
-        textX = renderX + WIDGET1X4W*1.2;
-        textY = renderY + WIDGET1X4H/4;    
-
-        fontSize = WIDGET1X4W / len * 4;
-        // put it vertically
-        angle = 90;
-      }
-      else if (size == SHAPE2X2){
-        textX = renderX + WIDGET2X2W/2;
-        textY = renderY + WIDGET2X2H/4;    
-        fontSize = WIDGET2X2W / len * 3.3;
-      }
-      else if (size == SHAPE4X1){
-        textX = renderX + WIDGET4X1W/2;
-        textY = renderY + WIDGET4X1H/7;            
-        fontSize = 40;     
-      }
-
-      Label* label = new Label(text, Align::Center,&textX,&textY,fontSize,SIMPLE_TEXT_MAX_LEN,&frontColor,&backColor,&brightness);
-      label->angle = angle;
-      gui.add(label);
-
-    }
-
-    void pushSimpleText3(uint8_t layout, const String* textOriginal) {
-  String text = textOriginal->substring(0, SIMPLE_TEXT_MAX_LEN);
-  int16_t angle = 0;
-  uint16_t fontSize;
-  uint16_t areaW = 0, areaH = 0;
-
-  // Définir la zone d'affichage selon la forme
-  if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) {
-    areaW = WIDGET4X4W;
-    areaH = WIDGET4X4H;
-  } else if (size == SHAPE1X4) {
-    areaW = WIDGET1X4W;
-    areaH = WIDGET1X4H;
-    angle = 90;
-  } else if (size == SHAPE2X2) {
-    areaW = WIDGET2X2W;
-    areaH = WIDGET2X2H;
-  } else if (size == SHAPE4X1) {
-    areaW = WIDGET4X1W;
-    areaH = WIDGET4X1H;
-  }
-
-  // Calcul dynamique de police
-  uint8_t len = text.length();
-  float estimatedFont = (angle == 90)
-      ? (areaH / (float)len) * 1.2
-      : (areaW / (float)len) * 1.2;
-
-  fontSize = constrain((uint16_t)estimatedFont, 28, 60);
-
-  // Centrage
-  textX = renderX + areaW / 2;
-  textY = renderY + areaH / 2 - fontSize / 4;
-
-  // Création du label
-  Label* label = new Label(textOriginal, Align::Center, &textX, &textY,
-                           fontSize, SIMPLE_TEXT_MAX_LEN,
-                           &frontColor, &backColor, &brightness);
-  label->angle = angle;
-  gui.add(label);
-}
-
-    #define MIN_SIMPLETEXT_SIZE 40
-    void pushSimpleText(uint8_t layout, const String* textOriginal) {
-      // texte limité par SIMPLE_TEXT_MAX_LEN
-      int16_t angle = 0;
-      uint16_t areaW = 0, areaH = 0;
-      uint8_t maxLen = 28;
-
-      // déterminer la zone selon la forme
-      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) {
-        areaW = WIDGET4X4W;
-        areaH = WIDGET4X4H;
-      } else if (size == SHAPE1X4) {
-        areaW = WIDGET1X4H;
-        areaH = WIDGET1X4W;
-        angle = 90;
-        maxLen = 13;
-      } else if (size == SHAPE2X2) {
-        areaW = WIDGET2X2W;
-        areaH = WIDGET2X2H;
-        maxLen = 13;
-      } else if (size == SHAPE4X1) {
-        areaW = WIDGET4X1W;
-        areaH = WIDGET4X1H;
-      }
-
-      int len = textOriginal->length();
-
-      #define FONT_SIZE_RATIO 1.5
-      int fontSize = areaH * FONT_SIZE_RATIO ;  // affect the maximum size of font possible, which is the widget height
-
-      // Réduire la taille jusqu'à tenir, ou jusqu'à MIN
-      while (fontSize > MIN_SIMPLETEXT_SIZE) {
-        float charWidth = 0.4f * fontSize;
-        float estimatedWidth = charWidth * len;
-
-        if (estimatedWidth <= areaW) break;  // ça rentre, on s'arrête
-        fontSize -= 2;                    
-      }
-
-      textX = renderX + areaW / 2;
-      textY = renderY + (areaH/2) - (fontSize/3);
-
-      if (size == SHAPE1X4 && layout != LAYOUT_ZOOM) {
-        // special treatment for vertical widget where text is rotated
-        textX = renderX + WIDGET1X4W/2;   // exactly middle
-        textY = renderY + WIDGET1X4H/2.5; // we want middle but for some reason we have to give it some margin
-      }
-      // Label GUI
-      Label* label = new Label(textOriginal, Align::Center, &textX, &textY,
-                              fontSize, maxLen,
-                              &frontColor, &backColor, &brightness);
-      label->angle = angle;
-      gui.add(label);
-    }
-
-
-
     virtual void pushToGUI(uint8_t layout){
       
       visible == true;
@@ -586,56 +447,168 @@ class Strip {
 
     bool determineTopLeft(uint8_t layout){
       DEBUG_PRINT("\nstrip[%d] %s topLeft=",index,type.c_str());
-      // retrieve the corner of the strip where we can start drawing, which is renderX, renderY
+      // retrieve the corner of the strip where we can start drawing, which is topX, topY
       if (layout == LAYOUT_ZOOM || size == SHAPE4X4){
-        renderX = 0;
-        renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);
+        topX = 0;
+        topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);
       }
       else if (size == SHAPE1X4){
-        renderX = x * WIDGET1X4W;
-        renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);        
+        topX = x * WIDGET1X4W;
+        topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);        
       }
       else if (size == SHAPE4X1){
-        renderX = 0;
-        renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET4X1H) ;        
+        topX = 0;
+        topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET4X1H) ;        
       }
       else if (size == SHAPE2X2){
-        renderX = (x * WIDGET2X2W/2);
-        renderY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
+        topX = (x * WIDGET2X2W/2);
+        topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
       }else{
         return false;
       }         
-      DEBUG_PRINT("(%i,%i)",renderX,renderY);
+      DEBUG_PRINT("(%i,%i)",topX,topY);
       return true;
     }
 
+    #define SIMPLE_TEXT_MAX_LEN 20
+    #define MIN_SIMPLETEXT_SIZE 40
+    void pushSimpleText(uint8_t layout, const String* textOriginal) {
+      // texte limité par SIMPLE_TEXT_MAX_LEN
+      int16_t angle = 0;
+      uint16_t areaW = 0, areaH = 0;
+      uint8_t maxLen = 28;
+
+      // déterminer la zone selon la forme
+      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) {
+        areaW = WIDGET4X4W;
+        areaH = WIDGET4X4H;
+      } else if (size == SHAPE1X4) {
+        areaW = WIDGET1X4H;   
+        areaH = WIDGET4X1H*0.6; // some margin to avoid text being rendered with overlap on top2label
+        angle = 90;
+        maxLen = 15;
+      } else if (size == SHAPE2X2) {
+        areaW = WIDGET2X2W;
+        areaH = WIDGET2X2H;
+        maxLen = 13;
+      } else if (size == SHAPE4X1) {
+        areaW = WIDGET4X1W;
+        areaH = WIDGET4X1H;
+      }
+
+      int len = textOriginal->length();
+
+      #define FONT_SIZE_RATIO 1.5
+      int fontSize = areaH * FONT_SIZE_RATIO ;  // affect the maximum size of font possible, which is the widget height
+
+      // Réduire la taille jusqu'à tenir, ou jusqu'à MIN
+      while (fontSize > MIN_SIMPLETEXT_SIZE) {
+        float charWidth = 0.4f * fontSize;
+        float estimatedWidth = charWidth * len;
+
+        if (estimatedWidth <= areaW) break;  // ça rentre, on s'arrête
+        fontSize -= 2;                    
+      }
+
+      simpleTextX = topX + areaW / 2;       //middle
+      simpleTextY = topY + (areaH/2);       //middle
+
+      // fix position according to some widget size specificity, but only when layout is DETAILS:
+      if (layout == LAYOUT_DETAILS){
+        if (size == SHAPE4X1) simpleTextY -= WIDGET4X1H/2;     // fix vertical location for flat strip
+        else if (size == SHAPE1X4) {
+          // special treatment for vertical widget where text is rotated
+          simpleTextX = topX + WIDGET1X4W/2;   // exactly middle
+          simpleTextY = topY + WIDGET1X4H/2.5; // we want middle but for some reason we have to give it some margin
+        }
+      }
+
+      // Label GUI
+      Label* label = new Label(textOriginal, Align::Center, &simpleTextX, &simpleTextY,
+                              fontSize, maxLen,
+                              &frontColor, &backColor, &brightness);
+      label->angle = angle;
+      gui.add(label);
+    }
+
+
     virtual void composeInterfaceState(uint8_t layout){
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
-        addFullScreenTextWithIcon(lang.getString(interface->state.label), lang.getString(interface->state.details), interface->getIcon(),&interface->state.led );        
+        pushIFState4x4();        
         
-        //gui.add (new ProgressBarH(&hwm.network->wiFiConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                             
+        //gui.add (new ProgressBarH(&hwm.network->networkConnectAttemptProgress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                             
         //gui.add (new PendingBar(&oneHundedFloat /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, 7 /*h*/, /*pingpong*/ true, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/, 50, 4));                                                  
 
       }else if (size == SHAPE1X4){
-        pushSimpleText(layout, lang.getString(interface->state.label));
+        pushSimpleText(layout, &interface->state.subState);
+        pushIFState1x4();
       }else if (size ==SHAPE2X2 ){
-         pushSimpleText(layout, lang.getString(interface->state.label));
+        pushSimpleText(layout, &interface->state.subState);
+        pushIFState2x2();
       }else if (size == SHAPE4X1){
-         pushSimpleText(layout, lang.getString(interface->state.label));
+        pushSimpleText(layout, &interface->state.subState);
+        pushIFState4x1();
       }else{
 
       }      
     }    
+
+    void pushIFState4x4(){
+      gui.add(new Label(&interface->state.label, Align::Center,&GUI::midScreenHoriz, &GUI::topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::transparentColor));    
+      gui.add(new Led(&GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20, &interface->state.led));      
+      gui.add(new Arc(&interface->state.progress, 0,1.0 , &GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20+10, &GUI::gold, &GUI::transparentColor,0));
+      gui.add(new Icon(interface->getIcon(),Align::Right,&GUI::rightMenuIconXpos, &GUI::iconY,MEDIUM_ICON_SIZE,&GUI::gold,&GUI::transparentColor));   
+      gui.add(new TextArea(&interface->state.details,TFT_WIDTH/2 ,Align::Left,Align::Center,&GUI::midScreenHoriz,&GUI::iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::transparentColor));           
+      gui.add(new Label(&interface->state.subState, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));
+      gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&GUI::midScreenHoriz, &GUI::belowBottomTexty,SIZE_18,40,&GUI::green,&GUI::transparentColor));          
+    }   
+
+    void pushIFState1x4(){      
+      IFledX = topX + WIDGET1X4W / 1.2;
+      IFledY = topY + WIDGET1X4H / 2.5;
+
+      IFiconX = topX + WIDGET1X4W ;
+      IFiconY = topY + WIDGET1X4H / 1.8;      
+
+      pushSmallLedandIcon();
+    }      
+
+
+    void pushIFState2x2(){      
+      IFledX = topX + WIDGET2X2W / 2.5;
+      IFledY = topY + SIZE_20;
+
+      IFiconX = topX + WIDGET2X2W / 1.4;
+      IFiconY = topY + SIZE_10 ;
+
+      pushSmallLedandIcon();
+    }     
+    
+    void pushIFState4x1(){      
+      IFledX = GUI::leftMenuIconXpos;
+      IFledY = topY + WIDGET4X1H/2;
+
+      IFiconX = TFT_WIDTH - SIZE_26/2;
+      IFiconY = topY + SIZE_26/4;
+
+      pushSmallLedandIcon();
+    }     
+
+    void pushSmallLedandIcon(){
+      gui.add(new Led(&IFledX, &IFledY, SIZE_10, &interface->state.led,&brightness));      
+      gui.add(new Arc(&interface->state.progress, 0,1.0 , &IFledX, &IFledY, SIZE_16, &GUI::gold, &GUI::transparentColor,0,&brightness));
+      gui.add(new Icon(interface->getIcon(),Align::Right,&IFiconX, &IFiconY,SIZE_26,&GUI::gold,&GUI::transparentColor,&brightness));    
+    }
 
     virtual void composeWidgets(uint8_t layout){
       drawWidgetsFrames(layout);
     } 
 
     void drawWidgetsFrames(uint8_t layout){
-      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) gui.add(new Canva(&renderX, &renderY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &frontColor,&brightness));  
-      else if ( size == SHAPE1X4) gui.add(new Canva(&renderX, &renderY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &frontColor,&brightness));
-      else if (size == SHAPE2X2) gui.add(new Canva(&renderX, &renderY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &frontColor,&brightness));  
-      else if (size == SHAPE4X1) gui.add(new Canva(&renderX, &renderY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &frontColor,&brightness));      
+      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) gui.add(new Canva(&topX, &topY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &frontColor,&brightness));  
+      else if ( size == SHAPE1X4) gui.add(new Canva(&topX, &topY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &frontColor,&brightness));
+      else if (size == SHAPE2X2) gui.add(new Canva(&topX, &topY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &frontColor,&brightness));  
+      else if (size == SHAPE4X1) gui.add(new Canva(&topX, &topY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &frontColor,&brightness));      
     }
 
     JsonArray properties;
@@ -643,7 +616,9 @@ class Strip {
     //LinkedList<Widget*> widgetHandles = LinkedList<Widget*>();
     float value = 0.0, valueMin = 0, valueMax = 1;
 
-    int16_t textX = 0, textY = 0;
+    int16_t simpleTextX = 0, simpleTextY = 0;
+    int16_t IFledX = 0, IFledY = 0;
+    int16_t IFiconX = 0, IFiconY = 0;
 
   protected:
     unsigned long lastCall;     

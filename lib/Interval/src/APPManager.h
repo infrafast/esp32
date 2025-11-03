@@ -500,9 +500,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         for (JsonPair kv : root) {
 
           bank = new IntervalBank(kv.key().c_str(),kv.value().as<String>());
+          //DEBUG_PRINT("\n new IntervalBank(%s,%s)",kv.key().c_str(),kv.value().as<String>().c_str());
           bank->init();
-          /*if (bank->strips.size()>0) banks.add(bank);
-          else delete bank; // bank has no strips and is threfore invalid*/
           banks.push_back(bank);
         }
         refreshBankMenu();
@@ -530,13 +529,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     #define DEFAULT_CONFIG_FILE_NAME "default"
-
-    void loadConfig(){
-      // this function applies all settings from the banks and user conf file
-      String profileFile = "/"+*systemCfg.getString(S_CONFIG_FILE,DEFAULT_CONFIG_FILE_NAME);
-      bankCfg.load(profileFile+".conf",defaultBanksConf);  
-      userCfg.load(profileFile+".user",defaultUserConf);            
-    }  
 
     #define SYSTEM_FILE_NAME "/settings.sys"
     void clearConfig(){
@@ -622,15 +614,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       systemCfg.load(SYSTEM_FILE_NAME,defaultSysConf);  
       applySystemSettings();
 
-      loadConfig();      
+      String currentProfile = getCurrentProfileName();
+      userCfg.load(currentProfile+".user",defaultUserConf);            
 
       #ifdef DEBUG
         String s;
         systemCfg.serialize(&s);
         DEBUG_PRINT("\n\n systemCfg:\t%s [...]",s.substring(0,300).c_str());
-        s="";
-        bankCfg.serialize(&s);
-        DEBUG_PRINT("\n\n bankCfg:\t%s [...]",s.substring(0,300).c_str());
         s="";
         userCfg.serialize(&s);
         DEBUG_PRINT("\n\n userCfg:\t%s [...]",s.substring(0,300).c_str());        
@@ -737,10 +727,17 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
+    String getCurrentProfileName(){
+      return "/"+*systemCfg.getString(S_CONFIG_FILE,DEFAULT_CONFIG_FILE_NAME);
+    }
+
     void startup(uint8_t startupScreen){          
+      // save the screen to be called (wiuard or bank)
       hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);            
       // we init banks and then go to banks or fail screen
-      if (deserializeBanks(bankCfg.getString(C_BANKS)) == nullptr){
+      String bankFilename = getCurrentProfileName()+".bank";
+      loadBanks(bankFilename);
+      if (deserializeBanks(&banksDefinition) == nullptr){
         menuTopText = *lang.getString("Bank creation");
         menuBottomLabel = emptyString;
         byeIconColor = &GUI::red; byeIcon = &iconForbid;
@@ -1109,6 +1106,40 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     //DEBUG_PRINT("\nrssi: %d",signalStrength);
   }
 
+  bool saveBanks(const String& bankFileName){
+    bool success = false;
+    // Ouvrir le fichier en écriture
+    File file = LittleFS.open(bankFileName, "w");
+    if (!file) {
+      DEBUG_PRINT("\nError creation:%s",bankFileName.c_str());          
+    }else{
+      if (file.print(serializeBanks()) == 0){
+        DEBUG_PRINT("\nError writting to:%s",bankFileName.c_str());
+        success = false;
+      }
+      file.close();
+    }        
+    return success;
+  }
+
+  bool loadBanks(const String& bankFileName){
+    bool success = false;
+    if (LittleFS.exists(bankFileName)){
+      File file = LittleFS.open(bankFileName);
+      if (file) {
+        banksDefinition = file.readString();  // lit tout le contenu
+        success = true;        
+      }else{
+        DEBUG_PRINT("\n%s open failed",bankFileName.c_str());          
+      }        
+      file.close();
+    }else{
+      DEBUG_PRINT("\n%s doesnt exists",bankFileName.c_str()); 
+    }
+    return success;
+  }
+
+
   String serializeBanks(){
     JsonDocument bankDoc;
     
@@ -1218,8 +1249,6 @@ void setup() {
 
       DEBUG_PRINT("\nserializing bankCfg");
       tempJsonString = serializeBanks();      
-      bankCfg.setValue(C_BANKS,tempJsonString);
-
       doc["banks"]=tempJsonString;
           
       serializeJson(doc, *returnedJsonStringData);  
@@ -1597,7 +1626,10 @@ void setup() {
       //------------------
       bool interfaceChangedState = false;
       for (const auto& interface : interfaceRepo.interfaces){        
-        if (interface->update()) broadCast("{\"deviceState\":"+interface->serializeState()+"}"); // inform web interface
+        if (                                                              // if
+          interface->update() ||                                          // interface state has changed
+          interface->state.progressChanged                                // or its progress
+        ) broadCast("{\"deviceState\":"+interface->serializeState()+"}"); // inform web interface
       }
 
       //------------------
@@ -2363,24 +2395,18 @@ void setup() {
         }
       }else if (command == "set"){
         //{"command":"set","param":{"section":"system","id":"pushDelay","value":"3"}}
-        String section = jsonInput["param"]["section"];
         String id = jsonInput["param"]["id"];
         String value = jsonInput["param"]["value"];
         //DEBUG_PRINT("\t => section:%s id:%s value:%s",section.c_str(),id.c_str(),value.c_str());
-        bool success;        
-        if (section == "system"){
-          success = systemCfg.setValue(id,value);
-          if (success){
-            applySystemSettings();      // ===>  propagate config values by giving reference to conf object using parameters instead of using local variable
-            systemCfg.save();
-          }
-        }else if (section == "config"){
-          success = bankCfg.setValue(id,value);
-          if (success) loadConfig();
-        }
+        bool success = systemCfg.setValue(id,value);
         if (success){
+          applySystemSettings();      // ===>  propagate config values by giving reference to conf object using parameters instead of using local variable
+          systemCfg.save();
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value ="1";
+        }else{
+          jsonAnswer.callback = RET_COMMANDERROR;
+          jsonAnswer.value = jsonInput.as<String>();            
         }
       }else if (command == "scanWifi"){        // Create the parrallel scan task
         xTaskCreate(
@@ -2586,17 +2612,16 @@ void setup() {
           refreshBankMenu();
         }else jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
       }else if (command == "save"){     
-        String fullConfig;
-        serialize(&fullConfig);
-        bool ret = bankCfg.save();
-        ret &=  systemCfg.save();   
-        userCfg.save();   
+        
+        String bankFileName = getCurrentProfileName()+".bank";
+        bool ret = saveBanks(bankFileName);
+        ret = systemCfg.save();   
+        ret &= userCfg.save();   
         if (ret){
           jsonAnswer.callback = RET_SAVEBUTTON;
           jsonAnswer.value = "0";  
         }else{
-          jsonAnswer.callback=RET_COMMANDERROR;
-          jsonAnswer.value = *lang.getString("Save error");
+          jsonAnswer.callback=RET_COMMANDERROR;          
         }
       }else if (command == "deviceConfig"){
         // {"command":"deviceConfig","param":{"MixingStation":{"offline":true,"oscIP":"999.999.999.999","oscPort":"99999"}}}
@@ -2661,7 +2686,6 @@ void setup() {
               removeJsonQuote(&jsonAnswer.value);              
               
               serialize(&jsonAnswer.value);
-
 
             }
           } 
@@ -2866,7 +2890,7 @@ void setup() {
       "\""+String(S_SHORTCUTS)+"\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
     "}";
 
-    String defaultBanksConf = "{\"banks\":{\"Test\":{\"layout\":0,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":0,\"icon\":5,\"size\":\"1x4\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/helloworld\"]}]}}}";
+    String banksDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";
     String defaultUserConf = "{}";
 
     ScreenUnion oldScreen;    

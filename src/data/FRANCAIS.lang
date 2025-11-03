@@ -8,7 +8,7 @@
 "Connected":"Connecté",
 "Press button":"Vous avez déjà un navigateur connecté. Appuyez sur un bouton pour sortir.",
 "Press >1s to startup":"Appuyer >1s pour démarrer",
-"networkDown":"Tentative de connexion WiFi (ou branchez cable ethernet)",
+"networkDown":"Tentative de connexion au réseau",
 "networkUp":"Non connecté au réseau",
 "disconnected":"déconnecté",
 "connected":"connecté",

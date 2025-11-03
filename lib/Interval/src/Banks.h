@@ -73,6 +73,7 @@ namespace Interval {
         return newMaxWindow;
       }*/
   
+
       bool deserialize(String value){
         bool success = false;
         //DynamicJsonDocument bank(JSON_BANK_SIZE);

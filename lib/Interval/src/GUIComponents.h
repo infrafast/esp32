@@ -1,5 +1,3 @@
-// label before icon
-
 #ifndef GUIComponents_h
 #define GUIComponents_h
 
@@ -67,17 +65,6 @@
 #define BIT_DEPTH 8
 
 
-///////////////////////////////////////// WIDGET SIZE AND POSITION STARTS ////////////////////////////
-#define TOP2WIDGET_SIZE (TFT_HEIGHT/7)
-
-#define TFT_HQUARTER TFT_WIDTH/4
-#define TFT_VQUARTER TFT_HEIGHT/4
-#define TFT_HTHIRD TFT_WIDTH/3
-
-#define WIDGET_PADDING 4
-///////////////////////////////////////// WIDGET SIZE AND POSITION END ///////////////////////////////
-
-
 typedef struct {
   uint16_t fColor;
   uint16_t bColor;
@@ -112,15 +99,27 @@ stripColor colorMap[MAX_COLOR_ID] = {
   {TFT_GREY, TFT_ORANGE},
 };
 
+/////////////////////////////////////// FIXED SIZE 
+#define SIZE_10 10
+#define SIZE_16 16
+#define SIZE_18 18
+#define SIZE_20 20
+#define SIZE_26 26
+///////////////////////////////////////
 
 class GUI : public GenericComponent{
 public:
     static TFT_eSPI* tft;      
     static bool off;
-
+    
+    // modifiable colors
     static uint16_t unUsedColor;
     static uint16_t defaultFcolor;
     static uint16_t defaultBcolor;
+    static uint16_t widgetInnerColor;
+    static uint16_t widgetSubLabelColor;
+    static AlteredColor glowingGoldColor;    
+
     // const colors
     static const uint16_t transparentColor;
     static const uint16_t nearlyBlack;
@@ -146,20 +145,65 @@ public:
     static const float fullBrightness;
     static float screenBrightness;
 
-    // variable colors
-    static uint16_t widgetInnerColor;
-    static uint16_t widgetSubLabelColor;
+    // const positions and size
+    #ifdef TFT_WIDTH
+      #undef TFT_WIDTH
+    #endif
+    #ifdef TFT_HEIGHT
+      #undef TFT_HEIGHT
+    #endif
+    #define TFT_WIDTH   320   //GUI::width()
+    #define TFT_HEIGHT  240   //GUI::height()
 
-    static AlteredColor glowingGoldColor;
+    ///////////////////////////////////////// ICON SIZE AND POSITION  ////////////////////////////
+    #define ICON_MAX_SIZE TFT_WIDTH/2
+    #define MEDIUM_ICON_SIZE (ICON_MAX_SIZE/1.7)
+    ///////////////////////////////////////// WIDGET SIZE AND POSITION  ////////////////////////////
+    #define TOP2WIDGET_SIZE (TFT_HEIGHT/7)
+    #define WIDGET_BIG_WIDTH TFT_WIDTH/5
+    #define WIDGET_SMALL_WIDTH TFT_WIDTH/8-5
 
+    #define TFT_HQUARTER TFT_WIDTH/4
+    #define TFT_VQUARTER TFT_HEIGHT/4
+    #define TFT_HTHIRD TFT_WIDTH/3
+
+    #define WIDGET_PADDING 4
+    ///////////////////////////////////////// MENU SIZE AND POSITION ///////////////////////////////
+    #define MENU_ICON_SIZE TFT_WIDTH/3
+    #define MENU_TITLE_SIZE MENU_ICON_SIZE/2
+    #define CONFIG_TEXTAREA_MESSAGE_SIZE MENU_TITLE_SIZE/1.8
+
+    
     static const int16_t zero;
     static const int16_t un;
     static const int16_t three;
     static const int16_t center;
     static const int16_t y1;
+    static const int16_t tenPixels;
+    static const int16_t midScreenHoriz;
+    static const int16_t midScreenVertical;
+    static const int16_t bigWidgetMidY;
+    static const int16_t iconMidY;    
+    static const int16_t iconY;
+    static const int16_t topTextY;
+    static const int16_t bottomTextY;
+    static const int16_t belowBottomTexty;
+    static const int16_t leftMenuIconXpos;
+    static const int16_t rightMenuIconXpos;
+    static const int16_t hquarter1xPos;
+    static const int16_t hquarter2xPos;
+    static const int16_t hquarter3xPos;
+    static const int16_t hquarter4xPos;
+    static const int16_t vquarter1xPos;
+    static const int16_t vquarter2xPos;
+    static const int16_t vquarter3xPos;
+    static const int16_t vquarter4xPos;
+    static const int16_t menuIconYpos;
+    static const int16_t menuTitleY;
 
-    /*static uint16_t networkIconColor;
-    static uint16_t configMediaIconColor;*/
+    /***************************************************************************************
+    ** Static utilities methods
+    ***************************************************************************************/    
     
     static inline void cls(uint16_t color = GUI::defaultBcolor){
       if (color == TFT_TRANSPARENT) color = GUI::defaultBcolor;
@@ -263,19 +307,6 @@ public:
     GUI(bool d=true):GenericComponent(d){};
 };
 
-#ifdef TFT_WIDTH
-  #undef TFT_WIDTH
-#endif
-#ifdef TFT_HEIGHT
-  #undef TFT_HEIGHT
-#endif
-
-
-/*#define TFT_WIDTH GUI::width()
-#define TFT_HEIGHT GUI::height()*/
-
-#define TFT_WIDTH 320
-#define TFT_HEIGHT 240
 // #########################################################################
 // Base class
 // #########################################################################
@@ -428,8 +459,10 @@ class Font : public Widget{
           //if (*value != oldValue) DEBUG_PRINT("\n%s changed value from '%s' to '%s'", this->id.c_str(), oldValue.c_str(), value->c_str());
         }
 
-        String truncatedValue = value->substring(0,maxLen).c_str();  //only display first characters
-        if (truncatedValue.length() == maxLen) truncatedValue+="...";  // string concatenation = source of memory leak
+        String truncatedValue = value->substring(0, maxLen);
+        if (value->length() > maxLen) {
+            truncatedValue = truncatedValue.substring(0, maxLen - 3) + "...";
+        }
 
         FT_BBox boundaries1 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,oldValue.substring(0,maxLen).c_str());
         FT_BBox boundaries2 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,truncatedValue.c_str());
@@ -989,7 +1022,6 @@ class Arc : public FromToWidget{
 
 
 };
-
 
 class RingMeter : public Arc{
   #define START_ANGLE 30
@@ -1565,9 +1597,9 @@ class Led : public Widget{
     }
 
   private:
-    static const uint16_t FLASH_MEDIUM_INTERVAL = 1000;
-    static const uint16_t FLASH_FAST_INTERVAL = 250;
-    static const uint16_t FLASH_SLOW_INTERVAL = 2000;
+    static const uint16_t FLASH_MEDIUM_INTERVAL = 350;
+    static const uint16_t FLASH_FAST_INTERVAL = 100;
+    static const uint16_t FLASH_SLOW_INTERVAL = 1500;
 
     const String* properties;
     String oldProperties;
@@ -1671,10 +1703,15 @@ class Led : public Widget{
       }
 
     }
+
+    virtual int16_t getX(){return *x-width/2;}
+    virtual int16_t getY(){return *y-height/2;}      
 };
 
 
 bool GUI::off = false;
+
+// COLORS DEFINITIONS
 uint16_t GUI::defaultFcolor = TFT_FCOLOR;
 uint16_t GUI::defaultBcolor = TFT_BGCOLOR;
 uint16_t GUI::unUsedColor = TFT_BLACK;
@@ -1691,6 +1728,7 @@ const uint16_t GUI::blue = TFT_BLUE;
 const uint16_t GUI::nearlyBlack = TFT_NEARLYBLACK;
 const uint16_t GUI::gold = TFT_GOLD;
 
+// BRIGHTNESS DEFINITIONS
 const float GUI::fullBrightness = 1.0;
 #define DEFAULT_BRIGHTNESS 0.7
 #define BRIGHTNESS_MAX 1.0
@@ -1698,23 +1736,43 @@ const float GUI::fullBrightness = 1.0;
 #define BRIGHTNESS_NOFOCUS 0.5
 float GUI::screenBrightness = DEFAULT_BRIGHTNESS;
 
+// WIDGETS AND MENU COLORS DEFINITIONS
 uint16_t GUI::widgetInnerColor = GUI::luminance(DARKER_GREY,120);
 uint16_t GUI::widgetSubLabelColor = TFT_GOLD;
-
+AlteredColor GUI::glowingGoldColor = AlteredColor{.baseColor = GUI::gold, .value = &GUI::unUsedColor};
 const uint16_t GUI::menuActiveIconColor = GUI::luminance(TFT_BLUE,150); 
 const uint16_t GUI::menuInactiveIconColor = GUI::luminance(TFT_BLUE,255); 
 const uint16_t GUI::menuBackGroundColor = TFT_WHITE;
-/*uint16_t GUI::networkIconColor = TFT_RED;
-uint16_t GUI::configMediaIconColor = TFT_RED;*/
 
+// WSIZE AND POSITIONS DEFINITIONS
 const int16_t GUI::zero = 0;
 const int16_t GUI::un = 1;
 const int16_t GUI::three = 3;
 const int16_t GUI::center = TFT_WIDTH/2;
 const int16_t GUI::y1 = TOP2WIDGET_SIZE+1;
+const int16_t GUI::tenPixels = 10;
+const int16_t GUI::midScreenHoriz = TFT_WIDTH/2;
+const int16_t GUI::midScreenVertical = TFT_HEIGHT/2;
+const int16_t GUI::bigWidgetMidY = GUI::midScreenVertical-WIDGET_BIG_WIDTH/2;
+const int16_t GUI::iconMidY = GUI::midScreenVertical-ICON_MAX_SIZE/2 ;  
+const int16_t GUI::topTextY = GUI::y1+TOP2WIDGET_SIZE;
+const int16_t GUI::iconY = GUI::topTextY + CONFIG_TEXTAREA_MESSAGE_SIZE;
+const int16_t GUI::bottomTextY = GUI::iconY + MEDIUM_ICON_SIZE;
+const int16_t GUI::belowBottomTexty = GUI::bottomTextY+SIZE_18*1.1;
+const int16_t GUI::leftMenuIconXpos = GUI::midScreenHoriz-MENU_ICON_SIZE*1.4;
+const int16_t GUI::rightMenuIconXpos = GUI::midScreenHoriz+MENU_ICON_SIZE*1.4;
+const int16_t GUI::hquarter1xPos = TFT_HQUARTER-TFT_HQUARTER/2;
+const int16_t GUI::hquarter2xPos = TFT_HQUARTER*2-TFT_HQUARTER/2;
+const int16_t GUI::hquarter3xPos = TFT_HQUARTER*3-TFT_HQUARTER/2;
+const int16_t GUI::hquarter4xPos = TFT_HQUARTER*4-TFT_HQUARTER/2;
+const int16_t GUI::vquarter1xPos = TFT_VQUARTER-TFT_VQUARTER/2;
+const int16_t GUI::vquarter2xPos = TFT_VQUARTER*2-TFT_VQUARTER/2;
+const int16_t GUI::vquarter3xPos = TFT_VQUARTER*3-TFT_VQUARTER/2;
+const int16_t GUI::vquarter4xPos = TFT_VQUARTER*4-TFT_VQUARTER/2;
+const int16_t GUI::menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2;
+const int16_t GUI::menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1; 
 
-AlteredColor GUI::glowingGoldColor = AlteredColor{.baseColor = GUI::gold, .value = &GUI::unUsedColor};
-
+// ICONS DEFINITIONS
 const String GUI::iconMixEthWiFi = ICON_MIXETHWIFI;
 const String GUI::iconEth = ICON_ETH;
 const String GUI::iconWiFi = ICON_WIFI;
