@@ -2,6 +2,7 @@
 #define HWComponents_h
 
 #include "Interval.h"
+#include <StringConcat.h>
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 #include <WiFiGeneric.cpp>   // for tipipinit
@@ -122,7 +123,7 @@ class DigitalOut : public HWComponent2State{
 
     DigitalOut(uint8_t p,bool s = HIGH): HWComponent2State(p,s){
       pinMode(CSPin, OUTPUT);
-      id = "DigitalOut~"+String(p);
+      id = concatStrings("DigitalOut~", p);
       refresh(true);  //force the state
     }
 
@@ -150,7 +151,7 @@ class AnalogIn : public HWComponent{
     AnalogIn(uint8_t p, uint16_t t=0, boolean d=true): HWComponent(p,d){
       refreshPercentageThreshold = t;
       pinMode(CSPin, INPUT);
-      id = "AnalogIn~"+String(p);
+      id = concatStrings("AnalogIn~", p);
     }
     
     bool refresh(bool force=false){
@@ -224,7 +225,7 @@ class BatteryMonitor : public HWComponent{
 
     BatteryMonitor(uint8_t p, boolean d=true): HWComponent(p,d){
       pinMode(CSPin, INPUT);
-      id = "BatteryMonitor~"+String(p);      
+      id = concatStrings("BatteryMonitor~", p);
     };
 
     virtual void init(){
@@ -476,7 +477,7 @@ class DigitalButton: public Interval::Button{
   
     DigitalButton(uint8_t p, uint8_t mode=INPUT_PULLUP, int e=LOW, boolean d=false, uint16_t push = DEFAULT_PUSH_DELAY, uint16_t dClic = DEFAULT_DCLIC_DELAY):Button(p, e,d, push, dClic){      
       pinMode(p, mode); //
-      id = "DigitalButton~"+String(getID());
+      id = concatStrings("DigitalButton~", getID());
       evt.type = EVENT_DIGITAL_BUTTON;
     }
 
@@ -510,7 +511,7 @@ class LadderButton: public Interval::Button{
       input = i;
       pinMode(input->CSPin, INPUT); //analog
       virtualID = bCount;      
-      id = "LadderButton~"+String(getID());
+      id = concatStrings("LadderButton~", getID());
       bCount++;
       evt.type = EVENT_ANALOG_BUTTON;
       //input = new AnalogIn(p,d);
@@ -675,12 +676,12 @@ void connectHTTPTask(void *parameter) {
           doc[API_BODY] = jo;
         } else {           
           doc[API_STATUS] = API_ERROR;
-          doc[API_BODY] = "httpStatusCode: "+String(httpStatusCode);
+          doc[API_BODY] = concatStrings("httpStatusCode: ", httpStatusCode);
         }
       } else {
         // ça veut dire pas de serveur a cette adresse
         doc[API_STATUS] = API_ERROR;
-        doc[API_BODY] = "Bad request: "+String(httpResponseCode);
+        doc[API_BODY] = concatStrings("Bad request: ", httpResponseCode);
       }  
       httpClient.endRequest();
       httpClient.stop();
@@ -749,7 +750,7 @@ class Network : public HWComponent2State{
     bool AP = false;
 
     Network(uint8_t pin, bool debug):HWComponent2State(pin,DISCONNECTED,debug){
-      id = "Network~"+String(pin);
+      id = concatStrings("Network~", pin);
       networkBusy = xSemaphoreCreateMutex();
     }
 
@@ -878,7 +879,7 @@ class WiFiEth : public Network{
     unsigned long checkEthCableTime=0;
 
     WiFiEth(uint8_t pin, uint8_t rstP, bool enableEth = true, bool debug = true): Network(pin, debug){      
-      id = "WiFiEth~"+String(pin);
+      id = concatStrings("WiFiEth~", pin);
       rstPin = rstP;
       ethEnabled = enableEth;
       String forgedEthMac = WiFi.macAddress();
@@ -1081,7 +1082,7 @@ class WiFiEth : public Network{
               bool success;
               /* IF CONFIG = STATIC IP {
               IP = config.getIP();
-                SSID = "Static IP: "+IP;
+                SSID = concatStrings("Static IP: ", IP);
                 success = Ethernet.begin(mac, IP, gateway, gateway, subnet);
               }
               else
@@ -1103,8 +1104,8 @@ class WiFiEth : public Network{
                   if (udp == NULL) udp = new EthernetUDP;
                   if (wsEthClient == nullptr) wsEthClient = new EthernetWebSocketClient{}; 
                   if (midiClient == nullptr) midiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);
-                  String midiName = String(midiClient->getName()+String("._")+MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
-                  String httpName = String(midiClient->getName()+String("._http"));
+                  String midiName = concatStrings(midiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
+                  String httpName = concatStrings(midiClient->getName(), "._http");
                   if (EthernetBonjour.begin(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str())){
                     EthernetBonjour.addServiceRecord(midiName.c_str(), midiClient->getPort(),MDNSServiceUDP);
                     EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
@@ -1499,7 +1500,7 @@ class AccessPoint : public Network{
     AccessPoint(const String* ssid, bool debug):Network(0,debug){ 
       id = "AccessPoint";
       media = WIFI_MEDIA;     
-      SSID = *ssid+String(random(99)); // we create a different SSID each time to force the client (laptop) to see it as a new network and avoid asking to renew the DHCP lease, which oculd lead to failing getting an IP address.      
+      SSID = concatStrings(*ssid, random(99)); // we create a different SSID each time to force the client (laptop) to see it as a new network and avoid asking to renew the DHCP lease, which oculd lead to failing getting an IP address.
       //setWifiPower();
       AP = true;
     }

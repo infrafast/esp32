@@ -2,6 +2,7 @@
 #define I_MIDI_h
 
 #include "Interfaces.h"
+#include <StringConcat.h>
 #include "i_osc.h"
 
 #include <BLEMIDI_Transport.h>
@@ -206,7 +207,7 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
       state.subState = IF_STATE_CONNECTED;
-      state.details = ""; //String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
+      state.details = ""; //String(name);// + concatStrings(" (", hwm.network->midiClient->getParticipantDetails(ssrc), ")");
       state.led = "blue";
       state.progress = -1;
     }    
@@ -216,7 +217,7 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PAIRING;
       state.subState = IF_STATE_PAIRING;
-      state.details = *lang.getString("Connect Blutooth") + " " + BLE_CONNECTION_NAME;  
+      state.details = concatStrings(*lang.getString("Connect Blutooth"), " ", BLE_CONNECTION_NAME);
       state.led = "blue medium";
       state.progress = -1;      
     }
@@ -456,7 +457,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
       state.subState = IF_STATE_CONNECTED;
-      state.details = String(name);// + " (" + hwm.network->midiClient->getParticipantDetails(ssrc) + ")";
+      state.details = String(name);// + concatStrings(" (", hwm.network->midiClient->getParticipantDetails(ssrc), ")");
       state.progress = -1;
       state.led = "green";
     }    
@@ -578,7 +579,15 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
           midiSessionName = hwm.network->midiClient->getName();
       }
       state.subState = midiSessionName;      
-      state.details = *lang.getString("Connect MIDI session") +" "+ midiSessionName +String(" (")+hwm.network->IP.toString() + String(", port: ")+hwm.network->midiClient->getPort()+ String(")");;          
+      state.details = concatStrings(
+          *lang.getString("Connect MIDI session"),
+          " ",
+          midiSessionName,
+          " (",
+          hwm.network->IP.toString(),
+          ", port: ",
+          hwm.network->midiClient->getPort(),
+          ")");
       state.led = "green slow";
       state.progress = -1;
     }

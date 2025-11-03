@@ -3,6 +3,7 @@
 
 #include <OpenFontRender.h>
 #include <vector>
+#include <StringConcat.h>
 
 #define ICON_LAPTOP           "/"
 #define ICON_EARTH            "L"
@@ -393,7 +394,7 @@ class Canva : public Widget{
   public:
 
     Canva(const int16_t* posX, const int16_t* posY, uint16_t width, uint16_t height, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Widget(posX, posY, fC, bC, _brightness,d){      
-      id = "Canva"+String(*posX)+"x"+String(*posY); 
+      id = concatStrings("Canva", *posX, "x", *posY);
       this->width = width; this->height = height;
     } 
 
@@ -441,7 +442,7 @@ class Font : public Widget{
 
     void init(Align a,const int16_t* posX, const int16_t* posY,uint16_t s){
       size = s; align = a;
-      id = "Font"+String(*posX)+"x"+String(*posY);       
+      id = concatStrings("Font", *posX, "x", *posY);
     }
 
     virtual int16_t getX(){
@@ -781,7 +782,7 @@ class TextArea : public Widget{
 class NumericLabel : public Label{
   public:
     NumericLabel(const float* n,uint8_t dec, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, String _unit="", int _alter = 1, bool d=false):number(n), decimal(dec),alter(_alter),unit(_unit), Label(&convertedNumber,  a,  posX, posY, s,12,fC, bC, _brightness, d){      
-      id = "NumericLabel"+String(*posX)+"x"+String(*posY); 
+      id = concatStrings("NumericLabel", *posX, "x", *posY);
     }
 
     virtual bool refresh(bool force=false){
@@ -816,7 +817,7 @@ class Icon : public Font{
     static OpenFontRender* ofr; 
     
     Icon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool d=false):Font(v, a, posX, posY, s,12, fC , bC , _brightness, d){
-      id = "Icon"+String(*posX)+"x"+String(*posY)+"~"+*v;   
+      id = concatStrings("Icon", *posX, "x", *posY, "~", *v);
       //if (debug) DEBUG_PRINT("\n new %s[%s]",id.c_str(),v->c_str()); // => cause problem as value may not be initialized when call from AnimatedIcon
     };
     
@@ -834,7 +835,7 @@ class AnimatedIcon : public Icon{
 
   public:
     AnimatedIcon(const String* stringArray, uint8_t nb, Align a, const int16_t* posX, const int16_t* posY, uint8_t size, uint8_t at=ANIMATE_REPEAT, uint16_t ad=500, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,const float* _brightness = &GUI::fullBrightness, bool d=false):Icon(&currentIcon, a, posX, posY, size, fC , bC , _brightness, d){
-      id = "AnimatedIcon"+String(*posX)+"x"+String(*posY);
+      id = concatStrings("AnimatedIcon", *posX, "x", *posY);
       numberOfFrames = nb;
       //DEBUG_PRINT("\n%s contains %i frames",id.c_str(),numberOfFrames);
       iconArray = stringArray;      
@@ -963,7 +964,7 @@ class Arc : public FromToWidget{
     Arc(const float *v, const float mini, const float maxi, const int16_t* posX, const int16_t* posY, uint16_t r, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, uint16_t sAngle = 0, const float* _brightness = &GUI::fullBrightness, bool d=false):FromToWidget(v, mini, maxi, posX, posY, fC, bC, _brightness,d){            
       radius = r;
       width = height = (radius*2)+2;        // +2 because of outer circle                
-      id = "Arc"+String(*posX)+"x"+String(*posY);
+      id = concatStrings("Arc", *posX, "x", *posY);
       startAngle = sAngle;
       from = startAngle;
     }
@@ -1029,7 +1030,7 @@ class RingMeter : public Arc{
     
     RingMeter(const float *v, float mini, float maxi, uint8_t deci, const int16_t* posX, const int16_t* posY, uint16_t r, const String* u,  const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool d=false):Arc(v,mini, maxi, posX, posY, r, fC, bC, START_ANGLE, _brightness,d){
       unit = u; 
-      id = "RingMeter"+String(*posX)+"x"+String(*posY);
+      id = concatStrings("RingMeter", *posX, "x", *posY);
       if (deci>1) deci = 1;
       decimal = deci;        
     }
@@ -1314,7 +1315,7 @@ class ProgressBarH : public HorizontalBar{
   public:
 
     ProgressBarH(float* v, float min, float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, uint8_t fOffset, uint8_t r,const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool d=false):HorizontalBar(v, min, max, posX, posY,w, h,fOffset, r,fC,bC,_brightness,d){
-      id = "ProgressBarH"+String(*posX)+"x"+String(*posY); 
+      id = concatStrings("ProgressBarH", *posX, "x", *posY);
     }
 
     virtual bool refreshLogic(bool force=false){ 
@@ -1337,7 +1338,7 @@ class ProgressBarV : public VerticalBar{
   public:
 
     ProgressBarV(float* v, float min, float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, uint8_t fOffset, uint8_t r,const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool d=false):VerticalBar(v, min, max, posX, posY,w, h,fOffset, r,fC,bC,_brightness,d){
-      id = "ProgressBarV"+String(*posX)+"x"+String(*posY); 
+      id = concatStrings("ProgressBarV", *posX, "x", *posY);
     }
 
     virtual bool refreshLogic(bool force=false){ 
@@ -1360,7 +1361,7 @@ class PendingBar : public HorizontalBar{
 
   public:
     PendingBar(float* size, float min, float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, bool pp = false, uint8_t fOffset = 0, uint8_t r = 0, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, uint16_t _speed = 40, uint8_t step = 2, const float* _brightness = &GUI::fullBrightness,bool d=false) : pingPong(pp), stepDirection(step), speed(_speed), HorizontalBar(size, min, max, posX, posY,w, h,fOffset, r,fC,bC,_brightness,d){
-      id = "PendingBar"+String(*posX)+"x"+String(*posY); 
+      id = concatStrings("PendingBar", *posX, "x", *posY);
       if (stepDirection > *size) stepDirection = *size;
     }   
 
@@ -1568,7 +1569,7 @@ class Led : public Widget{
 
   public:
     Led(const int16_t* posX, const int16_t* posY, uint16_t rad, const String* props, const float* _brightness = &GUI::fullBrightness, bool d=false):Widget(posX, posY, &ledBaseColor, &GUI::transparentColor, _brightness, d), properties(props), radius(rad){
-      id = "Led"+String(*posX)+"x"+String(*posY);
+      id = concatStrings("Led", *posX, "x", *posY);
       width = rad*2;
       height = rad*2;
       parseProperties();

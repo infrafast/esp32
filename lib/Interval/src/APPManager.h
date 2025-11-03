@@ -5,6 +5,7 @@
 #include <LinkedList.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
+#include <StringConcat.h>
 
 #include "interfaces\i_midi.h"
 #include "interfaces\i_dmx.h"
@@ -416,7 +417,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           batIcon = ICON_WAIT;
         break;  
       }
-      vBatLabel = *lang.getString("Battery")+": "+String(hwm->battery.vBat)+"v";
+      vBatLabel = concatStrings(*lang.getString("Battery"), ": ", hwm->battery.vBat, "v");
     }
 
     void setAPandNetIcons(){
@@ -519,7 +520,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       hwm->setButtonReactivity(systemCfg.getInt(S_PUSHDELAY),systemCfg.getInt(S_DCLICREACTIVITY));     
 
-      String langFile = "/"+*systemCfg.getString(S_LANG,"ENGLISH");
+      String langFile = concatStrings("/", *systemCfg.getString(S_LANG, "ENGLISH"));
       langFile.toUpperCase();
 
       lang.load(langFile+".lang"); 
@@ -728,14 +729,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     String getCurrentProfileName(){
-      return "/"+*systemCfg.getString(S_CONFIG_FILE,DEFAULT_CONFIG_FILE_NAME);
+      return concatStrings("/", *systemCfg.getString(S_CONFIG_FILE, DEFAULT_CONFIG_FILE_NAME));
     }
 
     void startup(uint8_t startupScreen){          
       // save the screen to be called (wiuard or bank)
       hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);            
       // we init banks and then go to banks or fail screen
-      String bankFilename = getCurrentProfileName()+".bank";
+      String bankFilename = concatStrings(getCurrentProfileName(), ".bank");
       loadBanks(bankFilename);
       if (deserializeBanks(&banksDefinition) == nullptr){
         menuTopText = *lang.getString("Bank creation");
@@ -1285,7 +1286,7 @@ void setup() {
       if (langMenu != nullptr) delete langMenu;
       langMenu = new Menu(langMenuString,menu_selected); 
 
-      populateFileList("lang","/",&countryList,String(ICON_LANG)+"-",false);     // this populate the list of countries with the icon (prefix = k-) and without extension
+      populateFileList("lang","/",&countryList,concatStrings(String(ICON_LANG), "-"),false);     // this populate the list of countries with the icon (prefix = k-) and without extension
 
       // populate the menu with all language found      
       for(int i = 0; i < countryList.size(); i++){
@@ -1329,7 +1330,7 @@ void setup() {
           }
     
           if (shortName.endsWith(fType) || fType == "*") {
-            String fullPath = path + "/" + shortName;
+            String fullPath = concatStrings(path, "/", shortName);
             if (LittleFS.remove(fullPath)) {
               ////DEBUG_PRINT("\nDeleted %s", fullPath.c_str());
             } else {
@@ -1355,7 +1356,7 @@ void setup() {
         if (TARGZUnpacker.tarExpander(LittleFS, fileName.c_str(), LittleFS, "/") ) success = true;
       }
       if (! success){
-        //progressBarLabel = i18n[EXPANDING_MSG]+" "+i18n[ERROR_MSG]+": "+String(TARGZUnpacker.tarGzGetError());
+        //progressBarLabel = concatStrings(i18n[EXPANDING_MSG], " ", i18n[ERROR_MSG], ": ", TARGZUnpacker.tarGzGetError());
       }else{
 
       } 
@@ -1436,10 +1437,10 @@ void setup() {
         GZUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );
         int success =  GZUnpacker.gzUpdater(tarGzFS, firmwareFilename.c_str(), 0,/*don't restart after update*/false );
         if( !success ) {
-          //progressBarLabel = i18n[ERROR_MSG]+ " " +i18n[UPDATE_MSG]+ " ("+String(GZUnpacker.tarGzGetError())+")";
+          //progressBarLabel = concatStrings(i18n[ERROR_MSG], " ", i18n[UPDATE_MSG], " (", GZUnpacker.tarGzGetError(), ")");
           binaryInstallStatus = BINARY_INSTALLFAIL;
         }else{          
-          //progressBarLabel = i18n[UPDATE_MSG]+ " "+ i18n[SUCCESS_MSG];
+          //progressBarLabel = concatStrings(i18n[UPDATE_MSG], " ", i18n[SUCCESS_MSG]);
           binaryInstallStatus = BINARY_INSTALLED;     
         }        
         //LOG_MESSAGE("firmware", progressBarLabel.c_str(), firmwareFilename.c_str());      
@@ -1629,7 +1630,7 @@ void setup() {
         if (                                                              // if
           interface->update() ||                                          // interface state has changed
           interface->state.progressChanged                                // or its progress
-        ) broadCast("{\"deviceState\":"+interface->serializeState()+"}"); // inform web interface
+        ) broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
       }
 
       //------------------
@@ -1767,7 +1768,7 @@ void setup() {
       uint32_t mem = ESP.getFreeHeap();
       if (mem>maxHeapSize) maxHeapSize = mem;
       if (mem<minHeapSize) minHeapSize = mem;
-      heapSize = String(minHeapSize)+"/"+String(mem)+"/"+String(maxHeapSize);
+      heapSize = concatStrings(minHeapSize, "/", mem, "/", maxHeapSize);
 
       return refreshed;
     }
@@ -1850,7 +1851,7 @@ void setup() {
             setWSServer();   // ==> websocket server is created and then changed by application refresh() in case the network medium is changed
             //webTaskhandle(WEB_START);                   
           }
-          hwm->configURL = "http://"+*systemCfg.getString(S_AP_NAME)+".local"; // hwm->configMedia->IP.toString();          
+          hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"); // hwm->configMedia->IP.toString();
           DEBUG_PRINT("\nWebserver serving on %s",hwm->configURL.c_str() );
           return true;
         }
@@ -1892,7 +1893,7 @@ void setup() {
       File file;
 
       if (strcmp(path, "/") == 0) file = LittleFS.open("/webapp/indexnozip.html");
-      else file = LittleFS.open("/webapp"+String(path));
+      else file = LittleFS.open(concatStrings("/webapp", path));
       
       while (file.available()) res.write(file.read());      
 
@@ -1936,8 +1937,9 @@ void setup() {
 
         bool fileIsCompressed = false;
 
-        if (LittleFS.exists(WEBAPP_PATH+String(path)+".gz")){
-          path = path+".gz";
+        String gzCandidate = concatStrings(WEBAPP_PATH, path, ".gz");
+        if (LittleFS.exists(gzCandidate)){
+          concatString(path, ".gz");
           fileIsCompressed = true;
         }
         
@@ -1948,7 +1950,7 @@ void setup() {
           res.set("Content-Encoding", "gzip");
         }
 
-        String fullPath = WEBAPP_PATH+String(path);   
+        String fullPath = fileIsCompressed ? gzCandidate : concatStrings(WEBAPP_PATH, path);
 
         //DEBUG_PRINT("\t%s",fullPath.c_str());              
 
@@ -2613,7 +2615,7 @@ void setup() {
         }else jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
       }else if (command == "save"){     
         
-        String bankFileName = getCurrentProfileName()+".bank";
+        String bankFileName = concatStrings(getCurrentProfileName(), ".bank");
         bool ret = saveBanks(bankFileName);
         ret = systemCfg.save();   
         ret &= userCfg.save();   
@@ -2652,7 +2654,7 @@ void setup() {
           }
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;
-          jsonAnswer.value = *lang.getString("Wrong Interface")+":"+interfaceName;
+          jsonAnswer.value = concatStrings(*lang.getString("Wrong Interface"), ":", interfaceName);
         }
 
       }else if (command == "saveLibrary"){
@@ -2661,7 +2663,7 @@ void setup() {
         String entries = jsonInput["param"]["entries"];       
 
         //write the data with compression
-        if (writeBufferToGzFile(WEBAPP_PATH"/"+fileName+".gz",entries.c_str()) != 0){         
+        if (writeBufferToGzFile(concatStrings(WEBAPP_PATH, "/", fileName, ".gz"), entries.c_str()) != 0){
 
           // reload the datasets
           if (fileName == SYSEXLIB_FILENAME){
@@ -2876,19 +2878,20 @@ void setup() {
 
     JsonList wiFiList;    
          
-    String defaultSysConf = "{"
-    //"\""+String(S_CONFIGNAMES)+"\":[\"anto\",\"thomas\",\"laurent\"]\","
-      "\""+String(S_PUSHDELAY)+"\":\"852\","
-      "\""+String(S_DCLICREACTIVITY)+"\":\"251\","
-      "\""+String(S_CONFIG_FILE)+"\":\""DEFAULT_CONFIG_FILE_NAME"\"," 
-      "\""+String(S_AP_NAME)+"\":\""INTERVAL_PRODUCT_NAME"\","
-      "\""+String(S_LAST_USED_SSID)+"\":\"intervalmix1\","
-      "\""+String(S_LANG)+"\":\"francais\","
-      "\""+String(S_FADERSPEED)+"\":\"157\","
-      "\""+String(S_SSID)+"\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},"
-      "\""+String(S_BUTTON_ASSIGN)+"\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]},"
-      "\""+String(S_SHORTCUTS)+"\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
-    "}";
+    String defaultSysConf =
+        "{\"" S_PUSHDELAY "\":\"852\",""
+        "\"" S_DCLICREACTIVITY "\":\"251\",""
+        "\"" S_CONFIG_FILE "\":\"" DEFAULT_CONFIG_FILE_NAME "\",""
+        "\"" S_AP_NAME "\":\"" INTERVAL_PRODUCT_NAME "\",""
+        "\"" S_LAST_USED_SSID "\":\"intervalmix1\",""
+        "\"" S_LANG "\":\"francais\",""
+        "\"" S_FADERSPEED "\":\"157\",""
+        "\"" S_SSID "\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},""
+        "\"" S_BUTTON_ASSIGN "\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]},""
+        "\"" S_SHORTCUTS "\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},""
+        "\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},""
+        "\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}""
+        "}";
 
     String banksDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";
     String defaultUserConf = "{}";

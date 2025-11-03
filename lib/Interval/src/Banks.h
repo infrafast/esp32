@@ -2,6 +2,7 @@
 #define BANKSDEF_h
 
 #include "Interval.h"
+#include <StringConcat.h>
 
 #define C_CURRENTLAYOUT     "layout"
 #define C_POSSIBLELAYOUT    "possibleLayout"
@@ -226,7 +227,7 @@ class BankNavigator: public Widget{
     BankNavigator(IntervalBank* b/*, LinkedList<Widget*>* w*/, bool debug = false):bank(b), oldBank(b), Widget(&xPos, &yPos, &fC, &bC, &GUI::fullBrightness, debug){      
       //widgetList = w;      
       if (bank != nullptr) oldSelector = bank->selector - 1; //this is to force first refresh
-      id = "BankNavigator"+String(xPos)+"x"+String(yPos); 
+      id = concatStrings("BankNavigator", xPos, "x", yPos);
     }
 
     virtual bool refresh(bool force = false) {

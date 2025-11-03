@@ -16,6 +16,7 @@
 
 #include "Interval.h"
 #include "mixerServer.h"
+#include <StringConcat.h>
 
 #if defined(USE_FTP) && defined(USE_NETWORK)
   #include "ESP-FTP-Server-Lib.h"
@@ -87,7 +88,7 @@ class MyIcon : public Font{
     static OpenFontRender* ofr; 
     
     MyIcon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Font(v, a, posX, posY, s, fC , bC , _brightness, d){
-      id = "Icon"+String(*posX)+"x"+String(*posY)+"~"+*v;   
+      id = concatStrings("Icon", *posX, "x", *posY, "~", *v);
       //if (debug) DEBUG_PRINT("\n new %s",id);
     };
     
@@ -572,12 +573,12 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       //select2ID = chID
 
       //sprintf(addr,mixerServer->chNames.address.c_str(),chID);
-      String val = "name"+String(random(1000));
+      String val = concatStrings("name", random(1000));
       DEBUG_PRINT("\n %s %s",addr,val.c_str());
     
       //chNames.values.set(chID-1, val);
       //mixerServer->chNames.setValue(chID-1,val);
-      //app.broadCast("{\"updateDataSets\":[{\""+String(addr)+"\":\""+val+"\"}]}");
+      //app.broadCast(concatStrings("{\"updateDataSets\":[{\"", String(addr), "\":\"", val, "\"}]}"));
 
       refresh();*/
       return true;
@@ -787,7 +788,16 @@ String userPongCallback(){
   // we send server connection attempts status only if network is connected, otherwise we polute the webapp with useless information
   if (hwm.network->state == CONNECTED && mixerServer.state == DISCONNECTED){
     //{"serverAttempt":"Trying 192.168.0.212 / 10026"}}>
-    String serverAttempt = *app.userLang.getString("Trying")+" "+mixerServer.serverIP.toString()+" "+mixerServer.behringerUDPPort+"/"+String(mixerServer.msUDPPort)+"/"+String(mixerServer.msAPIPort);
+    String serverAttempt = concatStrings(
+        *app.userLang.getString("Trying"),
+        " ",
+        mixerServer.serverIP.toString(),
+        " ",
+        mixerServer.behringerUDPPort,
+        "/",
+        mixerServer.msUDPPort,
+        "/",
+        mixerServer.msAPIPort);
     doc["serverAttempt"] = serverAttempt;
   }
   serializeJson(doc,pong);
@@ -1086,7 +1096,7 @@ void processInterfaceSync(){
     dataProgress = mixerServer.mixerInterface->syncDataProgress(); 
     if (dataProgress<100 && previousDataProgress!=dataProgress){ 
       previousDataProgress = dataProgress;
-      app.broadCast("{\"syncProgress\":"+String(dataProgress)+"}");
+      app.broadCast(concatStrings("{\"syncProgress\":", dataProgress, "}"));
     }
   }
 
