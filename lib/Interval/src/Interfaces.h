@@ -4,9 +4,13 @@
 #include <vector>
 #include "Interval.h"
 
+class DeviceInterface;
+extern DeviceInterface systemInterface;
+#include "Strips.h"
+
 #include "interfaces/i_states.h"
 
-class DeviceInterface {
+class DeviceInterface : public SerializableDataset {
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
   #define INTERFACE_EXPOSED     "exposed"
@@ -90,6 +94,10 @@ class DeviceInterface {
         config[INTERFACE_ICON] = icon;
       }
       derivedConfig(config);
+
+      JsonDocument propertiesDoc;
+      serializeProperties(propertiesDoc);
+      config[STRIP_SKELETON_PROPERTIES].set(propertiesDoc[STRIP_SKELETON_PROPERTIES]);
 
       doc.shrinkToFit();
       String output;
