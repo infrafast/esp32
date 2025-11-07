@@ -224,5 +224,73 @@ void DataRepository::removeDataSet(DataSet* ds) {
   }
 }
 
+#define SKELETON_PROPERTIES "properties"
+
+class SerializableDataset {
+  public:
+    virtual ~SerializableDataset() = default;
+
+    bool registerDataSetAddress(Address* address){
+      dataSetAddresses.push_back(address);
+      return true;
+    }
+
+    Address* getDataSetAddress(size_t index) const {
+      if (index >= dataSetAddresses.size()){
+        return nullptr;
+      }
+      return dataSetAddresses[index];
+    }
+
+    virtual String serialize() const {
+      JsonDocument jsonDocStripSkeleton;
+      serializeProperties(jsonDocStripSkeleton);
+      String data;
+      serializeJson(jsonDocStripSkeleton, data);
+      return data;
+    }
+
+    const String* getValuePtr(String provider, String address, uint8_t index){
+      const String *retVal = &emptyString;
+
+      //DEBUG_PRINT("\nSerializableDataset<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
+      DataSet* ds = dataRepository.getDataSet(provider, address);
+
+      if (ds != nullptr){
+        retVal = ds->getValuePtr(index);
+      }
+
+      //DEBUG_PRINT("<%s>",retVal->c_str());
+
+      return retVal;
+    }
+
+    std::vector<Address*> dataSetAddresses;
+
+  protected:
+    void serializeProperties(JsonDocument& jsonDocStripSkeleton) const {
+      JsonArray properties = jsonDocStripSkeleton[SKELETON_PROPERTIES].to<JsonArray>();
+      JsonDocument property;
+
+      for (size_t i = 0; i < dataSetAddresses.size(); i++){
+
+        Address* address = dataSetAddresses[i];
+        if (address != nullptr){
+          DeserializationError err = deserializeJson(property,address->serialize()); // {"/midi/value1/%s": ["freetext","note", "0-126"]} or {"/midi/channel/%d": ["dropdown"]}
+          if (err) {
+            DEBUG_PRINT("\naddress properties serialization failed: %s",dataSetAddresses[i]->pattern.c_str());
+            continue;
+          }
+        }else{
+           DEBUG_PRINT("\naddress[%d] is null",i);
+        }
+
+        // doc contient maintenant ton objet JSON
+        properties.add(property);
+
+      }
+    }
+};
+
 
 #endif
