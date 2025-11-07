@@ -8,9 +8,12 @@
 #include <vector>
 #include <FS.h>
 #include <LittleFS.h>
-#include <StringConcat.h>
+
 #define DEST_FS_USES_LITTLEFS // filesystem object will be available as "tarGzFS"
 #include <ESP32-targz.h>
+
+#include <array>
+#include <utility>
 
 #define INTERVAL_PRODUCT_NAME "footswitch"
 #define INTERVAL_MANUFACTURER "interval"
@@ -112,6 +115,26 @@ void usbEventCallback(void *arg, esp_event_base_t event_base, int32_t event_id, 
     }
 }
 */
+
+template<typename... Args>
+inline void concatString(String& destination, Args&&... args) {
+  std::array<String, sizeof...(Args)> parts{String(std::forward<Args>(args))...};
+  size_t totalLength = destination.length();
+  for (const auto& part : parts) {
+    totalLength += part.length();
+  }
+  destination.reserve(totalLength);
+  for (const auto& part : parts) {
+    destination += part;
+  }
+}
+
+template<typename... Args>
+inline String concatStrings(Args&&... args) {
+  String result;
+  concatString(result, std::forward<Args>(args)...);
+  return result;
+}
 
 
 //typedef void (BaseManager::*GUIScreenBuilderCallBack)(uint8_t);

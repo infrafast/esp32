@@ -4,7 +4,6 @@
 #include "Strips.h"
 #include "Interval.h"
 #include "interfaces/i_midi.h"
-#include <StringConcat.h>
 
 StripSkeleton *midiNoteSkel, *sysexSkel;
 

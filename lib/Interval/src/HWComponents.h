@@ -2,7 +2,6 @@
 #define HWComponents_h
 
 #include "Interval.h"
-#include <StringConcat.h>
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 #include <WiFiGeneric.cpp>   // for tipipinit

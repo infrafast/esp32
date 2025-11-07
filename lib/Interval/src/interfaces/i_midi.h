@@ -2,7 +2,7 @@
 #define I_MIDI_h
 
 #include "Interfaces.h"
-#include <StringConcat.h>
+
 #include "i_osc.h"
 
 #include <BLEMIDI_Transport.h>
@@ -173,20 +173,11 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
     virtual void goOffline(bool _offline){
       DeviceInterface::goOffline(_offline);
       if (_offline){
-        disconnectBleMidi();
+        end();
       }else{
-
+         bleMIDI.begin();
       }
     }
-
-    void disconnectBleMidi() {
-        DEBUG_PRINT("\nbleMIDI disconnected");
-        auto transport = bleMIDI.getTransport();  // ✅ On récupère le transport BLE
-        if (transport) {
-            transport->end();
-        }
-    }
-
 
     virtual bool derivedBegin(){    
       init();  
@@ -201,6 +192,18 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
 
       return true;
     }
+
+    virtual bool end(){
+        DEBUG_PRINT("\nbleMIDI disconnected");
+        auto transport = bleMIDI.getTransport();  // ✅ On récupère le transport BLE
+        if (transport) {
+            transport->end();
+            // bleMIDI.end() doesnt exists
+            return true;
+        }
+      return false;
+
+    }     
 
     void handleConnected() {
       DEBUG_PRINT("\nBLEMidi connected\n");
@@ -232,11 +235,7 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
         if (bleInstancePtr) {
             bleInstancePtr->handleDisconnected();
         }
-    }
-
-    virtual bool end(){
-      return false;
-    }     
+    } 
 
 
     virtual void derivedConfig(JsonObject& config){   
@@ -246,8 +245,9 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
     virtual bool restore(const JsonObject& config){
       bool changed = false;
       if (config.containsKey(CONFIG_BLE)){ 
-        voidBLEparam = config[CONFIG_BLE].as<String>();
-        changed = true;
+        String bleParam = config[CONFIG_BLE].as<String>();
+        if (voidBLEparam != bleParam) changed = true;
+        voidBLEparam = bleParam;
       }
       return changed;
     }  
@@ -328,8 +328,9 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
     virtual bool restore(const JsonObject& config){
       bool changed = false;
       if (config.containsKey(CONFIG_USB)){
-        voidUSBparam = config[CONFIG_USB].as<String>();
-        changed = true;
+        String usbParam = config[CONFIG_USB].as<String>();
+        if (voidUSBparam != usbParam) changed = true;
+        voidUSBparam = usbParam;
       }
       return changed;
     }      
@@ -396,8 +397,9 @@ class DINMIDIInterface: public MIDIInterface, public DeviceInterface{
     virtual bool restore(const JsonObject& config){
       bool changed = false;
       if (config.containsKey(CONFIG_DIN)){
-        voidDinparam = config[CONFIG_DIN].as<String>();
-        changed = true;
+        String dinParam = config[CONFIG_DIN].as<String>();
+        if (voidDinparam != dinParam) changed = true;
+        voidDinparam = dinParam;
       }
       return changed;
     }      
@@ -495,8 +497,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
     virtual bool restore(const JsonObject& config){
       bool changed = false;
       if (config.containsKey(CONFIG_APPLE)){        
-        voidAppleMidiParam = config[CONFIG_APPLE].as<String>();
-        changed = true;
+        String appleParam = config[CONFIG_APPLE].as<String>();
+        if (voidAppleMidiParam != appleParam) changed = true;
+        voidAppleMidiParam = appleParam;
       }
       return changed;
     }        

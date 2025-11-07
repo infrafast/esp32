@@ -10,7 +10,7 @@
 //#define SPIFFS LittleFS           // this is to force TJpg_Decoder to use LittleFS, compile conflict for esp32
 #include <TJpg_Decoder.h>
 #include <LinkedList.h>
-#include <StringConcat.h>
+
 #include "GUIComponents.h"
 
 #include "fonts.h"

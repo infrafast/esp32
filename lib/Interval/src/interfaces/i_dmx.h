@@ -29,8 +29,9 @@ class ArtnetDMXInterface: public DMXInterface, NetworkDevice{
     virtual bool restore(const JsonObject& config){
       bool changed = false;
       if (config.containsKey(CONFIG_ARTNET)){
-        voidArtnetParam = config[CONFIG_ARTNET].as<String>();
-        changed = true;
+        String configArtNet = config[CONFIG_ARTNET].as<String>();
+        if (voidArtnetParam != configArtNet) changed = true;
+        voidArtnetParam = configArtNet;        
       }
       return changed;
     }  
@@ -84,8 +85,9 @@ class ThreePinDMXInterface: public DMXInterface, public DeviceInterface{
     virtual bool restore(const JsonObject& config){
       bool changed = false;
       if (config.containsKey(CONFIG_3PINDMX)){
-        void3pinDMXParam = config[CONFIG_3PINDMX].as<String>();
-        changed = true;
+        String config3pin = config[CONFIG_3PINDMX].as<String>();
+        if (void3pinDMXParam != config3pin) changed = true;
+        void3pinDMXParam = config3pin;        
       }
       return changed;
     }  

@@ -3,7 +3,6 @@
 
 #include <vector>
 #include "Interval.h"
-#include <StringConcat.h>
 
 #include "interfaces/i_states.h"
 
@@ -217,9 +216,11 @@ class DeviceInterface {
 
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_OFFLINE)){
-        state.offline = config[INTERFACE_OFFLINE];
+        bool offline = config[INTERFACE_OFFLINE];
+        if (offline != state.offline) changed = true;
+        state.offline = offline;
         DEBUG_PRINT("\n%s offline=>%s",interfaceName.c_str(),state.offline?"true":"false");
-        changed = true;
+        
       }
 
       // and then we call the specific part

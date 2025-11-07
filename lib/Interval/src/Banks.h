@@ -2,7 +2,6 @@
 #define BANKSDEF_h
 
 #include "Interval.h"
-#include <StringConcat.h>
 
 #define C_CURRENTLAYOUT     "layout"
 #define C_POSSIBLELAYOUT    "possibleLayout"

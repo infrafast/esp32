@@ -5,7 +5,6 @@
 #include <LinkedList.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
-#include <StringConcat.h>
 
 #include "interfaces\i_midi.h"
 #include "interfaces\i_dmx.h"
@@ -2643,7 +2642,6 @@ void setup() {
             if (interface->save()){
               jsonAnswer.callback = RET_SAVEBUTTON;
               jsonAnswer.value ="1";
-              interface->begin(); // force interface disconnect so it reconnects with the new parameters
             }else{
               jsonAnswer.callback=RET_COMMANDERROR;
               jsonAnswer.value = "interface save error";                
@@ -2879,18 +2877,18 @@ void setup() {
     JsonList wiFiList;    
          
     String defaultSysConf =
-        "{\"" S_PUSHDELAY "\":\"852\",""
-        "\"" S_DCLICREACTIVITY "\":\"251\",""
-        "\"" S_CONFIG_FILE "\":\"" DEFAULT_CONFIG_FILE_NAME "\",""
-        "\"" S_AP_NAME "\":\"" INTERVAL_PRODUCT_NAME "\",""
-        "\"" S_LAST_USED_SSID "\":\"intervalmix1\",""
-        "\"" S_LANG "\":\"francais\",""
-        "\"" S_FADERSPEED "\":\"157\",""
-        "\"" S_SSID "\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},""
-        "\"" S_BUTTON_ASSIGN "\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]},""
-        "\"" S_SHORTCUTS "\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},""
-        "\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},""
-        "\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}""
+        "{\"" S_PUSHDELAY "\":\"852\","
+        "\"" S_DCLICREACTIVITY "\":\"251\","
+        "\"" S_CONFIG_FILE "\":\"" DEFAULT_CONFIG_FILE_NAME "\","
+        "\"" S_AP_NAME "\":\"" INTERVAL_PRODUCT_NAME "\","
+        "\"" S_LAST_USED_SSID "\":\"intervalmix1\","
+        "\"" S_LANG "\":\"francais\","
+        "\"" S_FADERSPEED "\":\"157\","
+        "\"" S_SSID "\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},"
+        "\"" S_BUTTON_ASSIGN "\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]},"
+        "\"" S_SHORTCUTS "\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},"
+        "\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},"
+        "\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
         "}";
 
     String banksDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";

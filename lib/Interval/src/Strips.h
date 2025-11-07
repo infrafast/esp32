@@ -647,7 +647,7 @@ class TwoSelectStrip : public Strip{
 
     void deserializeProperty(String property){
       if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
-        select2Content = skeleton->getValuePtr(interface->getProviderName(),select2PropertyAddress,select2ID-1);
+        select2Content = skeleton->getValuePtr(interface->getProviderName(),select2PropertyAddress,select2ID);
       }
     }  
 

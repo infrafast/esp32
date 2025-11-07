@@ -3,7 +3,7 @@
 
 #include <OpenFontRender.h>
 #include <vector>
-#include <StringConcat.h>
+#include "interval.h"
 
 #define ICON_LAPTOP           "/"
 #define ICON_EARTH            "L"
@@ -1059,7 +1059,7 @@ class RingMeter : public Arc{
 
     void refreshFrame(){
       createSprite();
-      sprite->fillCircle(width/2, height/2, radius,GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255) );
+      sprite->fillSmoothCircle(width/2, height/2, radius,GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255) );
       sprite->drawSmoothCircle(width/2, height/2, radius, GUI::luminance(TFT_SILVER,*brightness * GUI::screenBrightness * 255), GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255));
       uint16_t tmp = radius - 3;
       sprite->drawArc(width/2, height/2, tmp, tmp - tmp / 5, startAngle-1, 360-startAngle+1, TFT_NEARLYBLACK, GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255));           
@@ -1694,13 +1694,14 @@ class Led : public Widget{
 
       uint16_t innerColor = ledOn ? ledBaseColor : TFT_DARKGREY;
       uint16_t rimColor = GUI::luminance(TFT_GREY,*brightness * GUI::screenBrightness * 255);
+      uint16_t bgColor = GUI::luminance(TFT_GREY,*bColor * GUI::screenBrightness * 255);
 
-      sprite->drawCircle(centerX, centerY, mainRadius, rimColor);
-      sprite->drawCircle(centerX, centerY, mainRadius-1, TFT_BLACK);
+      sprite->drawSmoothCircle(centerX, centerY, mainRadius-1, TFT_BLACK,bgColor);
+      sprite->drawSmoothCircle(centerX, centerY, mainRadius, rimColor,bgColor);
 
       int16_t innerRadius = mainRadius - 2;
       if (innerRadius > 1){
-        sprite->fillCircle(centerX, centerY, innerRadius, GUI::luminance(innerColor,*brightness * GUI::screenBrightness * 255));
+        sprite->fillSmoothCircle(centerX, centerY, innerRadius, GUI::luminance(innerColor,*brightness * GUI::screenBrightness * 255));
       }
 
     }
