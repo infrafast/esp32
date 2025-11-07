@@ -13,7 +13,10 @@ class TextStrip : public Strip{
         
     TextStrip(StripSkeleton* s,bool debug=false):Strip(s){
       //icon = ICON_TEXT_STRIP;
-      textPropertyAddress = s->dataSetAddresses.get(0)->pattern;
+      Address* textAddress = s->getDataSetAddress(0);
+      if (textAddress != nullptr){
+        textPropertyAddress = textAddress->pattern;
+      }
     }
 
     virtual bool actionCallback(uint8_t trigger){return true;}

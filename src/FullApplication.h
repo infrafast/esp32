@@ -195,8 +195,14 @@ class OSCTestStrip : public TextStrip, public StripMixer{
   public:
 
     OSCTestStrip(StripSkeleton* s,GUIManager* g,MixerServer* _mi,bool debug=false):TextStrip(s,g, debug),StripMixer(_mi){
-      portPropertyAddress = s->dataSetAddresses.get(1);
-      msgPropertyAddress =  s->dataSetAddresses.get(2);
+      Address* portAddress = s->getDataSetAddress(1);
+      Address* msgAddress = s->getDataSetAddress(2);
+      if (portAddress != nullptr){
+        portPropertyAddress = portAddress->pattern;
+      }
+      if (msgAddress != nullptr){
+        msgPropertyAddress = msgAddress->pattern;
+      }
       message = *app.lang.getString("undefined");
       port = 0;
     }
