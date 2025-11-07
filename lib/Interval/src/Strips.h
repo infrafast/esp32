@@ -121,9 +121,9 @@ class StripSkeleton: public SerializableDataset{
 
     String serialize() const override{
       JsonDocument jsonDocStripSkeleton;
-      serializeProperties(jsonDocStripSkeleton);
       jsonDocStripSkeleton[stripID] = group;
       jsonDocStripSkeleton[C_ICON] = icon;
+      serializeProperties(jsonDocStripSkeleton);
       String data;
       serializeJson(jsonDocStripSkeleton, data);
       DEBUG_PRINT("\n%s serialize=> %s",stripID.c_str(),data.c_str());
