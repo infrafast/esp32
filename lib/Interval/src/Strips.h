@@ -43,9 +43,9 @@ typedef Strip* (*StripBuilderCallback)(/*String values*/);
 #define MAXNUMBER_OF_SKELPROPERTY 10
 #define STRIP_SKELETON_PROPERTIES "properties"
 
-class Serializable {
+class SerializableDataset {
   public:
-    virtual ~Serializable() = default;
+    virtual ~SerializableDataset() = default;
 
     bool registerDataSetAddress(Address* address){
       dataSetAddresses.push_back(address);
@@ -65,6 +65,21 @@ class Serializable {
       String data;
       serializeJson(jsonDocStripSkeleton, data);
       return data;
+    }
+
+    const String* getValuePtr(String provider, String address, uint8_t index){
+      const String *retVal = &emptyString;
+
+      //DEBUG_PRINT("\nSerializableDataset<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
+      DataSet* ds = dataRepository.getDataSet(provider, address);
+
+      if (ds != nullptr){
+        retVal = ds->getValuePtr(index);
+      }
+
+      //DEBUG_PRINT("<%s>",retVal->c_str());
+
+      return retVal;
     }
 
     std::vector<Address*> dataSetAddresses;
@@ -94,7 +109,7 @@ class Serializable {
     }
 };
 
-class StripSkeleton: public Serializable{
+class StripSkeleton: public SerializableDataset{
   public:
     String stripID;
     unsigned char icon;
@@ -104,21 +119,6 @@ class StripSkeleton: public Serializable{
 
     StripSkeleton(String id, String g, StripBuilderCallback b, unsigned char i='!');
 
-    const String* getValuePtr(String provider, String address, uint8_t index){
-      const String *retVal = &emptyString;
-
-      //DEBUG_PRINT("\nskeleton<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
-      DataSet* ds = dataRepository.getDataSet(provider, address);
-
-      if (ds != nullptr){
-        retVal = ds->getValuePtr(index);
-      }
-
-      //DEBUG_PRINT("<%s>",retVal->c_str());
-
-      return retVal;
-    }
-
     String serialize() const override{
       JsonDocument jsonDocStripSkeleton;
       serializeProperties(jsonDocStripSkeleton);
@@ -126,6 +126,7 @@ class StripSkeleton: public Serializable{
       jsonDocStripSkeleton[C_ICON] = icon;
       String data;
       serializeJson(jsonDocStripSkeleton, data);
+      DEBUG_PRINT("\n%s serialize=> %s",stripID.c_str(),data.c_str());
       return data;
     }
 

@@ -1224,23 +1224,23 @@ void setup() {
       JsonDocument doc;      
       String tempJsonString="";
 
-      doc["connectivity"] = getConnectivityState();
+      DEBUG_PRINT("\nserializing dataRepository");
+      JsonArray ds = doc["datasets"].to<JsonArray>();  
+      dataRepository.serialize(&ds);       
+
+      DEBUG_PRINT("\nserializing systemJsonDef");
+      shortcuts.serialize(&tempJsonString);
+      doc["systemJsonDef"] = tempJsonString;
 
       DEBUG_PRINT("\nserializing interfaces");
       JsonArray interfaces = doc["interfaces"].to<JsonArray>();  
       interfaceRepo.serialize(&interfaces);   
 
-      DEBUG_PRINT("\nserializing dataRepository");
-      JsonArray ds = doc["datasets"].to<JsonArray>();  
-      dataRepository.serialize(&ds); 
+      doc["connectivity"] = getConnectivityState();
 
       DEBUG_PRINT("\nserializing skeletons");
       JsonArray skel = doc["skeletons"].to<JsonArray>();
       stripFactory.serialize(&skel);  
-
-      DEBUG_PRINT("\nserializing shortcutsDef");
-      shortcuts.serialize(&tempJsonString);
-      doc["shortcutsDef"] = tempJsonString;
 
       DEBUG_PRINT("\nserializing system");
       tempJsonString="";
