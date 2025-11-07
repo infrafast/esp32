@@ -3,6 +3,7 @@
 
 #include "Interval.h"
 #include "GUIComponents.h"
+#include <vector>
 
 using IntervalButton = Interval::Button;
 
@@ -38,51 +39,42 @@ using IntervalButton = Interval::Button;
 class Strip;
 typedef Strip* (*StripBuilderCallback)(/*String values*/);
 
-class StripSkeleton{
-  #define STRIP_DEFAULT_GROUP "utils"
-  #define MAXNUMBER_OF_SKELPROPERTY 10
-  #define STRIP_SKELETON_PROPERTIES "properties"
+#define STRIP_DEFAULT_GROUP "utils"
+#define MAXNUMBER_OF_SKELPROPERTY 10
+#define STRIP_SKELETON_PROPERTIES "properties"
 
+class Serializable {
   public:
-    String stripID;
-    unsigned char icon;
-    String group;
-    StripBuilderCallback constructor;
-    //JsonObject variable;
-    LinkedList<Address*> dataSetAddresses = LinkedList<Address*>();
-
-    StripSkeleton(String id, String g, StripBuilderCallback b, unsigned char i='!');
-
-    const String* getValuePtr(String provider, String address, uint8_t index){
-      const String *retVal = &emptyString;
-
-      //DEBUG_PRINT("\nskeleton<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
-      DataSet* ds = dataRepository.getDataSet(provider, address);      
-      
-      if (ds != nullptr){
-        retVal = ds->getValuePtr(index);
-      }
-
-      //DEBUG_PRINT("<%s>",retVal->c_str());
-
-      return retVal;
-    }
+    virtual ~Serializable() = default;
 
     bool registerDataSetAddress(Address* address){
-      dataSetAddresses.add(address); 
+      dataSetAddresses.push_back(address);
       return true;
     }
 
-    String serialize(){
-      JsonDocument jsonDocStripSkeleton;
-      JsonArray properties;
-      jsonDocStripSkeleton[stripID] = group;
-      jsonDocStripSkeleton[C_ICON] = icon;
+    Address* getDataSetAddress(size_t index) const {
+      if (index >= dataSetAddresses.size()){
+        return nullptr;
+      }
+      return dataSetAddresses[index];
+    }
 
+    virtual String serialize() const {
+      JsonDocument jsonDocStripSkeleton;
+      serializeProperties(jsonDocStripSkeleton);
+      String data;
+      serializeJson(jsonDocStripSkeleton, data);
+      return data;
+    }
+
+    std::vector<Address*> dataSetAddresses;
+
+  protected:
+    void serializeProperties(JsonDocument& jsonDocStripSkeleton) const {
+      JsonArray properties = jsonDocStripSkeleton[STRIP_SKELETON_PROPERTIES].to<JsonArray>();
       JsonDocument property;
 
-      properties = jsonDocStripSkeleton[STRIP_SKELETON_PROPERTIES].to<JsonArray>();     
-      for (uint8_t i = 0; i < dataSetAddresses.size(); i++){
+      for (size_t i = 0; i < dataSetAddresses.size(); i++){
 
         Address* address = dataSetAddresses[i];
         if (address != nullptr){
@@ -96,10 +88,42 @@ class StripSkeleton{
         }
 
         // doc contient maintenant ton objet JSON
-        JsonObject obj = property.as<JsonObject>();    
         properties.add(property);
 
       }
+    }
+};
+
+class StripSkeleton: public Serializable{
+  public:
+    String stripID;
+    unsigned char icon;
+    String group;
+    StripBuilderCallback constructor;
+    //JsonObject variable;
+
+    StripSkeleton(String id, String g, StripBuilderCallback b, unsigned char i='!');
+
+    const String* getValuePtr(String provider, String address, uint8_t index){
+      const String *retVal = &emptyString;
+
+      //DEBUG_PRINT("\nskeleton<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
+      DataSet* ds = dataRepository.getDataSet(provider, address);
+
+      if (ds != nullptr){
+        retVal = ds->getValuePtr(index);
+      }
+
+      //DEBUG_PRINT("<%s>",retVal->c_str());
+
+      return retVal;
+    }
+
+    String serialize() const override{
+      JsonDocument jsonDocStripSkeleton;
+      serializeProperties(jsonDocStripSkeleton);
+      jsonDocStripSkeleton[stripID] = group;
+      jsonDocStripSkeleton[C_ICON] = icon;
       String data;
       serializeJson(jsonDocStripSkeleton, data);
       return data;
@@ -629,7 +653,10 @@ class TwoSelectStrip : public Strip{
 
   public: 
     TwoSelectStrip(StripSkeleton* s, bool debug=false):Strip(s){
-      select2PropertyAddress = s->dataSetAddresses.get(0)->pattern;
+      Address* select2Address = s->getDataSetAddress(0);
+      if (select2Address != nullptr){
+        select2PropertyAddress = select2Address->pattern;
+      }
     }
 
     void serializeProperties(){
@@ -666,7 +693,10 @@ class TwoSelectStrip : public Strip{
 class ThreeSelectStrip: public TwoSelectStrip{
   public:
     ThreeSelectStrip(StripSkeleton* s,bool debug=false):TwoSelectStrip(s,debug){
-      select3PropertyAddress = s->dataSetAddresses.get(1)->pattern;
+      Address* select3Address = s->getDataSetAddress(1);
+      if (select3Address != nullptr){
+        select3PropertyAddress = select3Address->pattern;
+      }
     }
   
     void serializeProperties(){
