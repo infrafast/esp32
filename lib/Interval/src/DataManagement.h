@@ -140,15 +140,20 @@ class DataRepository{
     //LinkedList<DataSet*> dataSets = LinkedList<DataSet*>();
     std::vector<DataSet*> dataSets;
 
-}dataRepository;
+};
+
+inline DataRepository& getDataRepository(){
+  static DataRepository instance;
+  return instance;
+}
 
 
 DataSet::DataSet(Address* addr, const String& _name): address(addr), name(_name) {
-    dataRepository.addDataSet(this);
+    getDataRepository().addDataSet(this);
 };
 
 DataSet::~DataSet() {
-  dataRepository.removeDataSet(this);
+  getDataRepository().removeDataSet(this);
 };
 
 String DataSet::serialize(){
@@ -284,7 +289,7 @@ class SerializableDataset {
       const String *retVal = &emptyString;
 
       //DEBUG_PRINT("\nSerializableDataset<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
-      DataSet* ds = dataRepository.getDataSet(provider, address);
+      DataSet* ds = getDataRepository().getDataSet(provider, address);
 
       if (ds != nullptr){
         retVal = ds->getValuePtr(index);
