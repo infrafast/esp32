@@ -19,6 +19,8 @@
 
 #include "Banks.h"
 
+#include "DataManagement.h"
+
 //#include <esp32FOTA.hpp>
 
 #include <aWOT.h>                 // awOT lasselukkari/aWOT@^3.5.0 wifi+eth server
@@ -224,8 +226,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     std::queue<EthernetClient*> clientQueue;
 
-    Event evt;    
+    Event evt;
     std::vector<String> broadcastQueue;
+
+    DataRepository& dataRepository;
 
     Application* webServer = nullptr;
     bool  httpServing = false;  //flag to indicate if http file are currently streamed
@@ -359,7 +363,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     ///////////////////////////////////////////////////////////////
    
 
-    ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true):GenericComponent(debug), SerializableDataset(SYSTEM_PROVIDER,GROUP_UTILS){
+    ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true)
+      : GenericComponent(debug), SerializableDataset(SYSTEM_PROVIDER,GROUP_UTILS), dataRepository(getDataRepository()){
       hwm = h;
       gui = g;
       id = "ApplicationManager";
