@@ -218,6 +218,7 @@ class StripHeaderWidget: public Top2Toggles{
 ///////////////////// MAIN APPLICATION CLASS ////////////////////////
 
 class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, public DataProvider, public SerializableDataset{
+  //
   public:   
   #define maxConcurrentClients 3
   int activeClients = 0;
