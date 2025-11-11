@@ -142,7 +142,7 @@ BLEMIDI_CREATE_INSTANCE(BLE_CONNECTION_NAME, bleMIDI);
 
 #define BLEMIDI_INTERFACE "BLEMIDI"
 class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
-  #define CONFIG_BLE "voidBLEparam" 
+
   public:
     String voidBLEparam = "abc";
 
@@ -238,18 +238,22 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
     } 
 
 
-    virtual void derivedConfig(JsonObject& config){   
-      config[CONFIG_BLE] = voidBLEparam;   // fill any parameters that are required by sysex
-    } 
-
-    virtual bool restore(const JsonObject& config){
-      bool changed = false;
+    virtual bool restoreProperty(const char* property){
+      /*bool changed = false;
       if (config.containsKey(CONFIG_BLE)){ 
         String bleParam = config[CONFIG_BLE].as<String>();
         if (voidBLEparam != bleParam) changed = true;
         voidBLEparam = bleParam;
       }
-      return changed;
+      return changed;*/
+
+      String bleParam;
+      if (sscanf(property, ADDRESS_OSCPORT, &bleParam)) {
+        if (voidBLEparam != bleParam) configChanged = true;
+        voidBLEparam = bleParam;       
+      }
+
+      return configChanged;      
     }  
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
@@ -268,8 +272,9 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
 };
 
 #define USBMIDI_INTERFACE "USBMIDI"
+
 class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
-  #define CONFIG_USB "voidUSBparam"
+
   public:
     String voidUSBparam = "toto";
 
@@ -321,18 +326,14 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
       }
     }
 
-    virtual void derivedConfig(JsonObject& config){   
-      config[CONFIG_USB] = voidUSBparam;   // fill any parameters that are required by sysex
-    } 
-
-    virtual bool restore(const JsonObject& config){
-      bool changed = false;
-      if (config.containsKey(CONFIG_USB)){
-        String usbParam = config[CONFIG_USB].as<String>();
-        if (voidUSBparam != usbParam) changed = true;
-        voidUSBparam = usbParam;
+    virtual bool restoreProperty(const char* property){
+      String usbParam;
+      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &usbParam)) {
+        if (usbParam != voidUSBparam) configChanged = true;
+        voidUSBparam = usbParam;       
       }
-      return changed;
+
+      return configChanged;      
     }      
 
     virtual bool derivedBegin(){
@@ -389,19 +390,14 @@ class DINMIDIInterface: public MIDIInterface, public DeviceInterface{
 
     virtual void monitor(){}
 
-
-    virtual void derivedConfig(JsonObject& config){   
-      config[CONFIG_DIN] = voidDinparam;   // fill any parameters that are required by sysex
-    } 
-
-    virtual bool restore(const JsonObject& config){
-      bool changed = false;
-      if (config.containsKey(CONFIG_DIN)){
-        String dinParam = config[CONFIG_DIN].as<String>();
-        if (voidDinparam != dinParam) changed = true;
-        voidDinparam = dinParam;
+    virtual bool restoreProperty(const char* property){
+      String dinParam;
+      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &dinParam)) {
+        if (dinParam != voidDinparam) configChanged = true;
+        voidDinparam = dinParam;       
       }
-      return changed;
+
+      return configChanged;       
     }      
 
     DeviceInterface* getDevice() override { return this; }
@@ -490,18 +486,14 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
 
     };
 
-    virtual void derivedConfig(JsonObject& config){   
-      config[CONFIG_APPLE] = voidAppleMidiParam;   // fill any parameters that are required by sysex
-    } 
-
-    virtual bool restore(const JsonObject& config){
-      bool changed = false;
-      if (config.containsKey(CONFIG_APPLE)){        
-        String appleParam = config[CONFIG_APPLE].as<String>();
-        if (voidAppleMidiParam != appleParam) changed = true;
-        voidAppleMidiParam = appleParam;
+    virtual bool restoreProperty(const char* property){
+      String appleParam;
+      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &voidAppleMidiParam)) {
+        if (appleParam != voidAppleMidiParam) configChanged = true;
+        voidAppleMidiParam = appleParam;       
       }
-      return changed;
+
+      return configChanged;       
     }        
 
     static void handleConnectedStatic(const ssrc_t& ssrc, const char* name) {

@@ -10,7 +10,7 @@ class DMXInterface{
 
 #define ARTNETDMX_INTERFACE "Artnet"
 class ArtnetDMXInterface: public DMXInterface, NetworkDevice{
-  #define CONFIG_ARTNET "voidArtnetparam" 
+
   public:
     String voidArtnetParam = "artnet123";
 
@@ -22,18 +22,16 @@ class ArtnetDMXInterface: public DMXInterface, NetworkDevice{
       icon = "b";
     }
 
-    virtual void derivedConfig(JsonObject& config){   
-      config[CONFIG_ARTNET] = voidArtnetParam;   // fill any parameters that are required by sysex
-    } 
+    virtual bool restoreProperty(const char* property){
 
-    virtual bool restore(const JsonObject& config){
-      bool changed = false;
-      if (config.containsKey(CONFIG_ARTNET)){
-        String configArtNet = config[CONFIG_ARTNET].as<String>();
-        if (voidArtnetParam != configArtNet) changed = true;
-        voidArtnetParam = configArtNet;        
+      String configArtNet;
+      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &configArtNet)) {
+        if (voidArtnetParam != configArtNet) configChanged = true;
+        voidArtnetParam = configArtNet;       
       }
-      return changed;
+
+      return configChanged;      
+
     }  
 
     virtual void* read(){return nullptr;}
@@ -62,9 +60,8 @@ class ArtnetDMXInterface: public DMXInterface, NetworkDevice{
 
 #define THREEEPINDMX_INTERFACE "3PinDMX"
 class ThreePinDMXInterface: public DMXInterface, public DeviceInterface{
-  #define CONFIG_3PINDMX "void3PinDMXparam" 
   public:
-    String void3pinDMXParam = "3pin123";
+    String void3pinDMXParam = "";
 
     ThreePinDMXInterface(bool _configurable):DeviceInterface(THREEEPINDMX_INTERFACE,GROUP_INTERFACE_DMX, _configurable){
       icon = "a";
@@ -78,18 +75,22 @@ class ThreePinDMXInterface: public DMXInterface, public DeviceInterface{
 
     } 
 
-    virtual void derivedConfig(JsonObject& config){   
-      config[CONFIG_3PINDMX] = void3pinDMXParam;   // fill any parameters that are required by sysex
-    } 
-
-    virtual bool restore(const JsonObject& config){
-      bool changed = false;
+    virtual bool restoreProperty(const char* property){
+      /*bool changed = false;
       if (config.containsKey(CONFIG_3PINDMX)){
         String config3pin = config[CONFIG_3PINDMX].as<String>();
         if (void3pinDMXParam != config3pin) changed = true;
         void3pinDMXParam = config3pin;        
       }
-      return changed;
+      return changed;*/
+
+      String config3pin;
+      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &config3pin)) {
+        if (void3pinDMXParam != config3pin) configChanged = true;
+        void3pinDMXParam = config3pin;       
+      }
+
+      return configChanged;      
     }  
 
     virtual void* read(){return nullptr;}

@@ -291,7 +291,7 @@ class BankNavigator: public Widget{
       // Clean up dynamically allocated objects
       delete canva;
       delete label;
-      DEBUG_PRINT("\nBankNavigator refreshed");
+      //DEBUG_PRINT("\nBankNavigator refreshed");
       return refreshed;
     }
 

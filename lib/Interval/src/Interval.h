@@ -852,6 +852,7 @@ struct State{ // used by Strip and Interface
   float progress = -1;
   bool stateChanged = false;
   bool progressChanged = false;
+  bool propertiesChanged = false;
 };
 
 #include "GUIManager.h"
@@ -900,8 +901,6 @@ void Log::drop(const char* originator, const char* message) {
 }
 
 ApplicationManager app(&hwm,&gui);
-
-
 
 void goDeepSleep(){
     // SHUTDOWN
@@ -1384,7 +1383,7 @@ void bankOverlayBuilder(uint8_t BankIndex){
 
   Interval::Bank* bank = app.banks[BankIndex];
   
-  DEBUG_PRINT("\n\n\n--------------------------------- bankOverlayBuilder %s ---------------------------------\n\n ",bank == nullptr?"nullptr":bank->name.c_str());
+  //DEBUG_PRINT("\n\n\n--------------------------------- bankOverlayBuilder %s ---------------------------------\n\n ",bank == nullptr?"nullptr":bank->name.c_str());
   if (bank != nullptr){
     app.navBar = new BankNavigator(bank,true);   
     gui.add(app.navBar);
@@ -1410,7 +1409,7 @@ void bankScreenBuilder(uint8_t subScreen){
   GUI::cls();
   
   Interval::Bank* bank = app.banks[subScreen];
-  DEBUG_PRINT("\n\n\n---------------------------------bankScreenBuilder ");
+  //DEBUG_PRINT("\n\n\n---------------------------------bankScreenBuilder ");
 
   if (bank != nullptr && !oversize){
 

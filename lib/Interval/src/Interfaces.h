@@ -6,7 +6,9 @@
 
 #include "interfaces/i_states.h"
 
-class DeviceInterface  : public SerializableDataset {
+#define ADDRESS_CHANGETOPARAMETERNAME "/config/%s"
+
+class DeviceInterface  : public SerializableDataset{
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
   #define INTERFACE_EXPOSED     "exposed"
@@ -29,6 +31,8 @@ class DeviceInterface  : public SerializableDataset {
     float previousProgress = -1;
 
     String interfaceName; 
+
+    bool configChanged = false;
     
     int dataAvailable;
     void* data;
@@ -37,12 +41,11 @@ class DeviceInterface  : public SerializableDataset {
 
     String group = "undef"; // used by the strip to define which deviceinterface they can connect
 
-    virtual const String& getProviderName(){
-      return group;
-    }
 
     DeviceInterface(const String&, const String&, bool);
     ~DeviceInterface();
+
+        /////////////////////////////////////
 
     String serializeState(){
       JsonDocument doc;
@@ -68,6 +71,10 @@ class DeviceInterface  : public SerializableDataset {
       return output;
     }  
 
+    const String& getProviderName(){
+      return group;
+    }
+
     String serializeConfig(bool mainNode = true){
       // by default we serialize the full content (main node)
       // but if an interface uses another one, it will only partially serialize 
@@ -89,7 +96,6 @@ class DeviceInterface  : public SerializableDataset {
         config[INTERFACE_PROVIDER] = getProviderName();      
         config[INTERFACE_ICON] = icon;
       }
-      derivedConfig(config);
 
       JsonDocument propertiesDoc;
       serializeProperties(propertiesDoc);
@@ -214,23 +220,30 @@ class DeviceInterface  : public SerializableDataset {
       state.offline = _offline;
     }
 
-    virtual bool restoreBase(const JsonObject& config){   
-
-      bool changed = false;
+    virtual bool restoreBase(const JsonObject& config){   // == deserialize = from string to variable
+      
+      configChanged = false;
 
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_OFFLINE)){
         bool offline = config[INTERFACE_OFFLINE];
-        if (offline != state.offline) changed = true;
+        if (offline != state.offline) configChanged = true;
         state.offline = offline;
-        DEBUG_PRINT("\n%s offline=>%s",interfaceName.c_str(),state.offline?"true":"false");
-        
+        DEBUG_PRINT("\n%s offline=>%s",interfaceName.c_str(),state.offline?"true":"false");        
       }
 
       // and then we call the specific part
-      changed |= restore(config);
-      if (changed) begin();    // begin is called when a parameter has changed, it means the interface may need to reconnect for instance
-      return changed;
+      JsonArray properties = config[KEY_PROPERTIES];
+      for (uint8_t i = 0; i< properties.size(); i++){
+        if (restoreProperty(properties[i])){
+          configChanged |= true;
+          DEBUG_PRINT("\n%s property %s changed",properties[i]);
+        }
+
+      }            
+
+      if (configChanged) handlePropertyChange();
+      return configChanged;
     }  
 
     #define IF_CFG_FILE_PATH "/"
@@ -292,12 +305,13 @@ class DeviceInterface  : public SerializableDataset {
       return success;
     }
 
-    virtual bool restore(const JsonObject& config) = 0;  
-    virtual void derivedConfig(JsonObject& config) = 0;  
+    virtual bool restoreProperty(const char* property) = 0;         // == deserialize properties = string to variable
+    
     // monitor manage internal state and set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
     // do not need to care about offline state as it is managed by update method
     virtual void monitor() = 0; 
     
+    virtual void handlePropertyChange(){DEBUG_PRINT("\n%s::handlePropertyChange() : void");} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
     virtual bool end() = 0;     
     virtual String getFilename() = 0;
 
@@ -395,7 +409,7 @@ class InterfaceRepository{
 InterfaceRepository interfaceRepo;
 
 
-DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable){
+DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable), SerializableDataset(name,_group){
   interfaceRepo.interfaces.push_back(this);
   interfaceName = name;
   group = _group;
@@ -407,148 +421,13 @@ DeviceInterface::~DeviceInterface(){
   interfaceRepo.interfaces.erase(std::remove(interfaceRepo.interfaces.begin(), interfaceRepo.interfaces.end(), this), interfaceRepo.interfaces.end());
 }
 
-#define MACRO_NUMBER_MAX      10
-#define ADDRESS_dsText    "/text/%s"
-#define ADDRESS_dsStripIDs      "/strip/id/%s"
-#define ADDRESS_ACTION        "/action/%s"
-  #define ADDRESS_ACTION_SIZE 5
-#define ADDRESS_MACRONAME     "/macro/name/%s"
-#define ADDRESS_PROVIDER      "/provider/"
-
-#define SYSTEM_INTERFACE "system"
-class SystemInterface: public DeviceInterface, public DataProvider{
-  #define GROUP_INTERFACE_SYSTEM "utils"
-  public:    
-
-    DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_dsText, "free text", REGEX_NON_EMPTY_STRING),this);
-    DynamicDataSet dsStripIDs = DynamicDataSet(new DropDownAddress(ADDRESS_dsStripIDs),this);
-    DynamicDataSet dsDropDownActions = DynamicDataSet(new DropDownAddress(ADDRESS_ACTION),this);        
-    DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
-
-
-    SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_SYSTEM,_configurable){
-      state.code = CONNECTED;
-    }
-
-    virtual String getDataSetName(){
-      return interfaceName;
-    }
-
-    virtual bool restore(const JsonObject& config){return false;}
-    virtual void derivedConfig(JsonObject& config){};    
-    virtual void monitor(){}
-    
-    virtual void* read(){return nullptr;}
-    
-    virtual bool derivedBegin(){
-      return true;
-    }
-    
-    virtual bool end(){
-      return true;
-    }     
-
-    String getFilename(){
-      return "system_if.cfg";
-    }
-
-    virtual uint16_t getSize(String addrr){
-      if (addrr == ADDRESS_dsText) return 1;
-      
-      else if (addrr == ADDRESS_dsStripIDs) return 0;       // 0 => means this is not an array of data but a javascript callback name
-      else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
-      else if (addrr == ADDRESS_MACRONAME) return MACRO_NUMBER_MAX;
-      else{
-        // IS IT AN INTERFACE ?
-        char group[64] = {0};
-        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
-        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
-          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX            
-          uint16_t count = 0;
-          for (const auto& interface : interfaceRepo.interfaces){
-            // check if we request provider listing
-            if (interface->group == group) count++;
-          }
-          //DEBUG_PRINT("\nDataSet getSize(%s) has %d items",addrr.c_str(),count);
-          return count;
-        }
-
-      }
-
-      DEBUG_PRINT("\nDataSet getSize(%s) is not implemented",addrr.c_str());
-      return 0;
-
-    }    
-    
-    virtual const String* getValuePtr(String addrr, uint16_t index){
-      if (addrr == ADDRESS_dsText){
-        textValue = concatStrings("hello", index);
-        return &textValue;
-      }
-      else if (addrr == ADDRESS_dsStripIDs){
-        return &getStripID;         //javascript local function callback
-      }else if (addrr == ADDRESS_ACTION){
-        return &dsDropDownActionsValues[index];   
-      }else if (addrr == ADDRESS_MACRONAME){
-        return &dsMacroNamesValues[index];      
-      }else{
-        char group[64] = {0};
-        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
-        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
-          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX    
-          int16_t count = -1;        
-          for (const auto& interface : interfaceRepo.interfaces){
-            if (interface->group == group) count++;
-            if (count == index){
-              String* s = &interface->interfaceName;
-              //DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) = %s",addrr.c_str(),index,s->c_str());
-              return s;
-            } 
-          }
-        }      
-      }
-      
-      DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) is not implemented",addrr.c_str(),index);
-      return &voidStatic;      
-    }
-
-  private:
-
-    String textValue = "";
-    
-    // javascript function that generates the data locally
-    String getStripID = "getStripID";
-        
-    String dsDropDownActionsValues[ADDRESS_ACTION_SIZE] = {
-      "play",
-      "pause",
-      "stop",
-      "FF",
-      "RW"      
-    };   
-    
-    String dsMacroNamesValues[MACRO_NUMBER_MAX] = {
-      "macro1",
-      "macro2",
-      "macro3",      
-      "macro4",
-      "macro5",
-      "macro6",
-      "macro7",
-      "macro8",
-      "macro9",
-      "macro10"
-    };            
-    
-}systemInterface(false);
-
 DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){
   for (const auto& interface : interfaceRepo.interfaces){ 
     //DEBUG_PRINT("\nInterfaceRepository::retrieve(%s)=>%s",requestedInterface.c_str(),interface->interfaceName.c_str())     ;
     if (interface->interfaceName == requestedInterface) return interface;
   }
-  DEBUG_PRINT("\nError: requested interface <%s> is not existing, returning <%s>",requestedInterface.c_str(),systemInterface.interfaceName.c_str() );
-  return &systemInterface;
+  DEBUG_PRINT("\nError: requested interface <%s> is not existing, returning nullptr",requestedInterface.c_str());
+  return nullptr;
 }
 
 

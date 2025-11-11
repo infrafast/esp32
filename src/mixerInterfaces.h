@@ -5,33 +5,34 @@
 
 
 #define GROUP_INTERFACE_MIXER "Mixer"   
+#define ADDRESS_MIXERMODEL  "/mixer/model/%s"
+#define ADDRESS_MIXERNAME   "/mixer/name/%s"
+
 class MixerInterface: public DeviceInterface{
-  #define CONFIG_MIXERNAME "mixerName"
-  #define CONFIG_MIXERMODEL "model"    
+
   public:
     String mixerModel;
+    String mixerName;
+
     MixerInterface(String _name, String _model):mixerModel(_model),DeviceInterface(_name,GROUP_INTERFACE_MIXER){}
     
    
     virtual const String& getProviderName(){
       return interfaceName;        // mixers do not belong to the group dataset interface name but have their own provider as MixingStation dropdown will not be the same as X32
     }      
-
-    virtual void derivedConfig(JsonObject& config){
-      //{"mixerName":"software","model":"virtual"}      
-      config[CONFIG_MIXERNAME] = interfaceName;
-      config[CONFIG_MIXERMODEL] = mixerModel;
-    }   
-    
-    virtual bool restore(const JsonObject& config){
-      bool changed = false;
-      //mixerName = config[CONFIG_MIXERNAME].as<String>(); // since mixerName is dynamically retrieved from mixer, we should not consider it
-      if (config.containsKey(CONFIG_MIXERMODEL)){
-        mixerModel = config[CONFIG_MIXERMODEL].as<String>();
-        changed = true;
+   
+    virtual bool restoreProperty(const char* property){
+      String _tmp;
+      if (sscanf(property, ADDRESS_MIXERNAME, &_tmp)) {
+        if (_tmp != mixerName) configChanged = true;
+        mixerName = _tmp;       
       }
-      return changed;
-    }      
+      if (sscanf(property, ADDRESS_MIXERMODEL, &_tmp)) {
+        if (mixerModel != _tmp) configChanged = true;
+        mixerModel = _tmp;       
+      }
+      return configChanged;   
+    }
 };
 
 class OSCMixerInterface : public MixerInterface{
@@ -40,57 +41,24 @@ class OSCMixerInterface : public MixerInterface{
     OSCMixerInterface(String _name, String _model, OSCInterface*_osc):osc(_osc),MixerInterface(_name,_model){
     }
           
-    virtual void derivedConfig(JsonObject& config){  
-      MixerInterface::derivedConfig(config);
-      //{"mixerName":"software","model":"virtual"}
-
-      // we retrieve the config of the OSCInterface instance which is specific
-      String usesConf = "{}"; //osc->serializeConfig(false); // false : we partially serialize 
-      JsonDocument oscConf;
-
-      // convert it back to an object that can be attached to the parent config 
-      DeserializationError error = deserializeJson(oscConf, usesConf);
-      if (error) {
-        DEBUG_PRINT("\n%s serialize %s",interfaceName.c_str(),error.c_str());
-        return;
-      }
-      oscConf.shrinkToFit();
-
-      //config[INTERFACE_USES] = oscConf;
-      for (JsonPair kv : oscConf.as<JsonObject>()) config[kv.key()] = kv.value();
-      /* 
-        "uses":{"NetworkOSC":{"config":{"oscIP":"1.2.3.4-restored","oscPort":10029}
-        "uses":{"MIDIOSC":{"config":{"voidSysexParam":"null"}
-      */
-      
-    } 
-
     virtual void monitor(){}
 
     virtual void* read(){return nullptr;}
 
-
-    virtual bool restore(const JsonObject& config){
-      bool changed = false;
-      //changed = osc->restore(config);
-      changed |= MixerInterface::restore(config);
-      return changed;
-    }  
 };
 
 #define MIXINGSTATION_INTERFACE "MixingStation"
 class MixingStation: public OSCMixerInterface{
-  #define MS_CONFIG_AUTOCONNECT "autoConnect"
-  #define MS_CONFIG_AUTOCONNECT_MIXERIP "mixerIP"
-  #define MS_CONFIG_AUTOCONNECT_MIXERID "mixerID"
-  #define MS_CONFIG_AUTOCONNECT_APIPORT "restAPIport"
+  #define MS_CONFIG_AUTOCONNECT "/autoConnect/%d"
+  #define MS_CONFIG_AUTOCONNECT_MIXERID "/mixerID/%d"
+  #define MS_CONFIG_AUTOCONNECT_APIPORT "/restAPIport/%d"
   public:
     uint8_t autoConnectMixerID = 1;
     int RESTAPI_port = 8080;
     String mixerIPaddress = "1.1.1.1";
     bool autoConnect = false;    
 
-    MixingStation(OSCInterface* osc):OSCMixerInterface("undef","virtual",osc){
+    MixingStation(OSCInterface* osc):OSCMixerInterface("MixingStation","virtual",osc){
       interfaceName = MIXINGSTATION_INTERFACE;
     }
 
@@ -98,17 +66,7 @@ class MixingStation: public OSCMixerInterface{
       return MIXINGSTATION_INTERFACE"_if.cfg";
     }
 
-    virtual void derivedConfig(JsonObject& config){      
-      OSCMixerInterface::derivedConfig(config); 
-      // uses NetworkOSC, so outcome will be: {"mixerName":"undef","model":"virtual","oscIP":"5.6.7.8","oscPort":3000}
-      config[MS_CONFIG_AUTOCONNECT_MIXERID] = autoConnectMixerID ;
-      config[MS_CONFIG_AUTOCONNECT_APIPORT] = RESTAPI_port;
-      config[MS_CONFIG_AUTOCONNECT] = autoConnect;
-      config[MS_CONFIG_AUTOCONNECT_MIXERIP] = mixerIPaddress;      
-      //{"MixingStation":{"config":{"mixerName":"undef","model":"virtual","oscIP":"5.6.7.8","oscPort":3000,"mixerID":1,"restAPIport":8080,"autoConnect":false,"mixerIP":"1.1.1.1"}}}      
-    }          
-
-    virtual bool restore(const JsonObject& config){
+    virtual bool restoreProperty(const char* property){
       bool changed = false;
       if (config.containsKey(MS_CONFIG_AUTOCONNECT_MIXERID)){ 
         autoConnectMixerID = config[MS_CONFIG_AUTOCONNECT_MIXERID];
@@ -147,15 +105,9 @@ class BehringerXMR: public OSCMixerInterface{
 
     BehringerXMR(OSCInterface* osc):OSCMixerInterface("X32Emul","X32",osc){
       interfaceName = "X+Mseries-"; //+osc->interfaceName;
-    }
+    }  
 
-    virtual void derivedConfig(JsonObject& config){
-      // uses NetworkOSC, so outcome will be: {"mixerName":"undef","model":"virtual","oscIP":"5.6.7.8","oscPort":3000}
-      OSCMixerInterface::derivedConfig(config);
-      config[BEHRINGER_CONFIG_DISCOVERY] = discovery;      
-    }          
-
-    virtual bool restore(const JsonObject& config){
+    virtual bool restoreProperty(const char* property){
       bool changed = false;
       if (config.containsKey(BEHRINGER_CONFIG_DISCOVERY)){
         discovery = config[BEHRINGER_CONFIG_DISCOVERY];

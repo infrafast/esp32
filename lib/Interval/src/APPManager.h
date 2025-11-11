@@ -215,20 +215,9 @@ class StripHeaderWidget: public Top2Toggles{
 };
 
 
-class Shortcuts{
-  public:
-    void serialize(String* buffer){
-
-      *buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":[\"freetext\"]}]}]";
-
-      removeJsonQuote(buffer);
-
-    }    
-};
-
 ///////////////////// MAIN APPLICATION CLASS ////////////////////////
 
-class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher{
+class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, public DataProvider, public SerializableDataset{
   public:   
   #define maxConcurrentClients 3
   int activeClients = 0;
@@ -318,7 +307,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
       
-    Shortcuts shortcuts;
     BankNavigator* navBar = nullptr;
 
     ///////////////// INTERFACES ///////////////////
@@ -332,7 +320,26 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     ArtnetDMXInterface* artnetDMXInterface;
     ThreePinDMXInterface* threePinDMXInterface;
-       
+
+    ///////////////////////// DATA TEMPLATES ////////////////////////////
+    #define MACRO_NUMBER_MAX       10
+    #define ADDRESS_TEXT          "/text/%s"
+    #define ADDRESS_DSSTRIPIDS      "/strip/id/%s"
+    #define ADDRESS_ACTION          "/action/%s"
+      #define ADDRESS_ACTION_SIZE 5
+    #define ADDRESS_MACRONAME     "/macro/name/%s"
+    #define ADDRESS_PROVIDER      "/provider/"
+
+    #define SYSTEM_PROVIDER "system"
+    #define GROUP_UTILS "utils"    
+
+    DropDownAddress addressStripID = DropDownAddress(ADDRESS_DSSTRIPIDS);
+    FreeTextAddress addressFreeText = FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_NON_EMPTY_STRING);
+
+    DynamicDataSet* dsText;
+    DynamicDataSet* dsStripIDs;
+    DynamicDataSet* dsDropDownActions;
+    DynamicDataSet* dsMacroNames;
 
     ////////////////////////////////////////////////
 
@@ -352,7 +359,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     ///////////////////////////////////////////////////////////////
    
 
-    ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true):GenericComponent(debug){
+    ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true):GenericComponent(debug), SerializableDataset(SYSTEM_PROVIDER,GROUP_UTILS){
       hwm = h;
       gui = g;
       id = "ApplicationManager";
@@ -361,9 +368,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       wss = nullptr;      // this is to make sure the template is correctly void
        
-      // *********************************
-      // CALLBACKS
-      // *********************************
       hwm->network->userInternetCallback = [this](bool* online) {
           this->internetCallBack(online);
       };         
@@ -372,6 +376,75 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           this->defaultEventHandling(event);
       };*/         
     }
+
+    // *********************************
+    // DATASET MANAGEMENT
+    // *********************************
+
+    virtual const String& getDataSetName(){return SYSTEM_PROVIDER;}    
+
+    virtual uint16_t getSize(String addrr){
+      if (addrr == ADDRESS_TEXT) return 1;
+      
+      else if (addrr == ADDRESS_DSSTRIPIDS) return 0;       // 0 => means this is not an array of data but a javascript callback name
+      else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
+      else if (addrr == ADDRESS_MACRONAME) return MACRO_NUMBER_MAX;
+      else{
+        // IS IT AN INTERFACE ?
+        char group[64] = {0};
+        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
+        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
+          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX            
+          uint16_t count = 0;
+          for (const auto& interface : interfaceRepo.interfaces){
+            // check if we request provider listing
+            if (interface->group == group) count++;
+          }
+          //DEBUG_PRINT("\nDataSet getSize(%s) has %d items",addrr.c_str(),count);
+          return count;
+        }
+
+      }
+
+      DEBUG_PRINT("\nDataSet getSize(%s) is not implemented",addrr.c_str());
+      return 0;
+
+    }    
+    
+    virtual const String* getValuePtr(String addrr, uint16_t index){
+      if (addrr == ADDRESS_TEXT){
+        textValue = concatStrings("hello", index);
+        return &textValue;
+      }
+      else if (addrr == ADDRESS_DSSTRIPIDS){
+        return &getStripID;         //javascript local function callback
+      }else if (addrr == ADDRESS_ACTION){
+        return &dsDropDownActionsValues[index];   
+      }else if (addrr == ADDRESS_MACRONAME){
+        return &dsMacroNamesValues[index];      
+      }else{
+        char group[64] = {0};
+        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
+        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
+          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX    
+          int16_t count = -1;        
+          for (const auto& interface : interfaceRepo.interfaces){
+            if (interface->group == group) count++;
+            if (count == index){
+              String* s = &interface->interfaceName;
+              //DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) = %s",addrr.c_str(),index,s->c_str());
+              return s;
+            } 
+          }
+        }      
+      }
+      
+      DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) is not implemented",addrr.c_str(),index);
+      return &voidStatic;      
+    }
+
+
+
 
     bool getButtonState(uint8_t B){
       return hwm->buttons[B]->refreshed;
@@ -551,6 +624,25 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       hwm->init();
 
+      //*********************************
+      // DATASET INIT
+      //*********************************
+      registerDataSetAddress(&addressStripID);
+      registerDataSetAddress(&addressFreeText);
+
+      dsText = new DynamicDataSet(&addressFreeText,this);
+      dsStripIDs = new DynamicDataSet(&addressStripID,this);
+      dsDropDownActions = new DynamicDataSet(new DropDownAddress(ADDRESS_ACTION),this);        
+      dsMacroNames = new DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this);     
+
+      // *********************************
+      // SHORTCUTS
+      // *********************************
+      //*buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":[\"freetext\"]}]}]";      
+      
+      jsonInputRepo.add(this);
+
+
       // *********************************
       // SKELETONS & DATA SETS
       // *********************************
@@ -558,7 +650,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       // general purposes / test skeletons
       //
       stripTextSkel = new StripSkeleton(STRIP_TEXT,STRIP_DEFAULT_GROUP,textStripConstructorCallback,'*');        
-        stripTextSkel->registerDataSetAddress(systemInterface.dsText.address);
+        stripTextSkel->registerDataSetAddress(dsText->address);
 
       //
       // midi skeletons
@@ -606,7 +698,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         }
         if (!exists) {
           groupesUniques.push_back(interface->group);
-          new DynamicDataSet(new DropDownAddress(ADDRESS_PROVIDER+interface->group+"/%s"),&systemInterface);
+          new DynamicDataSet(new DropDownAddress(ADDRESS_PROVIDER+interface->group+"/%s"),this);
         }
 
       }
@@ -1228,9 +1320,9 @@ void setup() {
       JsonArray ds = doc["datasets"].to<JsonArray>();  
       dataRepository.serialize(&ds);       
 
-      DEBUG_PRINT("\nserializing systemJsonDef");
-      shortcuts.serialize(&tempJsonString);
-      doc["systemJsonDef"] = tempJsonString;
+      DEBUG_PRINT("\nserializing input (shortcuts & interfaces fields)");
+      JsonArray ji = doc["jsonInput"].to<JsonArray>();
+      jsonInputRepo.serialize(&ji);
 
       DEBUG_PRINT("\nserializing interfaces");
       JsonArray interfaces = doc["interfaces"].to<JsonArray>();  
@@ -1533,7 +1625,7 @@ void setup() {
 
     void triggerRedraw(){
       // this forces the GUI to be rebuild at next refresh
-      DEBUG_PRINT("\ntriggerRedraw()");
+      //DEBUG_PRINT("\ntriggerRedraw()");
       screen.focus = screen.focus - 1;      
     }
 
@@ -2634,7 +2726,7 @@ void setup() {
         const char* interfaceName = first.key().c_str();    
         DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);
         
-        if (interface->interfaceName == interfaceName){
+        if (interface && interface->interfaceName == interfaceName){
           // we found the right interface 
           // Valeur = parameters
           JsonObject values = first.value().as<JsonObject>();
@@ -2875,7 +2967,36 @@ void setup() {
     JsonAnswer jsonAnswer;
 
     JsonList wiFiList;    
-         
+
+    //////////////// data sets
+    String textValue = "";
+    
+    // javascript function that generates the data locally
+    String getStripID = "getStripID";
+        
+    String dsDropDownActionsValues[ADDRESS_ACTION_SIZE] = {
+      "play",
+      "pause",
+      "stop",
+      "FF",
+      "RW"      
+    };   
+    
+    String dsMacroNamesValues[MACRO_NUMBER_MAX] = {
+      "macro1",
+      "macro2",
+      "macro3",      
+      "macro4",
+      "macro5",
+      "macro6",
+      "macro7",
+      "macro8",
+      "macro9",
+      "macro10"
+    };     
+    
+    //////////////////////////////
+
     String defaultSysConf =
         "{\"" S_PUSHDELAY "\":\"852\","
         "\"" S_DCLICREACTIVITY "\":\"251\","

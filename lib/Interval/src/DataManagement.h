@@ -6,7 +6,7 @@
 ///////////////////////////// DATA MANAGEMENT ///////////////////////////// 
 class DataProvider{
   public :
-    virtual String getDataSetName() = 0;
+    virtual const String& getDataSetName() = 0;
     virtual uint16_t getSize(String addrr) = 0;
     virtual const String* getValuePtr(String addrr, uint16_t index) = 0;
   protected:
@@ -28,11 +28,16 @@ enum {
 #define INPUTSELECT "dropdown"
 #define INPUTTEXT   "freetext"
 
-#define REGEX_0to126 "0-126"
-#define REGEX_NON_EMPTY_STRING "Non empty string"
-#define REGEX_SYSEX256 "sysex256"
-#define REGEX_ALPHANUM40 "alphanum40"
+#define REGEX_0to126                "0-126"
+#define REGEX_0to65535              "0-65535"
+#define REGEX_NON_EMPTY_STRING      "Non empty string"
+#define REGEX_SYSEX256              "sysex256"
+#define REGEX_ALPHANUM40            "alphanum40"
+#define REGEX_IPADDRESS             "ip"
 
+#define ADDRESS_IP "/ip/%s"  
+
+#define KEY_PROPERTIES    "properties"
 
 class Address {
   public:
@@ -77,7 +82,7 @@ class FreeTextAddress: public Address{
     }    
 };
 
-
+FreeTextAddress addressIP = FreeTextAddress(ADDRESS_IP, "ip", REGEX_IPADDRESS);    
 
 class DataSet{
   public:
@@ -228,7 +233,12 @@ void DataRepository::removeDataSet(DataSet* ds) {
 
 class SerializableDataset {
   public:
+    String name;
+    String group;
+
     virtual ~SerializableDataset() = default;
+
+    SerializableDataset(const String& n, const String& g) : name(n), group(g) {}    
 
     bool registerDataSetAddress(Address* address){
       dataSetAddresses.push_back(address);
@@ -242,14 +252,34 @@ class SerializableDataset {
       return dataSetAddresses[index];
     }
 
-    virtual String serialize() const {
-      JsonDocument jsonDocStripSkeleton;
-      serializeProperties(jsonDocStripSkeleton);
+    String serialize(){
+      JsonDocument jsonDoc;
+      JsonObject root = jsonDoc.to<JsonObject>();
+      serialize(root);
+
       String data;
-      serializeJson(jsonDocStripSkeleton, data);
+      serializeJson(root, data);
       return data;
     }
 
+    // 🚩 Méthode virtuelle : chaque classe dérivée enrichit ici le JSON
+    virtual void serialize(JsonObject& json) {
+        json["name"] = name;
+        json["group"] = group;
+
+        JsonArray properties = json[SKELETON_PROPERTIES].to<JsonArray>();
+        for (Address* address : dataSetAddresses) {
+            if (!address) continue;
+
+            JsonDocument prop;
+            if (deserializeJson(prop, address->serialize())) {
+                DEBUG_PRINT("\naddress properties serialization failed: %s", address->pattern.c_str());
+                continue;
+            }
+            properties.add(prop);
+        }
+    }
+    
     const String* getValuePtr(String provider, String address, uint8_t index){
       const String *retVal = &emptyString;
 
@@ -263,7 +293,7 @@ class SerializableDataset {
       //DEBUG_PRINT("<%s>",retVal->c_str());
 
       return retVal;
-    }
+    }    
 
     std::vector<Address*> dataSetAddresses;
 
@@ -291,6 +321,26 @@ class SerializableDataset {
       }
     }
 };
+
+
+
+class JsonTemplateRepository{
+  public:
+    std::vector<SerializableDataset*> jsonTemplateRepo;
+
+    void serialize(JsonArray* jsonTPLArray){
+      for (uint8_t i=0;i<jsonTemplateRepo.size();i++){
+        SerializableDataset* jsonTPL = jsonTemplateRepo[i];
+        jsonTPLArray->add(jsonTPL->serialize());
+      }
+    }
+
+    bool add(SerializableDataset* sd){
+      jsonTemplateRepo.push_back(sd);
+      return true;
+    }
+
+}jsonInputRepo;
 
 
 #endif

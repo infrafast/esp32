@@ -2,16 +2,22 @@
 #define I_OSC_h
 
 #include "Interfaces.h"
+#include "DataManagement.h"
 
 #define GROUP_INTERFACE_OSC "OSC"
 class OSCInterface{
   public:
 };
 
+#define ADDRESS_OSCPORT "/oscport/%d"
+
 class NetworkOSC: public OSCInterface, public NetworkDevice{
-  #define CONFIG_OSCIP  "oscIP"
-  #define CONFIG_OSCPORT  "oscPort"
+
   public:
+
+    //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
+    FreeTextAddress* addressOSCport = new FreeTextAddress(ADDRESS_OSCPORT,"OSCport", REGEX_0to65535);
+
     String OSC_IPaddress;
     int OSC_port;
 
@@ -22,29 +28,29 @@ class NetworkOSC: public OSCInterface, public NetworkDevice{
     NetworkOSC(String name, String _OSC_IPaddress,int _OSC_port,bool _configurable=false):OSC_IPaddress(_OSC_IPaddress),OSC_port(_OSC_port), NetworkDevice(name, GROUP_INTERFACE_OSC,_configurable){
       interfaceName = name;
       icon = "g";     
+
+      registerDataSetAddress(addressOSCport);
+      registerDataSetAddress(&addressIP);           // global
+
+      jsonInputRepo.add(this);
+
     }
 
-    virtual void derivedConfig(JsonObject& config){   
-      //{"oscIP":"5.6.7.8","oscPort":3000}
-      config[CONFIG_OSCIP] = OSC_IPaddress;
-      config[CONFIG_OSCPORT] = OSC_port;         
-    }
+    virtual bool restoreProperty(const char* property){
 
-    virtual bool restore(const JsonObject& config){
-      bool changed = false;
-      if (config.containsKey(CONFIG_OSCIP)){
-        String OSCIP = config[CONFIG_OSCIP].as<String>();
-        if (OSC_IPaddress != OSCIP) changed = true;
-        OSC_IPaddress = OSCIP;
-        DEBUG_PRINT("\n%s param: %s =>%s",interfaceName.c_str(),CONFIG_OSCIP, OSC_IPaddress.c_str());
+      uint16_t OSCport;
+      if (sscanf(property, ADDRESS_OSCPORT, &OSCport)) {
+        if (OSCport != OSC_port) configChanged = true;
+        OSC_port = OSCport;       
       }
-      if (config.containsKey(CONFIG_OSCPORT)){
-        int OSCport = config[CONFIG_OSCPORT];        
-        if (OSC_port != OSCport) changed = true;
-        OSC_port = OSCport;
-        DEBUG_PRINT("\n%s param: %s =>%i",interfaceName.c_str(),CONFIG_OSCPORT, OSC_port);        
+
+      String OSCIP;
+      if (sscanf(property, ADDRESS_IP, &OSCIP)) {
+        if (OSCIP != OSC_IPaddress) configChanged = true;
+        OSC_IPaddress = OSCIP;       
       }
-      return changed;
+
+      return configChanged;
     }        
 
     virtual void derivedMonitor(){}

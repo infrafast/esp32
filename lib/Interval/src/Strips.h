@@ -9,7 +9,6 @@ using IntervalButton = Interval::Button;
 
 //-------------------------
 
-#define C_PROPERTIES    "properties"
 #define C_STRIPTYPE     "type"
 #define C_INDEX         "id"
 #define C_X             "x"
@@ -44,23 +43,19 @@ typedef Strip* (*StripBuilderCallback)(/*String values*/);
 
 class StripSkeleton: public SerializableDataset{
   public:
-    String stripID;
     unsigned char icon;
-    String group;
     StripBuilderCallback constructor;
     //JsonObject variable;
+    using SerializableDataset::serialize;  // 🔴 réexpose String serialize()
 
     StripSkeleton(String id, String g, StripBuilderCallback b, unsigned char i='!');
 
-    String serialize() const override{
-      JsonDocument jsonDocStripSkeleton;
-      jsonDocStripSkeleton[stripID] = group;
-      jsonDocStripSkeleton[C_ICON] = icon;
-      serializeProperties(jsonDocStripSkeleton);
-      String data;
-      serializeJson(jsonDocStripSkeleton, data);
-      DEBUG_PRINT("\n%s serialize=> %s",stripID.c_str(),data.c_str());
-      return data;
+    // 🚩 Redéfinition : on enrichit simplement le JsonObject
+    void serialize(JsonObject& json) override {
+        // Appelle la version de base
+        SerializableDataset::serialize(json);
+        // Ajoute la donnée spécifique
+        json[C_ICON] = icon;
     }
 
 };
@@ -77,7 +72,7 @@ class StripFactory{
 
     void remove(StripSkeleton* ss) {
       for (auto it = stripSkeletonRepo.begin(); it != stripSkeletonRepo.end(); ++it) {
-        if ((*it)->stripID == ss->stripID) {
+        if ((*it)->name == ss->name) {
           stripSkeletonRepo.erase(it);
           break;
         }
@@ -103,7 +98,7 @@ class StripFactory{
     void serialize(JsonArray* jsonSkeletons){
       for (uint8_t i=0;i<stripSkeletonRepo.size();i++){
         StripSkeleton* skeleton = stripSkeletonRepo[i];
-        String stripName = skeleton->stripID;
+        String stripName = skeleton->name;
         jsonSkeletons->add(skeleton->serialize());
       }
     }
@@ -112,17 +107,15 @@ class StripFactory{
     StripSkeleton* getStripSkeleton(String stripID){
       for (uint8_t i=0;i<stripSkeletonRepo.size();i++){
         StripSkeleton* s = stripSkeletonRepo[i];        
-        if (stripID == s->stripID){
+        if (stripID == s->name){
           return s;
         } 
       }
       return nullptr;
     }
-};
+}stripFactory;
 
-StripFactory stripFactory;
-
-StripSkeleton::StripSkeleton(String id, String g, StripBuilderCallback c, unsigned char i):stripID(id),group(g),icon(i),constructor(c){
+StripSkeleton::StripSkeleton(String id, String g, StripBuilderCallback c, unsigned char i):SerializableDataset(id,g),constructor(c){
   stripFactory.add(this);
 }
 
@@ -158,7 +151,7 @@ class Strip {
 
     String type="undef";
 
-    String interfaceName = SYSTEM_INTERFACE; //
+    String interfaceName = "interfaceName"; //
     DeviceInterface* interface = nullptr;
 
     bool visible = false;
@@ -180,7 +173,6 @@ class Strip {
     Strip(StripSkeleton* s){
       skeleton = s;
       value = (valueMax-valueMin)/2;
-      interface = &systemInterface;     // default
       //id = skeleton->stripID;
     }    
 
@@ -206,7 +198,8 @@ class Strip {
     virtual bool process(){ // this code is requesting the strip to update its state (values, etc...) using data from the interface (with read())
     // process() is called from main app on all strip: the strip decide then if he has to do the query (for instance if it is focused) as       
     // some strip may do some backgroud tasks (like playing sample or executing a macro), other will only do this if they have focus         
-      redraw = interface->state.stateChanged;
+    if (!interface) return false;
+    redraw = interface->state.stateChanged;
       if (interface->available()) update();   //update is called if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure
       return redraw;      
     }; 
@@ -249,7 +242,7 @@ class Strip {
         backColor = colorMap[colorID].bColor;  
 
         icon = jsonStrip[C_ICON];//.as<unsigned char>();
-        properties = jsonStrip[C_PROPERTIES];
+        properties = jsonStrip[KEY_PROPERTIES];
         for (uint8_t i = 0; i< properties.size(); i++){
           deserializeProperty(properties[i].as<String>());
         }
@@ -275,7 +268,7 @@ class Strip {
       doc["position"][C_INDEX] = index;
       doc["position"][C_WIN] = win;
       
-      properties = doc[C_PROPERTIES].to<JsonArray>();
+      properties = doc[KEY_PROPERTIES].to<JsonArray>();
       serializeProperties();
       String data;
       serializeJson(doc, data);
@@ -367,6 +360,13 @@ class Strip {
       focus(false);
       renderError = false;
 
+      if (!interface){
+        renderError = true;
+        DEBUG_PRINT("\nStrip interface %s not instanciated");
+        pushSimpleText(layout, lang.getString("No interface"));
+        return;
+      }
+
 
       if (x>3 || y>3){
         renderError = true;
@@ -404,7 +404,7 @@ class Strip {
     }
 
     bool determineTopLeft(uint8_t layout){
-      DEBUG_PRINT("\nstrip[%d] %s topLeft=",index,type.c_str());
+      //DEBUG_PRINT("\nstrip[%d] %s topLeft=",index,type.c_str());
       // retrieve the corner of the strip where we can start drawing, which is topX, topY
       if (layout == LAYOUT_ZOOM || size == SHAPE4X4){
         topX = 0;
@@ -491,6 +491,7 @@ class Strip {
 
 
     virtual void composeInterfaceState(uint8_t layout){
+      if (!interface) return;
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         pushIFState4x4();        
         
@@ -512,6 +513,7 @@ class Strip {
     }    
 
     void pushIFState4x4(){
+      if (!interface) return;
       gui.add(new Label(&interface->state.label, Align::Center,&GUI::midScreenHoriz, &GUI::topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::transparentColor));    
       gui.add(new Led(&GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20, &interface->state.led));      
       gui.add(new Arc(&interface->state.progress, 0,1.0 , &GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20+10, &GUI::gold, &GUI::transparentColor,0));
@@ -553,6 +555,7 @@ class Strip {
     }     
 
     void pushSmallLedandIcon(){
+      if (!interface) return;
       gui.add(new Led(&IFledX, &IFledY, SIZE_10, &interface->state.led,&brightness));      
       gui.add(new Arc(&interface->state.progress, 0,1.0 , &IFledX, &IFledY, SIZE_16, &GUI::gold, &GUI::transparentColor,0,&brightness));
       gui.add(new Icon(interface->getIcon(),Align::Right,&IFiconX, &IFiconY,SIZE_26,&GUI::gold,&GUI::transparentColor,&brightness));    
@@ -605,8 +608,8 @@ class TwoSelectStrip : public Strip{
       Strip::pushToGUI(layout);
     }    
 
-
     void deserializeProperty(String property){
+      if (!interface) return;
       if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
         select2Content = skeleton->getValuePtr(interface->getProviderName(),select2PropertyAddress,select2ID);
       }
@@ -649,6 +652,7 @@ class ThreeSelectStrip: public TwoSelectStrip{
     
 
     void deserializeProperty(String property){
+      if (!interface) return;
       TwoSelectStrip::deserializeProperty(property);
       if (sscanf(property.c_str(), select3PropertyAddress.c_str(), &select3ID)) {
         select3Content = skeleton->getValuePtr(interface->getProviderName(),select3PropertyAddress,select3ID-1);         
