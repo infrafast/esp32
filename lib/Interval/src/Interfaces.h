@@ -47,6 +47,8 @@ class DeviceInterface  : public SerializableDataset{
 
         /////////////////////////////////////
 
+    virtual const String& getDataProviderNameForThisInterface(){ return group;}
+
     String serializeState(){
       JsonDocument doc;
       
@@ -71,10 +73,6 @@ class DeviceInterface  : public SerializableDataset{
       return output;
     }  
 
-    const String& getProviderName(){
-      return group;
-    }
-
     String serializeConfig(bool mainNode = true){
       // by default we serialize the full content (main node)
       // but if an interface uses another one, it will only partially serialize 
@@ -93,13 +91,13 @@ class DeviceInterface  : public SerializableDataset{
         // that's the attribute we do not serialize in case of partial serialization
         config[INTERFACE_EXPOSED] = exposed;
         config[INTERFACE_GROUP] = group;
-        config[INTERFACE_PROVIDER] = getProviderName();      
+        config[INTERFACE_PROVIDER] = getDataProviderNameForThisInterface();      
         config[INTERFACE_ICON] = icon;
       }
 
-      JsonDocument propertiesDoc;
+      JsonArray propertiesDoc = config[DATASET_PROPERTIES].to<JsonArray>();
       serializeProperties(propertiesDoc);
-      config[SKELETON_PROPERTIES].set(propertiesDoc[SKELETON_PROPERTIES]);      
+
 
       doc.shrinkToFit();
       String output;
@@ -249,6 +247,7 @@ class DeviceInterface  : public SerializableDataset{
     #define IF_CFG_FILE_PATH "/"
 
     bool restoreFromFile() {
+
       // Ouvrir le fichier
       File file = LittleFS.open(IF_CFG_FILE_PATH+getFilename(), "r");
       if (!file) {
@@ -305,12 +304,14 @@ class DeviceInterface  : public SerializableDataset{
       return success;
     }
 
+    //by default no properties are serialized
+    virtual void serializeProperties(JsonArray& properties){}
     virtual bool restoreProperty(const char* property) = 0;         // == deserialize properties = string to variable
     
     // monitor manage internal state and set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
     // do not need to care about offline state as it is managed by update method
     virtual void monitor() = 0; 
-    
+
     virtual void handlePropertyChange(){DEBUG_PRINT("\n%s::handlePropertyChange() : void");} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
     virtual bool end() = 0;     
     virtual String getFilename() = 0;
@@ -404,10 +405,112 @@ class InterfaceRepository{
     }  
 
     DeviceInterface* retrieve(String _interfaceName);
-};
+}interfaceRepo;
 
-InterfaceRepository interfaceRepo;
+#define MACRO_NUMBER_MAX      10
+#define ADDRESS_TEXT    "/text/%s"
+#define ADDRESS_COMMAND    "/command/%s"
+#define ADDRESS_STIPID      "/strip/id/%s"
+#define ADDRESS_ACTION        "/action/%s"
+  #define ADDRESS_ACTION_SIZE 5
+#define ADDRESS_MACRONAME     "/macro/name/%s"
+#define ADDRESS_PROVIDER      "/provider/"
 
+#define SYSTEM_INTERFACE "system"
+class SystemInterface: public DeviceInterface, public DataProvider{
+  #define GROUP_INTERFACE_SYSTEM "utils"
+  public:    
+
+    SerializableDataset systemDS = SerializableDataset(SYSTEM_INTERFACE, GROUP_INTERFACE_SYSTEM);   // one instance
+        
+    DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_STRING),this);  // create as many parameters as required
+
+    SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_SYSTEM,_configurable),DataProvider(getDataProviderNameForThisInterface()){
+      state.code = CONNECTED;            
+    }
+
+    virtual bool restore(const JsonObject& config){return false;}
+    virtual bool restoreProperty(const char* property){return false;}
+
+    virtual void derivedConfig(JsonObject& config){};    
+    virtual void monitor(){}
+    
+    virtual void* read(){return nullptr;}
+    
+    virtual bool derivedBegin(){
+
+      systemDS.registerDataSetAddress(dsText.address);      // register all ds             
+      jsonInputRepo.add(&systemDS);     // registered once
+
+      //dataProviderName = getDataProviderNameForThisInterface();      
+
+      return true;
+    }
+    
+    virtual bool end(){
+      return true;
+    }     
+
+    String getFilename(){
+      return "system_if.cfg";
+    }
+
+    virtual uint16_t getSize(String addrr){
+      if (addrr == ADDRESS_TEXT) return 1;
+      else{
+        // IS IT AN INTERFACE ?
+        char group[64] = {0};
+        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
+        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
+          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX            
+          uint16_t count = 0;
+          for (const auto& interface : interfaceRepo.interfaces){
+            // check if we request provider listing
+            if (interface->group == group) count++;
+          }
+          //DEBUG_PRINT("\nDataSet getSize(%s) has %d items",addrr.c_str(),count);
+          return count;
+        }
+
+      }
+
+      
+      DEBUG_PRINT("\n<%s>DataSet getSize(%s) is not implemented",dataProviderName.c_str(),addrr.c_str());
+      return 0;
+
+    }    
+    
+    virtual const String* getValuePtr(String addrr, uint16_t index){
+      if (addrr == ADDRESS_TEXT){
+        textValue = concatStrings("hello", index);
+        return &textValue;
+      }else{
+        char group[64] = {0};
+        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
+        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
+          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX    
+          int16_t count = -1;        
+          for (const auto& interface : interfaceRepo.interfaces){
+            if (interface->group == group) count++;
+            if (count == index){
+              String* s = &interface->interfaceName;
+              //DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) = %s",addrr.c_str(),index,s->c_str());
+              return s;
+            } 
+          }
+        }      
+      }     
+
+      DEBUG_PRINT("\n<%s>DataSet getValuePtr(%s,%d) is not implemented",dataProviderName.c_str(),addrr.c_str(),index);
+      return &voidStatic;      
+    }
+
+  private:
+
+    String textValue = "";    
+        
+    
+}systemInterface(false);
 
 DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable), SerializableDataset(name,_group){
   interfaceRepo.interfaces.push_back(this);

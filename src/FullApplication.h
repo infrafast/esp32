@@ -34,7 +34,6 @@
 
 
 #define STRIP_XAIR_GROUP    "xair"
-#define STRIP_UTILS_GROUP   "utils"
 
 #define ADDRESS_MACRONAME   "/macro/name/%s"
 #define ADDRESS_ACTION      "/action/%s"

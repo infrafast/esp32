@@ -6,7 +6,8 @@
 ///////////////////////////// DATA MANAGEMENT ///////////////////////////// 
 class DataProvider{
   public :
-    virtual const String& getDataSetName() = 0;
+    String dataProviderName;
+    DataProvider(String pName):dataProviderName(pName){};
     virtual uint16_t getSize(String addrr) = 0;
     virtual const String* getValuePtr(String addrr, uint16_t index) = 0;
   protected:
@@ -30,10 +31,10 @@ enum {
 
 #define REGEX_0to126                "0-126"
 #define REGEX_0to65535              "0-65535"
-#define REGEX_NON_EMPTY_STRING      "Non empty string"
 #define REGEX_SYSEX256              "sysex256"
 #define REGEX_ALPHANUM40            "alphanum40"
 #define REGEX_IPADDRESS             "ip"
+#define REGEX_STRING                "string"
 
 #define ADDRESS_IP "/ip/%s"  
 
@@ -140,20 +141,14 @@ class DataRepository{
     //LinkedList<DataSet*> dataSets = LinkedList<DataSet*>();
     std::vector<DataSet*> dataSets;
 
-};
-
-inline DataRepository& getDataRepository(){
-  static DataRepository instance;
-  return instance;
-}
-
+}dataRepository;
 
 DataSet::DataSet(Address* addr, const String& _name): address(addr), name(_name) {
-    getDataRepository().addDataSet(this);
+    dataRepository.addDataSet(this);
 };
 
 DataSet::~DataSet() {
-  getDataRepository().removeDataSet(this);
+  dataRepository.removeDataSet(this);
 };
 
 String DataSet::serialize(){
@@ -197,7 +192,7 @@ class DynamicDataSet : public DataSet{
   public:
     DataProvider* dataProvider;    
 
-    DynamicDataSet(Address* addr, DataProvider* dp): dataProvider(dp), DataSet(addr, dp->getDataSetName()) {}
+    DynamicDataSet(Address* addr, DataProvider* dp): dataProvider(dp), DataSet(addr, dp->dataProviderName) {}
 
     // Ensure dataProvider is valid before accessing it
     virtual uint16_t getSize() {
@@ -234,14 +229,12 @@ void DataRepository::removeDataSet(DataSet* ds) {
   }
 }
 
-#define SKELETON_PROPERTIES "properties"
+#define DATASET_PROPERTIES "properties"
 
 class SerializableDataset {
   public:
     String name;
     String group;
-
-    virtual ~SerializableDataset() = default;
 
     SerializableDataset(const String& n, const String& g) : name(n), group(g) {}    
 
@@ -269,10 +262,9 @@ class SerializableDataset {
 
     // 🚩 Méthode virtuelle : chaque classe dérivée enrichit ici le JSON
     virtual void serialize(JsonObject& json) {
-        json["name"] = name;
-        json["group"] = group;
+        json[name] = group;
 
-        JsonArray properties = json[SKELETON_PROPERTIES].to<JsonArray>();
+        JsonArray properties = json[DATASET_PROPERTIES].to<JsonArray>();
         for (Address* address : dataSetAddresses) {
             if (!address) continue;
 
@@ -289,7 +281,7 @@ class SerializableDataset {
       const String *retVal = &emptyString;
 
       //DEBUG_PRINT("\nSerializableDataset<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
-      DataSet* ds = getDataRepository().getDataSet(provider, address);
+      DataSet* ds = dataRepository.getDataSet(provider, address);
 
       if (ds != nullptr){
         retVal = ds->getValuePtr(index);
@@ -302,29 +294,6 @@ class SerializableDataset {
 
     std::vector<Address*> dataSetAddresses;
 
-  protected:
-    void serializeProperties(JsonDocument& jsonDocStripSkeleton) const {
-      JsonArray properties = jsonDocStripSkeleton[SKELETON_PROPERTIES].to<JsonArray>();
-      JsonDocument property;
-
-      for (size_t i = 0; i < dataSetAddresses.size(); i++){
-
-        Address* address = dataSetAddresses[i];
-        if (address != nullptr){
-          DeserializationError err = deserializeJson(property,address->serialize()); // {"/midi/value1/%s": ["freetext","note", "0-126"]} or {"/midi/channel/%d": ["dropdown"]}
-          if (err) {
-            DEBUG_PRINT("\naddress properties serialization failed: %s",dataSetAddresses[i]->pattern.c_str());
-            continue;
-          }
-        }else{
-           DEBUG_PRINT("\naddress[%d] is null",i);
-        }
-
-        // doc contient maintenant ton objet JSON
-        properties.add(property);
-
-      }
-    }
 };
 
 

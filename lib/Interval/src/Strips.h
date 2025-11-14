@@ -38,7 +38,6 @@ using IntervalButton = Interval::Button;
 class Strip;
 typedef Strip* (*StripBuilderCallback)(/*String values*/);
 
-#define STRIP_DEFAULT_GROUP "utils"
 #define MAXNUMBER_OF_SKELPROPERTY 10
 
 class StripSkeleton: public SerializableDataset{
@@ -611,7 +610,7 @@ class TwoSelectStrip : public Strip{
     void deserializeProperty(String property){
       if (!interface) return;
       if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
-        select2Content = skeleton->getValuePtr(interface->getProviderName(),select2PropertyAddress,select2ID);
+        select2Content = skeleton->getValuePtr(interface->getDataProviderNameForThisInterface(),select2PropertyAddress,select2ID);
       }
     }  
 
@@ -655,7 +654,7 @@ class ThreeSelectStrip: public TwoSelectStrip{
       if (!interface) return;
       TwoSelectStrip::deserializeProperty(property);
       if (sscanf(property.c_str(), select3PropertyAddress.c_str(), &select3ID)) {
-        select3Content = skeleton->getValuePtr(interface->getProviderName(),select3PropertyAddress,select3ID-1);         
+        select3Content = skeleton->getValuePtr(interface->getDataProviderNameForThisInterface(),select3PropertyAddress,select3ID-1);         
       }
     }  
 

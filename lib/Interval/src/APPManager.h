@@ -216,10 +216,93 @@ class StripHeaderWidget: public Top2Toggles{
 
 };
 
+#define SHORTCUT_GROUP "shortcut"
+class Shortcuts: public DataProvider{
+  public:
+
+    /////////////// SHORTCUTS ////////////////////
+    SerializableDataset jumpToSD = SerializableDataset("jump", SHORTCUT_GROUP);
+    SerializableDataset macroSD = SerializableDataset("macro", SHORTCUT_GROUP);
+    SerializableDataset advancedSD = SerializableDataset("advanced", SHORTCUT_GROUP);
+
+
+    DynamicDataSet dsStripIDs = DynamicDataSet(new DropDownAddress(ADDRESS_STIPID),this);
+    DynamicDataSet dsDropDownActions = DynamicDataSet(new DropDownAddress(ADDRESS_ACTION),this);        
+    DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this);     
+    DynamicDataSet dsCommand = DynamicDataSet(new FreeTextAddress(ADDRESS_COMMAND, "command", REGEX_STRING) ,this);  
+
+    Shortcuts(String name):DataProvider(name){
+      // *********************************
+      // SHORTCUTS
+      // *********************************
+      //*buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":[\"freetext\"]}]}]";          
+    
+      jumpToSD.registerDataSetAddress(dsStripIDs.address);
+      macroSD.registerDataSetAddress(dsMacroNames.address);
+      macroSD.registerDataSetAddress(dsDropDownActions.address);
+
+      advancedSD.registerDataSetAddress(dsCommand.address);
+      
+      jsonInputRepo.add(&jumpToSD);     
+      jsonInputRepo.add(&macroSD);     
+      jsonInputRepo.add(&advancedSD);    
+    }
+
+      // *********************************
+      // DATASETS
+      // *********************************
+
+    virtual uint16_t getSize(String addrr){   
+      if (addrr == ADDRESS_STIPID) return 0;       // 0 => means this is not an array of data but a javascript callback name
+      else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
+      else if (addrr == ADDRESS_MACRONAME) return MACRO_NUMBER_MAX;
+      DEBUG_PRINT("\n<%s>:DataSet getSize(%s) is not implemented",dataProviderName.c_str(),addrr.c_str());
+      return 0;
+
+    }    
+    
+    virtual const String* getValuePtr(String addrr, uint16_t index){
+      if (addrr == ADDRESS_STIPID){
+        return &getStripID;         //javascript local function callback
+      }else if (addrr == ADDRESS_ACTION){
+        return &dsDropDownActionsValues[index];   
+      }else if (addrr == ADDRESS_MACRONAME){
+        return &dsMacroNamesValues[index];      
+      }      
+      DEBUG_PRINT("\n<%s>:DataSet getValuePtr(%s,%d) is not implemented",dataProviderName.c_str(),addrr.c_str(),index);
+      return &voidStatic;      
+    }    
+
+    private:
+      // javascript function that generates the data locally
+      String getStripID = "getStripID";
+          
+      String dsDropDownActionsValues[ADDRESS_ACTION_SIZE] = {
+        "play",
+        "pause",
+        "stop",
+        "FF",
+        "RW"      
+      };   
+      
+      String dsMacroNamesValues[MACRO_NUMBER_MAX] = {
+        "macro1",
+        "macro2",
+        "macro3",      
+        "macro4",
+        "macro5",
+        "macro6",
+        "macro7",
+        "macro8",
+        "macro9",
+        "macro10"
+      };  
+};
+
 
 ///////////////////// MAIN APPLICATION CLASS ////////////////////////
 
-class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, public DataProvider, public SerializableDataset{
+class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher{
   //
   public:   
   #define maxConcurrentClients 3
@@ -229,8 +312,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     Event evt;
     std::vector<String> broadcastQueue;
-
-    DataRepository& dataRepository;
 
     Application* webServer = nullptr;
     bool  httpServing = false;  //flag to indicate if http file are currently streamed
@@ -326,28 +407,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     ArtnetDMXInterface* artnetDMXInterface;
     ThreePinDMXInterface* threePinDMXInterface;
 
-    ///////////////////////// DATA TEMPLATES ////////////////////////////
-    #define MACRO_NUMBER_MAX       10
-    #define ADDRESS_TEXT          "/text/%s"
-    #define ADDRESS_DSSTRIPIDS      "/strip/id/%s"
-    #define ADDRESS_ACTION          "/action/%s"
-      #define ADDRESS_ACTION_SIZE 5
-    #define ADDRESS_MACRONAME     "/macro/name/%s"
-    #define ADDRESS_PROVIDER      "/provider/"
-
-    #define SYSTEM_PROVIDER "system"
-    #define GROUP_UTILS "utils"    
-
-    DropDownAddress addressStripID = DropDownAddress(ADDRESS_DSSTRIPIDS);
-    FreeTextAddress addressFreeText = FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_NON_EMPTY_STRING);
-
-    DynamicDataSet* dsText;
-    DynamicDataSet* dsStripIDs;
-    DynamicDataSet* dsDropDownActions;
-    DynamicDataSet* dsMacroNames;
-
-    ////////////////////////////////////////////////
-
     unsigned long goSleepCountdownStart;
 
     bool webAppConnected;
@@ -356,7 +415,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     String firmwareUpdateFilename="";
 
-     
+    Shortcuts shortcuts = Shortcuts(SHORTCUT_GROUP); 
+    
     ///////////////////////////////////////////////////////////////
     //////////////////                        /////////////////////
     //////////////////    MAIN CLASS START   //////////////////////
@@ -364,8 +424,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     ///////////////////////////////////////////////////////////////
    
 
-    ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true)
-      : GenericComponent(debug), SerializableDataset(SYSTEM_PROVIDER,GROUP_UTILS), dataRepository(getDataRepository()){
+    ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true): GenericComponent(debug){
       hwm = h;
       gui = g;
       id = "ApplicationManager";
@@ -382,75 +441,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           this->defaultEventHandling(event);
       };*/         
     }
-
-    // *********************************
-    // DATASET MANAGEMENT
-    // *********************************
-
-    virtual const String& getDataSetName(){return SYSTEM_PROVIDER;}    
-
-    virtual uint16_t getSize(String addrr){
-      if (addrr == ADDRESS_TEXT) return 1;
-      
-      else if (addrr == ADDRESS_DSSTRIPIDS) return 0;       // 0 => means this is not an array of data but a javascript callback name
-      else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
-      else if (addrr == ADDRESS_MACRONAME) return MACRO_NUMBER_MAX;
-      else{
-        // IS IT AN INTERFACE ?
-        char group[64] = {0};
-        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
-        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
-          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX            
-          uint16_t count = 0;
-          for (const auto& interface : interfaceRepo.interfaces){
-            // check if we request provider listing
-            if (interface->group == group) count++;
-          }
-          //DEBUG_PRINT("\nDataSet getSize(%s) has %d items",addrr.c_str(),count);
-          return count;
-        }
-
-      }
-
-      DEBUG_PRINT("\nDataSet getSize(%s) is not implemented",addrr.c_str());
-      return 0;
-
-    }    
-    
-    virtual const String* getValuePtr(String addrr, uint16_t index){
-      if (addrr == ADDRESS_TEXT){
-        textValue = concatStrings("hello", index);
-        return &textValue;
-      }
-      else if (addrr == ADDRESS_DSSTRIPIDS){
-        return &getStripID;         //javascript local function callback
-      }else if (addrr == ADDRESS_ACTION){
-        return &dsDropDownActionsValues[index];   
-      }else if (addrr == ADDRESS_MACRONAME){
-        return &dsMacroNamesValues[index];      
-      }else{
-        char group[64] = {0};
-        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
-        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
-          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX    
-          int16_t count = -1;        
-          for (const auto& interface : interfaceRepo.interfaces){
-            if (interface->group == group) count++;
-            if (count == index){
-              String* s = &interface->interfaceName;
-              //DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) = %s",addrr.c_str(),index,s->c_str());
-              return s;
-            } 
-          }
-        }      
-      }
-      
-      DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) is not implemented",addrr.c_str(),index);
-      return &voidStatic;      
-    }
-
-
-
 
     bool getButtonState(uint8_t B){
       return hwm->buttons[B]->refreshed;
@@ -623,31 +613,28 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
+ 
 
     void init(String _defaultUserConf="{}"){               
       defaultUserConf = _defaultUserConf;
       GenericComponent::init();
 
-      hwm->init();
-
-      //*********************************
-      // DATASET INIT
-      //*********************************
-      registerDataSetAddress(&addressStripID);
-      registerDataSetAddress(&addressFreeText);
-
-      dsText = new DynamicDataSet(&addressFreeText,this);
-      dsStripIDs = new DynamicDataSet(&addressStripID,this);
-      dsDropDownActions = new DynamicDataSet(new DropDownAddress(ADDRESS_ACTION),this);        
-      dsMacroNames = new DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this);     
+      hwm->init();  
 
       // *********************************
       // SHORTCUTS
       // *********************************
-      //*buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":[\"freetext\"]}]}]";      
-      
-      jsonInputRepo.add(this);
+      //*buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":[\"freetext\"]}]}]";          
+    
+      /*jumpToSD.registerDataSetAddress(dsStripIDs.address);
+      macroSD.registerDataSetAddress(dsMacroNames.address);
+      macroSD.registerDataSetAddress(dsDropDownActions.address);
 
+      advancedSD.registerDataSetAddress(dsCommand.address);
+      
+      jsonInputRepo.add(&jumpToSD);     
+      jsonInputRepo.add(&macroSD);     
+      jsonInputRepo.add(&advancedSD);  */
 
       // *********************************
       // SKELETONS & DATA SETS
@@ -655,8 +642,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //
       // general purposes / test skeletons
       //
-      stripTextSkel = new StripSkeleton(STRIP_TEXT,STRIP_DEFAULT_GROUP,textStripConstructorCallback,'*');        
-        stripTextSkel->registerDataSetAddress(dsText->address);
+      stripTextSkel = new StripSkeleton(STRIP_TEXT,GROUP_INTERFACE_SYSTEM,textStripConstructorCallback,'*');        
+        stripTextSkel->registerDataSetAddress(systemInterface.dsText.address);
 
       //
       // midi skeletons
@@ -704,7 +691,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         }
         if (!exists) {
           groupesUniques.push_back(interface->group);
-          new DynamicDataSet(new DropDownAddress(ADDRESS_PROVIDER+interface->group+"/%s"),this);
+          new DynamicDataSet(new DropDownAddress(ADDRESS_PROVIDER+interface->group+"/%s"),&systemInterface);
         }
 
       }
@@ -2974,35 +2961,6 @@ void setup() {
 
     JsonList wiFiList;    
 
-    //////////////// data sets
-    String textValue = "";
-    
-    // javascript function that generates the data locally
-    String getStripID = "getStripID";
-        
-    String dsDropDownActionsValues[ADDRESS_ACTION_SIZE] = {
-      "play",
-      "pause",
-      "stop",
-      "FF",
-      "RW"      
-    };   
-    
-    String dsMacroNamesValues[MACRO_NUMBER_MAX] = {
-      "macro1",
-      "macro2",
-      "macro3",      
-      "macro4",
-      "macro5",
-      "macro6",
-      "macro7",
-      "macro8",
-      "macro9",
-      "macro10"
-    };     
-    
-    //////////////////////////////
-
     String defaultSysConf =
         "{\"" S_PUSHDELAY "\":\"852\","
         "\"" S_DCLICREACTIVITY "\":\"251\","
@@ -3013,9 +2971,9 @@ void setup() {
         "\"" S_FADERSPEED "\":\"157\","
         "\"" S_SSID "\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},"
         "\"" S_BUTTON_ASSIGN "\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]},"
-        "\"" S_SHORTCUTS "\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[\"/strip/id/second~module:artNet/toto\"]},"
-        "\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},"
-        "\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03~55\"]}}"
+        "\"" S_SHORTCUTS "\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[]},"
+                             "\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},"
+                             "\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03\"]}}"
         "}";
 
     String banksDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";

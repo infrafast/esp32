@@ -25,16 +25,32 @@ class NetworkOSC: public OSCInterface, public NetworkDevice{
       return interfaceName+"_if.cfg";
     }
 
+    virtual const String& getDataProviderNameForThisInterface(){ return interfaceName;}
+
     NetworkOSC(String name, String _OSC_IPaddress,int _OSC_port,bool _configurable=false):OSC_IPaddress(_OSC_IPaddress),OSC_port(_OSC_port), NetworkDevice(name, GROUP_INTERFACE_OSC,_configurable){
       interfaceName = name;
       icon = "g";     
 
       registerDataSetAddress(addressOSCport);
-      registerDataSetAddress(&addressIP);           // global
+      registerDataSetAddress(&addressIP);           // global      
 
-      jsonInputRepo.add(this);
+      jsonInputRepo.add(this);            
 
     }
+
+    virtual void serializeProperties(JsonArray& properties) override{
+      char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_OSCPORT,OSC_port);
+      properties.add(String(buf)); 
+      delete buf;
+
+      buf = (char*)malloc((strlen(ADDRESS_IP)+OSC_IPaddress.length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,OSC_IPaddress);
+      properties.add(String(buf)); 
+      delete buf;      
+    }
+
+
 
     virtual bool restoreProperty(const char* property){
 
