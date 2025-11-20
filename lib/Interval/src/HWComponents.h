@@ -715,6 +715,14 @@ void connectHTTPTask(void *parameter) {
 String httpTaskResult;
 ByteBuffer readHttpBuffer;
 
+struct UdpSlot {
+  UDP* udp = nullptr;
+  int port = -1;
+  bool active = false;
+  uint8_t media = CABLE_MEDIA;
+  SemaphoreHandle_t mutex = nullptr;   // 👈 un mutex par slot
+};
+
 class Network : public HWComponent2State{
 
   public:
@@ -731,7 +739,7 @@ class Network : public HWComponent2State{
     //IWebSocket* wsClient = nullptr;  //     wsClient = wifiClient;   
 
     //IWebSocketServer *wss{ nullptr };
-    UDP* udp = NULL;
+    //UDP* udp = NULL;
     Server* server=NULL;
 
     MidiClient* midiClient = nullptr;
@@ -753,6 +761,9 @@ class Network : public HWComponent2State{
       networkBusy = xSemaphoreCreateMutex();
     }
 
+    virtual UdpSlot* getUDPslot(int i) = 0;
+    virtual int requestUDPslotID(int port) = 0;
+    virtual void stopAllUDP() = 0;
     virtual void setLink(EthernetLinkStatus linkStatus) = 0;    
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path)=0;
     virtual void clientSocketSend(const char *message)=0;
@@ -938,6 +949,85 @@ class WiFiEth : public Network{
       delay(200);  // Attendez au moins 200 ms pour que le W5500 termine son initialisation interne
     }
 
+    #define MAX_UDP_SLOT 4
+    UdpSlot udpSlots[MAX_UDP_SLOT];   // max 4 objets
+   
+    virtual int requestUDPslotID(int port) {
+
+      // 1️⃣ Chercher si un slot existe déjà pour ce port
+      for (int i = 0; i < MAX_UDP_SLOT; i++) {
+          if (udpSlots[i].port == port && udpSlots[i].udp != nullptr && udpSlots[i].media == media) {
+            // we found a slot which correspond to the port
+            if (udpSlots[i].media == media){
+              DEBUG_PRINT("\n[UDP-%d/%d] ID reclaimed", i, port);
+              return i;
+            }
+          }
+      }
+
+      // 2️⃣ Chercher un slot libre pour creation
+      for (int i = 0; i < MAX_UDP_SLOT; i++) {
+
+        if (udpSlots[i].udp == nullptr) {
+
+            // Créer l'objet UDP du bon type
+            if (media == CABLE_MEDIA)
+                udpSlots[i].udp = new EthernetUDP;
+            else
+                udpSlots[i].udp = new WiFiUDP;
+
+            udpSlots[i].media = media;                
+            udpSlots[i].udp->begin(port);
+            udpSlots[i].port = port;
+            udpSlots[i].active = true;
+            udpSlots[i].mutex = xSemaphoreCreateMutex();
+
+            DEBUG_PRINT("\n[UDP-%d/%d] ID created", i, port);
+
+            return i;
+        }
+      }
+
+    // 3️⃣ Aucun slot libre
+    DEBUG_PRINT("\n[UDP] Reached max!");
+    return -1;
+  }
+
+    virtual UdpSlot* getUDPslot(int i) {
+
+      if (udpSlots[i].udp == nullptr || i>= MAX_UDP_SLOT) return nullptr;
+
+      // Prendre le mutex du slot
+      if (xSemaphoreTake(udpSlots[i].mutex,  pdMS_TO_TICKS(50)) != pdTRUE) {
+          return nullptr;
+      }
+         
+      // Restart socket
+      if (!udpSlots[i].active){
+        DEBUG_PRINT("\n[UDP-%d/%d] reactivated", i, udpSlots[i].port);
+        udpSlots[i].active = true;
+        udpSlots[i].udp->begin(udpSlots[i].port);
+      }      
+
+      return &udpSlots[i];
+    }
+
+
+    virtual void stopAllUDP() {
+      UdpSlot* udpSlot;
+      for (int i = 0; i < MAX_UDP_SLOT; i++) {
+        udpSlot = getUDPslot(i);
+        if (udpSlot != nullptr) {
+          if (udpSlot[i].udp != nullptr){
+            udpSlots[i].udp->stop();
+            udpSlots[i].active = false;
+            DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);           
+          }
+          xSemaphoreGive(udpSlot->mutex);
+        }
+      }
+    }
+
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){
       DEBUG_PRINT("\nclientSocketOpen(%s,%d,%s)",host,port,path);
       return false;
@@ -1100,7 +1190,7 @@ class WiFiEth : public Network{
                   DEBUG_PRINT("\nEthernet.begin() => got IP:%s",IP.toString().c_str());  
                   if (client == NULL) client = new EthernetClient();
                   if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
-                  if (udp == NULL) udp = new EthernetUDP;
+                  //if (udp == NULL) udp = new EthernetUDP;
                   if (wsEthClient == nullptr) wsEthClient = new EthernetWebSocketClient{}; 
                   if (midiClient == nullptr) midiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);
                   String midiName = concatStrings(midiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
@@ -1165,7 +1255,7 @@ class WiFiEth : public Network{
               //if (debug) DEBUG_PRINT("\nWifi.begin() => got IP: %s, %idb",IP.toString().c_str(),WiFi.RSSI());
               if (client == NULL) client = new WiFiClient();
               if (server == NULL){ server = new WiFiServer(80,3);}
-              if (udp == NULL) udp = new WiFiUDP;
+              //if (udp == NULL) udp = new WiFiUDP; 
               if (wsWiFiClient == nullptr) wsWiFiClient = new WiFiWebSocketClient{};
               if (midiClient == nullptr) midiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(/*APPLE_MIDIWIFICLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);             
               if (MDNS.begin(systemCfg.getString(S_AP_NAME)->c_str())){
@@ -1231,7 +1321,7 @@ class WiFiEth : public Network{
           networkConnectAttemptProgress = -1;
           // initialiser of common object to both Wifi and Ethernet goes here
           
-          if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888
+          //if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888 
           midiClient->begin();
           // then specific to ETH or WIFI
           
@@ -1261,7 +1351,7 @@ class WiFiEth : public Network{
             // common destruction
             internet = false;          
 
-            if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
+            //if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
             if (client != NULL){client->stop(); delete client; client = NULL;} 
             if (server != NULL){delete server; server  = NULL;} 
             if (wsWiFiClient != nullptr){ delete wsWiFiClient; wsWiFiClient = nullptr;}
@@ -1514,6 +1604,9 @@ class AccessPoint : public Network{
       }
     }
 
+    virtual UdpSlot* getUDPslot(int i){return nullptr;}
+    virtual int requestUDPslotID(int port){return 0;}
+    virtual void stopAllUDP(){}
     virtual void asyncPing(String ipAddress, PingCallback callback){};
     virtual bool asyncConnect(AsyncHttpClient *clientParam){ return false;}
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}

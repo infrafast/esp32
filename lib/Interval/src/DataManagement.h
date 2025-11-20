@@ -37,6 +37,7 @@ enum {
 #define REGEX_STRING                "string"
 
 #define ADDRESS_IP "/ip/%s"  
+#define ADDRESS_PING "/ping/%s"
 
 #define KEY_PROPERTIES    "properties"
 
@@ -84,6 +85,7 @@ class FreeTextAddress: public Address{
 };
 
 FreeTextAddress addressIP = FreeTextAddress(ADDRESS_IP, "ip", REGEX_IPADDRESS);    
+FreeTextAddress addressPing = FreeTextAddress(ADDRESS_PING, "ping", REGEX_STRING);    
 
 class DataSet{
   public:
@@ -315,6 +317,37 @@ class JsonTemplateRepository{
     }
 
 }jsonInputRepo;
+
+
+
+class WebLibrary : public DataSet, public JsonListFile{
+  public:
+    WebLibrary(String _filename, Address* _address, String _provider): filename(_filename), DataSet(_address, _provider){ 
+      reload();      
+    }      
+
+    bool reload(){      
+      clean();      
+      String fullFilePathName = concatStrings(WEBAPP_PATH,"/",filename,".gz");
+      bool success = load(fullFilePathName);
+      if (!success) addValue(filename,"error");      
+      return success;
+    }
+
+    virtual const String* getValuePtr(uint16_t index){      
+      if (index>size()-1) return &errorDatasetOOR;      
+      //return getString(getName(index));       // return the valuenof the jkey   
+      return getName(index);                
+    }  
+
+    virtual uint16_t getSize(){
+      return size();                //number of pair k/v loaded from the file
+    }
+
+  private:
+    String filename;
+    
+};
 
 
 #endif

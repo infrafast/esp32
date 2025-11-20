@@ -30,10 +30,10 @@ class DeviceInterface  : public SerializableDataset{
     bool previousOffline = false;
     float previousProgress = -1;
 
-    String interfaceName; 
+    bool triggerPropertiesChange = false;
 
-    bool configChanged = false;
-    
+    String interfaceName; 
+  
     int dataAvailable;
     void* data;
 
@@ -103,38 +103,52 @@ class DeviceInterface  : public SerializableDataset{
       String output;
       serializeJson(doc, output);    
       //{"MixerOffline":{"config":{FILLED BY DERIVED CLASS}}}
-      //DEBUG_PRINT("\nserializeConfig: %s",output.c_str());          
+      DEBUG_PRINT("\n%s->serializeConfig(%d): %s",interfaceName.c_str(),mainNode,output.c_str());          
       return output;
     }  
 
-    bool restoreFromString(const char* config){    
-      bool changed = false;
+    bool init(){
+      bool success = load();
+      return success && begin();
+    }
+
+    bool restore(const char* config){    
+      DEBUG_PRINT("\n%s->restore(%s)",interfaceName.c_str(),config);           
       JsonDocument doc;
       DeserializationError error = deserializeJson(doc, config);
       if (error) {
-        DEBUG_PRINT("\n%s restoreFromString %s",interfaceName.c_str(),error.c_str());
+        DEBUG_PRINT("\n%s restore %s",interfaceName.c_str(),error.c_str());
         return false;
       }
       JsonObject configJson = doc.as<JsonObject>();
-
-      //by default a used interface (which means it had a partial serialization) 
-      // is not exposed and is online, this can be overwritten by the deserialization 
-      // of a full interface
-      //offline = false;
-      //exposed = false;
-
-      changed = restoreBase(configJson);    
-
-      doc.shrinkToFit();
-
-      #ifdef DEBUG
-        String output;
-        serializeJson(doc, output);    
-        //{"MixerOffline":{"config":{FILLED BY DERIVED CLASS}}}
-        DEBUG_PRINT("\nrestoreFromString: %s",output.c_str());          
-      #endif
-      return changed;      
+      return restore(configJson);    
     }
+
+    virtual bool restore(const JsonObject& config){   // == deserialize = from string to variable
+      state.change.properties = false;
+      state.change.handleChange = false;
+
+      DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
+      // this restore the base parameters common to all base class interface
+      if (config.containsKey(INTERFACE_OFFLINE)){
+        bool offline = config[INTERFACE_OFFLINE];
+        if (offline != state.offline) state.change.properties = true;   // ==> this one trigger an interface properties change so they are saved but not a trigger handleChange as this one is treated by the state change 
+        state.offline = offline;
+        goOffline(state.offline);                        
+      }
+
+      // and then we call the restoreProperty of the interface which will check if the properties is for her
+      JsonArray properties = config[KEY_PROPERTIES];
+      for (uint8_t i = 0; i< properties.size(); i++) restoreProperty(properties[i]);
+     
+      // properties triggering a callback
+      // like interface who would need to reconnect because the IP address has changed 
+      if ( state.change.handleChange){
+        handlePropertyChange();   
+        state.change.properties = true; // a triggerProperty change is obviously flagging a change
+      }
+      return state.change.properties;
+    }      
 
     virtual void serialize(JsonDocument& interfaceDoc){
       //start with the config
@@ -172,42 +186,41 @@ class DeviceInterface  : public SerializableDataset{
 
     virtual bool update(){      // return a boolean indicatin if the interface has changed its state
       // reset change state
-      state.stateChanged = false;
-      state.progressChanged = false;
+      state.change.code = false;
+      state.change.progress = false;
 
       // reset the flag so strips will not be updated and re-processed already consummed data
       dataAvailable = 0;
 
       // report if state has changed
       if (state.label != previousStateLabel){
-        state.stateChanged  = true;
+        state.change.code  = true;
         previousStateLabel = state.label;
       }
       if (state.code != previousStateCode){
-        state.stateChanged  = true;
+        state.change.code  = true;
         previousStateCode = state.code;
       }    
       if (state.offline != previousOffline){
-        state.stateChanged  = true;
+        state.change.code  = true;
         previousOffline = state.offline;
       }    
       if (state.progress != previousProgress){
-        // a progress change is captured but is not a state change
+        // a progress change is captured so applicatoin manager can broadcast it to the webclient but is not a state change
         // indeed, a state change would trigger redraw which we do not want
-        state.progressChanged = true;        
         previousProgress = state.progress;        
       }
       if (state.led != previousLed){
-        state.stateChanged  = true;
+        state.change.code  = true;
         previousLed = state.led;
       }
 
-      //do specific interface internal workflow
-      if (state.offline != true){      
+      //call the specific interface internal workflow
+      if (!state.offline){      
         monitor();
       }
-      
-      return state.stateChanged;
+            
+      return state.change.code;
     }
 
     int available(){ // called by strip 
@@ -215,43 +228,18 @@ class DeviceInterface  : public SerializableDataset{
     }
 
     virtual void goOffline(bool _offline){
+      DEBUG_PRINT("\n%s goOffline=>%s",interfaceName.c_str(),state.offline?"true":"false");              
       state.offline = _offline;
     }
 
-    virtual bool restoreBase(const JsonObject& config){   // == deserialize = from string to variable
-      
-      configChanged = false;
-
-      // this restore the base parameters common to all base class interface
-      if (config.containsKey(INTERFACE_OFFLINE)){
-        bool offline = config[INTERFACE_OFFLINE];
-        if (offline != state.offline) configChanged = true;
-        state.offline = offline;
-        DEBUG_PRINT("\n%s offline=>%s",interfaceName.c_str(),state.offline?"true":"false");        
-      }
-
-      // and then we call the specific part
-      JsonArray properties = config[KEY_PROPERTIES];
-      for (uint8_t i = 0; i< properties.size(); i++){
-        if (restoreProperty(properties[i])){
-          configChanged |= true;
-          DEBUG_PRINT("\n%s property %s changed",properties[i]);
-        }
-
-      }            
-
-      if (configChanged) handlePropertyChange();
-      return configChanged;
-    }  
-
     #define IF_CFG_FILE_PATH "/"
 
-    bool restoreFromFile() {
+    virtual bool load() { // some interfaces may override this to be empty as they do not load or save parameters
 
       // Ouvrir le fichier
       File file = LittleFS.open(IF_CFG_FILE_PATH+getFilename(), "r");
       if (!file) {
-        DEBUG_PRINT("\t%s::restoreFromFile : impossible d'ouvrir %s\t",interfaceName.c_str(), getFilename().c_str());
+        DEBUG_PRINT("\t%s::load : impossible d'ouvrir %s\t",interfaceName.c_str(), getFilename().c_str());
         return false;
       }
 
@@ -260,53 +248,52 @@ class DeviceInterface  : public SerializableDataset{
       file.close();
 
       if (content.length() == 0) {
-        DEBUG_PRINT("\t%s::restoreFromFile %s vide\t",interfaceName.c_str(), getFilename().c_str());
+        DEBUG_PRINT("\t%s::load %s vide\t",interfaceName.c_str(), getFilename().c_str());
         return false;
       }
 
       // Appeler la fonction de restauration
-      return restoreFromString(content.c_str());
+      restore(content.c_str());
+
+      return true;
     }
 
-    bool save(){
+    virtual bool save(){  // some interfaces may override this to be empty as they do not load or save parameters
       File file = LittleFS.open(IF_CFG_FILE_PATH+getFilename(), "w");
       if (!file) {
         DEBUG_PRINT("\t%s::save : impossible d'ouvrir %s en écriture\t", interfaceName.c_str(),getFilename().c_str());
         return false;
       }
 
-      String content = serializeConfig();
+      String content = serializeConfig(false); // only serialize properties with interface name, return {"sysOSC":{"properties":["/oscport/5000","/ip/1.1.1.2"]}}}
+
+      JsonDocument doc;
+      deserializeJson(doc, content);
+
+      // Récupérer le noeud sysOSC afin de sauvegarder son contenu dans le nom de l'interface
+      JsonObject sysOSC = doc[interfaceName];
+      serializeJson(sysOSC, content);      
 
       size_t written = file.print(content);
       file.close();
 
-      if (written != content.length()) {
-        DEBUG_PRINT("\t%s::save : seulement %d/%d octets écrits dans %s\t", interfaceName.c_str(),written, content.length(), getFilename().c_str());
+      if (written == content.length()) {
+        DEBUG_PRINT("\n%s::saved : %s", interfaceName.c_str(),content.c_str());  
+      }else{
+        DEBUG_PRINT("\n%s::save : ony %d/%d bytes in %s\t", interfaceName.c_str(),written, content.length(), getFilename().c_str());
         return false;
-      }    
+
+      }
 
       return true;
 
     }
 
-    void* read(){
-      return data;
-    }
-
-    virtual bool derivedBegin() = 0;
-
-    virtual bool begin(){
-      DEBUG_PRINT("\n%s->begin()...",interfaceName.c_str());
-      bool success = end();
-      success &= restoreFromFile();
-      success &= derivedBegin();
-      DEBUG_PRINT("\t%s",success?"ok":"failed or is not implemented");    
-      return success;
-    }
+    virtual bool begin() = 0;
 
     //by default no properties are serialized
     virtual void serializeProperties(JsonArray& properties){}
-    virtual bool restoreProperty(const char* property) = 0;         // == deserialize properties = string to variable
+    virtual void restoreProperty(const char* property) = 0;         // == deserialize properties = string to variable
     
     // monitor manage internal state and set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
     // do not need to care about offline state as it is managed by update method
@@ -314,7 +301,10 @@ class DeviceInterface  : public SerializableDataset{
 
     virtual void handlePropertyChange(){DEBUG_PRINT("\n%s::handlePropertyChange() : void");} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
     virtual bool end() = 0;     
-    virtual String getFilename() = 0;
+
+    String getFilename(){
+      return  concatStrings(interfaceName,"_if.cfg");
+    }       
 
     virtual const String* getIcon(){
       return &icon;
@@ -325,31 +315,35 @@ class DeviceInterface  : public SerializableDataset{
 
 };
 
-class NetworkDevice : public DeviceInterface{
+class NetWorkInterface{
+  public:
+    virtual void derivedMonitor() = 0;
+    virtual bool connect() = 0;           // called when network is connected
+    virtual bool disconnect() = 0;        // called when network is disconnected
+};
+
+class NetworkInterfaceMonitor{
 
   public:
-    
-    NetworkDevice(const String& name, const String& _group,bool _configurable = true):DeviceInterface(name, _group, _configurable){
-      networkDown();
-    }
 
-    virtual void derivedMonitor() = 0;
-    virtual bool connect() = 0;
-    virtual bool disconnect() = 0;    
+    NetWorkInterface* networkInterface = nullptr;
+    DeviceInterface* deviceInterface = nullptr;
     
+    NetworkInterfaceMonitor(NetWorkInterface* _netif, DeviceInterface* _devif):networkInterface(_netif),deviceInterface(_devif){}
+   
     void networkDown(){
-      state.code = IF_NOT_READY;
-      state.label = IF_STATE_DISCONNECTED;           
-      state.led = "red medium";
-      state.details = *lang.getString("networkDown");                // connect Eth cable or attempt to connect a previous SSID
+      deviceInterface->state.code = IF_NOT_READY;
+      deviceInterface->state.label = IF_STATE_DISCONNECTED;           
+      deviceInterface->state.led = "red medium";
+      deviceInterface->state.details = *lang.getString("networkDown");                // connect Eth cable or attempt to connect a previous SSID
     }
 
     void networkUp(){
-      state.code = IF_NOT_READY;
-      state.label = IF_STATE_DISCONNECTED;
-      state.details = *lang.getString("networkUp");      
-      state.led = "red";
-      state.progress = -1;
+      deviceInterface->state.code = IF_NOT_READY;
+      deviceInterface->state.label = IF_STATE_DISCONNECTED;
+      deviceInterface->state.details = *lang.getString("networkUp");      
+      deviceInterface->state.led = "red";
+      deviceInterface->state.progress = -1;
     }    
     
 
@@ -357,26 +351,26 @@ class NetworkDevice : public DeviceInterface{
       if (hwm.network->refreshed){
         bool success = false;
         if (hwm.network->state == CONNECTED){
-          if (state.offline){
-            DEBUG_PRINT("\n%s->connect<OFFLINE>() ignored",interfaceName.c_str());
+          if (deviceInterface->state.offline){
+            DEBUG_PRINT("\n%s->connect<OFFLINE>() ignored",deviceInterface->interfaceName.c_str());
             return;
           }else{
             networkUp();
-            success = connect();
-            DEBUG_PRINT("\n%s->connect<ONLINE>()...%s",interfaceName.c_str(),success?"ok":"failed or is not implemented");                    
+            success = networkInterface->connect();
+            DEBUG_PRINT("\n%s->connect<ONLINE>()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");                    
           }
         }else{
           networkDown();    
-          success = disconnect();
-          DEBUG_PRINT("\n%s->disconnect()...%s",interfaceName.c_str(),success?"ok":"failed or is not implemented");
+          success = networkInterface->disconnect();
+          DEBUG_PRINT("\n%s->disconnect()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");
         }
       }
       // we only monitor networkdevices when network is on
-      if (hwm.network->state == CONNECTED) derivedMonitor();
-      // otherwise we report on progress and the network we try to connect 
+      if (hwm.network->state == CONNECTED) networkInterface->derivedMonitor();
       else{
-        state.progress = hwm.network->networkConnectAttemptProgress;
-        state.subState = hwm.network->SSID;
+        // otherwise we report on progress and the network we try to connect         
+        deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
+        deviceInterface->state.subState = hwm.network->SSID;
       }
     }
 
@@ -430,14 +424,14 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     }
 
     virtual bool restore(const JsonObject& config){return false;}
-    virtual bool restoreProperty(const char* property){return false;}
+    virtual void restoreProperty(const char* property){}
 
     virtual void derivedConfig(JsonObject& config){};    
     virtual void monitor(){}
     
     virtual void* read(){return nullptr;}
     
-    virtual bool derivedBegin(){
+    virtual bool begin(){
 
       systemDS.registerDataSetAddress(dsText.address);      // register all ds             
       jsonInputRepo.add(&systemDS);     // registered once

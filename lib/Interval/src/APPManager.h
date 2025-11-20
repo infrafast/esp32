@@ -16,6 +16,7 @@
 
 #include "strips\s_midi.h"
 #include "strips\s_utils.h"
+#include "strips\s_osc.h"
 
 #include "Banks.h"
 
@@ -165,8 +166,11 @@ class StripHeaderWidget: public Top2Toggles{
   public:    
     Strip* strip = nullptr;
     StripHeaderWidget(Strip* s, bool debug=false): strip(s),
-        Top2Toggles(s->getTopLabel(),s->getBottomLabel(),&s->toggle1,&s->toggle2,&s->frontColor,&s->backColor,
+        /*Top2Toggles(s->getTopLabel(),s->getBottomLabel(),&s->toggle1,&s->toggle2,&s->frontColor,&s->backColor,
+                    &GUI::defaultFcolor, &GUI::silver, &GUI::fullBrightness, debug)*/
+        Top2Toggles(&NoStrip,&emptyString,&GUI::off,&GUI::off,&GUI::defaultFcolor,&GUI::defaultBcolor,
                     &GUI::defaultFcolor, &GUI::silver, &GUI::fullBrightness, debug)
+
     {
       //if (strip) setValues();
     }
@@ -174,7 +178,7 @@ class StripHeaderWidget: public Top2Toggles{
     
     virtual bool refresh(bool force=false){    
       
-      if (strip == nullptr) return false;
+      //if (strip == nullptr) return false;
       
       refreshed = force;
 
@@ -182,7 +186,7 @@ class StripHeaderWidget: public Top2Toggles{
         //strip->updated = false; // we acknowledge the strip change
         oldStrip = strip;
         refreshed = true;
-        setStripPointer(strip);
+        if (strip != nullptr) setStripPointer(strip);
       }
 
       Top2Toggles::refresh(refreshed);
@@ -211,6 +215,8 @@ class StripHeaderWidget: public Top2Toggles{
 
   private:    
     Strip* oldStrip = nullptr; 
+
+    String NoStrip = "No Strip";
   
 
 
@@ -654,16 +660,24 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         midiNoteSkel->registerDataSetAddress(dsMidiValue1.address);
         midiNoteSkel->registerDataSetAddress(dsMidiValue2.address);      
 
-      dsSysexMessages = new SysexLib(new DropDownAddress(ADDRESS_SYSEX));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved
       sysexSkel = new StripSkeleton(STRIP_SYSEX,GROUP_INTERFACE_MIDI,sysexStripConstructorCallback,'*');             
+        dsSysexMessages = new SysexLib(new DropDownAddress(ADDRESS_SYSEX));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved      
         sysexSkel->registerDataSetAddress(dsSysexMessages->address);
+
+      //
+      // OSC skeletons
+      //
+      oscSkel = new StripSkeleton(STRIP_OSC,GROUP_INTERFACE_OSC,oscStripConstructorCallback,'*');             
+        dsOSCMessages = new OSCLib(new DropDownAddress(ADDRESS_OSCMSG));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved
+        oscSkel->registerDataSetAddress(dsOSCMessages->address);
+
 
       // interfaces that do not need the network have to be started manually
       usbMIDIInterface = new USBMIDIInterface(true); 
       bleMIDIInterface = new BLEMIDIInterface(true); 
       dinMIDIInterface = new DINMIDIInterface(true); 
       // interfaces that need the network will be started and stopped by app refresh when network change state
-      networkOSCinterface = new NetworkOSC("sysOSC","99.98.97.96",10024,true); // true = configurable
+      networkOSCinterface = new NetworkOSC("sysOSC",7777,"1.1.1.1",5000,"/info",true); // true = configurable
       // DMX
       artnetDMXInterface = new ArtnetDMXInterface(true);
       threePinDMXInterface = new ThreePinDMXInterface(true);     
@@ -678,8 +692,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       */
       for (const auto& interface : interfaceRepo.interfaces){
         
-        if (!interface->begin()){
-          
+        if (!interface->init()){
+          DEBUG_PRINT("\n%s->init() failed or is not fully implemented",interface->interfaceName.c_str());    
         }
         
         bool exists = false;
@@ -843,7 +857,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             if (getSelectedStrip() != nullptr){
               bool offline = getSelectedStrip()->interface->state.offline;
               getSelectedStrip()->interface->goOffline(!offline); // toggle offline state
-
             }
           }        
 
@@ -1713,7 +1726,7 @@ void setup() {
       for (const auto& interface : interfaceRepo.interfaces){        
         if (                                                              // if
           interface->update() ||                                          // interface state has changed
-          interface->state.progressChanged                                // or its progress
+          interface->state.change.progress                                // or its progress
         ) broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
       }
 
@@ -2007,6 +2020,9 @@ void setup() {
 
     void commonFileServer(Request &req, Response &res){    
       httpServing = true;
+      
+      hwm->network->stopAllUDP();
+      
       //if (req.method() != Request::GET) return;
       String path = req.path();
 
@@ -2315,7 +2331,7 @@ void setup() {
 
       // Force screen redraw if we changed the window or the bank OR if we are displaying full size strip
       if (
-          currentStrip->win != targetStrip->win ||
+          targetStrip->win != currentStrip->win ||
           targetStrip->size == SHAPE4X4 ||
           bank->layout == LAYOUT_ZOOM
       ){
@@ -2723,17 +2739,18 @@ void setup() {
           // we found the right interface 
           // Valeur = parameters
           JsonObject values = first.value().as<JsonObject>();
-          if (interface->restoreBase(values)){
+
+          if (interface->restore(values)){
             if (interface->save()){
               jsonAnswer.callback = RET_SAVEBUTTON;
-              jsonAnswer.value ="1";
+              jsonAnswer.value ="0";
             }else{
               jsonAnswer.callback=RET_COMMANDERROR;
               jsonAnswer.value = "interface save error";                
             }
           }else{
-            jsonAnswer.callback=RET_COMMANDERROR;
-            jsonAnswer.value ="no interface change";            
+            jsonAnswer.callback=RET_SAVEBUTTON;
+            jsonAnswer.value ="0";            
           }
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;
@@ -2770,8 +2787,6 @@ void setup() {
               serializeJson(doc, jsonAnswer.value);  
               removeJsonQuote(&jsonAnswer.value);              
               
-              serialize(&jsonAnswer.value);
-
             }
           } 
           //do the same for osc messages here

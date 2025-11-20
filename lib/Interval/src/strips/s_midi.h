@@ -16,30 +16,9 @@ StripSkeleton *midiNoteSkel, *sysexSkel;
 #define ADDRESS_SYSEX "/sysex/%s"
 #define SYSEXLIB_FILENAME "sysexlib.json"
 
-#define OSCLIB_FILENAME "osclib.json"  
-
-class SysexLib : public DataSet, public JsonListFile{
+class SysexLib : public  WebLibrary{
   public:
-    SysexLib(Address* _address): DataSet(_address, GROUP_INTERFACE_MIDI){ 
-      reload();      
-    }      
-
-    bool reload(){      
-      clean();      
-      bool success = load(WEBAPP_PATH"/"SYSEXLIB_FILENAME".gz");
-      if (!success) addValue(filename,"error");      
-      return success;
-    }
-
-    virtual const String* getValuePtr(uint16_t index){      
-      if (index>size()-1) return &errorDatasetOOR;      
-      //return getString(getName(index));       // return the valuenof the jkey   
-      return getName(index);                
-    }  
-
-    virtual uint16_t getSize(){
-      return size();                //number of pair k/v loaded from the file
-    }
+    SysexLib(Address* _address): WebLibrary(SYSEXLIB_FILENAME, _address, GROUP_INTERFACE_MIDI){}
 };
 
 SysexLib* dsSysexMessages;
@@ -260,23 +239,25 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       bool success = false;
       if (note == midiMessages[MIDI_NOTEON]){
         // polymorphism doesnt work
-        if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
+        /*if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
         else if (interface->interfaceName == USBMIDI_INTERFACE) success = ((USBMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
         else if (interface->interfaceName == DINMIDI_INTERFACE) success = ((DINMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
         else if (interface->interfaceName == APPLEMIDI_INTERFACE) success = ((AppleMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
         else{
           DEBUG_PRINT("\n%s invalid interface",type.c_str());
-        }
+        }*/
+       success = ((MIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID);
       }
       else if (note == midiMessages[MIDI_NOTEOFF]){
         // polymorphism doesnt work
-        if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
+        /*if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
         else if (interface->interfaceName == USBMIDI_INTERFACE) success = ((USBMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
         else if (interface->interfaceName == DINMIDI_INTERFACE) success = ((DINMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
         else if (interface->interfaceName == APPLEMIDI_INTERFACE) success = ((AppleMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
         else{
           DEBUG_PRINT("\n%s invalid interface",type.c_str());
-        }
+        }*/
+       success = ((MIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
       }
       return success;
     }    
@@ -292,7 +273,6 @@ Strip* midiNoteStripConstructorCallback(){
 class SysexStrip : public Strip{  // should inherit from MidiStrip before so methode like data read castng are common
   #define STRIP_SYSEX "Sysex"
   #define SYSEX_MAX_KEY_LENGTH 64
-  #define SYSEX_MAX_MESSAGE_LENGTH 256
 
   public:
     SysexStrip(StripSkeleton* s,bool debug=false):Strip(s){
@@ -326,8 +306,8 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
     }
 
     virtual void update(){
-      ////update is called if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure
-      MidiData* midiData = static_cast<MidiData*>(interface->read()); // WARNING CAREFULLY TEST IF POLYMORPHISM WORKS
+      ////update is called if data are availabe and must therefore cast the data to the right data structure
+      MidiData* midiData = static_cast<MidiData*>(interface->data); // WARNING CAREFULLY TEST IF POLYMORPHISM WORKS
       // check if the data is for me
       if (midiData->type == MIDI_SYSEX){
 
@@ -361,13 +341,14 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       size_t length = hexStringToBytes(sysexMessage, buffer, outMax);
       if (length>0) {
         // polymorphism doesnt work
-        if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendSysEx(length, buffer, false);
+        /*if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendSysEx(length, buffer, false);
         else if (interface->interfaceName == USBMIDI_INTERFACE) success = ((USBMIDIInterface*)interface)->sendSysEx(length, buffer, false);
         else if (interface->interfaceName == DINMIDI_INTERFACE) success = ((DINMIDIInterface*)interface)->sendSysEx(length, buffer, false);
         else if (interface->interfaceName == APPLEMIDI_INTERFACE) success = ((AppleMIDIInterface*)interface)->sendSysEx(length, buffer, false);
         else{
           DEBUG_PRINT("\n%s invalid interface",type.c_str());
-        }
+        }*/
+        success = ((MIDIInterface*)interface)->sendSysEx(length, buffer, false);
         //Log::drop(interface->interfaceName.c_str(), (const char*)buffer);  // => for SOME REASON THIS CREATE A DISCONNECTION OF WEBSOCKET...MAYBE THE GENERATED FRAME IS INCORRECT?
       } else {
         String err = concatStrings("Invalid sysex: ", sysexMessage);

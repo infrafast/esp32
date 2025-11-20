@@ -842,6 +842,13 @@ enum{
 
 #include "interfaces/i_states.h"
 
+struct Change{ 
+  bool code = false;         //   
+  bool progress = false;  
+  bool handleChange = false;  //indicate if callback should be triggered
+  bool properties = false;
+};
+
 struct State{ // used by Strip and Interface
   uint8_t code = IF_NOT_READY;
   String label = IF_STATE_UNAVAILABLE;
@@ -850,9 +857,7 @@ struct State{ // used by Strip and Interface
   String led = "black";
   bool offline = false;
   float progress = -1;
-  bool stateChanged = false;
-  bool progressChanged = false;
-  bool propertiesChanged = false;
+  Change change;
 };
 
 #include "GUIManager.h"
@@ -1414,6 +1419,8 @@ void bankScreenBuilder(uint8_t subScreen){
   if (bank != nullptr && !oversize){
 
     Strip* strip = app.getSelectedStrip();
+    app.stripHeader = new StripHeaderWidget(strip);      
+    gui.add(app.stripHeader);         
 
     if (strip != nullptr){
     
@@ -1431,10 +1438,7 @@ void bankScreenBuilder(uint8_t subScreen){
       }
       
       strip->focus(true);
-      
-      app.stripHeader = new StripHeaderWidget(strip);      
-      gui.add(app.stripHeader);            
-      
+                  
     }else{
       DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
       gui.add(new TextArea(lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));

@@ -109,13 +109,15 @@ namespace Interval {
       }
   
       Strip* addStrip(JsonObject jsonStrip){
+        String jsonStripString;                           
+        serializeJson(jsonStrip, jsonStripString);
         Strip* strip = buildStrip(jsonStrip);
         if (strip != nullptr){    
-          String jsonStripString;
-          serializeJson(jsonStrip, jsonStripString);                 
           if (strip->deserialize(jsonStripString)){
             strips.push_back(strip);
           }  
+        }else{
+          DEBUG_PRINT("\nbuildStrip(%s) failed",jsonStripString.c_str());
         }
         return strip;
       }

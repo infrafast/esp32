@@ -56,17 +56,23 @@ typedef struct MidiData{
 #endif
 
 
-class MIDIInterface{
+class MIDIInterface: public DeviceInterface{
   #define GROUP_INTERFACE_MIDI "MIDI"
   public:
 
     MidiData midiData;
 
+    MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
+      data = &midiData;      
+    }
+
+    virtual void restoreProperty(const char* property){
+      DEBUG_PRINT("\n%s::restoreProperty() not applicable");
+    }      
+
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
-
-    virtual DeviceInterface* getDevice() = 0;
 
     static void handleSysexStatic(byte* data, unsigned length) {
       if (baseInstancePtr) {
@@ -88,7 +94,7 @@ class MIDIInterface{
       midiData.number = number;
       midiData.value = value;
       // and indicate how much is available
-      getDevice()->dataAvailable = 1;
+      dataAvailable = 1;
     }
 
     virtual void handleSysex(byte* sysexdata, unsigned length){
@@ -111,7 +117,7 @@ class MIDIInterface{
       }
 
       // and indicate how much is available
-      getDevice()->dataAvailable = length;
+      dataAvailable = length;
     }    
 
 
@@ -125,11 +131,8 @@ class MIDIInterface{
 
     void init(){
       baseInstancePtr = this;
-      // set the interface data pointer to the midi data structure
-      getDevice()->data = &midiData;
-      
+      //set the interface data pointer to the midi data structure
     }
-
 
   protected:
       static inline MIDIInterface* baseInstancePtr = nullptr;
@@ -141,19 +144,14 @@ class MIDIInterface{
 BLEMIDI_CREATE_INSTANCE(BLE_CONNECTION_NAME, bleMIDI);
 
 #define BLEMIDI_INTERFACE "BLEMIDI"
-class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
+class BLEMIDIInterface: public MIDIInterface{
 
   public:
-    String voidBLEparam = "abc";
 
-    BLEMIDIInterface(bool _configurable):DeviceInterface(BLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
+    BLEMIDIInterface(bool _configurable):MIDIInterface(BLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_BLEMIDI;
       handleDisconnected();
     }
-
-    String getFilename(){
-      return BLEMIDI_INTERFACE"_if.cfg";
-    }    
 
     virtual uint16_t getSize(String addrr){
       return 0;
@@ -163,24 +161,26 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
       return &emptyString;
     }
 
-    DeviceInterface* getDevice() override { return this; }
-
     virtual void monitor(){
       if (state.label == IF_STATE_CONNECTED) 
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
 
     virtual void goOffline(bool _offline){
-      DeviceInterface::goOffline(_offline);
-      if (_offline){
+      // THE BLEMIDI GO OFFLINE MUST NOT TOUCH THE STATE; IT JUST CONTINUES NORMALLY OTHERWISE IT IS NOT POSSIBLE TO RE-ESTABLISH THE CONNEXION AFTER GOING BACK ONLINE
+      // THIS HAS SOMETHING TO DEAL WITH HANDLING OF END()
+      /*if (_offline){
         end();
       }else{
-         bleMIDI.begin();
-      }
+        bleMIDI.begin();
+      }*/
+      DeviceInterface::goOffline(_offline);            
+      if (!_offline) begin();
+
     }
 
-    virtual bool derivedBegin(){    
-      init();  
+    virtual bool begin(){    
+      MIDIInterface::init();  
       bleInstancePtr = this;   // do not forget otherwise callback function will crash
 
       BLEbleMIDI.setHandleConnected(handleConnectedStatic);
@@ -188,7 +188,15 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
       
       bleMIDI.setHandleSystemExclusive(handleSysexStatic);
 
-      bleMIDI.begin();
+      if (alreadyBegun){
+        DEBUG_PRINT("\n%s begin() ignored (alreadyBegun)",interfaceName.c_str());   // this is a workaround becaue of offline may recall it 
+      }else if (!state.offline){
+        DEBUG_PRINT("\n%s begin()",interfaceName.c_str());
+        bleMIDI.begin();
+        alreadyBegun = true;
+      }else{
+        DEBUG_PRINT("\n%s begin() ignored (offline))",interfaceName.c_str());
+      }
 
       return true;
     }
@@ -201,12 +209,11 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
             // bleMIDI.end() doesnt exists
             return true;
         }
-      return false;
-
+      return false;    
     }     
 
     void handleConnected() {
-      DEBUG_PRINT("\nBLEMidi connected\n");
+      DEBUG_PRINT("\nBLEMidi paired\n");
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
       state.subState = IF_STATE_CONNECTED;
@@ -237,56 +244,42 @@ class BLEMIDIInterface: public MIDIInterface, public DeviceInterface{
         }
     } 
 
-
-    virtual bool restoreProperty(const char* property){
-      /*bool changed = false;
-      if (config.containsKey(CONFIG_BLE)){ 
-        String bleParam = config[CONFIG_BLE].as<String>();
-        if (voidBLEparam != bleParam) changed = true;
-        voidBLEparam = bleParam;
-      }
-      return changed;*/
-
-      String bleParam;
-      if (sscanf(property, ADDRESS_OSCPORT, &bleParam)) {
-        if (voidBLEparam != bleParam) configChanged = true;
-        voidBLEparam = bleParam;       
-      }
-
-      return configChanged;      
-    }  
-
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
       DEBUG_PRINT("\nBLEMIDIInterface::sendSysex(%i) ",inLength);
-      if (state.code == IF_READY) bleMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);
+      if (state.code == IF_READY) bleMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);      
       else return false;
       return true; 
     }
 
-    virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};
-    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};
+    virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
+      DEBUG_PRINT("\tnBLEMIDIInterface::sendNoteOn(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
+      if (state.code == IF_READY) bleMIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);      
+      else return false;
+      return true; 
+    }
+
+    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
+      DEBUG_PRINT("\tnBLEMIDIInterface::sendNoteOff(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
+      if (state.code == IF_READY) bleMIDI.sendNoteOff(inNoteNumber,inVelocity,inChannel);      
+      else return false;
+      return true; 
+    }
 
   private:
     static inline BLEMIDIInterface* bleInstancePtr = nullptr;    
+    bool alreadyBegun = false;
 
 };
 
 #define USBMIDI_INTERFACE "USBMIDI"
 
-class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
+class USBMIDIInterface: public MIDIInterface{
 
   public:
-    String voidUSBparam = "toto";
 
-    USBMIDIInterface(bool _configurable):DeviceInterface(USBMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
+    USBMIDIInterface(bool _configurable):MIDIInterface(USBMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_USBMIDI;      
     }
-
-    String getFilename(){
-      return USBMIDI_INTERFACE"_if.cfg";
-    }
-
-    DeviceInterface* getDevice() override { return this; }
 
     virtual void monitor(){
       if (useUSBMidi){  // only if USB is active
@@ -326,18 +319,8 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
       }
     }
 
-    virtual bool restoreProperty(const char* property){
-      String usbParam;
-      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &usbParam)) {
-        if (usbParam != voidUSBparam) configChanged = true;
-        voidUSBparam = usbParam;       
-      }
-
-      return configChanged;      
-    }      
-
-    virtual bool derivedBegin(){
-      init();
+    virtual bool begin(){
+      MIDIInterface::init();
       usbMIDI.setHandleSystemExclusive(handleSysexStatic);
       // if the fooswtich has started in FW update or debug mode, USB MIDI is not active, hence we set the status once for all
       if (!useUSBMidi){
@@ -375,35 +358,17 @@ class USBMIDIInterface: public MIDIInterface, public DeviceInterface{
 
 
 #define DINMIDI_INTERFACE "DINMIDI"
-class DINMIDIInterface: public MIDIInterface, public DeviceInterface{
+class DINMIDIInterface: public MIDIInterface{
   #define CONFIG_DIN "voidUSBparam"
   public:
-    String voidDinparam = "din1";
-
-    DINMIDIInterface(bool _configurable):DeviceInterface(DINMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
+    DINMIDIInterface(bool _configurable):MIDIInterface(DINMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_DINMIDI;
-    }
-
-    String getFilename(){
-      return DINMIDI_INTERFACE"_if.cfg";
     }
 
     virtual void monitor(){}
 
-    virtual bool restoreProperty(const char* property){
-      String dinParam;
-      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &dinParam)) {
-        if (dinParam != voidDinparam) configChanged = true;
-        voidDinparam = dinParam;       
-      }
-
-      return configChanged;       
-    }      
-
-    DeviceInterface* getDevice() override { return this; }
-
-    virtual bool derivedBegin(){
-      init();
+    virtual bool begin(){
+      MIDIInterface::init();
       return true;
     }
 
@@ -423,32 +388,28 @@ class DINMIDIInterface: public MIDIInterface, public DeviceInterface{
 
 
 #define APPLEMIDI_INTERFACE "AppleMIDI"
-class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
+class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
   #define CONFIG_APPLE "voidAppleMidiParam"
-  public:
-    String voidAppleMidiParam = "titi";      
+  public: 
 
-    AppleMIDIInterface(bool _configurable):NetworkDevice(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
+    NetworkInterfaceMonitor netHelper = NetworkInterfaceMonitor(this,this);
+
+    AppleMIDIInterface(bool _configurable):MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
     }
 
-    String getFilename(){
-      return APPLEMIDI_INTERFACE"_if.cfg";
+    virtual void monitor(){     
+      netHelper.monitor();
     }
-
-    DeviceInterface* getDevice() override { return this; }
 
     virtual void derivedMonitor(){
-      
       if (hwm.network->midiClient != nullptr){
         // the read trigger callback like connection, hence it has to be called independantly from being connected to a session or not
-        hwm.network->midiClient->read();                        //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time
-      }
-             
-      if (hwm.network->refreshed && hwm.network->state == CONNECTED) setStatePendingSession();    // network has just connected so we now wait for a session to connect
-
+        //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time        
+        hwm.network->midiClient->read();                       
+      }            
     }
-
+    
     // Méthode de l'instance réellement appelée
     void handleConnected(const ssrc_t& ssrc, const char* name) {
       DEBUG_PRINT("\nConnected to session: %s\n", name);
@@ -486,15 +447,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
 
     };
 
-    virtual bool restoreProperty(const char* property){
-      String appleParam;
-      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &voidAppleMidiParam)) {
-        if (appleParam != voidAppleMidiParam) configChanged = true;
-        voidAppleMidiParam = appleParam;       
-      }
-
-      return configChanged;       
-    }        
 
     static void handleConnectedStatic(const ssrc_t& ssrc, const char* name) {
         if (appleInstancePtr) {
@@ -559,8 +511,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
     }    
 
     virtual void goOffline(bool _offline){
-      NetworkDevice::goOffline(_offline);      
-      disconnect();     // force disconnect in all case: either you will reconnect 
+      MIDIInterface::goOffline(_offline);      
+      if (_offline) disconnect();     // force disconnect in all case: either you will reconnect 
+      else connect();
       // maybe add a if (_offline) {} else {}
     }
 
@@ -587,9 +540,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
       state.progress = -1;
     }
 
-    virtual bool derivedBegin(){      
+    virtual bool begin(){      
       //DEBUG_PRINT("\tAppleMIDIInterface::derivedBegin()");
-      init();
+      MIDIInterface::init();
       appleInstancePtr = this;   // do not forget otherwise callback function will crash
       return disconnect();      
     }
@@ -600,7 +553,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
     }
 
     virtual bool connect(){
-      //DEBUG_PRINT("\tAppleMIDIInterface::connect()");
+      DEBUG_PRINT("\tAppleMIDIInterface::connect()");
+      setStatePendingSession();    // network has just connected so we now wait for a session to connect
+
+      // we connect the midi client to its callback
+      // this should not go to the begin
       MidiClient* midiClient = hwm.network->midiClient;      
       if (midiClient == nullptr){
         DEBUG_PRINT("\t(nullptr)\t");
@@ -632,12 +589,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetworkDevice{
 
 };
 
-
-class MIDIOSC: public OSCInterface{
-  #define CONFIG_SYSEX "voidSysexParam"  
+class MIDIOSC/*: public OSCInterface*/{
   public:
     MIDIInterface* midiTransport = nullptr;
-    String voidSysexParam = "xyz";
 
     MIDIOSC(String midiInterface, bool _configurable){
       instantiate(midiInterface,_configurable);
@@ -646,7 +600,7 @@ class MIDIOSC: public OSCInterface{
 
     ~MIDIOSC(){
         //if (midiTransport && std::find(interfaceRepo.interfaces.begin(), interfaceRepo.interfaces.end(), midiTransport) == interfaceRepo.interfaces.end())
-          delete midiTransport; // => check double free in repo ?
+        delete midiTransport; // => check double free in repo ?
     }
 
     void instantiate(String midiInterface, bool _configurable){

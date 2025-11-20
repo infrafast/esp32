@@ -5,14 +5,13 @@
 //#define TFT_BGCOLOR   TFT_DARKGREY
 
 #include "Interval.h"
-//#include "mixerInterfaces.h"
-
-//NetworkOSC* networkOSCinterface2 = new NetworkOSC("mixerOSC","999.999.999.999",99999,false); // false = not exposed
+#include "mixerInterfaces.h"
 
 void setup(){
     app.init();
 
     //new MixingStation(networkOSCinterface2);    
+    //new BehringerXM();
 }
 
 void loop(){

@@ -4,39 +4,50 @@
 #include "Interfaces.h"
 
 #define GROUP_INTERFACE_DMX "DMX"
-class DMXInterface{
+class DMXInterface : public DeviceInterface{
+
+  public:
+    DMXInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){}
+
+    virtual bool load(){
+      DEBUG_PRINT("\n%s::load() not applicable",interfaceName.c_str());
+      return true;
+    }
+
+    virtual bool save(){
+      DEBUG_PRINT("\n%s::save() not applicable",interfaceName.c_str());
+      return true;      
+    }    
+
+    virtual void restoreProperty(const char* property){
+      DEBUG_PRINT("\n%s::restoreProperty() not applicable");
+    }     
 
 };
 
 #define ARTNETDMX_INTERFACE "Artnet"
-class ArtnetDMXInterface: public DMXInterface, NetworkDevice{
+class ArtnetDMXInterface: public DMXInterface, public NetWorkInterface {
 
   public:
     String voidArtnetParam = "artnet123";
+    NetworkInterfaceMonitor netHelper = NetworkInterfaceMonitor(this,this);
 
-    String getFilename(){
-      return ARTNETDMX_INTERFACE"_if.cfg";
-    }    
-
-    ArtnetDMXInterface(bool _configurable):NetworkDevice(ARTNETDMX_INTERFACE, GROUP_INTERFACE_DMX, _configurable){
+    ArtnetDMXInterface(bool _configurable):DMXInterface(ARTNETDMX_INTERFACE, GROUP_INTERFACE_DMX, _configurable){
       icon = "b";
     }
 
-    virtual bool restoreProperty(const char* property){
-
-      String configArtNet;
-      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &configArtNet)) {
-        if (voidArtnetParam != configArtNet) configChanged = true;
-        voidArtnetParam = configArtNet;       
-      }
-
-      return configChanged;      
-
+    virtual void restoreProperty(const char* property){
+      DEBUG_PRINT("\n%s::restoreProperty() not applicable");
     }  
 
+    virtual void monitor(){     
+      netHelper.monitor();
+    }
+
+  
     virtual void* read(){return nullptr;}
 
-    virtual bool derivedBegin(){
+    virtual bool begin(){
       return false;
     }
     
@@ -59,43 +70,25 @@ class ArtnetDMXInterface: public DMXInterface, NetworkDevice{
 
 
 #define THREEEPINDMX_INTERFACE "3PinDMX"
-class ThreePinDMXInterface: public DMXInterface, public DeviceInterface{
+class ThreePinDMXInterface: public DMXInterface{
   public:
     String void3pinDMXParam = "";
 
-    ThreePinDMXInterface(bool _configurable):DeviceInterface(THREEEPINDMX_INTERFACE,GROUP_INTERFACE_DMX, _configurable){
+    ThreePinDMXInterface(bool _configurable):DMXInterface(THREEEPINDMX_INTERFACE,GROUP_INTERFACE_DMX, _configurable){
       icon = "a";
     }
-
-    String getFilename(){
-      return THREEEPINDMX_INTERFACE"_if.cfg";
-    }   
 
     virtual void monitor(){
 
     } 
 
-    virtual bool restoreProperty(const char* property){
-      /*bool changed = false;
-      if (config.containsKey(CONFIG_3PINDMX)){
-        String config3pin = config[CONFIG_3PINDMX].as<String>();
-        if (void3pinDMXParam != config3pin) changed = true;
-        void3pinDMXParam = config3pin;        
-      }
-      return changed;*/
-
-      String config3pin;
-      if (sscanf(property, ADDRESS_CHANGETOPARAMETERNAME, &config3pin)) {
-        if (void3pinDMXParam != config3pin) configChanged = true;
-        void3pinDMXParam = config3pin;       
-      }
-
-      return configChanged;      
+    virtual void restoreProperty(const char* property){
+      DEBUG_PRINT("\n%s::restoreProperty() not applicable");
     }  
 
     virtual void* read(){return nullptr;}
 
-    virtual bool derivedBegin(){
+    virtual bool begin(){
       return false;
     }
 
