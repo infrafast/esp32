@@ -6,17 +6,17 @@
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 
-#include "interfaces\i_midi.h"
-#include "interfaces\i_dmx.h"
-#include "interfaces\i_osc.h"
+#include "interfaces/i_midi.h"
+#include "interfaces/i_dmx.h"
+#include "interfaces/i_osc.h"
 
 ///////////////////// WIDGET LOCATION & SIZE ////////////////////////
 #define OVERLAY_ICON_SIZE TFT_HEIGHT/15
 
 
-#include "strips\s_midi.h"
-#include "strips\s_utils.h"
-#include "strips\s_osc.h"
+#include "strips/s_midi.h"
+#include "strips/s_utils.h"
+#include "strips/s_osc.h"
 
 #include "Banks.h"
 

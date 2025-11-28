@@ -27,7 +27,7 @@ using WSclientOnMessageCallback = std::function<void(const char*)>;
 ////////////////////////////////////////////////////////////////////
 ///                MIDI LAYER OBJECTS DECLARATION            ///////
 ////////////////////////////////////////////////////////////////////
-#include "interfaces\appleMidiHelpers.h"
+#include "interfaces/appleMidiHelpers.h"
 #define MIDI_CHANNEL_OMNI 0
 /*#define APPLE_MIDIETHCLIENT_NAME  "interval"    
 #define APPLE_MIDIWIFICLIENT_NAME  "interval"    */
