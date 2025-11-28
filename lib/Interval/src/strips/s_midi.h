@@ -213,11 +213,11 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
         topY += h/2; 
         gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topX /*x*/, &topY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }else if (size == SHAPE1X4){
-        pushSimpleText(layout, lang.getString("SHAPE1X4 note"));
+        pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," Note")));
       }else if (size ==SHAPE2X2 ){
-         pushSimpleText(layout, lang.getString("SHAPE2X2 note"));
+         pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," Note")));
       }else if (size == SHAPE4X1){
-         pushSimpleText(layout, lang.getString("SHAPE4X1 note"));
+         pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," Note")));
       }else{
 
       } 
@@ -290,11 +290,11 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
         topY += h/2; 
         gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topX /*x*/, &topY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }else if (size == SHAPE1X4){
-        pushSimpleText(layout, lang.getString("SHAPE1X4 SYSEX"));
+        pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," SYSEX")));
       }else if (size ==SHAPE2X2 ){
-         pushSimpleText(layout, lang.getString("SHAPE2X2 SYSEX"));
+         pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," SYSEX")));
       }else if (size == SHAPE4X1){
-         pushSimpleText(layout, lang.getString("SHAPE4X1 SYSEX"));
+         pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," SYSEX")));
       }else{
 
       }         

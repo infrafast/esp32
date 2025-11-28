@@ -523,8 +523,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
       String midiSessionName = "null";
+      int port = 0;
       if (hwm.network->midiClient != nullptr){
           midiSessionName = hwm.network->midiClient->getName();
+          port = hwm.network->midiClient->getPort();
       }
       state.subState = midiSessionName;      
       state.details = concatStrings(
@@ -534,7 +536,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
           " (",
           hwm.network->IP.toString(),
           ", port: ",
-          hwm.network->midiClient->getPort(),
+          port,
           ")");
       state.led = "green slow";
       state.progress = -1;

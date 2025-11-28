@@ -842,11 +842,11 @@ enum{
 
 #include "interfaces/i_states.h"
 
-struct Change{ 
-  bool code = false;         //   
-  bool progress = false;  
+struct Trigger{ 
+  bool redraw = false;         //   
+  bool broadcast = false;  
   bool handleChange = false;  //indicate if callback should be triggered
-  bool properties = false;
+  bool save = false;
 };
 
 struct State{ // used by Strip and Interface
@@ -857,7 +857,7 @@ struct State{ // used by Strip and Interface
   String led = "black";
   bool offline = false;
   float progress = -1;
-  Change change;
+  Trigger trigger;
 };
 
 #include "GUIManager.h"

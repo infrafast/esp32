@@ -24,6 +24,8 @@ class DeviceInterface  : public SerializableDataset{
 
     State state;
 
+    uint8_t stripCount = 0;      // indicate if an interface is not refered by any strip
+
     String previousStateLabel;
     String previousLed = "";
     uint8_t previousStateCode = 0;
@@ -125,14 +127,14 @@ class DeviceInterface  : public SerializableDataset{
     }
 
     virtual bool restore(const JsonObject& config){   // == deserialize = from string to variable
-      state.change.properties = false;
-      state.change.handleChange = false;
+      state.trigger.save = false;
+      state.trigger.handleChange = false;
 
       DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_OFFLINE)){
         bool offline = config[INTERFACE_OFFLINE];
-        if (offline != state.offline) state.change.properties = true;   // ==> this one trigger an interface properties change so they are saved but not a trigger handleChange as this one is treated by the state change 
+        if (offline != state.offline) state.trigger.save = true;   // ==> this one trigger an interface properties change so they are saved but not a trigger handleChange as this one is treated by the state change 
         state.offline = offline;
         goOffline(state.offline);                        
       }
@@ -143,11 +145,11 @@ class DeviceInterface  : public SerializableDataset{
      
       // properties triggering a callback
       // like interface who would need to reconnect because the IP address has changed 
-      if ( state.change.handleChange){
+      if ( state.trigger.handleChange){
         handlePropertyChange();   
-        state.change.properties = true; // a triggerProperty change is obviously flagging a change
+        state.trigger.save = true; // a triggerProperty change is obviously flagging a change
       }
-      return state.change.properties;
+      return state.trigger.save;
     }      
 
     virtual void serialize(JsonDocument& interfaceDoc){
@@ -186,32 +188,33 @@ class DeviceInterface  : public SerializableDataset{
 
     virtual bool update(){      // return a boolean indicatin if the interface has changed its state
       // reset change state
-      state.change.code = false;
-      state.change.progress = false;
+      state.trigger.redraw = false;
+      state.trigger.broadcast = false;
 
       // reset the flag so strips will not be updated and re-processed already consummed data
       dataAvailable = 0;
 
       // report if state has changed
       if (state.label != previousStateLabel){
-        state.change.code  = true;
+        state.trigger.redraw  = true;
         previousStateLabel = state.label;
       }
       if (state.code != previousStateCode){
-        state.change.code  = true;
+        state.trigger.redraw  = true;
         previousStateCode = state.code;
       }    
       if (state.offline != previousOffline){
-        state.change.code  = true;
+        state.trigger.redraw  = true;
         previousOffline = state.offline;
       }    
       if (state.progress != previousProgress){
         // a progress change is captured so applicatoin manager can broadcast it to the webclient but is not a state change
         // indeed, a state change would trigger redraw which we do not want
-        previousProgress = state.progress;        
+        previousProgress = state.progress;   
+        state.trigger.broadcast = true;     
       }
       if (state.led != previousLed){
-        state.change.code  = true;
+        state.trigger.redraw  = true;
         previousLed = state.led;
       }
 
@@ -219,8 +222,8 @@ class DeviceInterface  : public SerializableDataset{
       if (!state.offline){      
         monitor();
       }
-            
-      return state.change.code;
+      \\\
+      return  (state.trigger.redraw || state.trigger.broadcast);
     }
 
     int available(){ // called by strip 
@@ -228,8 +231,8 @@ class DeviceInterface  : public SerializableDataset{
     }
 
     virtual void goOffline(bool _offline){
-      DEBUG_PRINT("\n%s goOffline=>%s",interfaceName.c_str(),state.offline?"true":"false");              
       state.offline = _offline;
+      DEBUG_PRINT("\n%s goOffline=>%s",interfaceName.c_str(),state.offline?"true":"false");                    
     }
 
     #define IF_CFG_FILE_PATH "/"

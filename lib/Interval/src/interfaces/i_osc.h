@@ -71,18 +71,18 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       #define MAXLENGHTINPUT 32
       char inputStr[MAXLENGHTINPUT];      
       if (sscanf(property, ADDRESS_OSCPORT, &OSCport) == 1) {
-        if (OSCport != OSC_clientPort)   state.change.handleChange = true;
+        if (OSCport != OSC_clientPort)   state.trigger.handleChange = true;
         OSC_clientPort = OSCport;       
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
         IPAddress ip;
         if (ip.fromString(inputStr)){
-          if (OSC_IP != ip)  state.change.handleChange = true;
+          if (OSC_IP != ip)  state.trigger.handleChange = true;
           OSC_IP = ip;      
         }else{
           DEBUG_PRINT("\ninvalid IP address:%s",inputStr);
         }
       }else if (sscanf(property, ADDRESS_PING, &inputStr)) {
-        if (OSC_ping != inputStr)  state.change.handleChange = true;
+        if (OSC_ping != inputStr)  state.trigger.handleChange = true;
         OSC_ping = inputStr;    
       }
     }        

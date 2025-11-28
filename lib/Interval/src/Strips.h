@@ -139,7 +139,7 @@ class Strip {
 
     // flag to indicate if position is out of range
     bool renderError;
-    bool redraw = false;
+    //bool redraw = false;
 
     bool toggle1 = false;
     bool toggle2 = false;
@@ -176,6 +176,7 @@ class Strip {
     }    
 
     virtual ~Strip(){
+      interface->stripCount -= 1;
     }
   
     virtual uint8_t getNumberOfProperties(){
@@ -194,13 +195,11 @@ class Strip {
     // it assign the GUI values the values that were acquired or processed in the process() method
     // basedon its internal state, it will set the redraw flag 
     
-    virtual bool process(){ // this code is requesting the strip to update its state (values, etc...) using data from the interface (with read())
+    void process(){ // this code is requesting the strip to update its state (values, etc...) using data from the interface
     // process() is called from main app on all strip: the strip decide then if he has to do the query (for instance if it is focused) as       
     // some strip may do some backgroud tasks (like playing sample or executing a macro), other will only do this if they have focus         
-      if (!interface) return false;
-      redraw = interface->state.change.code;
+      if (!interface) return;
       if (interface->available()>0) update();   //update is called if data are availabe and must therefore implement data casting to the right data structure
-      return redraw;      
     }; 
 
 
@@ -235,6 +234,8 @@ class Strip {
         interfaceName = jsonStrip[C_INTERFACE].as<String>();//.as<int>();
         
         interface = interfaceRepo.retrieve(interfaceName);
+        interface->stripCount++;
+        //DEBUG_PRINT("\n%s has %i strips",interfaceName.c_str(), interface->stripCount);
 
         if (colorID>MAX_COLOR_ID-1) colorID = 0;
         frontColor = colorMap[colorID].fColor;

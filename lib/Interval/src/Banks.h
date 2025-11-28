@@ -51,7 +51,10 @@ namespace Interval {
           // we ask each strip of the bank to process itself
           // it's up to him to determine if he refreshes it's internal data
           // some may only do that if they are visible        
-          if (strip != nullptr && strip->process() && strip->visible) redraw = true;
+          if (strip != nullptr){
+            strip->process();
+            if (strip->visible && strip->interface->state.trigger.redraw) redraw = true;
+          }
         }
         return redraw;
       }

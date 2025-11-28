@@ -855,8 +855,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           if (screen.id == SCREEN_BANK){
             // toggle interface offline - online
             if (getSelectedStrip() != nullptr){
-              bool offline = getSelectedStrip()->interface->state.offline;
-              getSelectedStrip()->interface->goOffline(!offline); // toggle offline state
+              bool offline = !getSelectedStrip()->interface->state.offline;
+              String interfaceName = getSelectedStrip()->interface->interfaceName;                            
+              //{"AppleMIDI":{"offline":true,"properties":[]}}
+              // we transmit the command via the parseJsonInput so it also call for saveing interface, etc...
+              parseJsonInput(
+                concatStrings("{\"command\":\"deviceConfig\",\"param\":{\"",interfaceName,"\":{\"offline\":",offline?"true":"false",",\"properties\":[]}}}")
+              );             
             }
           }        
 
@@ -1723,11 +1728,15 @@ void setup() {
       //
       //------------------
       bool interfaceChangedState = false;
-      for (const auto& interface : interfaceRepo.interfaces){        
-        if (                                                              // if
-          interface->update() ||                                          // interface state has changed
-          interface->state.change.progress                                // or its progress
-        ) broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
+      for (const auto& interface : interfaceRepo.interfaces){       
+
+        #ifdef PROD
+        if (interface->stripCount == 0){
+          //continue;                           // optimization  WARNING: to activate that you need to implement the feature of greying out the interface panel as they will not be updated...
+        }
+        #endif
+
+        if (interface->update()) broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
       }
 
       //------------------
