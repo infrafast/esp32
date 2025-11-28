@@ -222,7 +222,7 @@ class DeviceInterface  : public SerializableDataset{
       if (!state.offline){      
         monitor();
       }
-      \\\
+  
       return  (state.trigger.redraw || state.trigger.broadcast);
     }
 
