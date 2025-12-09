@@ -2,7 +2,7 @@
 #define Interval_h
 
 #ifndef _V
-  #define _V "0.11"
+  #define _V "0.01"
 #endif
 
 
@@ -1330,7 +1330,7 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
                                String& outRemoteVersion,
                                String& outFileUrl)
 {
-  DEBUG_PRINT("Listing: %s", baseUrl.c_str());
+  DEBUG_PRINT("\n(v%s) Listing: %s", _V, baseUrl.c_str());
 
   // 1) GET du listing
   UrlParts u = parseUrl(baseUrl);
@@ -1419,7 +1419,7 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
 
   outFileUrl = bestUrl;
   outRemoteVersion = bestVerStr;
-  DEBUG_PRINT("Nouvelle version: %s @ %s", outRemoteVersion.c_str(), outFileUrl.c_str());
+  DEBUG_PRINT("\nNouvelle version: %s @ %s", outRemoteVersion.c_str(), outFileUrl.c_str());
   // le flux est maintenant lisible via outHttp.read()/available()
   return true;
 }
@@ -1495,7 +1495,7 @@ void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component) {
         
 
     findNewerFszAndOpenStream(
-      concatStrings("http://",serverRoot,"/firmware/"),
+      concatStrings("http://",serverRoot,"/fwupdate/"),
       _V,
       httpClient,
       newVersion,
