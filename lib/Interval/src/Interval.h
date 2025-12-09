@@ -1,6 +1,11 @@
 #ifndef Interval_h
 #define Interval_h
 
+#ifndef _V
+  #define _V "0.11"
+#endif
+
+
 #include <Arduino.h>
 
 #include <LinkedList.h>
@@ -231,6 +236,7 @@ class EventDispatcher {
   #define API_OK 1
   #define API_ERROR 0
 #define API_BODY   "body"
+
 
 // Structure pour stocker les données décompressées dans un buffer
 struct ByteBuffer : public Stream {
@@ -790,6 +796,7 @@ Config userCfg = Config();
 #define S_LAST_USED_SSID    "lastSSID"
 #define S_BUTTON_ASSIGN     "buttonsAssignements"
 #define S_SHORTCUTS         "shortcuts"
+#define S_SERVER_ROOT       "serverRoot"
 
 
 class I18n : public JsonListFile{
@@ -1206,6 +1213,219 @@ void connectHTTPTask(void *parameter) {
   vTaskDelete(NULL);
 }
 
+//////////////////////// FIRMWARE UPDATE FUNCTIONS  ////////////////////////
+//--- utilitaires URL -----------------------------------------------------------
+struct UrlParts {
+  String proto, host, path;
+  uint16_t port = 80;
+  bool ok = false;
+};
+
+static UrlParts parseUrl(const String& url) {
+  UrlParts u;
+  int p = url.indexOf("://");
+  if (p < 0) return u;
+  u.proto = url.substring(0, p);
+  String rest = url.substring(p + 3);
+  int slash = rest.indexOf('/');
+  if (slash >= 0) {
+    u.host = rest.substring(0, slash);
+    u.path = rest.substring(slash);
+  } else {
+    u.host = rest;
+    u.path = "/";
+  }
+  int colon = u.host.indexOf(':');
+  if (colon >= 0) {
+    u.port = (uint16_t)u.host.substring(colon + 1).toInt();
+    u.host = u.host.substring(0, colon);
+  } else {
+    u.port = (u.proto == "https") ? 443 : 80;
+  }
+  u.ok = (u.host.length() > 0);
+  return u;
+}
+
+static String makeAbsoluteUrl(const String& baseUrl, const String& href) {
+  if (href.startsWith("http://") || href.startsWith("https://")) return href;
+  bool baseHasSlash = baseUrl.endsWith("/");
+  if (href.startsWith("/")) {
+    // base proto+host
+    int p = baseUrl.indexOf("://");
+    if (p >= 0) {
+      int hostEnd = baseUrl.indexOf('/', p + 3);
+      if (hostEnd >= 0) return baseUrl.substring(0, hostEnd) + href;
+      return baseUrl + href;
+    }
+  }
+  return baseUrl + (baseHasSlash ? "" : "/") + href;
+}
+
+//--- parsing HTML très simple: récupère hrefs terminant par .fsz ----------------
+static void findFszLinksInHtml(const String& html, std::vector<String>& outLinks) {
+  int pos = 0;
+  while (true) {
+    int idx = html.indexOf(".fsz", pos);
+    if (idx < 0) break;
+
+    int L = -1;
+    for (int i = idx; i >= 0; --i) {
+      if (html[i] == '"' || html[i] == '\'') { L = i; break; }
+      if (html[i] == '>') break;
+    }
+    int R = -1;
+    for (size_t i = idx; i < html.length(); ++i) {
+      if (html[i] == '"' || html[i] == '\'') { R = (int)i; break; }
+      if (html[i] == '<') break;
+    }
+    if (L >= 0 && R > L) {
+      String href = html.substring(L + 1, R);
+      href.trim();
+      if (href.endsWith(".fsz")) outLinks.push_back(href);
+    }
+    pos = idx + 4;
+  }
+}
+
+//--- extrait la version float depuis un nom "0.00.fsz" -------------------------
+static bool extractFloatVersionFromFilename(const String& filename, double& outVer) {
+  if (!filename.endsWith(".fsz")) return false;
+  // isole le nom de fichier sans chemin
+  int slash = filename.lastIndexOf('/');
+  String base = (slash >= 0) ? filename.substring(slash + 1) : filename;
+  // retire l'extension
+  String verStr = base.substring(0, base.length() - 4); // enlève ".fsz"
+  verStr.trim();
+  // contrôle rapide du format (chiffres + un point, ex: 0.00)
+  bool hasDot = false;
+  for (size_t i = 0; i < verStr.length(); ++i) {
+    char c = verStr[i];
+    if (c == '.') {
+      if (hasDot) return false; // un seul point attendu
+      hasDot = true;
+    } else if (!isDigit(c)) {
+      return false;
+    }
+  }
+  if (!hasDot) return false;
+
+  outVer = verStr.toFloat(); // double-compatible
+  return true;
+}
+
+/**
+ * Recherche la version distante maximale au format "float" (ex: 0.00.fsz),
+ * compare avec currentVersion ("0.00"), et si >, ouvre le flux HTTP sur ce fichier.
+ *
+ * @param baseUrl           URL listant les fichiers (index HTML)
+ * @param currentVersion    version locale (String, ex "1.25")
+ * @param outHttp           HttpClient (amcewen) — retour: flux ouvert sur le fichier si maj
+ * @param outRemoteVersion  version distante retenue (String)
+ * @param outFileUrl        URL absolue du fichier choisi
+ * @return true si une nouvelle version est trouvée ET que le flux fichier est ouvert
+ */
+bool findNewerFszAndOpenStream(const String& baseUrl,
+                               const String& currentVersion,
+                               HttpClient& outHttp,
+                               String& outRemoteVersion,
+                               String& outFileUrl)
+{
+  DEBUG_PRINT("Listing: %s", baseUrl.c_str());
+
+  // 1) GET du listing
+  UrlParts u = parseUrl(baseUrl);
+  if (!u.ok) return false;
+
+  DEBUG_PRINT("\t host: %s, port:%d, path: %s", u.host.c_str(), u.port, u.path.c_str());  
+
+  outHttp.stop();
+  int err = outHttp.startRequest(u.host.c_str(), u.port, u.path.c_str(), "GET", "ESP32HttpClient/1.0");
+  if (err != 0) {
+    DEBUG_PRINT("startRequest listing err=%d", err);
+    return false;
+  }
+  int status = outHttp.responseStatusCode();
+  if (status != 200) {
+    DEBUG_PRINT("HTTP %d sur %s", status, baseUrl.c_str());
+    outHttp.stop();
+    return false;
+  }
+  outHttp.skipResponseHeaders();
+
+  String html;
+  while (outHttp.available()) {
+    char c = outHttp.read();
+    if (html.length() < 200000) html += c;
+  }
+  outHttp.stop();
+
+  // 2) collecte des liens .fsz
+  std::vector<String> hrefs;
+  findFszLinksInHtml(html, hrefs);
+  if (hrefs.empty()) {
+    DEBUG_PRINT("Aucun .fsz trouvé");
+    return false;
+  }
+
+  // 3) sélection de la version max (comparaison en double)
+  double cur = currentVersion.toFloat();
+  bool foundNewer = false;
+  double best = -1.0;
+  String bestUrl, bestVerStr;
+
+  for (const auto& href : hrefs) {
+    String absUrl = makeAbsoluteUrl(baseUrl, href);
+    double v = -1.0;
+    if (!extractFloatVersionFromFilename(absUrl, v)) continue;
+
+    if (!foundNewer || v > best) {
+      foundNewer = true;
+      best = v;
+      bestUrl = absUrl;
+
+      // conserver le string affichable tel que repéré (avec 2 décimales si c’est ton format)
+      int slash = absUrl.lastIndexOf('/');
+      String base = (slash >= 0) ? absUrl.substring(slash + 1) : absUrl; // "0.00.fsz"
+      bestVerStr = base.substring(0, base.length() - 4);                 // "0.00"
+    }
+  }
+
+  if (!foundNewer) {
+    DEBUG_PRINT("Aucune version valide trouvée");
+    return false;
+  }
+  if (!(best > cur)) { // strictement supérieure
+    DEBUG_PRINT("Version distante %.2f <= locale %.2f", best, cur);
+    return false;
+  }
+
+  // 4) ouvrir le flux sur le fichier retenu
+  UrlParts f = parseUrl(bestUrl);
+  if (!f.ok) return false;
+
+  outHttp.stop();
+  err = outHttp.startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
+  if (err != 0) {
+    DEBUG_PRINT("startRequest fichier err=%d", err);
+    return false;
+  }
+  int st2 = outHttp.responseStatusCode();
+  if (st2 != 200) {
+    DEBUG_PRINT("HTTP fichier %d", st2);
+    outHttp.stop();
+    return false;
+  }
+  outHttp.skipResponseHeaders();
+
+  outFileUrl = bestUrl;
+  outRemoteVersion = bestVerStr;
+  DEBUG_PRINT("Nouvelle version: %s @ %s", outRemoteVersion.c_str(), outFileUrl.c_str());
+  // le flux est maintenant lisible via outHttp.read()/available()
+  return true;
+}
+
+
+
 
 /*void webServerTaskWrapper(void * parameter){
   while(true){
@@ -1262,6 +1482,29 @@ void brightness_menu_item_selected(MenuComponent* p_menu_component) {
   app.triggerRedraw(); // force redraw*/
   screen.id = SCREEN_UTILS;
   screen.state = STATE_UTILS_BRIGHTNESS;
+}
+
+void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component) {
+  
+  if (hwm.network->state == CONNECTED){
+    HttpClient httpClient(*hwm.network->client);
+    String newVersion;
+    String fwURL;
+    String serverRoot = *systemCfg.getString(S_SERVER_ROOT);
+    if (serverRoot == "") serverRoot = "infrafast.fr";
+        
+
+    findNewerFszAndOpenStream(
+      concatStrings("http://",serverRoot,"/firmware/"),
+      _V,
+      httpClient,
+      newVersion,
+      fwURL
+    );
+  }else{
+    DEBUG_PRINT("\nNetwork disconnected");
+  }
+
 }
 
 void save_profile_item_selected(MenuComponent* p_menu_component) {

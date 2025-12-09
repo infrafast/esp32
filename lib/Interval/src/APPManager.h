@@ -157,6 +157,7 @@ void reset_item_selected(MenuComponent* p_menu_component);
 void shutdown_menu_item_selected(MenuComponent* p_menu_component);
 void menu_selected(MenuComponent* p_menu_component);
 void brightness_menu_item_selected(MenuComponent* p_menu_component);
+void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component);
 
 void handleConfigConnection();  // 
 
@@ -394,6 +395,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     const char* resetMenuScreen{ICON_RESET":RESET"};
     const char* shutdownMenuString{ICON_POWER":OFF"};
     const char* brightnessMenuString{ICON_BRIGHTNESS":BRIGHTNESS"};
+    const char* fmwUpdateMenuString{ICON_FWUPDATE":FIRMWARE"};
 
     #define NO_BANK_MENU_ITEM "No bank"
 
@@ -760,7 +762,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       reset_menu_item = new MenuItem(resetMenuScreen,&reset_item_selected);                // to be removed
       shutdown_menu_item = new MenuItem(shutdownMenuString, &shutdown_menu_item_selected);
       brightness_menu_item = new MenuItem(brightnessMenuString, &brightness_menu_item_selected);
-
+      fmw_update_menu_item = new MenuItem(fmwUpdateMenuString, &fmwUpdate_menu_item_selected);
       
       ms.get_root_menu().add_item(back_menu_item);
       ms.get_root_menu().add_item(info_menu_item);
@@ -770,6 +772,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       ms.get_root_menu().add_menu(profile_menu_item);
       ms.get_root_menu().add_item(shutdown_menu_item);
       ms.get_root_menu().add_item(brightness_menu_item);
+      ms.get_root_menu().add_item(fmw_update_menu_item);
       profile_menu_item->add_item(back_menu_item);
       profile_menu_item->add_item(save_profile_menu_item);
 
@@ -2991,6 +2994,7 @@ void setup() {
         "\"" S_CONFIG_FILE "\":\"" DEFAULT_CONFIG_FILE_NAME "\","
         "\"" S_AP_NAME "\":\"" INTERVAL_PRODUCT_NAME "\","
         "\"" S_LAST_USED_SSID "\":\"intervalmix1\","
+        "\"" S_SERVER_ROOT "\":\"infrafast.fr\","
         "\"" S_LANG "\":\"francais\","
         "\"" S_FADERSPEED "\":\"157\","
         "\"" S_SSID "\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},"
@@ -3053,6 +3057,8 @@ void setup() {
     MenuItem* reset_menu_item;   
     MenuItem* shutdown_menu_item; 
     MenuItem* brightness_menu_item; 
+    MenuItem* fmw_update_menu_item; 
+
 
     void refreshBankMenu(){
       if (bankMenu != nullptr) delete bankMenu;

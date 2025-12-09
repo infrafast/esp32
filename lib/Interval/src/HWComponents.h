@@ -836,7 +836,6 @@ class Network : public HWComponent2State{
       return data;
     }
 
-
     void stopWiFi(){
       DEBUG_PRINT("\n---------> stopWiFi() : WiFiEnabled = false <------------");
       WiFiEnabled = false;
@@ -940,6 +939,18 @@ class WiFiEth : public Network{
         // power off the ethernet
         stopEthernet();
       }
+      wipeWifiConfig();
+    }    
+
+    void wipeWifiConfig() {
+      // Do the same as Erase Flash
+      // 1) Couper le Wi-Fi et effacer les creds Arduino dans la NVS
+      //    (2e paramètre = erase NVS des creds)
+      WiFi.disconnect(true /*wifioff*/, true /*erase*/);
+      // 2) Rétablir la config Wi-Fi par défaut côté IDF (efface aussi les profils)
+      esp_wifi_restore();
+      // 3) Éviter de réécrire automatiquement plus tard
+      WiFi.persistent(false);
     }    
 
     void reset(){
@@ -1122,7 +1133,12 @@ class WiFiEth : public Network{
       WiFi.setSleep(false); // Désactiver le mode veille Wi-Fi
       WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); // Reconfigurer DHCP    */
 
-      DEBUG_PRINT("\nstartWifi(%s,%s), wifiEnabled=%d",SSID.c_str(),pwd.c_str(),WiFiEnabled);                
+      DEBUG_PRINT("\nstartWifi(%s,%s), wifiEnabled=%d, status: %d, MAC:%s",SSID.c_str(),pwd.c_str(),WiFiEnabled,WiFi.status(),WiFi.macAddress().c_str());                
+      // Hostname avant begin
+      //WiFi.setHostname("esp32-client");
+      // Pas d’économie d’énergie pendant les tests
+      //esp_wifi_set_ps(WIFI_PS_NONE);      
+      //WiFi.disconnect(false,true);      
       WiFi.begin(ssid,pwd);
       lastWiFiAttempt = millis();      
       _newWifiAttempt = false;      
@@ -1217,14 +1233,16 @@ class WiFiEth : public Network{
               if (_newWifiAttempt){
                 //WiFi.begin("infrafast","Mf9k8iie2");
                 
-
-                  /* IF CONFIG = STATIC IP {
+                   /* IF CONFIG = STATIC IP {
                     IP = config.getIP();
                     // Configurer l'adresse IP statique
                     if (!WiFi.config(IP, gateway, subnet)) {
                       DEBUG_PRINT("\nStatic WifI IP failed");
                     }
                   }*/
+                  // DHCP
+                WiFi.config(INADDR_ANY, INADDR_ANY, INADDR_ANY);
+
                 String pass = *wiFiList->getString(SSID);    // getting the password for the given ssid
                 startWifi(SSID,pass);
               }              
@@ -1344,7 +1362,7 @@ class WiFiEth : public Network{
             wsEthClient->onError(socketClientOnErrorCallback);
             wsEthClient->onClose(socketClientOnClose);            
           }
-          //checkInternet();
+          checkInternet();
           DEBUG_PRINT("\n...all network component begin() done");
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
