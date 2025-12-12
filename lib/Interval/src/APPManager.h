@@ -400,8 +400,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     #define NO_BANK_MENU_ITEM "No bank"
 
     ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
-      
+
     BankNavigator* navBar = nullptr;
+
+    struct PromptParameters{
+      String message;
+      String labels[3];
+      uint8_t targetScreens[3];
+      uint32_t timeoutMs;
+    };
+
+    PromptParameters promptParams;
+    float promptRemainingTime = 0;
+    float promptTimeoutMax = 1;
+    unsigned long promptStartTime = 0;
+    String promptLedProperties[3] = {"green","blue","red"};
 
     ///////////////// INTERFACES ///////////////////
     //OSCInterface osc;
@@ -440,6 +453,17 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       Log::init(this);
 
       wss = nullptr;      // this is to make sure the template is correctly void
+
+      promptParams.message = "";
+      promptParams.labels[0] = "";
+      promptParams.labels[1] = "";
+      promptParams.labels[2] = "";
+      promptParams.targetScreens[0] = SCREEN_MENU;
+      promptParams.targetScreens[1] = SCREEN_MENU;
+      promptParams.targetScreens[2] = SCREEN_MENU;
+      promptParams.timeoutMs = 0;
+      promptTimeoutMax = 1;
+      promptRemainingTime = 0;
        
       hwm->network->userInternetCallback = [this](bool* online) {
           this->internetCallBack(online);
@@ -921,6 +945,38 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     //////////////////////////////////////////////////////////////
     ////                BUTTONS CALLBACKS                  ///////
     //////////////////////////////////////////////////////////////
+    void branchFromPrompt(uint8_t targetScreen){
+      if (targetScreen < SCREEN_MAX){
+        screen.id = targetScreen;
+      }
+    }
+
+    void handlePromptClick(uint8_t buttonID){
+      if (buttonID == hwm->buttons[LEFTB]->getID()) branchFromPrompt(promptParams.targetScreens[0]);
+      else if (buttonID == hwm->buttons[MIDDLEB]->getID() || buttonID == hwm->onOff.getID()) branchFromPrompt(promptParams.targetScreens[1]);
+      else if (buttonID == hwm->buttons[RIGHTB]->getID()) branchFromPrompt(promptParams.targetScreens[2]);
+    }
+
+    void resetPromptTimer(){
+      promptStartTime = millis();
+      promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
+      promptRemainingTime = promptParams.timeoutMs;
+    }
+
+    void handlePromptTimeout(){
+      promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
+      if (promptParams.timeoutMs == 0){
+        promptRemainingTime = 0;
+        return;
+      }
+      unsigned long elapsed = millis() - promptStartTime;
+      if (elapsed >= promptParams.timeoutMs){
+        branchFromPrompt(promptParams.targetScreens[1]);
+      }else{
+        promptRemainingTime = promptParams.timeoutMs - elapsed;
+      }
+    }
+
     void menuSwitchCallback(uint8_t buttonID, unsigned long time){
       if (screen.id == SCREEN_MENU){   //set GUI
         restoreScreen();
@@ -938,13 +994,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           
         break;
         case SCREEN_MENU:
-          handleMenuButton(buttonID);   
+          handleMenuButton(buttonID);
         break;
         case SCREEN_BANK_SWITCH:
           handleSwitchScreen(buttonID);
         break;
         case SCREEN_PROMPT:
-
+          handlePromptClick(buttonID);
         break;
         case SCREEN_UTILS:
           switch(screen.state){
@@ -1790,10 +1846,13 @@ void setup() {
         //DEBUG_PRINT("\nDEBUG DONE");
         //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
         if (gui->transparency) gui->clearScreenBuffer();
-        oldScreen.value = screen.value;      
+        if (screen.id == SCREEN_PROMPT){
+          resetPromptTimer();
+        }
+        oldScreen.value = screen.value;
         // save the bank to restore in case of restoreScreen
         if (screen.id == SCREEN_BANK){
-          hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_BANK);    
+          hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_BANK);
           hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state);         
         }
       }
@@ -1832,9 +1891,9 @@ void setup() {
         break;
         case SCREEN_UTILS:
           switch(screen.state){
-            case STATE_UTILS_CONNECTCONFIGMEDIA:                            
+            case STATE_UTILS_CONNECTCONFIGMEDIA:
               if (hwm->configMedia->refreshed){
-                handleConfigConnection();                 
+                handleConfigConnection();
               } 
             break;
             case STATE_UTILS_CONNECTWEBAPP:              
@@ -1852,11 +1911,14 @@ void setup() {
             break;
           }
         break;
-        case SCREEN_MENU:          
-          if (refreshed) menuSystemFullRefresh(); 
+        case SCREEN_PROMPT:
+          handlePromptTimeout();
         break;
-        case SCREEN_BANK_SWITCH:          
-          if (refreshed) menuSwitchBankFullRefresh(); 
+        case SCREEN_MENU:
+          if (refreshed) menuSystemFullRefresh();
+        break;
+        case SCREEN_BANK_SWITCH:
+          if (refreshed) menuSwitchBankFullRefresh();
         break;
         case SCREEN_BYE:
           switch(screen.state){ 
