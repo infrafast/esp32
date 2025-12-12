@@ -22,6 +22,7 @@
 
 #define INTERVAL_PRODUCT_NAME "footswitch"
 #define INTERVAL_MANUFACTURER "interval"
+#define INTERVAL_DEFAULT_SERVER "82.65.4.93"  //"interval.fr"
 
 #define WEBAPP_PATH "/webapp"
 
@@ -1096,13 +1097,31 @@ void scanNetworksTaskWrapper(void * parameter){
 void pingTask(void* parameter) {
   // Récupérer les paramètres passés à la tâche
   PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
-  DEBUG_PRINT("\npingTaskthread running=>%s",params->ipAddress);
+  //if (hwm.network->media == WIFI_MEDIA){
+    DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
+    if (Ping.ping(params->host.c_str())) {
+      params->callback(true);  // Appel du callback en cas de succès
+    } else {
+      params->callback(false);  // Appel du callback en cas d'échec
+    }
+  //}else{
+    DEBUG_PRINT("\nETHpingTaskthread running=>%s",params->host.c_str());  
+    /*SOCKET pingSocket = 0;
+    EthernetICMPPing ping(pingSocket, (uint16_t)random(0, 255));
+    IPAddress IPaddr;
+    EthernetICMPEchoReply echoReply = ping(IPaddr.fromString(params->host), 4);
+    if (echoReply.status == SUCCESS)
+    {
+      //DEBUG_PRINT("Reply[%d] from: %d.%d.%d.%d: bytes=%d time=%ldms TTL=%d",echoReply.data.seq,echoReply.addr[0],echoReply.addr[1],echoReply.addr[2],echoReply.addr[3],REQ_DATASIZE,millis() - echoReply.data.time,echoReply.ttl);
+      params->callback(true);  // Appel du callback en cas de succès
+    }
+    else
+    {
+      params->callback(false);  // Appel du callback en cas de succès
+    }*/
 
-  if (Ping.ping(params->ipAddress.c_str())) {
-    params->callback(true);  // Appel du callback en cas de succès
-  } else {
-    params->callback(false);  // Appel du callback en cas d'échec
-  }
+  //}
+
 
   // Libérer la mémoire allouée pour les paramètres
   delete params;
@@ -1490,9 +1509,7 @@ void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component) {
     HttpClient httpClient(*hwm.network->client);
     String newVersion;
     String fwURL;
-    String serverRoot = *systemCfg.getString(S_SERVER_ROOT);
-    if (serverRoot == "") serverRoot = "infrafast.fr";
-        
+    String serverRoot = *systemCfg.getString(S_SERVER_ROOT,INTERVAL_DEFAULT_SERVER);      
 
     findNewerFszAndOpenStream(
       concatStrings("http://",serverRoot,"/fwupdate/"),

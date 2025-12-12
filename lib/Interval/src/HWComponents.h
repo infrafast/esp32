@@ -6,7 +6,9 @@
 #include <EthernetUdp.h>
 #include <WiFiGeneric.cpp>   // for tipipinit
 #include <ArduinoOTA.h>           // for WIFI_MEDIA program upload 
-#include <ESP32Ping.h>
+#include <ESP32Ping.h>      // for WiFi
+//#include <EthernetICMP.h>   // for Ethernet tis library crash at runtime
+//#include <ICMPPing.h>
 #include <HttpClient.h> // amcewen/HttpClient@^2.2.0 as opposed to the std lib #include <HTTPClient.h> which only handle WiFIclient
 #include <WiFiClientSecure.h>
 #include "BluetoothSerial.h"   //required for OSC
@@ -590,7 +592,7 @@ public:
     DEBUG_PRINT("\nPingTaskParameters deleted");
   }
 
-  String ipAddress;
+  String host;
   PingCallback callback;
 };
 
@@ -1402,10 +1404,18 @@ class WiFiEth : public Network{
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
-    virtual void asyncPing(String ipAddress, PingCallback callBack) {
+    virtual void asyncPing(String host, PingCallback callBack) {
       // Allouer la mémoire pour stocker les paramètres de la tâche
       PingTaskParameters* params = new PingTaskParameters;
-      params->ipAddress = ipAddress;
+
+      IPAddress ipAddr; 
+      // NB: host resolution doesnt work
+      if (WiFi.hostByName(host.c_str(), ipAddr) == 1) params->host = ipAddr.toString();
+      else {
+        DEBUG_PRINT("\nasyncPing(%s) hostname unresovable",host.c_str());
+        return;
+      }
+
       params->callback = callBack;
       // Créer la tâche FreeRTOS pour le ping
       xTaskCreate(
@@ -1416,7 +1426,7 @@ class WiFiEth : public Network{
         2,                // Priorité
         &pingTaskHandle   // Handle de la tâche
       );
-      DEBUG_PRINT("\nasyncPing task created");
+      DEBUG_PRINT("\nasyncPing(%s) task created",host.c_str());
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
@@ -1459,7 +1469,8 @@ class WiFiEth : public Network{
     void checkInternet(){
       DEBUG_PRINT("\n\n\tcheckInternet => ");
       // Utiliser des lambdas pour passer les méthodes membres comme callbacks
-      asyncPing("8.8.8.8", 
+      asyncPing(
+        "8.8.8.8",
         [&](bool online) { onInternetPing(online); }
       );
       // latency
