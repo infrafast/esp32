@@ -1819,7 +1819,26 @@ void startupScreenBuilder(uint8_t id){
   gui.drawJpg(0,0,"/webapp/logo.jpg");
 }
 
-void promptScreenBuiler(uint8_t id){}
+void promptScreenBuiler(uint8_t id){
+  GUI::cls(GUI::menuBackGroundColor);
+
+  int16_t ledY = GUI::midScreenVertical;
+  uint16_t ledRadius = MENU_ICON_SIZE/2;
+  uint16_t arcRadius = ledRadius + 12;
+  int16_t labelY = ledY + ledRadius + SIZE_18;
+
+  gui.add(new TextArea(&app.promptParams.message, TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+
+  gui.add(new Led(&GUI::hquarter1xPos, &ledY, ledRadius, &app.promptLedProperties[0], &GUI::fullBrightness));
+  gui.add(new Led(&GUI::hquarter2xPos, &ledY, ledRadius, &app.promptLedProperties[1], &GUI::fullBrightness));
+  gui.add(new Led(&GUI::hquarter3xPos, &ledY, ledRadius, &app.promptLedProperties[2], &GUI::fullBrightness));
+
+  gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::hquarter2xPos, &ledY, arcRadius, &GUI::menuActiveIconColor, &GUI::transparentColor, 270));
+
+  gui.add(new Label(&app.promptParams.labels[0], Align::Center,&GUI::hquarter1xPos, &labelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(&app.promptParams.labels[1], Align::Center,&GUI::hquarter2xPos, &labelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(&app.promptParams.labels[2], Align::Center,&GUI::hquarter3xPos, &labelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
+}
 
 
 void addLeftRightIcons(){
