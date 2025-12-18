@@ -54,6 +54,12 @@ void defaultWizardStepFlow();
 void startAnimationThread(AnimationTaskParams* param);
 void stopAnimationThread();
 
+bool findNewerFszAndOpenStream(const String& baseUrl,
+                               const String& currentVersion,
+                               HttpClient& outHttp,
+                               String& outRemoteVersion,
+                               String& outFileUrl);
+
 // Prototypage de la fonction de gestion de la connexion
 //void handleWebConnection(void *parameter);
 
@@ -76,9 +82,6 @@ enum{
 
 //sub screen (state) 
 enum{
-  STATE_PROMPT_SEQUENCE_X,
-  STATE_PROMPT_SEQUENCE_Y,
-  STATE_PROMPT_SEQUENCE_Z,
   STATE_WIZARD_LANG_STEP1,
   STATE_WIZARD_CONNECT_CONFIG_STEP2,
   STATE_WIZARD_CONNECT_NETWORK_STEP3,
@@ -89,8 +92,10 @@ enum{
   STATE_UTILS_CONNECTCONFIGMEDIA,
   STATE_UTILS_CONNECTWEBAPP,
   STATE_UTILS_WEBAPPCONNECTED,
-  STATE_BYE_GOSLEEP_MESSAGE,
+  STATE_UTILS_DOWNLOAD_FIRMWARE,
+  STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
   STATE_BYE_MODAL_MESSAGE,
+  STATE_BYE_GOSLEEP_MESSAGE
 };
 
 
@@ -376,7 +381,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     Menu* langMenu = nullptr;
     Menu* confMenu = nullptr;  
     String menuTopText=" ", vBatLabel; //menuTitle
-    String menuItemIcon[3]={"","",""}; // left, mid, right
+
+    struct MenuItems{
+      String icon="";
+      uint16_t color = GUI::menuInactiveIconColor;
+    }menuItems[3];
+
     String menuBottomLabel=" ";
 
     uint16_t menuActiveIconColor;
@@ -407,6 +417,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       String message;
       String labels[3];
       uint8_t targetScreens[3];
+      uint8_t targetState[3];
       uint32_t timeoutMs;
     };
 
@@ -465,7 +476,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       promptTimeoutMax = 1;
       promptRemainingTime = 0;
        
-      hwm->network->userInternetCallback = [this](bool* online) {
+      hwm->network->internetCallback = [this](bool* online) {
           this->internetCallBack(online);
       };         
 
@@ -494,6 +505,62 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     void internetCallBack(bool* online){
+      static bool firstStartup = true;
+      ///////////////////////// do what application manager has to do when internet is connected/disconnected      
+      if (firstStartup){
+        firstStartup = false;
+        // internet check is only done at first startup to avoid slowing down workflow when network disconnect and reconnect
+        if (*online){
+          HttpClient httpClient(*hwm->network->client);
+          String newVersion;
+          String fwURL;
+          String serverRoot = *systemCfg.getString(S_HOSTNAME,INTERVAL_DEFAULT_HOSTNAME);      
+          bool fwAvailable = findNewerFszAndOpenStream(
+            concatStrings("http://",serverRoot,"/fwupdate/"),
+            _V,
+            httpClient,
+            newVersion,
+            fwURL
+          );
+          // enable or disable the firmware update menu item accordingly
+          fmw_update_menu_item->setEnabled(fwAvailable);
+          if (screen.id == SCREEN_MENU) triggerRedraw();  // this s to update firmware menu item to be actif or disabled uppon internet check                      
+          DEBUG_PRINT("\n================> %s fmw_update_menu_item", *online ? "enable":"disable");          
+          // BRANCH TO SCREEN PROMPT IF CONFIG ALLOWS IT          
+          if (fwAvailable){
+            if (systemCfg.getBool(S_SWUPDATE_PROMPT)){            
+              // prepare software update promnpt screen
+              promptParams.message = concatStrings(*lang.getString("Update to firmware")," v",newVersion,"?");              
+              
+              promptParams.labels[0] = *lang.getString("Yes");
+              promptParams.targetScreens[0] = SCREEN_UTILS;  // go to utils screen to perform the update
+              promptParams.targetState[0] = STATE_UTILS_DOWNLOAD_FIRMWARE;
+              
+              promptParams.labels[1] = *lang.getString("No");              
+              promptParams.targetScreens[1] = SCREEN_BANK;   // back to banks
+              promptParams.targetState[1] = hwm->persistants.getUChar(PERSISTANT_SCREEN_STATE,0);               
+
+              promptParams.labels[2] = *lang.getString("No, never ask");              
+              promptParams.targetScreens[2] = SCREEN_UTILS;  // diable auto update prompt in utils screen
+              promptParams.targetState[2] = STATE_UTILS_DISABLE_SWUPDATE_PROMPT;
+              
+              promptParams.timeoutMs = 5000;                // 5s timeout
+              DEBUG_PRINT("\nGoto screen prompt"); 
+              screen.id = SCREEN_PROMPT;              // branch prompt screen
+            }else{
+              DEBUG_PRINT("\nStartup update disabled in config");                
+            }
+          }else{
+            DEBUG_PRINT("\n≤n*** No firmware update ***");          
+          }
+        }else{
+          DEBUG_PRINT("\nNetwork disconnected");          
+        }
+       
+      }else{
+        DEBUG_PRINT("\nStartup done, skipping internet checks");
+      }                 
+      ///////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
       evt.data = online;
       fireEvent(&evt);
@@ -629,14 +696,16 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     }
 
-    #define DEFAULT_CONFIG_FILE_NAME "default"
-
+    #define DEFAULT_PROFILE "default"
     #define SYSTEM_FILE_NAME "/settings.sys"
+
     void clearConfig(){
       // add a callback usere function userClearConfig()
       // delete all config files here, add the code to iterate FS on *.conf
-      LittleFS.remove(userCfg.filename);
-      LittleFS.remove(DEFAULT_CONFIG_FILE_NAME);
+
+      // ... remove (*.user)
+      // ... remove (*.bank)
+
       // delete systemCfg settings
       LittleFS.remove(SYSTEM_FILE_NAME);
       hwm->persistants.clear();
@@ -739,8 +808,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       systemCfg.load(SYSTEM_FILE_NAME,defaultSysConf);  
       applySystemSettings();
 
-      String currentProfile = getCurrentProfileName();
-      userCfg.load(currentProfile+".user",defaultUserConf);            
+      userCfg.load(concatStrings(concatStrings("/", *systemCfg.getString(S_PROFILE, DEFAULT_PROFILE)), ".user"),defaultUserConf);            
 
       #ifdef DEBUG
         String s;
@@ -787,6 +855,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       shutdown_menu_item = new MenuItem(shutdownMenuString, &shutdown_menu_item_selected);
       brightness_menu_item = new MenuItem(brightnessMenuString, &brightness_menu_item_selected);
       fmw_update_menu_item = new MenuItem(fmwUpdateMenuString, &fmwUpdate_menu_item_selected);
+      fmw_update_menu_item->setEnabled(false); // disabled by default, enabled when internet is available
       
       ms.get_root_menu().add_item(back_menu_item);
       ms.get_root_menu().add_item(info_menu_item);
@@ -853,15 +922,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    String getCurrentProfileName(){
-      return concatStrings("/", *systemCfg.getString(S_CONFIG_FILE, DEFAULT_CONFIG_FILE_NAME));
-    }
-
     void startup(uint8_t startupScreen){          
       // save the screen to be called (wiuard or bank)
       hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);            
       // we init banks and then go to banks or fail screen
-      String bankFilename = concatStrings(getCurrentProfileName(), ".bank");
+      String bankFilename = concatStrings(concatStrings("/", *systemCfg.getString(S_PROFILE, DEFAULT_PROFILE)), ".bank");
       loadBanks(bankFilename);
       if (deserializeBanks(&banksDefinition) == nullptr){
         menuTopText = *lang.getString("Bank creation");
@@ -873,6 +938,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     // EVENTS HANDLING
+
 
     void onOffCallback(Event* event){
       ButtonEvent* btnEvt = (ButtonEvent*) event->data;
@@ -945,33 +1011,41 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     //////////////////////////////////////////////////////////////
     ////                BUTTONS CALLBACKS                  ///////
     //////////////////////////////////////////////////////////////
-    void branchFromPrompt(uint8_t targetScreen){
+    void branchFromPrompt(uint8_t target){
+
+      uint8_t targetScreen = promptParams.targetScreens[target];
+
       if (targetScreen < SCREEN_MAX){
         screen.id = targetScreen;
+        screen.state = promptParams.targetState[target];
       }
     }
 
     void handlePromptClick(uint8_t buttonID){
-      if (buttonID == hwm->buttons[LEFTB]->getID()) branchFromPrompt(promptParams.targetScreens[0]);
-      else if (buttonID == hwm->buttons[MIDDLEB]->getID() || buttonID == hwm->onOff.getID()) branchFromPrompt(promptParams.targetScreens[1]);
-      else if (buttonID == hwm->buttons[RIGHTB]->getID()) branchFromPrompt(promptParams.targetScreens[2]);
+      if (buttonID == hwm->buttons[LEFTB]->getID()) branchFromPrompt(0);
+      else if (buttonID == hwm->buttons[MIDDLEB]->getID() || buttonID == hwm->onOff.getID()) branchFromPrompt(1);
+      else if (buttonID == hwm->buttons[RIGHTB]->getID()) branchFromPrompt(2);
     }
 
-    void resetPromptTimer(){
+   void resetPromptTimer(){
       promptStartTime = millis();
       promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
       promptRemainingTime = promptParams.timeoutMs;
+      DEBUG_PRINT("\nPrompt: %d/%d ms",promptRemainingTime,promptTimeoutMax);            
     }
 
     void handlePromptTimeout(){
       promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
+
+      DEBUG_PRINT("\nhandlePromptTimeout: %d",promptTimeoutMax);     
+
       if (promptParams.timeoutMs == 0){
         promptRemainingTime = 0;
         return;
       }
       unsigned long elapsed = millis() - promptStartTime;
       if (elapsed >= promptParams.timeoutMs){
-        branchFromPrompt(promptParams.targetScreens[1]);
+        branchFromPrompt(1);  // timeout always branch to middle button action
       }else{
         promptRemainingTime = promptParams.timeoutMs - elapsed;
       }
@@ -1909,6 +1983,11 @@ void setup() {
                 handleConfigConnection();
               }
             break;
+            case STATE_UTILS_DISABLE_SWUPDATE_PROMPT:
+              systemCfg.setValue(S_SWUPDATE_PROMPT,"false");
+              systemCfg.save();
+              restoreScreen();
+            break;
           }
         break;
         case SCREEN_PROMPT:
@@ -2209,7 +2288,6 @@ void setup() {
     void menuSystemFullRefresh(){  
       //DEBUG_PRINT("\nmenuSystemFullRefresh");
       setRootMenuItems(&ms);
-      GUI::glowingGoldColor.value = &menuActiveIconColor;
       menuTopText = *lang.getString(" "); // empty message
     }
 
@@ -2223,39 +2301,65 @@ void setup() {
 
       cp_m_comp = menu->get_current_component();
       const char* menuString = cp_m_comp->get_name();
-      menuItemIcon[1] = getIconFromString(menuString);
+      menuItems[1].icon = getIconFromString(menuString);  
+           
+      if (cp_m_comp->isEnabled()){
+        // if menu item is enabled, we use the glowing color
+        GUI::glowingGoldColor.value = &menuActiveIconColor;
+        // then based on its internal state (means utcome of the select action which sets the success), we either display it red to indicate an error happens or old
+        if (cp_m_comp->success) GUI::glowingGoldColor.baseColor = TFT_GOLD;
+        else GUI::glowingGoldColor.baseColor = TFT_RED;        
+      }else{
+        menuActiveIconColor = GUI::menuGreydoutColor;
+        GUI::glowingGoldColor.value = &GUI::unUsedColor;
+      }
+
       selection = menu->get_current_component_num();    
 
       //DEBUG_PRINT("\nsetRootMenuItems name:%s numItem:%i currentComponentName: %s, menuIcon:[%s]",menu->get_name(),numItem,menuString, menuItemIcon[1]);
 
       menuBottomLabel = *lang.getString(getNameFromString(menuString));
       if (numItem == 1){
-          menuItemIcon[0] = " ";
-          menuItemIcon[2] = " ";
+          menuItems[0].icon = " ";
+          menuItems[2].icon = " ";
       }else if (numItem == 2){
         if (selection == numItem-1){ 
           // left = right = first item
-          menuItemIcon[0] = getIconFromString(menu->get_menu_component(0)->get_name());
-          menuItemIcon[2] = getIconFromString(menu->get_menu_component(0)->get_name());
+          menuItems[0].icon = getIconFromString(menu->get_menu_component(0)->get_name());
+          menuItems[2].icon = getIconFromString(menu->get_menu_component(0)->get_name());
+          
+          menuItems[0].color = menu->get_menu_component(0)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;
+          menuItems[2].color = menu->get_menu_component(0)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;          
         }else{
           // left = right = second ite,
-          menuItemIcon[0] = getIconFromString(menu->get_menu_component(1)->get_name());
-          menuItemIcon[2] = getIconFromString(menu->get_menu_component(1)->get_name());
+          menuItems[0].icon = getIconFromString(menu->get_menu_component(1)->get_name());
+          menuItems[2].icon = getIconFromString(menu->get_menu_component(1)->get_name());
           
+          menuItems[0].color = menu->get_menu_component(1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
+          menuItems[2].color = menu->get_menu_component(1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;          
         }
       }else if (numItem > 2){
         if (selection == numItem-1){ // last item
           // left icon = -1, right icon = first item
-          menuItemIcon[0] = getIconFromString(menu->get_menu_component(selection-1)->get_name());
-          menuItemIcon[2] = getIconFromString(menu->get_menu_component(0)->get_name());
+          menuItems[0].icon = getIconFromString(menu->get_menu_component(selection-1)->get_name());
+          menuItems[2].icon = getIconFromString(menu->get_menu_component(0)->get_name());
+
+          menuItems[0].color = menu->get_menu_component(selection-1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
+          menuItems[2].color = menu->get_menu_component(0)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;          
         }else if (selection == 0){ // first item
           // left icon = last item, right icon = +1
-          menuItemIcon[0] = getIconFromString(menu->get_menu_component(numItem-1)->get_name());
-          menuItemIcon[2] = getIconFromString(menu->get_menu_component(selection+1)->get_name());
+          menuItems[0].icon = getIconFromString(menu->get_menu_component(numItem-1)->get_name());
+          menuItems[2].icon = getIconFromString(menu->get_menu_component(selection+1)->get_name());
+
+          menuItems[0].color = menu->get_menu_component(numItem-1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
+          menuItems[2].color = menu->get_menu_component(selection+1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;          
         }else{ // any item in between
           // normal case, we take the -1 and +1 item
-          menuItemIcon[0] = getIconFromString(menu->get_menu_component(selection-1)->get_name());
-          menuItemIcon[2] = getIconFromString(menu->get_menu_component(selection+1)->get_name());
+          menuItems[0].icon = getIconFromString(menu->get_menu_component(selection-1)->get_name());
+          menuItems[2].icon = getIconFromString(menu->get_menu_component(selection+1)->get_name());
+
+          menuItems[0].color = menu->get_menu_component(selection-1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
+          menuItems[2].color = menu->get_menu_component(selection+1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;          
         }  
       }
     }
@@ -2269,7 +2373,7 @@ void setup() {
 
       if (bank != nullptr){
         menuBottomLabel = bank->name;
-        menuItemIcon[1] = bank->icon;
+        menuItems[1].icon = bank->icon;
 
         auto iconOrEmpty = [this](uint8_t index) -> String {
           if (index < banks.size()){
@@ -2281,23 +2385,26 @@ void setup() {
 
         if (selection == numItem-1){ // last item
           // left icon = -1, right icon = first item
-          menuItemIcon[0] = iconOrEmpty(selection > 0 ? selection-1 : selection);
-          menuItemIcon[2] = iconOrEmpty(0);
+          menuItems[0].icon = iconOrEmpty(selection > 0 ? selection-1 : selection);
+          menuItems[2].icon = iconOrEmpty(0);
         }else if (selection == 0){ // first item
           // left icon = last item, right icon = +1
-          menuItemIcon[0] = iconOrEmpty(numItem>0 ? numItem-1 : 0);
-          menuItemIcon[2] = iconOrEmpty(selection+1);
+          menuItems[0].icon = iconOrEmpty(numItem>0 ? numItem-1 : 0);
+          menuItems[2].icon = iconOrEmpty(selection+1);
         }else{ // any item in between
           // normal case, we take the -1 and +1 item
-          menuItemIcon[0] = iconOrEmpty(selection-1);
-          menuItemIcon[2] = iconOrEmpty(selection+1);          
+          menuItems[0].icon = iconOrEmpty(selection-1);
+          menuItems[2].icon = iconOrEmpty(selection+1);          
         }  
       }else{
         menuBottomLabel = *lang.getString(NO_BANK_MENU_ITEM);
-        menuItemIcon[0] = " ";
-        menuItemIcon[1] = ICON_QUIT;
-        menuItemIcon[2] = " ";       
-      }      
+        menuItems[0].icon = " ";
+        menuItems[1].icon = ICON_QUIT;
+        menuItems[2].icon = " ";       
+      }
+      menuItems[0].color = GUI::menuInactiveIconColor;
+      menuItems[1].color = GUI::menuInactiveIconColor;
+      menuItems[2].color = GUI::menuInactiveIconColor;
     }
 
     void menuSwitchBankFullRefresh(){  
@@ -2789,7 +2896,7 @@ void setup() {
         }else jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
       }else if (command == "save"){     
         
-        String bankFileName = concatStrings(getCurrentProfileName(), ".bank");
+        String bankFileName = concatStrings(concatStrings("/", *systemCfg.getString(S_PROFILE, DEFAULT_PROFILE)), ".bank");
         bool ret = saveBanks(bankFileName);
         ret = systemCfg.save();   
         ret &= userCfg.save();   
@@ -3053,11 +3160,13 @@ void setup() {
     String defaultSysConf =
         "{\"" S_PUSHDELAY "\":\"852\","
         "\"" S_DCLICREACTIVITY "\":\"251\","
-        "\"" S_CONFIG_FILE "\":\"" DEFAULT_CONFIG_FILE_NAME "\","
+        "\"" S_PROFILE "\":\"" DEFAULT_PROFILE "\","
         "\"" S_AP_NAME "\":\"" INTERVAL_PRODUCT_NAME "\","
         "\"" S_LAST_USED_SSID "\":\"intervalmix1\","
-        "\"" S_SERVER_ROOT "\":\"infrafast.fr\","
+        "\"" S_HOSTNAME "\":\"infrafast.fr\","
         "\"" S_LANG "\":\"francais\","
+        "\"" S_HOSTNAME "\":\"" INTERVAL_PRODUCT_NAME "\","
+        "\"" S_SWUPDATE_PROMPT "\":\"true\","
         "\"" S_FADERSPEED "\":\"157\","
         "\"" S_SSID "\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},"
         "\"" S_BUTTON_ASSIGN "\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]},"
@@ -3120,7 +3229,6 @@ void setup() {
     MenuItem* shutdown_menu_item; 
     MenuItem* brightness_menu_item; 
     MenuItem* fmw_update_menu_item; 
-
 
     void refreshBankMenu(){
       if (bankMenu != nullptr) delete bankMenu;

@@ -22,7 +22,7 @@
 
 #define INTERVAL_PRODUCT_NAME "footswitch"
 #define INTERVAL_MANUFACTURER "interval"
-#define INTERVAL_DEFAULT_SERVER "82.65.4.93"  //"interval.fr"
+#define INTERVAL_DEFAULT_HOSTNAME "infrafast.fr"    //"82.65.4.93"
 
 #define WEBAPP_PATH "/webapp"
 
@@ -44,6 +44,8 @@ typedef void (*VoidIntCallback)(int);
 typedef void (*VoidDoubleIntCallback)(int,int);
 typedef String (*ReturnStringCallback)();
 typedef std::function<void(bool*)> StdFunctionCallbackVoidBool; 
+
+StdFunctionCallbackVoidBool userInternetCallback = nullptr;    
 
 enum{
   SYSTEM_OFF,
@@ -777,8 +779,8 @@ class Config : public JsonListFile{
     const float getFloat(String name) {
       return getString(name,"0")->toFloat();
     };
-    const boolean getBool(String name) {
-      return (*getString(name,"0") != "0");
+    const boolean getBool(String name, bool defaultValue=true) {
+      return (*getString(name,defaultValue?"true":"false") == "true");
     };
 
 };
@@ -792,12 +794,13 @@ Config userCfg = Config();
 #define S_FADERSPEED        "faderSpeed"
 #define S_AP_NAME           "apName"
 #define S_LANG              "lang"
-#define S_CONFIG_FILE       "profile"
+#define S_PROFILE           "profile"
 #define S_SSID              "ssid"
 #define S_LAST_USED_SSID    "lastSSID"
 #define S_BUTTON_ASSIGN     "buttonsAssignements"
 #define S_SHORTCUTS         "shortcuts"
-#define S_SERVER_ROOT       "serverRoot"
+#define S_HOSTNAME          "hostname"
+#define S_SWUPDATE_PROMPT   "startupUpdate"
 
 
 class I18n : public JsonListFile{
@@ -1105,7 +1108,7 @@ void pingTask(void* parameter) {
       params->callback(false);  // Appel du callback en cas d'échec
     }
   //}else{
-    DEBUG_PRINT("\nETHpingTaskthread running=>%s",params->host.c_str());  
+    //DEBUG_PRINT("\nETHpingTaskthread running=>%s",params->host.c_str());  
     /*SOCKET pingSocket = 0;
     EthernetICMPPing ping(pingSocket, (uint16_t)random(0, 255));
     IPAddress IPaddr;
@@ -1129,6 +1132,7 @@ void pingTask(void* parameter) {
   // Suspendre la tâche après chaque ping (exécution ponctuelle)
   vTaskDelete(NULL);
 }
+
 
 // Prototype pour la tâche de connexion
 void connectHTTPTask(void *parameter) {
@@ -1231,8 +1235,10 @@ void connectHTTPTask(void *parameter) {
   vTaskDelay(1);
   vTaskDelete(NULL);
 }
+////////////////////////////////////////////////////////////////////////
 
-//////////////////////// FIRMWARE UPDATE FUNCTIONS  ////////////////////////
+//////////////////////// FIRMWARE UPDATE FUNCTIONS  ////////////////////
+////////////////////////////////////////////////////////////////////////
 //--- utilitaires URL -----------------------------------------------------------
 struct UrlParts {
   String proto, host, path;
@@ -1360,12 +1366,12 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
   outHttp.stop();
   int err = outHttp.startRequest(u.host.c_str(), u.port, u.path.c_str(), "GET", "ESP32HttpClient/1.0");
   if (err != 0) {
-    DEBUG_PRINT("startRequest listing err=%d", err);
+    DEBUG_PRINT("\n/!\\startRequest listing err=%d", err);
     return false;
   }
   int status = outHttp.responseStatusCode();
   if (status != 200) {
-    DEBUG_PRINT("HTTP %d sur %s", status, baseUrl.c_str());
+    DEBUG_PRINT("\n/!\\HTTP %d sur %s", status, baseUrl.c_str());
     outHttp.stop();
     return false;
   }
@@ -1382,7 +1388,7 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
   std::vector<String> hrefs;
   findFszLinksInHtml(html, hrefs);
   if (hrefs.empty()) {
-    DEBUG_PRINT("Aucun .fsz trouvé");
+    DEBUG_PRINT("\n/!\\Aucun .fsz trouvé!!!");
     return false;
   }
 
@@ -1410,11 +1416,11 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
   }
 
   if (!foundNewer) {
-    DEBUG_PRINT("Aucune version valide trouvée");
+    DEBUG_PRINT("\n/!\\Aucune version valide trouvée");
     return false;
   }
   if (!(best > cur)) { // strictement supérieure
-    DEBUG_PRINT("Version distante %.2f <= locale %.2f", best, cur);
+    DEBUG_PRINT("\nVersion distante %.2f <= locale %.2f", best, cur);
     return false;
   }
 
@@ -1425,12 +1431,12 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
   outHttp.stop();
   err = outHttp.startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
   if (err != 0) {
-    DEBUG_PRINT("startRequest fichier err=%d", err);
+    DEBUG_PRINT("\n/!\\startRequest fichier err=%d", err);
     return false;
   }
   int st2 = outHttp.responseStatusCode();
   if (st2 != 200) {
-    DEBUG_PRINT("HTTP fichier %d", st2);
+    DEBUG_PRINT("\n/!\\HTTP fichier %d", st2);
     outHttp.stop();
     return false;
   }
@@ -1504,23 +1510,8 @@ void brightness_menu_item_selected(MenuComponent* p_menu_component) {
 }
 
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component) {
-  
-  if (hwm.network->state == CONNECTED){
-    HttpClient httpClient(*hwm.network->client);
-    String newVersion;
-    String fwURL;
-    String serverRoot = *systemCfg.getString(S_SERVER_ROOT,INTERVAL_DEFAULT_SERVER);      
-
-    findNewerFszAndOpenStream(
-      concatStrings("http://",serverRoot,"/fwupdate/"),
-      _V,
-      httpClient,
-      newVersion,
-      fwURL
-    );
-  }else{
-    DEBUG_PRINT("\nNetwork disconnected");
-  }
+ 
+  DEBUG_PRINT("\nupdating firmware...");
 
 }
 
@@ -1578,14 +1569,13 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
   // load should return a boolean which indicate if the lanugage file has been loaded correctly to 
   // process the semantic return and update the menu title accordingly if it was loaded or not
   if (lang.load(concatStrings("/", langName, ".lang"))){
-    systemCfg.setValue(S_LANG,langName);
-    /*app.menuActiveIconColor = TFT_GREEN;
-    GUI::glowingGoldColor.value = &GUI::unUsedColor;*/
+    systemCfg.setValue(S_LANG,langName);    
     systemCfg.save();
+    app.ms.back();
     app.restoreScreen();    // return to the caller
+    p_menu_component->success = true;
   }else{
-    app.menuActiveIconColor = TFT_RED;
-    GUI::glowingGoldColor.value = &GUI::unUsedColor;
+    p_menu_component->success = false;
     app.menuTopText = *lang.getString("File Error");
   }  
 }
@@ -1721,9 +1711,9 @@ void addMenuWidgets(){
 
   addTopandBottomMenuLabel();
 
-  gui.add(new Icon(&app.menuItemIcon[0], Align::Center,&GUI::leftMenuIconXpos, &GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuInactiveIconColor,&GUI::defaultBcolor));  
-  gui.add(new Icon(&app.menuItemIcon[1], Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE,&app.menuActiveIconColor,&GUI::defaultBcolor));
-  gui.add(new Icon(&app.menuItemIcon[2], Align::Center,&GUI::rightMenuIconXpos, &GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuInactiveIconColor,&GUI::defaultBcolor));    
+  gui.add(new Icon(&app.menuItems[0].icon, Align::Center,&GUI::leftMenuIconXpos, &GUI::menuIconYpos,MENU_ICON_SIZE,&app.menuItems[0].color,&GUI::defaultBcolor));  
+  gui.add(new Icon(&app.menuItems[1].icon, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE,&app.menuActiveIconColor,&GUI::defaultBcolor));
+  gui.add(new Icon(&app.menuItems[2].icon, Align::Center,&GUI::rightMenuIconXpos, &GUI::menuIconYpos,MENU_ICON_SIZE,&app.menuItems[2].color,&GUI::defaultBcolor));    
 }
 
 void setMenuColors(){
@@ -1819,25 +1809,26 @@ void startupScreenBuilder(uint8_t id){
   gui.drawJpg(0,0,"/webapp/logo.jpg");
 }
 
-void promptScreenBuiler(uint8_t id){
-  GUI::cls(GUI::menuBackGroundColor);
+#define ledRadius  TFT_WIDTH/20
+int16_t ledLabelY = GUI::midScreenVertical + ledRadius + SIZE_18;
 
-  int16_t ledY = GUI::midScreenVertical;
-  uint16_t ledRadius = MENU_ICON_SIZE/2;
+void promptScreenBuiler(uint8_t id){
+  setMenuColors();
+  GUI::cls(GUI::menuBackGroundColor);
+  
   uint16_t arcRadius = ledRadius + 12;
-  int16_t labelY = ledY + ledRadius + SIZE_18;
 
   gui.add(new TextArea(&app.promptParams.message, TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
-  gui.add(new Led(&GUI::hquarter1xPos, &ledY, ledRadius, &app.promptLedProperties[0], &GUI::fullBrightness));
-  gui.add(new Led(&GUI::hquarter2xPos, &ledY, ledRadius, &app.promptLedProperties[1], &GUI::fullBrightness));
-  gui.add(new Led(&GUI::hquarter3xPos, &ledY, ledRadius, &app.promptLedProperties[2], &GUI::fullBrightness));
+  gui.add(new Led(&GUI::hquarter1xPos, &GUI::midScreenVertical, ledRadius, &app.promptLedProperties[0], &GUI::fullBrightness));
+  gui.add(new Led(&GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius, &app.promptLedProperties[1], &GUI::fullBrightness));
+  gui.add(new Led(&GUI::hquarter4xPos, &GUI::midScreenVertical, ledRadius, &app.promptLedProperties[2], &GUI::fullBrightness));
 
-  gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::hquarter2xPos, &ledY, arcRadius, &GUI::menuActiveIconColor, &GUI::transparentColor, 270));
+  gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::midScreenHoriz, &GUI::midScreenVertical, arcRadius, &GUI::menuActiveIconColor, &GUI::transparentColor, 0));
 
-  gui.add(new Label(&app.promptParams.labels[0], Align::Center,&GUI::hquarter1xPos, &labelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
-  gui.add(new Label(&app.promptParams.labels[1], Align::Center,&GUI::hquarter2xPos, &labelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
-  gui.add(new Label(&app.promptParams.labels[2], Align::Center,&GUI::hquarter3xPos, &labelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(&app.promptParams.labels[0], Align::Center,&GUI::hquarter1xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(&app.promptParams.labels[1], Align::Center,&GUI::midScreenHoriz, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new Label(&app.promptParams.labels[2], Align::Center,&GUI::hquarter4xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
 }
 
 

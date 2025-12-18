@@ -736,7 +736,7 @@ class Network : public HWComponent2State{
 
     SemaphoreHandle_t networkBusy;
 
-    StdFunctionCallbackVoidBool userInternetCallback = nullptr;    
+    StdFunctionCallbackVoidBool internetCallback = nullptr;    
     // Déclarer un pointeur générique pour le client
     //IWebSocket* wsClient = nullptr;  //     wsClient = wifiClient;   
 
@@ -1400,7 +1400,7 @@ class WiFiEth : public Network{
     void onInternetPing(bool online) {
         internet = online;
         DEBUG_PRINT("\n\n\n\t\t\t * * * * PING %s * * * *",internet?"OK":"fail");
-        if (userInternetCallback !=nullptr) userInternetCallback(&internet);
+        if (internetCallback !=nullptr) internetCallback(&internet);
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
@@ -1478,7 +1478,6 @@ class WiFiEth : public Network{
       //LANlatency = 20;
       //else 
       WANlatency = 150;
-
     }
 
     void restoreWiFiSSID(){

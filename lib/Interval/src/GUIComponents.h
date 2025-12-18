@@ -113,6 +113,7 @@ class GUI : public GenericComponent{
 public:
     static TFT_eSPI* tft;      
     static bool off;
+    static bool on;
     
     // modifiable colors
     static uint16_t unUsedColor;
@@ -136,6 +137,7 @@ public:
     static const uint16_t blue;
     static const uint16_t menuActiveIconColor;
     static const uint16_t menuInactiveIconColor;
+    static const uint16_t menuGreydoutColor;
     static const uint16_t menuBackGroundColor;
 
     // const icon
@@ -145,6 +147,7 @@ public:
 
     // default luminance
     static const float fullBrightness;
+    static const float greydOutBrightness;
     static float screenBrightness;
 
     // const positions and size
@@ -1713,6 +1716,7 @@ class Led : public Widget{
 
 
 bool GUI::off = false;
+bool GUI::on = true;
 
 // COLORS DEFINITIONS
 uint16_t GUI::defaultFcolor = TFT_FCOLOR;
@@ -1733,6 +1737,7 @@ const uint16_t GUI::gold = TFT_GOLD;
 
 // BRIGHTNESS DEFINITIONS
 const float GUI::fullBrightness = 1.0;
+const float GUI::greydOutBrightness = 0.5;
 #define DEFAULT_BRIGHTNESS 0.7
 #define BRIGHTNESS_MAX 1.0
 #define BRIGHTNESS_MIN 0.2
@@ -1745,6 +1750,7 @@ uint16_t GUI::widgetSubLabelColor = TFT_GOLD;
 AlteredColor GUI::glowingGoldColor = AlteredColor{.baseColor = GUI::gold, .value = &GUI::unUsedColor};
 const uint16_t GUI::menuActiveIconColor = GUI::luminance(TFT_BLUE,150); 
 const uint16_t GUI::menuInactiveIconColor = GUI::luminance(TFT_BLUE,255); 
+const uint16_t GUI::menuGreydoutColor= GUI::luminance(TFT_LIGHTGREY,255); 
 const uint16_t GUI::menuBackGroundColor = TFT_WHITE;
 
 // WSIZE AND POSITIONS DEFINITIONS
