@@ -94,6 +94,7 @@ enum{
   STATE_UTILS_WEBAPPCONNECTED,
   STATE_UTILS_DOWNLOAD_FIRMWARE,
   STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
+  STATE_UTILS_RESTORE_SCREEN,
   STATE_BYE_MODAL_MESSAGE,
   STATE_BYE_GOSLEEP_MESSAGE
 };
@@ -425,7 +426,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     float promptRemainingTime = 0;
     float promptTimeoutMax = 1;
     unsigned long promptStartTime = 0;
-    String promptLedProperties[3] = {"green","blue","red"};
+
+    String newSWversion = "";
 
     ///////////////// INTERFACES ///////////////////
     //OSCInterface osc;
@@ -511,15 +513,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         firstStartup = false;
         // internet check is only done at first startup to avoid slowing down workflow when network disconnect and reconnect
         if (*online){
-          HttpClient httpClient(*hwm->network->client);
-          String newVersion;
+          HttpClient httpClient(*hwm->network->client);          
           String fwURL;
           String serverRoot = *systemCfg.getString(S_HOSTNAME,INTERVAL_DEFAULT_HOSTNAME);      
           bool fwAvailable = findNewerFszAndOpenStream(
             concatStrings("http://",serverRoot,"/fwupdate/"),
             _V,
             httpClient,
-            newVersion,
+            newSWversion,
             fwURL
           );
           // enable or disable the firmware update menu item accordingly
@@ -529,29 +530,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           // BRANCH TO SCREEN PROMPT IF CONFIG ALLOWS IT          
           if (fwAvailable){
             if (systemCfg.getBool(S_SWUPDATE_PROMPT)){            
-              // prepare software update promnpt screen
-              promptParams.message = concatStrings(*lang.getString("Update to firmware")," v",newVersion,"?");              
-              
-              promptParams.labels[0] = *lang.getString("Yes");
-              promptParams.targetScreens[0] = SCREEN_UTILS;  // go to utils screen to perform the update
-              promptParams.targetState[0] = STATE_UTILS_DOWNLOAD_FIRMWARE;
-              
-              promptParams.labels[1] = *lang.getString("No");              
-              promptParams.targetScreens[1] = SCREEN_BANK;   // back to banks
-              promptParams.targetState[1] = hwm->persistants.getUChar(PERSISTANT_SCREEN_STATE,0);               
-
-              promptParams.labels[2] = *lang.getString("No, never ask");              
-              promptParams.targetScreens[2] = SCREEN_UTILS;  // diable auto update prompt in utils screen
-              promptParams.targetState[2] = STATE_UTILS_DISABLE_SWUPDATE_PROMPT;
-              
-              promptParams.timeoutMs = 5000;                // 5s timeout
-              DEBUG_PRINT("\nGoto screen prompt"); 
-              screen.id = SCREEN_PROMPT;              // branch prompt screen
+              SWupdatePromptScreen();
             }else{
               DEBUG_PRINT("\nStartup update disabled in config");                
             }
           }else{
-            DEBUG_PRINT("\n≤n*** No firmware update ***");          
+            DEBUG_PRINT("\n*** No firmware update ***");          
           }
         }else{
           DEBUG_PRINT("\nNetwork disconnected");          
@@ -984,6 +968,28 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       fireEvent(event);      
     }
 
+    void SWupdatePromptScreen(){
+      // prepare software update promnpt screen
+      promptParams.message = concatStrings(*lang.getString("Update to firmware")," v",newSWversion,"?");              
+      
+      promptParams.labels[0] = *lang.getString("Yes");
+      promptParams.targetScreens[0] = SCREEN_UTILS;  // go to utils screen to perform the update
+      promptParams.targetState[0] = STATE_UTILS_DOWNLOAD_FIRMWARE;
+      
+      promptParams.labels[1] = *lang.getString("No");              
+      promptParams.targetScreens[1] = SCREEN_UTILS;   // back to caller
+      promptParams.targetState[1] = STATE_UTILS_RESTORE_SCREEN;              
+
+      promptParams.labels[2] = *lang.getString("No, never ask");              
+      promptParams.targetScreens[2] = SCREEN_UTILS;  // diable auto update prompt in utils screen
+      promptParams.targetState[2] = STATE_UTILS_DISABLE_SWUPDATE_PROMPT;
+      
+      promptParams.timeoutMs = 5000;                // 5s timeout
+
+      screen.id = SCREEN_PROMPT;   
+    }
+
+
     void buttonCallBack(Event* event) {
       ButtonEvent* btnEvt = (ButtonEvent*) event->data;             
       switch(btnEvt->id){
@@ -1027,25 +1033,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       else if (buttonID == hwm->buttons[RIGHTB]->getID()) branchFromPrompt(2);
     }
 
-   void resetPromptTimer(){
+    void resetPromptTimer(){
+      promptTimeoutMax = (float)promptParams.timeoutMs;
+      promptRemainingTime = promptTimeoutMax;
       promptStartTime = millis();
-      promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
-      promptRemainingTime = promptParams.timeoutMs;
-      DEBUG_PRINT("\nPrompt: %d/%d ms",promptRemainingTime,promptTimeoutMax);            
     }
 
     void handlePromptTimeout(){
       promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
-
-      DEBUG_PRINT("\nhandlePromptTimeout: %d",promptTimeoutMax);     
-
       if (promptParams.timeoutMs == 0){
         promptRemainingTime = 0;
         return;
       }
       unsigned long elapsed = millis() - promptStartTime;
       if (elapsed >= promptParams.timeoutMs){
-        branchFromPrompt(1);  // timeout always branch to middle button action
+        branchFromPrompt(1);
       }else{
         promptRemainingTime = promptParams.timeoutMs - elapsed;
       }
@@ -1492,14 +1494,14 @@ void setup() {
     }
 
     void restoreScreen(){
-      //DEBUG_PRINT("\nrestoreScreen():");
+      DEBUG_PRINT("\nrestoreScreen():");
       screen.id = hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
       screen.state = hwm->persistants.getUChar(PERSISTANT_SCREEN_STATE,0);  
-      //DEBUG_PRINT("\t read: id=%d / state:%d",screen.id,screen.state);
+      DEBUG_PRINT("\t read: id=%d / state:%d",screen.id,screen.state);
       // prevents wrong branching
       if (screen.id == SCREEN_BANK && screen.state > banks.size()-1) screen.state = 0; 
       if (screen.id == SCREEN_WIZARD && screen.state > STATE_WIZARD_USER_STEP4) screen.state = STATE_WIZARD_LANG_STEP1;       
-      //DEBUG_PRINT("\t => id=%d / state:%d",screen.id,screen.state);
+      DEBUG_PRINT("\t => id=%d / state:%d",screen.id,screen.state);
       // branch the first available strip 
       //DEBUG_PRINT("\tgetFocusedStrip():%s, id:%i",getSelectedStrip() == nullptr?"null":getSelectedStrip()->getTopLabel()->c_str(),getSelectedStrip() == nullptr?0:getSelectedStrip()->index);
     }
@@ -1986,6 +1988,7 @@ void setup() {
             case STATE_UTILS_DISABLE_SWUPDATE_PROMPT:
               systemCfg.setValue(S_SWUPDATE_PROMPT,"false");
               systemCfg.save();
+            case STATE_UTILS_RESTORE_SCREEN:
               restoreScreen();
             break;
           }
@@ -3257,4 +3260,3 @@ void setup() {
 };
 
 #endif
-

@@ -209,9 +209,8 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
 
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
-        w = WIDGET4X4W;
-        topY += h/2; 
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topX /*x*/, &topY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+        w = WIDGET4X4W-GUI::three*2;
+        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &GUI::three /*x*/, &GUI::midScreenHoriz /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }else if (size == SHAPE1X4){
         pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," Note")));
       }else if (size ==SHAPE2X2 ){
@@ -229,6 +228,7 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
 
     virtual void update(){ // this code is called by process()
 
+     
     }  
 
     virtual void queryInterface(){ // this code is called by pushToGUI() to send a command that will be executed, 
@@ -262,6 +262,8 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       return success;
     }    
 
+  protected:
+    int16_t barY = 0;
     
 };
 
@@ -286,9 +288,8 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
 
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
-        w = WIDGET4X4W;
-        topY += h/2; 
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topX /*x*/, &topY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+        w = WIDGET4X4W-GUI::three*2;
+        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &GUI::three /*x*/, &GUI::midScreenHoriz /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }else if (size == SHAPE1X4){
         pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," SYSEX")));
       }else if (size ==SHAPE2X2 ){
@@ -297,7 +298,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
          pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," SYSEX")));
       }else{
 
-      }         
+      }     
 
 
       //DEBUG_PRINT("\nchGainStrip topX: %d, topY: %d, w: %d, h: %d",topX,topY,w,h);

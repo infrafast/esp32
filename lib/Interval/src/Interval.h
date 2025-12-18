@@ -1029,7 +1029,7 @@ void waitingAnimationThread(void *param_type) {
   GUI::tft->fillScreen(GUI::defaultBcolor);
   
   y = TFT_HEIGHT-ANIM_FONT_SIZE;
-  Label message = Label(params->text, Align::Center, &x, &y, ANIM_FONT_SIZE , 5, &GUI::defaultFcolor, &GUI::defaultBcolor, &GUI::screenBrightness);
+  Label message = Label(params->text, Align::Center, &x, &y, ANIM_FONT_SIZE);
   message.refresh(true);
   message.sprite->pushSprite(message.getX(),message.getY(),TFT_TRANSPARENT);        
 
@@ -1100,30 +1100,19 @@ void scanNetworksTaskWrapper(void * parameter){
 void pingTask(void* parameter) {
   // Récupérer les paramètres passés à la tâche
   PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
-  //if (hwm.network->media == WIFI_MEDIA){
+  if (hwm.network->media == WIFI_MEDIA){
     DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
     if (Ping.ping(params->host.c_str())) {
       params->callback(true);  // Appel du callback en cas de succès
     } else {
       params->callback(false);  // Appel du callback en cas d'échec
     }
-  //}else{
-    //DEBUG_PRINT("\nETHpingTaskthread running=>%s",params->host.c_str());  
-    /*SOCKET pingSocket = 0;
-    EthernetICMPPing ping(pingSocket, (uint16_t)random(0, 255));
-    IPAddress IPaddr;
-    EthernetICMPEchoReply echoReply = ping(IPaddr.fromString(params->host), 4);
-    if (echoReply.status == SUCCESS)
-    {
-      //DEBUG_PRINT("Reply[%d] from: %d.%d.%d.%d: bytes=%d time=%ldms TTL=%d",echoReply.data.seq,echoReply.addr[0],echoReply.addr[1],echoReply.addr[2],echoReply.addr[3],REQ_DATASIZE,millis() - echoReply.data.time,echoReply.ttl);
-      params->callback(true);  // Appel du callback en cas de succès
-    }
-    else
-    {
-      params->callback(false);  // Appel du callback en cas de succès
-    }*/
+  }else{
 
-  //}
+
+    
+
+  }
 
 
   // Libérer la mémoire allouée pour les paramètres
@@ -1510,9 +1499,7 @@ void brightness_menu_item_selected(MenuComponent* p_menu_component) {
 }
 
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component) {
- 
-  DEBUG_PRINT("\nupdating firmware...");
-
+  app.SWupdatePromptScreen();
 }
 
 void save_profile_item_selected(MenuComponent* p_menu_component) {
@@ -1811,20 +1798,19 @@ void startupScreenBuilder(uint8_t id){
 
 #define ledRadius  TFT_WIDTH/20
 int16_t ledLabelY = GUI::midScreenVertical + ledRadius + SIZE_18;
+String promptLedColor = "blue";
 
 void promptScreenBuiler(uint8_t id){
   setMenuColors();
   GUI::cls(GUI::menuBackGroundColor);
   
-  uint16_t arcRadius = ledRadius + 12;
-
   gui.add(new TextArea(&app.promptParams.message, TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
-  gui.add(new Led(&GUI::hquarter1xPos, &GUI::midScreenVertical, ledRadius, &app.promptLedProperties[0], &GUI::fullBrightness));
-  gui.add(new Led(&GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius, &app.promptLedProperties[1], &GUI::fullBrightness));
-  gui.add(new Led(&GUI::hquarter4xPos, &GUI::midScreenVertical, ledRadius, &app.promptLedProperties[2], &GUI::fullBrightness));
+  gui.add(new Led(&GUI::hquarter1xPos, &GUI::midScreenVertical, ledRadius, &promptLedColor, &GUI::fullBrightness));
+  gui.add(new Led(&GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
+  gui.add(new Led(&GUI::hquarter4xPos, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
 
-  gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::midScreenHoriz, &GUI::midScreenVertical, arcRadius, &GUI::menuActiveIconColor, &GUI::transparentColor, 0));
+  if (app.promptRemainingTime>0) gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius, &GUI::menuActiveIconColor, &GUI::transparentColor, 0));
 
   gui.add(new Label(&app.promptParams.labels[0], Align::Center,&GUI::hquarter1xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
   gui.add(new Label(&app.promptParams.labels[1], Align::Center,&GUI::midScreenHoriz, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));

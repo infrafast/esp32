@@ -240,18 +240,6 @@ class BankNavigator: public Widget{
           
       if (bank == nullptr){
         return refreshed;
-        /*if (oldBank != bank){
-          // clear the bankNavigator
-          oldBank = bank;
-          Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &GUI::defaultBcolor, &GUI::defaultBcolor);
-          canva->refresh();
-          width = NAV_WIDTH; height = NAV_HEIGHT;
-          createSprite();
-          canva->sprite->pushToSprite(sprite, 0, 2);
-          delete canva;
-          refreshed = true;
-        }
-        return refreshed;*/
       }
       
       refreshed = (bank->selector != oldSelector) || 
@@ -267,7 +255,7 @@ class BankNavigator: public Widget{
       uint16_t navFrameColor = GUI::luminance(GUI::gold, 100);
       
       // Create a canvas for the navigation UI
-      Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT, &GUI::defaultBcolor, &GUI::defaultBcolor);
+      Canva* canva = new Canva(&GUI::zero, &GUI::zero, NAV_WIDTH, NAV_HEIGHT,0, &GUI::defaultBcolor, &GUI::defaultBcolor);
       canva->refresh(true);
 
       // Draw each strip on the navigation UI

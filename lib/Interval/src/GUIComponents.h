@@ -103,6 +103,7 @@ stripColor colorMap[MAX_COLOR_ID] = {
 
 /////////////////////////////////////// FIXED SIZE 
 #define SIZE_10 10
+#define SIZE_14 14
 #define SIZE_16 16
 #define SIZE_18 18
 #define SIZE_20 20
@@ -397,7 +398,7 @@ class Canva : public Widget{
 
   public:
 
-    Canva(const int16_t* posX, const int16_t* posY, uint16_t width, uint16_t height, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Widget(posX, posY, fC, bC, _brightness,d){      
+    Canva(const int16_t* posX, const int16_t* posY, uint16_t width, uint16_t height, uint8_t _round, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Widget(posX, posY, fC, bC, _brightness,d), round(_round){      
       id = concatStrings("Canva", *posX, "x", *posY);
       this->width = width; this->height = height;
     } 
@@ -407,11 +408,14 @@ class Canva : public Widget{
       if(Widget::refresh(force)){     
         createSprite(GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255));
         uint16_t color = *fColor;
-        sprite->drawRect(0,0,width,height,GUI::luminance(color,*brightness * GUI::screenBrightness * 255));
+        sprite->drawRoundRect(0,0,width,height,round,GUI::luminance(color,*brightness * GUI::screenBrightness * 255));
         // background is done by filling the sprite with bColor when creating it
       }
       return refreshed;
     }
+
+  private:  
+    uint8_t round = 0;
 
 };
 
@@ -1700,8 +1704,8 @@ class Led : public Widget{
       uint16_t rimColor = GUI::luminance(TFT_GREY,*brightness * GUI::screenBrightness * 255);
       uint16_t bgColor = GUI::luminance(TFT_GREY,*bColor * GUI::screenBrightness * 255);
 
-      sprite->drawSmoothCircle(centerX, centerY, mainRadius-1, TFT_BLACK,bgColor);
-      sprite->drawSmoothCircle(centerX, centerY, mainRadius, rimColor,bgColor);
+      sprite->drawCircle(centerX, centerY, mainRadius-1, TFT_BLACK);
+      sprite->drawCircle(centerX, centerY, mainRadius, rimColor);
 
       int16_t innerRadius = mainRadius - 2;
       if (innerRadius > 1){
@@ -1767,7 +1771,7 @@ const int16_t GUI::iconMidY = GUI::midScreenVertical-ICON_MAX_SIZE/2 ;
 const int16_t GUI::topTextY = GUI::y1+TOP2WIDGET_SIZE;
 const int16_t GUI::iconY = GUI::topTextY + CONFIG_TEXTAREA_MESSAGE_SIZE;
 const int16_t GUI::bottomTextY = GUI::iconY + MEDIUM_ICON_SIZE;
-const int16_t GUI::belowBottomTexty = GUI::bottomTextY+SIZE_18*1.1;
+const int16_t GUI::belowBottomTexty = GUI::bottomTextY+SIZE_14*1.1;
 const int16_t GUI::leftMenuIconXpos = GUI::midScreenHoriz-MENU_ICON_SIZE*1.4;
 const int16_t GUI::rightMenuIconXpos = GUI::midScreenHoriz+MENU_ICON_SIZE*1.4;
 const int16_t GUI::hquarter1xPos = TFT_HQUARTER-TFT_HQUARTER/2;

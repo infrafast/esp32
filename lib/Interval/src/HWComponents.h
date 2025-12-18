@@ -7,8 +7,8 @@
 #include <WiFiGeneric.cpp>   // for tipipinit
 #include <ArduinoOTA.h>           // for WIFI_MEDIA program upload 
 #include <ESP32Ping.h>      // for WiFi
-//#include <EthernetICMP.h>   // for Ethernet tis library crash at runtime
-//#include <ICMPPing.h>
+//#include <EthernetICMP.h>
+
 #include <HttpClient.h> // amcewen/HttpClient@^2.2.0 as opposed to the std lib #include <HTTPClient.h> which only handle WiFIclient
 #include <WiFiClientSecure.h>
 #include "BluetoothSerial.h"   //required for OSC

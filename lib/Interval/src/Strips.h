@@ -383,22 +383,14 @@ class Strip {
       }
 
       // strip size and position are correct, we therefore go ahead and render it
+      drawWidgetsFrames(layout);      
 
-      uint8_t state = interface->state.code;
-      
       // if connected, we call the virtual function that display the strip
       if (interface->state.code == IF_READY || interface->state.offline == true){
-        if (interface->state.offline == true){
-          // if offline , we may want to add a widget indicating it in addition to all the rest which is displayed
-          gui.add(new Canva(&GUI::zero, &GUI::zero, TFT_WIDTH, TFT_HEIGHT, &GUI::red, &GUI::transparentColor,&brightness));  
-          DEBUG_PRINT("\nStrip[%i] %s is offline",index,type.c_str());
-        }        
-        // go ahead with normal rendering
         composeWidgets(layout);
       }else{
         //DEBUG_PRINT("\nStrip %s is syncing",strip->type.c_str());          
         composeInterfaceState(layout);  
-        //gui.add (new ProgressBarH(&&stripState.progress /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &scrollBarY /*y*/, TFT_WIDTH /*w*/, MODAL_SCREEN_SCROLLBAR_HEIGHT /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::white /*fc*/ , &GUI::defaultBcolor/*bc*/));                      
       }
 
     }
@@ -469,11 +461,11 @@ class Strip {
       }
 
       simpleTextX = topX + areaW / 2;       //middle
-      simpleTextY = topY + (areaH/2);       //middle
+      simpleTextY = topY + (areaH/2) -2;       //middle
 
       // fix position according to some widget size specificity, but only when layout is DETAILS:
       if (layout == LAYOUT_DETAILS){
-        if (size == SHAPE4X1) simpleTextY -= WIDGET4X1H/2;     // fix vertical location for flat strip
+        if (size == SHAPE4X1) simpleTextY -= WIDGET4X1H/2-3;     // fix vertical location for flat strip
         else if (size == SHAPE1X4) {
           // special treatment for vertical widget where text is rotated
           simpleTextX = topX + WIDGET1X4W/2;   // exactly middle
@@ -519,15 +511,15 @@ class Strip {
       gui.add(new Arc(&interface->state.progress, 0,1.0 , &GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20+10, &GUI::gold, &GUI::transparentColor,0));
       gui.add(new Icon(interface->getIcon(),Align::Right,&GUI::rightMenuIconXpos, &GUI::iconY,MEDIUM_ICON_SIZE,&GUI::gold,&GUI::transparentColor));   
       gui.add(new TextArea(&interface->state.details,TFT_WIDTH/2 ,Align::Left,Align::Center,&GUI::midScreenHoriz,&GUI::iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::transparentColor));           
+      gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&GUI::midScreenHoriz, &GUI::belowBottomTexty,SIZE_14,40,&GUI::green,&GUI::transparentColor));          
       gui.add(new Label(&interface->state.subState, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));
-      gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&GUI::midScreenHoriz, &GUI::belowBottomTexty,SIZE_18,40,&GUI::green,&GUI::transparentColor));          
     }   
 
     void pushIFState1x4(){      
-      IFledX = topX + WIDGET1X4W / 1.2;
+      IFledX = topX + WIDGET1X4W / 1.25;
       IFledY = topY + WIDGET1X4H / 2.5;
 
-      IFiconX = topX + WIDGET1X4W ;
+      IFiconX = topX + WIDGET1X4W / 1.05;
       IFiconY = topY + WIDGET1X4H / 1.8;      
 
       pushSmallLedandIcon();
@@ -545,7 +537,7 @@ class Strip {
     }     
     
     void pushIFState4x1(){      
-      IFledX = GUI::leftMenuIconXpos;
+      IFledX = GUI::leftMenuIconXpos+3;
       IFledY = topY + WIDGET4X1H/2;
 
       IFiconX = TFT_WIDTH - SIZE_26/2;
@@ -566,10 +558,18 @@ class Strip {
     } 
 
     void drawWidgetsFrames(uint8_t layout){
-      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) gui.add(new Canva(&topX, &topY, WIDGET4X4W, WIDGET4X4H, &GUI::gold, &frontColor,&brightness));  
-      else if ( size == SHAPE1X4) gui.add(new Canva(&topX, &topY, WIDGET1X4W, WIDGET1X4H, &GUI::gold, &frontColor,&brightness));
-      else if (size == SHAPE2X2) gui.add(new Canva(&topX, &topY, WIDGET2X2W, WIDGET2X2H, &GUI::gold, &frontColor,&brightness));  
-      else if (size == SHAPE4X1) gui.add(new Canva(&topX, &topY, WIDGET4X1W, WIDGET4X1H, &GUI::gold, &frontColor,&brightness));      
+      
+      if (interface->state.offline) frameColor = TFT_RED;
+      else frameColor = TFT_GOLD;
+
+      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
+        // having a frame when we are 4x4 is useless unless we want to indicate interface is offline
+        //if (interface->state.offline) gui.add(new 
+          gui.add(new Canva(&topX, &topY, WIDGET4X4W, WIDGET4X4H,4, &frameColor, &GUI::transparentColor,&brightness));  
+      }
+      else if ( size == SHAPE1X4) gui.add(new Canva(&topX, &topY, WIDGET1X4W, WIDGET1X4H, 4,&frameColor, &GUI::transparentColor,&brightness));
+      else if (size == SHAPE2X2) gui.add(new Canva(&topX, &topY, WIDGET2X2W, WIDGET2X2H,4, &frameColor, &GUI::transparentColor,&brightness));  
+      else if (size == SHAPE4X1) gui.add(new Canva(&topX, &topY, WIDGET4X1W, WIDGET4X1H,4, &frameColor, &GUI::transparentColor,&brightness));      
     }
 
     JsonArray properties;
@@ -583,6 +583,7 @@ class Strip {
 
   protected:
     unsigned long lastCall;     
+    uint16_t frameColor = TFT_GOLD;
     //Label* defaultLabel = nullptr;
 };
 

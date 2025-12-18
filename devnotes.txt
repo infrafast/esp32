@@ -237,3 +237,45 @@ void wifiping(const char * host){   // see also https://github.com/espressif/esp
 
 
       The double buffering is in the file GraphDraw.c. There is a variable DataBuffer, the graphics routines in this file draw on the DataBuffer, see the routine DrawGraphPlotInline(). After the drawing has been done, it is sent to the LCD as one single BMP via DMA for fast rendering using LcdBmp().
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+              promptParams.timeoutMs = 20000;                // 15s timeout
+              promptTimeoutMax = (float)promptParams.timeoutMs;
+              promptRemainingTime = promptTimeoutMax;
+              promptStartTime = millis();
+              screen.id = SCREEN_PROMPT;   
+
+
+
+    void resetPromptTimer(){
+      promptStartTime = millis();
+      promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
+      promptRemainingTime = promptParams.timeoutMs;
+    }
+
+    void handlePromptTimeout(){
+      promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
+      if (promptParams.timeoutMs == 0){
+        promptRemainingTime = 0;
+        return;
+      }
+      unsigned long elapsed = millis() - promptStartTime;
+      if (elapsed >= promptParams.timeoutMs){
+        branchFromPrompt(promptParams.targetScreens[1]);
+      }else{
+        promptRemainingTime = promptParams.timeoutMs - elapsed;
+      }
+    }
