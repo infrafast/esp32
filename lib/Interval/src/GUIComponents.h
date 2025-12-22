@@ -373,7 +373,7 @@ class Widget : public GUI{
         sprite->createSprite(width,height);     
         if (color == TFT_TRANSPARENT) sprite->fillSprite(TFT_TRANSPARENT);
         else sprite->fillSprite(GUI::luminance(color,*brightness * GUI::screenBrightness * 255));            
-        //if (debug){DEBUG_PRINT("\tsprite(%i,%i)",width,height);}
+        if (debug){DEBUG_PRINT("\tsprite(%i,%i)",width,height);}
       }     
     }
 
@@ -913,123 +913,191 @@ class AnimatedIcon : public Icon{
     String currentIcon = "";
 };
 
-class FromToWidget : public Widget{
+class FromToWidget : public Widget {
   public:
-    FromToWidget(const float* v, const float mini, const float maxi, const int16_t* posX, const int16_t* posY, const uint16_t* fC, const uint16_t* bC,const float* _brightness = &GUI::fullBrightness,  bool d=false):Widget(posX, posY,fC, bC,  _brightness,d){
-      value = v; 
-      oldValue = *v-1;
-      minValue = mini; maxValue = maxi;
+    FromToWidget(const float* v, const float mini, const float maxi,
+                 const int16_t* posX, const int16_t* posY,
+                 const uint16_t* fC, const uint16_t* bC,
+                 const float* _brightness = &GUI::fullBrightness,
+                 bool d=false)
+      : Widget(posX, posY, fC, bC, _brightness, d)
+    {
+      value    = v; 
+      oldValue = *v - 1.0f; // force un premier refresh
+      minValue = mini;
+      maxValue = maxi;
     }
   
-    virtual bool refresh(bool force=false){ 
-      sprite = nullptr;   // we set that as the GUIManager would need to know if we use a sprite or not, by default, no need.
+    virtual bool refresh(bool force=false) { 
+      // Par défaut, pas de sprite (le widget peut décider dans refreshFrame/refreshContent)
+      sprite = nullptr;
 
-      if (oldBrightness != *brightness){
-        //DEBUG_PRINT("\n%s BRIGHTNESS HAS CHANGED %.2f -> %.2f",id.c_str(),oldBrightness,*brightness);
-        oldBrightness = *brightness ;
-        force = true;   // we changed the brightness so we redraw the complete widget
+      bool forceFull = force;
+
+      // Changement de luminosité => redraw complet
+      if (oldBrightness != *brightness) {
+        oldBrightness = *brightness;
+        forceFull = true;
       }
       
-      refreshed = force;
+      bool frameChanged = false;
+      bool logicChanged = false;
+      bool colorChanged = false;
 
-      //Widget::refresh(force);
-
-      // location or bg color has changed, hence we redraw the frame, we don't call parent refresh as treatment for front color is different
-      if(oldX != *x || oldY != *y || oldbColor != *bColor || force){
+      // Changement de position ou de couleur de fond => redraw frame
+      if (forceFull || oldX != *x || oldY != *y || oldbColor != *bColor) {
         refreshFrame();
-        oldX=*x; oldY=*y;
-        oldbColor = *bColor;        
-        refreshed = true;
-        //if (debug){DEBUG_PRINT("\n%s.refreshed frame, new: %i,%i",this->id.c_str(),*x,*y);}
+        oldX      = *x;
+        oldY      = *y;
+        oldbColor = *bColor;
+        frameChanged = true;
       }
 
-      refreshLogic(force);
+      // Logique spécifique au widget (angles, valeurs, etc.)
+      // IMPORTANT : chaque dérivé doit appeler lui-même refreshContent()
+      // quand la valeur change (partiel ou complet).
+      logicChanged = refreshLogic(forceFull);
 
-      if (oldfColor != *fColor || force){  // warning this may refresh twice the widget as it was done abve
-        refreshContent(true); //when the color change we redraw the complete arc
-        oldfColor = *fColor;  
-        refreshed = true;
-        //if (true){DEBUG_PRINT("\n%s.refreshed color, new: %i",this->id.c_str(),*fColor);}
+      // Changement de couleur de premier plan => redraw complet du contenu
+      if (forceFull || oldfColor != *fColor) {
+        oldfColor   = *fColor;
+        refreshContent(true);   // redraw complet
+        colorChanged = true;
       }
 
+      // Le widget est considéré comme rafraîchi si au moins un de ces éléments a changé
+      refreshed = frameChanged || logicChanged || colorChanged || forceFull;
       return refreshed;
     }
 
   protected:
-    virtual bool refreshLogic(bool force) = 0;
-    virtual void refreshContent(bool full) = 0;
+    virtual bool refreshLogic(bool force) = 0;     // doit retourner true si la valeur / affichage a changé
+    virtual void refreshContent(bool full) = 0;    // full = redraw complet
     virtual void refreshFrame() = 0;
-    uint16_t to=0,oldTo=254;
-    int16_t from=0,oldFrom=254;
+
+    uint16_t to = 0, oldTo = 254;
+    int16_t  from = 0, oldFrom = 254;
+
     const float* value;
     float oldValue;
     float minValue, maxValue;
-
 };
 
-class Arc : public FromToWidget{
+
+class Arc : public FromToWidget {
   public:
-    Arc(const float *v, const float mini, const float maxi, const int16_t* posX, const int16_t* posY, uint16_t r, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, uint16_t sAngle = 0, const float* _brightness = &GUI::fullBrightness, bool d=false):FromToWidget(v, mini, maxi, posX, posY, fC, bC, _brightness,d){            
+    Arc(const float *v, const float mini, const float maxi,
+        const int16_t* posX, const int16_t* posY, uint16_t r,
+        const uint16_t *fC = &GUI::defaultFcolor,
+        const uint16_t *bC = &GUI::defaultBcolor,
+        uint16_t sAngle = 0,
+        const float* _brightness = &GUI::fullBrightness,
+        bool d=false)
+      : FromToWidget(v, mini, maxi, posX, posY, fC, bC, _brightness, d)
+    {            
       radius = r;
-      width = height = (radius*2)+2;        // +2 because of outer circle                
+      width = height = (radius * 2) + 2;        // +2 because of outer circle                
       id = concatStrings("Arc", *posX, "x", *posY);
       startAngle = sAngle;
       from = startAngle;
+      to   = startAngle + 1;
     }
 
-    virtual int16_t getX(){return *x-width/2;}
-    virtual int16_t getY(){return *y-height/2;}    
+    virtual int16_t getX() { return *x - width  / 2; }
+    virtual int16_t getY() { return *y - height / 2; }    
 
   protected:
     uint16_t startAngle, radius;
 
-    virtual bool refreshLogic(bool force){ 
-      refreshed = force;
-      if (*value != oldValue || force){
-        //to = map(*value, minValue, maxValue, START_ANGLE, 360-START_ANGLE);
-        to = mapFloatToInt(*value, minValue, maxValue, startAngle, 360-startAngle);
-        if (to > 360-startAngle) to = 360-startAngle;
-        else if (to<startAngle) to = startAngle;
+    // Logic: calcule les angles, choisit full/partial, et appelle refreshContent()
+    virtual bool refreshLogic(bool force) { 
+      bool changed = false;
 
-        oldValue = *value;
-        refreshed = true;
-        //if (debug){DEBUG_PRINT("\n%s.refreshed value, new: %.2f",id.c_str(),*value);}
+      float v = *value;
+
+      // On peut utiliser un epsilon si souhaité, sinon == suffit
+      // if (force || fabsf(v - oldValue) > 0.0001f)
+      if (force || v != oldValue) {
+
+        uint16_t newTo = mapFloatToInt(v, minValue, maxValue,
+                                      startAngle, 360 - startAngle);
+
+        // Clamp sûr :
+        if (newTo >= 360) newTo = 359;
+        if (newTo < startAngle) newTo = startAngle;
+
+
+        // Seulement si l'angle a réellement changé, on redessine
+        if (force || newTo != to) {
+          uint16_t previousTo = to;
+          to = newTo;
+
+          if (force) {
+            // redraw complet
+            from = startAngle;
+            refreshContent(true);
+            from = to;   // on se recale
+          } else {
+            // redraw partiel : on laisse refreshContent(false) gérer
+            from = previousTo;
+            refreshContent(false);
+            from = to;   // on se recale pour la prochaine fois
+          }
+
+          changed = true;
+        }
+
+        oldValue = v;
       }
 
-      if (to != from || force){
-        refreshContent(force);  // or we may redrw the arc if its value change or it was forced to
-        from = to;      
-        refreshed = true;
-        //if (debug){DEBUG_PRINT("\n%s.refreshed angle, new: %i",this->id.c_str(),to);}
-      }
-      return refreshed;
+      return changed || force;
+    }
+ 
+    virtual void refreshFrame() {
+      // Si tu veux un contour, fond, etc. c’est ici.
+      // Laisser vide si l'Arc ne nécessite pas de frame spécifique.
     }
 
-    virtual void refreshFrame(){
-    };
-
-    void refreshContent(bool full){
+    void refreshContent(bool full) {
       createSprite();       
           
-      // THE ARC VALUE
-      // Allocate a value to the arc thickness dependant of radius
-      uint8_t thickness = (radius / 5)+1;
-      if ( radius < 25 ) thickness = radius / 3;        
+      // Épaisseur de l’arc : sécurisation pour petits rayons
+      uint8_t thickness = (radius / 5) + 1;
+      if (radius < 25) thickness = (radius / 3) - 1;
+      if (thickness < 1) thickness = 1;
 
-      // if forced, it means we just redraw the complete indicator
       uint16_t color = *fColor;
-      if (full) sprite->drawArc(width/2, height/2, radius-3, radius - thickness, startAngle, to, GUI::luminance(color,*brightness * GUI::screenBrightness * 255), /*TFT_BLACK*/ getClearColor()); // TFT_SKYBLUE random(0x10000)
-      else{ // otherwise we only redraw the required portion of it
+      uint16_t fg    = GUI::luminance(color,
+                          *brightness * GUI::screenBrightness * 255);
+      uint16_t bg    = getClearColor();
+
+      if (full) {
+        // Redessine tout l’arc (de startAngle à to)
+        sprite->drawArc(width/2, height/2,
+                        radius-3, radius - thickness,
+                        startAngle, to,
+                        fg, bg);
+      } else {
+        // redraw partiel seulement entre from et to
         if (to > from) {
-          sprite->drawArc(width/2, height/2, radius-3, radius - thickness, from, to, GUI::luminance(color,*brightness * GUI::screenBrightness * 255), /*TFT_NEARLYBLACK*/ getClearColor()); // TFT_SKYBLUE random(0x10000)
-        }else {
-          sprite->drawArc(width/2, height/2, radius-3, radius - thickness, to, from, /*TFT_NEARLYBLACK*/ getClearColor(), GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255));
+          // la valeur augmente : on dessine le nouveau segment
+          sprite->drawArc(width/2, height/2,
+                          radius-3, radius - thickness,
+                          from, to,
+                          fg, bg);
+        } else if (to < from) {
+          // la valeur diminue : on "efface" le surplus
+          uint16_t eraseColor = GUI::luminance(widgetInnerColor,
+                                   *brightness * GUI::screenBrightness * 255);
+
+          sprite->drawArc(width/2, height/2,
+                          radius-2, radius - thickness -1,
+                          to, from,
+                          bg, eraseColor,false);
         }
+        // si to == from, rien à faire
       }
-      refreshed = true;
     }
-
-
 };
 
 class RingMeter : public Arc{
@@ -1066,6 +1134,7 @@ class RingMeter : public Arc{
     uint8_t decimal, clearArea=0;
 
     void refreshFrame(){
+      //DEBUG_PRINT("\n%s.refreshFrame()",this->id.c_str());
       createSprite();
       sprite->fillSmoothCircle(width/2, height/2, radius,GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255) );
       sprite->drawSmoothCircle(width/2, height/2, radius, GUI::luminance(TFT_SILVER,*brightness * GUI::screenBrightness * 255), GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255));
@@ -1075,6 +1144,7 @@ class RingMeter : public Arc{
 
     void refreshUnitLabel(){
       createSprite();
+      //DEBUG_PRINT("\n%s.refreshUnitLabel()",this->id.c_str());
       // THE UNIT LABEL
       uint8_t unitFontSize = (2 * radius*0.7) / (unit->length());
       uint16_t color = widgetInnerColor;
@@ -1089,7 +1159,7 @@ class RingMeter : public Arc{
       createSprite();
 
       // THE VALUE LABEL        
-
+      //DEBUG_PRINT("\n%s.refreshValueLabel()",this->id.c_str());
       String fToS = String((float)*value,(unsigned int)decimal);   // convert the floating value to String with precision so we can get the number of character/digit to determine the fontSize        
       uint8_t digitFontSize;
       if (decimal == 0){
@@ -1099,7 +1169,7 @@ class RingMeter : public Arc{
         digitFontSize = (4.8 * radius) / (fToS.length());
       }
       
-      sprite->fillCircle(width/2, height/2.2, radius*0.65,GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255)); //
+      sprite->fillSmoothCircle(width/2, height/2.2, radius*0.65,GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255)); //
       // we create the numeric label but with an empty unit as this one is handled separately as it is below the value for the RingerMeter 
       NumericLabel* digits = new NumericLabel(value,decimal,Align::Center,&GUI::zero,&GUI::zero,digitFontSize,&GUI::defaultFcolor,&GUI::transparentColor,brightness, "", 1, debug); 
       digits->refresh(true);
@@ -1701,11 +1771,10 @@ class Led : public Widget{
       if (mainRadius < 2) mainRadius = 2;
 
       uint16_t innerColor = ledOn ? ledBaseColor : TFT_DARKGREY;
-      uint16_t rimColor = GUI::luminance(TFT_GREY,*brightness * GUI::screenBrightness * 255);
-      uint16_t bgColor = GUI::luminance(TFT_GREY,*bColor * GUI::screenBrightness * 255);
+      uint16_t rimColor = GUI::luminance(GUI::defaultFcolor,*brightness * GUI::screenBrightness * 255);
 
       sprite->drawCircle(centerX, centerY, mainRadius-1, TFT_BLACK);
-      sprite->drawCircle(centerX, centerY, mainRadius, rimColor);
+      sprite->drawSmoothCircle(centerX, centerY, mainRadius, rimColor,GUI::defaultBcolor );
 
       int16_t innerRadius = mainRadius - 2;
       if (innerRadius > 1){

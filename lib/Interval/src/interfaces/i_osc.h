@@ -159,7 +159,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
 
     void setStateConnected(){            
-      DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
+      //DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
       state.code = IF_READY;      
       state.label = IF_STATE_CONNECTED;
       state.subState = OSC_IP.toString();      
@@ -169,7 +169,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
     void setStateQueryingDevice(){
-      DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
+      //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
       // network is connected but not the OSC device is not answering
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;

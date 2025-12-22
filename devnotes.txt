@@ -1,3 +1,8 @@
+
+~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C  0x02ad01ca:0x3fcebdb0 0x42128b85:0x3fcebe10 0x42007ae3:0x3fcebeb0 0x4202a3c6:0x3fcebed0 0x4202a4c0:0x3fcebf80 0x4205a711:0x3fcebfa0
+
+
+
 packages are in C:\Users\progman\.platformio\packages
 
 C:\Users\progman\.platformio\packages\framework-arduinoespressif32\tools\sdk\esp32s3 => https://arduinojson.org/v7/how-to/use-external-ram-on-esp32/
@@ -249,33 +254,5 @@ void wifiping(const char * host){   // see also https://github.com/espressif/esp
 
 
 
+//////////////////////////////////////
 
-
-
-              promptParams.timeoutMs = 20000;                // 15s timeout
-              promptTimeoutMax = (float)promptParams.timeoutMs;
-              promptRemainingTime = promptTimeoutMax;
-              promptStartTime = millis();
-              screen.id = SCREEN_PROMPT;   
-
-
-
-    void resetPromptTimer(){
-      promptStartTime = millis();
-      promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
-      promptRemainingTime = promptParams.timeoutMs;
-    }
-
-    void handlePromptTimeout(){
-      promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
-      if (promptParams.timeoutMs == 0){
-        promptRemainingTime = 0;
-        return;
-      }
-      unsigned long elapsed = millis() - promptStartTime;
-      if (elapsed >= promptParams.timeoutMs){
-        branchFromPrompt(promptParams.targetScreens[1]);
-      }else{
-        promptRemainingTime = promptParams.timeoutMs - elapsed;
-      }
-    }

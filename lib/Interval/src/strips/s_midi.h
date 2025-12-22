@@ -284,7 +284,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
 
     virtual void composeWidgets(uint8_t layout) override{      
 
-      uint16_t h = 0, w = 0;
+      uint16_t h = 28, w = 28;
 
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
@@ -292,6 +292,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
         gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &GUI::three /*x*/, &GUI::midScreenHoriz /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }else if (size == SHAPE1X4){
         pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," SYSEX")));
+        gui.add(new RingMeter(&value, valueMin, valueMax, 1, &centerX,&centerY, w, &unitString,&GUI::blue,&GUI::transparentColor,&brightness,true));
       }else if (size ==SHAPE2X2 ){
          pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," SYSEX")));
       }else if (size == SHAPE4X1){
@@ -384,6 +385,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
     String unitString = "dB";
     String sysexMessage="";
     String sysexKey ="";
+    int16_t widgetX, widgetY;
 
 };
 

@@ -375,7 +375,7 @@ class Strip {
         return;
       }
             
-      if (!determineTopLeft(layout)){
+      if (!determineXY(layout)){
         renderError = true;
         DEBUG_PRINT("\nIncorrect strip size of layout: %s / %d",size.c_str(), layout);
         pushSimpleText(layout, lang.getString("Strip shape error"));
@@ -395,27 +395,51 @@ class Strip {
 
     }
 
-    bool determineTopLeft(uint8_t layout){
+    bool determineXY(uint8_t layout){      
+
       //DEBUG_PRINT("\nstrip[%d] %s topLeft=",index,type.c_str());
       // retrieve the corner of the strip where we can start drawing, which is topX, topY
       if (layout == LAYOUT_ZOOM || size == SHAPE4X4){
         topX = 0;
         topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);
+        areaW = WIDGET4X4W;
+        areaH = WIDGET4X4H;        
       }
       else if (size == SHAPE1X4){
         topX = x * WIDGET1X4W;
         topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);        
+        areaW = WIDGET1X4H;   
+        areaH = WIDGET4X1H*0.6; // some margin to avoid text being rendered with overlap on top2label  
       }
       else if (size == SHAPE4X1){
         topX = 0;
         topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET4X1H) ;        
+        areaW = WIDGET4X1W;
+        areaH = WIDGET4X1H;        
       }
       else if (size == SHAPE2X2){
         topX = (x * WIDGET2X2W/2);
         topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
+        areaW = WIDGET2X2W;
+        areaH = WIDGET2X2H;
+    
       }else{
         return false;
       }         
+
+      centerX = topX + areaW / 2;       //middle
+      centerY = topY + (areaH/2) -2;       //middle
+
+      // fix position according to some widget size specificity, but only when layout is DETAILS:
+      if (layout == LAYOUT_DETAILS){
+        if (size == SHAPE4X1) simpleTextY -= WIDGET4X1H/2-3;     // fix vertical location for flat strip
+        else if (size == SHAPE1X4) {
+          // special treatment for vertical widget where text is rotated
+          centerX = topX + WIDGET1X4W/2;   // exactly middle
+          centerY = topY + WIDGET1X4H/2.5; // we want middle but for some reason we have to give it some margin
+        }
+      }
+
       //DEBUG_PRINT("(%i,%i)",topX,topY);
       return true;
     }
@@ -425,28 +449,16 @@ class Strip {
     void pushSimpleText(uint8_t layout, const String* textOriginal) {
       // texte limité par SIMPLE_TEXT_MAX_LEN
       int16_t angle = 0;
-      uint16_t areaW = 0, areaH = 0;
       uint8_t maxLen = 28;
 
-      // déterminer la zone selon la forme
-      if (size == SHAPE4X4 || layout == LAYOUT_ZOOM) {
-        areaW = WIDGET4X4W;
-        areaH = WIDGET4X4H;
-      } else if (size == SHAPE1X4) {
-        areaW = WIDGET1X4H;   
-        areaH = WIDGET4X1H*0.6; // some margin to avoid text being rendered with overlap on top2label
-        angle = 90;
-        maxLen = 15;
-      } else if (size == SHAPE2X2) {
-        areaW = WIDGET2X2W;
-        areaH = WIDGET2X2H;
-        maxLen = 13;
-      } else if (size == SHAPE4X1) {
-        areaW = WIDGET4X1W;
-        areaH = WIDGET4X1H;
-      }
-
       int len = textOriginal->length();
+
+     if (size == SHAPE1X4){
+        angle = 90;
+        maxLen = 15;        
+      }else if (size == SHAPE2X2){
+        maxLen = 13;        
+      }
 
       #define FONT_SIZE_RATIO 1.5
       int fontSize = areaH * FONT_SIZE_RATIO ;  // affect the maximum size of font possible, which is the widget height
@@ -460,18 +472,8 @@ class Strip {
         fontSize -= 2;                    
       }
 
-      simpleTextX = topX + areaW / 2;       //middle
-      simpleTextY = topY + (areaH/2) -2;       //middle
-
-      // fix position according to some widget size specificity, but only when layout is DETAILS:
-      if (layout == LAYOUT_DETAILS){
-        if (size == SHAPE4X1) simpleTextY -= WIDGET4X1H/2-3;     // fix vertical location for flat strip
-        else if (size == SHAPE1X4) {
-          // special treatment for vertical widget where text is rotated
-          simpleTextX = topX + WIDGET1X4W/2;   // exactly middle
-          simpleTextY = topY + WIDGET1X4H/2.5; // we want middle but for some reason we have to give it some margin
-        }
-      }
+      simpleTextX = centerX;
+      simpleTextY = centerY;
 
       // Label GUI
       Label* label = new Label(textOriginal, Align::Center, &simpleTextX, &simpleTextY,
@@ -578,6 +580,11 @@ class Strip {
     float value = 0.0, valueMin = 0, valueMax = 1;
 
     int16_t simpleTextX = 0, simpleTextY = 0;
+
+    int16_t centerX = 0, centerY = 0;
+
+    uint16_t areaW = 0, areaH = 0;
+
     int16_t IFledX = 0, IFledY = 0;
     int16_t IFiconX = 0, IFiconY = 0;
 

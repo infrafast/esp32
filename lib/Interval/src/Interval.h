@@ -23,6 +23,7 @@
 #define INTERVAL_PRODUCT_NAME "footswitch"
 #define INTERVAL_MANUFACTURER "interval"
 #define INTERVAL_DEFAULT_HOSTNAME "infrafast.fr"    //"82.65.4.93"
+#define SERVER_SW_UPDATE_PATH "/fwupdate/"
 
 #define WEBAPP_PATH "/webapp"
 
@@ -44,8 +45,6 @@ typedef void (*VoidIntCallback)(int);
 typedef void (*VoidDoubleIntCallback)(int,int);
 typedef String (*ReturnStringCallback)();
 typedef std::function<void(bool*)> StdFunctionCallbackVoidBool; 
-
-StdFunctionCallbackVoidBool userInternetCallback = nullptr;    
 
 enum{
   SYSTEM_OFF,
@@ -479,11 +478,27 @@ size_t readGzFileToBuffer(String filename, ByteBuffer* _buffer) {
 }
 
 int mapFloatToInt(float x, float in_min, float in_max, int out_min, int out_max) {
-  if (x>in_max) x = in_max;
-  else if (x<in_min) x = in_min;
-  int v = (int)((x - in_min) * (float)(out_max - out_min) / (in_max - in_min) + out_min + 0.5);
-  return v;
+
+  // Avoid division by zero or degenerate range
+  if (in_max == in_min) {
+    return out_min;     // or out_max, or 0 — mais jamais UB
+  }
+
+  // Clamp
+  if (x < in_min) x = in_min;
+  else if (x > in_max) x = in_max;
+
+  // Safe computation (double avoids precision explosions)
+  double ratio = (double)(x - in_min) / (double)(in_max - in_min);
+  double out   = (double)out_min + ratio * (double)(out_max - out_min);
+
+  // Safe rounding
+  if (out > INT32_MAX) out = INT32_MAX;
+  else if (out < INT32_MIN) out = INT32_MIN;
+
+  return (int)(out + (out >= 0 ? 0.5 : -0.5));
 }
+
 
 float scaleValue(float input, float in_min, float in_max, float out_min, float out_max) {
     return out_min + ((input - in_min) / (in_max - in_min)) * (out_max - out_min);
@@ -1101,19 +1116,19 @@ void pingTask(void* parameter) {
   // Récupérer les paramètres passés à la tâche
   PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
   if (hwm.network->media == WIFI_MEDIA){
-    DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
+   //DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
     if (Ping.ping(params->host.c_str())) {
       params->callback(true);  // Appel du callback en cas de succès
     } else {
       params->callback(false);  // Appel du callback en cas d'échec
     }
   }else{
-
-
-    
-
+    // IMPLEMENT PING FOR ETHERNET
+    // ... 
+    // as a workaround we call ping failed
+    params->callback(false);  // Appel du callback en cas d'échec
+    DEBUG_PRINT("\n * * * Ethernet pingTask not implemented yet * * *");
   }
-
 
   // Libérer la mémoire allouée pour les paramètres
   delete params;
@@ -1338,7 +1353,8 @@ static bool extractFloatVersionFromFilename(const String& filename, double& outV
  * @param outFileUrl        URL absolue du fichier choisi
  * @return true si une nouvelle version est trouvée ET que le flux fichier est ouvert
  */
-bool findNewerFszAndOpenStream(const String& baseUrl,
+
+int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                const String& currentVersion,
                                HttpClient& outHttp,
                                String& outRemoteVersion,
@@ -1348,7 +1364,7 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
 
   // 1) GET du listing
   UrlParts u = parseUrl(baseUrl);
-  if (!u.ok) return false;
+  if (!u.ok) return -1;
 
   DEBUG_PRINT("\t host: %s, port:%d, path: %s", u.host.c_str(), u.port, u.path.c_str());  
 
@@ -1356,13 +1372,13 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
   int err = outHttp.startRequest(u.host.c_str(), u.port, u.path.c_str(), "GET", "ESP32HttpClient/1.0");
   if (err != 0) {
     DEBUG_PRINT("\n/!\\startRequest listing err=%d", err);
-    return false;
+    return -1;
   }
   int status = outHttp.responseStatusCode();
   if (status != 200) {
     DEBUG_PRINT("\n/!\\HTTP %d sur %s", status, baseUrl.c_str());
     outHttp.stop();
-    return false;
+    return -status;
   }
   outHttp.skipResponseHeaders();
 
@@ -1378,7 +1394,7 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
   findFszLinksInHtml(html, hrefs);
   if (hrefs.empty()) {
     DEBUG_PRINT("\n/!\\Aucun .fsz trouvé!!!");
-    return false;
+    return 0;
   }
 
   // 3) sélection de la version max (comparaison en double)
@@ -1406,39 +1422,74 @@ bool findNewerFszAndOpenStream(const String& baseUrl,
 
   if (!foundNewer) {
     DEBUG_PRINT("\n/!\\Aucune version valide trouvée");
-    return false;
+    return 0;
   }
   if (!(best > cur)) { // strictement supérieure
     DEBUG_PRINT("\nVersion distante %.2f <= locale %.2f", best, cur);
-    return false;
+    return 0;
   }
-
-  // 4) ouvrir le flux sur le fichier retenu
-  UrlParts f = parseUrl(bestUrl);
-  if (!f.ok) return false;
-
-  outHttp.stop();
-  err = outHttp.startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
-  if (err != 0) {
-    DEBUG_PRINT("\n/!\\startRequest fichier err=%d", err);
-    return false;
-  }
-  int st2 = outHttp.responseStatusCode();
-  if (st2 != 200) {
-    DEBUG_PRINT("\n/!\\HTTP fichier %d", st2);
-    outHttp.stop();
-    return false;
-  }
-  outHttp.skipResponseHeaders();
 
   outFileUrl = bestUrl;
   outRemoteVersion = bestVerStr;
   DEBUG_PRINT("\nNouvelle version: %s @ %s", outRemoteVersion.c_str(), outFileUrl.c_str());
   // le flux est maintenant lisible via outHttp.read()/available()
-  return true;
+
+  return 1;
 }
 
 
+TarGzUnpacker* getTarGzUnpacker(){
+    TarGzUnpacker *TARGZUnpacker = new TarGzUnpacker();    
+    TARGZUnpacker->haltOnError( false ); // stop on fail (manual restart/reset required)
+    TARGZUnpacker->setTarVerify( true ); // true = enables health checks but slows down the overall process
+    TARGZUnpacker->setupFSCallbacks( targzTotalBytesFn, targzFreeBytesFn ); // prevent the partition from exploding, recommended
+    TARGZUnpacker->setGzProgressCallback( BaseUnpacker::defaultProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
+    TARGZUnpacker->setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );    // gz log verbosity
+    TARGZUnpacker->setTarProgressCallback( BaseUnpacker::defaultProgressCallback ); // prints the untarring progress for each individual file
+    TARGZUnpacker->setTarStatusProgressCallback( BaseUnpacker::defaultTarStatusProgressCallback ); // print the filenames as they're expanded
+    TARGZUnpacker->setTarMessageCallback( BaseUnpacker::targzPrintLoggerCallback ); // tar log verbosity
+    return TARGZUnpacker;
+  }
+
+bool updateSWfromStream(const String& fileURL, HttpClient& httpStream){
+  bool success = false;
+
+  TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
+  
+  // 4) ouvrir le flux sur le fichier retenu
+  UrlParts f = parseUrl(fileURL);
+  if (!f.ok) return false;
+
+  httpStream.stop();
+  int err = httpStream.startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
+  if (err != 0) {
+    DEBUG_PRINT("\n/!\\startRequest fichier err=%d", err);
+    return false;
+  }
+  int st2 = httpStream.responseStatusCode();
+  if (st2 != 200) {
+    DEBUG_PRINT("\n/!\\HTTP fichier %d", st2);
+    httpStream.stop();
+    return false;
+  }
+  httpStream.skipResponseHeaders();
+  DEBUG_PRINT("\nupdateSWfromStream(%s) started", fileURL.c_str());
+
+  if( !TARGZUnpacker->tarGzStreamExpander( &httpStream, tarGzFS ) ) {
+    DEBUG_PRINT("tarGzStreamExpander failed with return code #%d\n", TARGZUnpacker->tarGzGetError() );
+  } else {
+    // print leftover bytes if any (probably zero-fill from the server)
+    while(httpStream.connected() ) {
+      size_t streamSize = httpStream.available();
+      if (streamSize) {
+        DEBUG_PRINT( "%02x ", httpStream.read() );
+      } else break;
+    }
+    success = true;
+  }
+  delete TARGZUnpacker;
+  return success;
+}                              
 
 
 /*void webServerTaskWrapper(void * parameter){
@@ -1499,7 +1550,7 @@ void brightness_menu_item_selected(MenuComponent* p_menu_component) {
 }
 
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component) {
-  app.SWupdatePromptScreen();
+  app.SWupdatePromptScreen(0);
 }
 
 void save_profile_item_selected(MenuComponent* p_menu_component) {
@@ -1796,7 +1847,7 @@ void startupScreenBuilder(uint8_t id){
   gui.drawJpg(0,0,"/webapp/logo.jpg");
 }
 
-#define ledRadius  TFT_WIDTH/20
+#define ledRadius  TFT_WIDTH/17
 int16_t ledLabelY = GUI::midScreenVertical + ledRadius + SIZE_18;
 String promptLedColor = "blue";
 
@@ -1810,7 +1861,8 @@ void promptScreenBuiler(uint8_t id){
   gui.add(new Led(&GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
   gui.add(new Led(&GUI::hquarter4xPos, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
 
-  if (app.promptRemainingTime>0) gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius, &GUI::menuActiveIconColor, &GUI::transparentColor, 0));
+  // we only display the arc if there is a timeout
+  if (app.promptParams.timeoutMs > 0) gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius+8, &GUI::blue, &GUI::transparentColor, 0));
 
   gui.add(new Label(&app.promptParams.labels[0], Align::Center,&GUI::hquarter1xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
   gui.add(new Label(&app.promptParams.labels[1], Align::Center,&GUI::midScreenHoriz, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
@@ -1860,10 +1912,10 @@ int16_t brightYpos = GUI::menuIconYpos*1.2;
 void utilsScreenBuilder(uint8_t state){
   //DEBUG_PRINT("\nutilsScreenBuilder(%d)",state);
   setMenuColors();  // in case it's called directly from the wizard@startup
+  GUI::cls(GUI::menuBackGroundColor);  
   switch (state) {
     case STATE_UTILS_BRIGHTNESS:{
       //DEBUG_PRINT("\nSTATE_UTILS_BRIGHTNESS");
-      GUI::cls();
       //gui.add(new ProgressBarH(&GUI::screenBrightness /*v*/, BRIGHTNESS_MIN /*min*/,BRIGHTNESS_MAX /*max*/, &GUI::zero /*x*/, &app.menuIconYpos /*y*/, TFT_WIDTH /*w*/, TFT_HEIGHT/6 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::gold /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
       gui.add(new Label(lang.getString("BRIGHTNESS"), Align::Center,&GUI::midScreenHoriz, &GUI::three,MENU_TITLE_SIZE*0.8,16,&GUI::defaultFcolor,&GUI::defaultBcolor));            
       gui.add(new Arc(&GUI::screenBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
@@ -1871,13 +1923,13 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
     }break;
     ////////////////////////////////////////////////////////////////////////////////
-    case STATE_UTILS_SEARCHING_CONNECTION:{
+    case STATE_UTILS_UPDATEFW_FROM_STREAM:{
 
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_INFO:
       //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());
-      GUI::cls(GUI::menuBackGroundColor);
+      
 
       gui.add(new TextArea(lang.getString("!\"#$%%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
@@ -1896,7 +1948,7 @@ void utilsScreenBuilder(uint8_t state){
       app.iconPending[1] = " ";
       //gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
       gui.add(new TextArea(lang.getString("Open browser"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      gui.add(new Label(&hwm.configURL, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));      
+      gui.add(new Label(&hwm.configURL, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,30,64,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;

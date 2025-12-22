@@ -54,11 +54,12 @@ void defaultWizardStepFlow();
 void startAnimationThread(AnimationTaskParams* param);
 void stopAnimationThread();
 
-bool findNewerFszAndOpenStream(const String& baseUrl,
+int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                const String& currentVersion,
                                HttpClient& outHttp,
                                String& outRemoteVersion,
                                String& outFileUrl);
+bool updateSWfromStream(const String& fwUpdateURL, HttpClient& httpStream);
 
 // Prototypage de la fonction de gestion de la connexion
 //void handleWebConnection(void *parameter);
@@ -92,11 +93,12 @@ enum{
   STATE_UTILS_CONNECTCONFIGMEDIA,
   STATE_UTILS_CONNECTWEBAPP,
   STATE_UTILS_WEBAPPCONNECTED,
-  STATE_UTILS_DOWNLOAD_FIRMWARE,
+  STATE_UTILS_UPDATEFW_FROM_STREAM,
   STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
   STATE_UTILS_RESTORE_SCREEN,
   STATE_BYE_MODAL_MESSAGE,
-  STATE_BYE_GOSLEEP_MESSAGE
+  STATE_BYE_GOSLEEP_MESSAGE,
+  STATE_UTILS_TRIGGER_FWUPDATE_PROMPT
 };
 
 
@@ -447,7 +449,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     String configClientIP; // ip of the client connect to the AP during configuration    
 
-    String firmwareUpdateFilename="";
+    String firmwareUpdateFilename="";       // from fileStream
+    String fwUpdateURL;                   // from internet
 
     Shortcuts shortcuts = Shortcuts(SHORTCUT_GROUP); 
     
@@ -506,44 +509,53 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       return bank->getStrip(bank->selector);
     }
 
-    void internetCallBack(bool* online){
-      static bool firstStartup = true;
-      ///////////////////////// do what application manager has to do when internet is connected/disconnected      
-      if (firstStartup){
-        firstStartup = false;
-        // internet check is only done at first startup to avoid slowing down workflow when network disconnect and reconnect
-        if (*online){
-          HttpClient httpClient(*hwm->network->client);          
-          String fwURL;
-          String serverRoot = *systemCfg.getString(S_HOSTNAME,INTERVAL_DEFAULT_HOSTNAME);      
-          bool fwAvailable = findNewerFszAndOpenStream(
-            concatStrings("http://",serverRoot,"/fwupdate/"),
-            _V,
-            httpClient,
-            newSWversion,
-            fwURL
-          );
-          // enable or disable the firmware update menu item accordingly
-          fmw_update_menu_item->setEnabled(fwAvailable);
-          if (screen.id == SCREEN_MENU) triggerRedraw();  // this s to update firmware menu item to be actif or disabled uppon internet check                      
-          DEBUG_PRINT("\n================> %s fmw_update_menu_item", *online ? "enable":"disable");          
-          // BRANCH TO SCREEN PROMPT IF CONFIG ALLOWS IT          
-          if (fwAvailable){
-            if (systemCfg.getBool(S_SWUPDATE_PROMPT)){            
-              SWupdatePromptScreen();
-            }else{
-              DEBUG_PRINT("\nStartup update disabled in config");                
-            }
+
+    void checkRemoteVersion(){
+      static bool alreadyChecked = false;
+      //  check is only done once to avoid slowing down workflow when network disconnect and reconnect (when called by ping callback)
+      if (!alreadyChecked){
+        alreadyChecked = true;
+        HttpClient httpClient(*hwm->network->client);          
+        String serverRoot = *systemCfg.getString(S_HOSTNAME,INTERVAL_DEFAULT_HOSTNAME);      
+        int8_t retCode = findNewerRemoteFWUpdate(
+          concatStrings("http://",serverRoot,SERVER_SW_UPDATE_PATH),
+          _V,
+          httpClient,
+          newSWversion,
+          fwUpdateURL
+        );
+        // enable or disable the firmware update menu item accordingly          
+        fmw_update_menu_item->setEnabled(retCode == 1 ? true:false); // if retcode = 1, there is a newer version available
+        DEBUG_PRINT("\n================> fmw_update_menu_item(%s", retCode == 1 ? "enable)":"disable)");          
+        // BRANCH TO SCREEN PROMPT IF CONFIG ALLOWS IT          
+        if (retCode == 1){
+          if (systemCfg.getBool(S_SWUPDATE_PROMPT)){            
+            screen.id = SCREEN_UTILS;
+            screen.state = STATE_UTILS_TRIGGER_FWUPDATE_PROMPT;
           }else{
-            DEBUG_PRINT("\n*** No firmware update ***");          
+            if (screen.id == SCREEN_MENU) triggerRedraw();  // this s to update firmware menu item to be actif or disabled uppon internet check                      
+            DEBUG_PRINT("\nStartup update disabled in config");                
           }
+        }else if(retCode  == 0) {
+          DEBUG_PRINT("\n*** No firmware update ***");          
         }else{
-          DEBUG_PRINT("\nNetwork disconnected");          
-        }
-       
+          DEBUG_PRINT("\n*** Firmware update check error :%i ***",retCode);
+        }      
       }else{
-        DEBUG_PRINT("\nStartup done, skipping internet checks");
-      }                 
+        DEBUG_PRINT("\n SW update check already done at startup");
+      }
+
+    }
+
+
+    void internetCallBack(bool* online){
+      ///////////////////////// do what application manager has to do when internet is connected/disconnected      
+      if (*online){
+        //checkRemoteVersion();
+      }else{
+        DEBUG_PRINT("\nNo internet connection");          
+      }
+       
       ///////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
       evt.data = online;
@@ -968,13 +980,19 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       fireEvent(event);      
     }
 
-    void SWupdatePromptScreen(){
+    void promptScreen(){
+      resetPromptTimer();
+      screen.id = SCREEN_PROMPT;
+    }
+
+    void SWupdatePromptScreen(uint16_t timeoutMs = 5000){
+      DEBUG_PRINT("\nPreparing SW update prompt screen for v%s",newSWversion.c_str());
       // prepare software update promnpt screen
       promptParams.message = concatStrings(*lang.getString("Update to firmware")," v",newSWversion,"?");              
       
       promptParams.labels[0] = *lang.getString("Yes");
       promptParams.targetScreens[0] = SCREEN_UTILS;  // go to utils screen to perform the update
-      promptParams.targetState[0] = STATE_UTILS_DOWNLOAD_FIRMWARE;
+      promptParams.targetState[0] = STATE_UTILS_UPDATEFW_FROM_STREAM;
       
       promptParams.labels[1] = *lang.getString("No");              
       promptParams.targetScreens[1] = SCREEN_UTILS;   // back to caller
@@ -984,9 +1002,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       promptParams.targetScreens[2] = SCREEN_UTILS;  // diable auto update prompt in utils screen
       promptParams.targetState[2] = STATE_UTILS_DISABLE_SWUPDATE_PROMPT;
       
-      promptParams.timeoutMs = 5000;                // 5s timeout
-
-      screen.id = SCREEN_PROMPT;   
+      promptParams.timeoutMs = timeoutMs;                // 5s timeout
+      
+      promptScreen();
     }
 
 
@@ -1034,6 +1052,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     void resetPromptTimer(){
+      DEBUG_PRINT("\nresetPromptTimer()");
       promptTimeoutMax = (float)promptParams.timeoutMs;
       promptRemainingTime = promptTimeoutMax;
       promptStartTime = millis();
@@ -1494,14 +1513,14 @@ void setup() {
     }
 
     void restoreScreen(){
-      DEBUG_PRINT("\nrestoreScreen():");
+      //DEBUG_PRINT("\nrestoreScreen():");
       screen.id = hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
       screen.state = hwm->persistants.getUChar(PERSISTANT_SCREEN_STATE,0);  
-      DEBUG_PRINT("\t read: id=%d / state:%d",screen.id,screen.state);
+      //DEBUG_PRINT("\t read: id=%d / state:%d",screen.id,screen.state);
       // prevents wrong branching
       if (screen.id == SCREEN_BANK && screen.state > banks.size()-1) screen.state = 0; 
       if (screen.id == SCREEN_WIZARD && screen.state > STATE_WIZARD_USER_STEP4) screen.state = STATE_WIZARD_LANG_STEP1;       
-      DEBUG_PRINT("\t => id=%d / state:%d",screen.id,screen.state);
+      //DEBUG_PRINT("\t => id=%d / state:%d",screen.id,screen.state);
       // branch the first available strip 
       //DEBUG_PRINT("\tgetFocusedStrip():%s, id:%i",getSelectedStrip() == nullptr?"null":getSelectedStrip()->getTopLabel()->c_str(),getSelectedStrip() == nullptr?0:getSelectedStrip()->index);
     }
@@ -1810,6 +1829,8 @@ void setup() {
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                   
 
+          checkRemoteVersion();   // should be only called from internetCallback, but since the ping is not working, we rely on the httpCall
+
           // network has refreshed so we shift to appropriate configMedia
           if (hwm->network->media == WIFI_MEDIA){
             //we set last used Wifi SSID (id) and save config, hence keep WIFI_MEDIA credential
@@ -1922,9 +1943,6 @@ void setup() {
         //DEBUG_PRINT("\nDEBUG DONE");
         //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
         if (gui->transparency) gui->clearScreenBuffer();
-        if (screen.id == SCREEN_PROMPT){
-          resetPromptTimer();
-        }
         oldScreen.value = screen.value;
         // save the bank to restore in case of restoreScreen
         if (screen.id == SCREEN_BANK){
@@ -1984,13 +2002,31 @@ void setup() {
               if (hwm->configMedia->refreshed){
                 handleConfigConnection();
               }
+              if (webAppConnected == false){
+                screen.id = SCREEN_UTILS;
+                screen.state = STATE_UTILS_CONNECTWEBAPP;  
+              }  // when web app connect we go back to normal scree
+            break;
+            case STATE_UTILS_TRIGGER_FWUPDATE_PROMPT:
+              SWupdatePromptScreen(5000);
             break;
             case STATE_UTILS_DISABLE_SWUPDATE_PROMPT:
               systemCfg.setValue(S_SWUPDATE_PROMPT,"false");
               systemCfg.save();
+              restoreScreen();
+            break;
             case STATE_UTILS_RESTORE_SCREEN:
               restoreScreen();
             break;
+            case STATE_UTILS_UPDATEFW_FROM_STREAM:{
+              HttpClient httpStream(*hwm->network->client);
+              if (updateSWfromStream(fwUpdateURL,httpStream)){
+                //ESP.restart();
+                restoreScreen();
+              }else{
+                restoreScreen();
+              }
+            }break;
           }
         break;
         case SCREEN_PROMPT:
@@ -2104,7 +2140,7 @@ void setup() {
             setWSServer();   // ==> websocket server is created and then changed by application refresh() in case the network medium is changed
             //webTaskhandle(WEB_START);                   
           }
-          hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"); // hwm->configMedia->IP.toString();
+          hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"," (http://",hwm->network->IP.toString(),")"); // hwm->configMedia->IP.toString();
           DEBUG_PRINT("\nWebserver serving on %s",hwm->configURL.c_str() );
           return true;
         }
@@ -3166,9 +3202,8 @@ void setup() {
         "\"" S_PROFILE "\":\"" DEFAULT_PROFILE "\","
         "\"" S_AP_NAME "\":\"" INTERVAL_PRODUCT_NAME "\","
         "\"" S_LAST_USED_SSID "\":\"intervalmix1\","
-        "\"" S_HOSTNAME "\":\"infrafast.fr\","
         "\"" S_LANG "\":\"francais\","
-        "\"" S_HOSTNAME "\":\"" INTERVAL_PRODUCT_NAME "\","
+        "\"" S_HOSTNAME "\":\"" INTERVAL_DEFAULT_HOSTNAME "\","
         "\"" S_SWUPDATE_PROMPT "\":\"true\","
         "\"" S_FADERSPEED "\":\"157\","
         "\"" S_SSID "\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},"

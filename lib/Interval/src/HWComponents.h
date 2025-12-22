@@ -586,10 +586,10 @@ typedef std::function<void(bool)> PingCallback; // Utilisation de std::function 
 class PingTaskParameters {
 public:
   PingTaskParameters(){
-    DEBUG_PRINT("\nPingTaskParameters created");
+    //DEBUG_PRINT("\nPingTaskParameters created");
   }
   ~PingTaskParameters(){
-    DEBUG_PRINT("\nPingTaskParameters deleted");
+    //DEBUG_PRINT("\nPingTaskParameters deleted");
   }
 
   String host;
@@ -972,7 +972,7 @@ class WiFiEth : public Network{
           if (udpSlots[i].port == port && udpSlots[i].udp != nullptr && udpSlots[i].media == media) {
             // we found a slot which correspond to the port
             if (udpSlots[i].media == media){
-              DEBUG_PRINT("\n[UDP-%d/%d] ID reclaimed", i, port);
+              //DEBUG_PRINT("\n[UDP-%d/%d] ID reclaimed", i, port);
               return i;
             }
           }
@@ -995,7 +995,7 @@ class WiFiEth : public Network{
             udpSlots[i].active = true;
             udpSlots[i].mutex = xSemaphoreCreateMutex();
 
-            DEBUG_PRINT("\n[UDP-%d/%d] ID created", i, port);
+            //DEBUG_PRINT("\n[UDP-%d/%d] ID created", i, port);
 
             return i;
         }
@@ -1365,7 +1365,7 @@ class WiFiEth : public Network{
             wsEthClient->onClose(socketClientOnClose);            
           }
           checkInternet();
-          DEBUG_PRINT("\n...all network component begin() done");
+          //DEBUG_PRINT("\n...all network component begin() done");
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
             // common destruction
