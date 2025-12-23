@@ -591,10 +591,10 @@ public:
   ~PingTaskParameters(){
     //DEBUG_PRINT("\nPingTaskParameters deleted");
   }
-
   String host;
   PingCallback callback;
 };
+
 
 //typedef std::function<void()> StdFunctionCallbackVoid; 
 typedef std::function<void(const char*)> StdFunctionCallbackStringPointer;

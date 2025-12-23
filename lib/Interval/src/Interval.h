@@ -20,6 +20,16 @@
 #include <array>
 #include <utility>
 
+#define USE_FTP
+
+#if defined(USE_FTP) && defined(USE_NETWORK)
+  #include "ESP-FTP-Server-Lib.h"
+  #include "FTPFilesystem.h"
+  FTPServer ftp;
+#endif
+
+
+
 #define INTERVAL_PRODUCT_NAME "footswitch"
 #define INTERVAL_MANUFACTURER "interval"
 #define INTERVAL_DEFAULT_HOSTNAME "infrafast.fr"    //"82.65.4.93"
@@ -28,6 +38,9 @@
 #define WEBAPP_PATH "/webapp"
 
 bool useUSBMidi = false;
+
+#define FW_EXTENSION ".tgz"
+
 
 #ifdef DEBUG  //ets_printf(__VA_ARGS__) //
   #define debugMon Serial  //  
@@ -45,6 +58,13 @@ typedef void (*VoidIntCallback)(int);
 typedef void (*VoidDoubleIntCallback)(int,int);
 typedef String (*ReturnStringCallback)();
 typedef std::function<void(bool*)> StdFunctionCallbackVoidBool; 
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief // Callback to report progress during unpacking
+/// @param percent Completed percent (0.0 - 100.0)
+String updateProgressLabel = "";
+float updateProgressPercent = 0.0;
+String updateSWerrorString = "";
 
 enum{
   SYSTEM_OFF,
@@ -1011,13 +1031,29 @@ void xTaskBackground(void *pvParameters){
 }
 
 void unpackProgressCallback( uint8_t progress ) {
-  // app.progress = progress;
+  static int8_t uzLibLastProgress = -1;
+  if( uzLibLastProgress != progress ) {
+    if( uzLibLastProgress == -1 ) {
+      Serial.print("Progress: 0% *");
+    }
+    uzLibLastProgress = progress;
+    switch( progress ) {
+      //case   0: Serial.print("0% ▓");  break;
+      case  25: Serial.print(" 25% ");break;
+      case  50: Serial.print(" 50% ");break;
+      case  75: Serial.print(" 75% ");break;
+      case 100: Serial.print("* 100%\n"); uzLibLastProgress = -1; break;
+      default: if( progress > 0 && progress < 100) Serial.print( "*" ); break;
+    }
+  }
+
+  updateProgressPercent = progress;
 }
 
 void tarStatusProgressCallback( const char* name, size_t size, size_t total_unpacked ){
-  // app.unpackFIleName = name;
+  updateProgressLabel = name;
+  DEBUG_PRINT("[TAR] %-64s %8d bytes - %8d Total bytes\n", name, size, total_unpacked );  
 } 
-
 
 void commonFileServerWrapper(Request &req, Response &res) {
   app.commonFileServer(req,res);
@@ -1099,10 +1135,6 @@ void stopAnimationThread() {
     }
   }
 }
-
-
-
-
 
 
 void scanNetworksTaskWrapper(void * parameter){
@@ -1240,9 +1272,13 @@ void connectHTTPTask(void *parameter) {
   vTaskDelete(NULL);
 }
 ////////////////////////////////////////////////////////////////////////
-
-//////////////////////// FIRMWARE UPDATE FUNCTIONS  ////////////////////
+///////////////////////                              ///////////////////
+///////////////////////  FIRMWARE UPDATE FUNCTIONS   ///////////////////
+///////////////////////                              ///////////////////
 ////////////////////////////////////////////////////////////////////////
+
+// tar --format=ustar --exclude='.DS*' -czvf 0.13.tgz -C ./tgztest .
+
 //--- utilitaires URL -----------------------------------------------------------
 struct UrlParts {
   String proto, host, path;
@@ -1290,11 +1326,11 @@ static String makeAbsoluteUrl(const String& baseUrl, const String& href) {
   return baseUrl + (baseHasSlash ? "" : "/") + href;
 }
 
-//--- parsing HTML très simple: récupère hrefs terminant par .fsz ----------------
+//--- parsing HTML très simple: récupère hrefs terminant par .tgz ----------------
 static void findFszLinksInHtml(const String& html, std::vector<String>& outLinks) {
   int pos = 0;
   while (true) {
-    int idx = html.indexOf(".fsz", pos);
+    int idx = html.indexOf(FW_EXTENSION, pos);
     if (idx < 0) break;
 
     int L = -1;
@@ -1310,20 +1346,20 @@ static void findFszLinksInHtml(const String& html, std::vector<String>& outLinks
     if (L >= 0 && R > L) {
       String href = html.substring(L + 1, R);
       href.trim();
-      if (href.endsWith(".fsz")) outLinks.push_back(href);
+      if (href.endsWith(FW_EXTENSION)) outLinks.push_back(href);
     }
     pos = idx + 4;
   }
 }
 
-//--- extrait la version float depuis un nom "0.00.fsz" -------------------------
+//--- extrait la version float depuis un nom "0.00.tgz" -------------------------
 static bool extractFloatVersionFromFilename(const String& filename, double& outVer) {
-  if (!filename.endsWith(".fsz")) return false;
+  if (!filename.endsWith(FW_EXTENSION)) return false;
   // isole le nom de fichier sans chemin
   int slash = filename.lastIndexOf('/');
   String base = (slash >= 0) ? filename.substring(slash + 1) : filename;
   // retire l'extension
-  String verStr = base.substring(0, base.length() - 4); // enlève ".fsz"
+  String verStr = base.substring(0, base.length() - 4); // enlève FW_EXTENSION
   verStr.trim();
   // contrôle rapide du format (chiffres + un point, ex: 0.00)
   bool hasDot = false;
@@ -1343,7 +1379,7 @@ static bool extractFloatVersionFromFilename(const String& filename, double& outV
 }
 
 /**
- * Recherche la version distante maximale au format "float" (ex: 0.00.fsz),
+ * Recherche la version distante maximale au format "float" (ex: 0.00.tgz),
  * compare avec currentVersion ("0.00"), et si >, ouvre le flux HTTP sur ce fichier.
  *
  * @param baseUrl           URL listant les fichiers (index HTML)
@@ -1389,11 +1425,11 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
   }
   outHttp.stop();
 
-  // 2) collecte des liens .fsz
+  // 2) collecte des liens .tgz
   std::vector<String> hrefs;
   findFszLinksInHtml(html, hrefs);
   if (hrefs.empty()) {
-    DEBUG_PRINT("\n/!\\Aucun .fsz trouvé!!!");
+    DEBUG_PRINT("\n/!\\Aucun %s trouvé!!!",FW_EXTENSION);
     return 0;
   }
 
@@ -1415,7 +1451,7 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
 
       // conserver le string affichable tel que repéré (avec 2 décimales si c’est ton format)
       int slash = absUrl.lastIndexOf('/');
-      String base = (slash >= 0) ? absUrl.substring(slash + 1) : absUrl; // "0.00.fsz"
+      String base = (slash >= 0) ? absUrl.substring(slash + 1) : absUrl; // "0.00.tgz"
       bestVerStr = base.substring(0, base.length() - 4);                 // "0.00"
     }
   }
@@ -1443,80 +1479,153 @@ TarGzUnpacker* getTarGzUnpacker(){
     TARGZUnpacker->haltOnError( false ); // stop on fail (manual restart/reset required)
     TARGZUnpacker->setTarVerify( true ); // true = enables health checks but slows down the overall process
     TARGZUnpacker->setupFSCallbacks( targzTotalBytesFn, targzFreeBytesFn ); // prevent the partition from exploding, recommended
-    TARGZUnpacker->setGzProgressCallback( BaseUnpacker::defaultProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
+    TARGZUnpacker->setGzProgressCallback( unpackProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
     TARGZUnpacker->setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );    // gz log verbosity
-    TARGZUnpacker->setTarProgressCallback( BaseUnpacker::defaultProgressCallback ); // prints the untarring progress for each individual file
-    TARGZUnpacker->setTarStatusProgressCallback( BaseUnpacker::defaultTarStatusProgressCallback ); // print the filenames as they're expanded
+    TARGZUnpacker->setTarProgressCallback( unpackProgressCallback ); // prints the untarring progress for each individual file
+    TARGZUnpacker->setTarStatusProgressCallback( tarStatusProgressCallback ); // print the filenames as they're expanded
     TARGZUnpacker->setTarMessageCallback( BaseUnpacker::targzPrintLoggerCallback ); // tar log verbosity
     return TARGZUnpacker;
   }
 
-bool updateSWfromStream(const String& fileURL, HttpClient& httpStream){
-  bool success = false;
 
-  TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
-  
-  // 4) ouvrir le flux sur le fichier retenu
-  UrlParts f = parseUrl(fileURL);
-  if (!f.ok) return false;
-
-  httpStream.stop();
-  int err = httpStream.startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
-  if (err != 0) {
-    DEBUG_PRINT("\n/!\\startRequest fichier err=%d", err);
-    return false;
-  }
-  int st2 = httpStream.responseStatusCode();
-  if (st2 != 200) {
-    DEBUG_PRINT("\n/!\\HTTP fichier %d", st2);
-    httpStream.stop();
-    return false;
-  }
-  httpStream.skipResponseHeaders();
-  DEBUG_PRINT("\nupdateSWfromStream(%s) started", fileURL.c_str());
-
-  if( !TARGZUnpacker->tarGzStreamExpander( &httpStream, tarGzFS ) ) {
-    DEBUG_PRINT("tarGzStreamExpander failed with return code #%d\n", TARGZUnpacker->tarGzGetError() );
-  } else {
-    // print leftover bytes if any (probably zero-fill from the server)
-    while(httpStream.connected() ) {
-      size_t streamSize = httpStream.available();
-      if (streamSize) {
-        DEBUG_PRINT( "%02x ", httpStream.read() );
-      } else break;
+// Tâche de ping non bloquante
+/*
+void pingTask(void* parameter) {
+  // Récupérer les paramètres passés à la tâche
+  PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
+  if (hwm.network->media == WIFI_MEDIA){
+   //DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
+    if (Ping.ping(params->host.c_str())) {
+      params->callback(true);  // Appel du callback en cas de succès
+    } else {
+      params->callback(false);  // Appel du callback en cas d'échec
     }
-    success = true;
+  }else{
+    // IMPLEMENT PING FOR ETHERNET
+    // ... 
+    // as a workaround we call ping failed
+    params->callback(false);  // Appel du callback en cas d'échec
+    DEBUG_PRINT("\n * * * Ethernet pingTask not implemented yet * * *");
   }
-  delete TARGZUnpacker;
-  return success;
-}                              
 
+  // Libérer la mémoire allouée pour les paramètres
+  delete params;
 
-/*void webServerTaskWrapper(void * parameter){
-  while(true){
-    vTaskDelay(1);
-    app.handleWeb(parameter);
-  }
-}*/
-
-// Fonction de gestion de la connexion client
-/*void handleWebConnection(void *parameter) {
-  // Récupérer l'objet EthernetClient à partir du paramètre
-  EthernetClient client = *((EthernetClient*)parameter);
-
-  // Gestion de la connexion et des données
-            while (client.connected()) {
-              DEBUG_PRINT("\nWebapp connected eth");
-              app.webServer->process(&client);
-            } 
-                          client.stop();
-
-  // Terminer la connexion avec le client
-  // Supprimer la tâche une fois le traitement terminé
+  // Suspendre la tâche après chaque ping (exécution ponctuelle)
   vTaskDelete(NULL);
 }*/
 
+enum{
+  BINARY_INSTALLFAIL,
+  BINARY_INSTALLED,
+  NOBINARY_INSTALLED
+};
 
+void installGZBinaryFromFile(void *parameter){
+  String* s = static_cast<String*>(parameter);
+  String firmwareFilename = *s;
+
+  uint8_t binaryInstallStatus = NOBINARY_INSTALLED;
+
+  if (firmwareFilename != "") {
+    DEBUG_PRINT("\nPeforming binary update:%s", firmwareFilename.c_str());
+
+    GzUnpacker GZUnpacker;
+
+    GZUnpacker.setGzProgressCallback( unpackProgressCallback/*BaseUnpacker::defaultProgressCallback*/ );
+    GZUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );
+    int success =  GZUnpacker.gzUpdater(tarGzFS, firmwareFilename.c_str(), 0,/*don't restart after update*/false );
+    if(success ) {
+      app.singlePromptScreen(*lang.getString("Firmware installed successfully. Please restart the device to apply the update."),"Ok");
+    }else{          
+      app.singlePromptScreen(*lang.getString("Firmware install failed"),"Ok");
+    }        
+  }  
+}
+
+
+
+void checkAndInstallBinary() {
+  //DEBUG_PRINT("\nNow checking if a bin need to be installed\n");
+  // we have to rename each file from tmp to the root and check if we have a binary in the pack to install
+  // then we have to clean /tmp
+  File root = LittleFS.open("/");
+  
+  File file = root.openNextFile();
+  while (file) {
+    if (!file.isDirectory()) {
+      String filename = file.name();
+      if (filename.endsWith(".bin.gz") /*|| filename.endsWith(".bin")*/) {
+        DEBUG_PRINT("\nbinary update found: %s", filename.c_str());
+        updateProgressLabel = *lang.getString("Updating firmware");
+        screen.id = SCREEN_UTILS;
+        screen.state = STATE_UTILS_SHOW_PROGRESS;
+        // Créer la tâche FreeRTOS pour le ping
+        xTaskCreate(
+          installGZBinaryFromFile,         // Tâche à exécuter
+          "installGZBinaryFromFile",       // Nom de la tâche
+          4096*2,             // Taille de la pile de la tâche
+          &filename,           // Paramètres de la tâche (adresse IP et callbacks)
+          2,                // Priorité
+          nullptr
+        );
+        return;
+      }
+      else file = root.openNextFile();   
+    }       
+  }
+  app.restoreScreen();
+}
+
+void updateSWfromStreamTask(void* parameter){
+  bool success = false;  
+ 
+  HttpClient httpStream(*hwm.network->client);
+
+  int err = 0;
+  // 4) ouvrir le flux sur le fichier retenu
+  UrlParts f = parseUrl(app.fwUpdateURL);
+  if (f.ok){   
+    httpStream.stop();
+    err = httpStream.startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
+    if (err != 0) {
+      updateSWerrorString = concatStrings("http request ", String(err));
+    }else{
+      err = httpStream.responseStatusCode();
+      if (err != 200) {
+        updateSWerrorString = concatStrings("http response ", String(err));
+        httpStream.stop();
+      }else{
+        httpStream.skipResponseHeaders();
+        TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
+        if( !TARGZUnpacker->tarGzStreamExpander( &httpStream, tarGzFS ) ) {
+          updateSWerrorString = concatStrings("TARGZUnpacker ", String(TARGZUnpacker->tarGzGetError())  );
+        } else {
+          // print leftover bytes if any (probably zero-fill from the server)
+          while(httpStream.connected() ) {
+            size_t streamSize = httpStream.available();
+            if (streamSize) {
+              DEBUG_PRINT( "%02x ", httpStream.read() );
+            } else break;
+          }
+          success = true;
+        }
+        delete TARGZUnpacker;
+      }
+    }
+  }
+  if (success){
+    screen.id = SCREEN_UTILS;
+    screen.state = STATE_UTILS_CHECK_BINARY;    
+  }else{
+    app.singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Ok");    
+  }
+  vTaskDelete(NULL);
+}                              
+
+//////////////////////////////////////////////////////////////
+////                WIFI EVENT HANDLER                ///////
+//////////////////////////////////////////////////////////////  
 void OnWiFiEvent(WiFiEvent_t event){
   app.evt.type = EventDispatcher::EVENT_NETWORK;
   app.evt.data = &event;
@@ -1857,16 +1966,24 @@ void promptScreenBuiler(uint8_t id){
   
   gui.add(new TextArea(&app.promptParams.message, TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
-  gui.add(new Led(&GUI::hquarter1xPos, &GUI::midScreenVertical, ledRadius, &promptLedColor, &GUI::fullBrightness));
-  gui.add(new Led(&GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
-  gui.add(new Led(&GUI::hquarter4xPos, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
-
-  // we only display the arc if there is a timeout
-  if (app.promptParams.timeoutMs > 0) gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius+8, &GUI::blue, &GUI::transparentColor, 0));
-
-  gui.add(new Label(&app.promptParams.labels[0], Align::Center,&GUI::hquarter1xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
-  gui.add(new Label(&app.promptParams.labels[1], Align::Center,&GUI::midScreenHoriz, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
-  gui.add(new Label(&app.promptParams.labels[2], Align::Center,&GUI::hquarter4xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  if (app.promptParams.labels[0] != ""){
+    gui.add(new Led(&GUI::hquarter1xPos, &GUI::midScreenVertical, ledRadius, &promptLedColor, &GUI::fullBrightness));
+    gui.add(new Label(&app.promptParams.labels[0], Align::Center,&GUI::hquarter1xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  }
+  
+  if (app.promptParams.labels[1] != ""){
+    gui.add(new Led(&GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
+    gui.add(new Label(&app.promptParams.labels[1], Align::Center,&GUI::midScreenHoriz, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));    
+    // we only display the arc if there is a timeout
+    if (app.promptParams.timeoutMs > 0) gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius+8, &GUI::blue, &GUI::transparentColor, 0));
+  }
+ 
+    
+  if (app.promptParams.labels[2] != ""){
+    gui.add(new Led(&GUI::hquarter4xPos, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
+    gui.add(new Label(&app.promptParams.labels[2], Align::Center,&GUI::hquarter4xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));    
+  }
+  
 }
 
 
@@ -1923,16 +2040,16 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
     }break;
     ////////////////////////////////////////////////////////////////////////////////
-    case STATE_UTILS_UPDATEFW_FROM_STREAM:{
-
+    case STATE_UTILS_SHOW_PROGRESS :{
+      // this screen is shared with firmware update and binary install and others...
+      gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,SIZE_20,28,&GUI::defaultFcolor,&GUI::defaultBcolor));            
+      //gui.add(new TextArea(&updateProgressLabel, SIZE_20,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::menuTitleY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new ProgressBarH(&updateProgressPercent /*v*/, 0 /*min*/,100 /*max*/, &GUI::tenPixels /*x*/, &GUI::midScreenVertical /*y*/, TFT_WIDTH - 20 /*w*/, TFT_HEIGHT/12 /*h*/, 2 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_INFO:
-      //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());
-      
-
+      //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());     
       gui.add(new TextArea(lang.getString("!\"#$%%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
-
       gui.add(new Label(&app.vBatLabel, Align::Center,&GUI::midScreenHoriz, &GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,16,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
     break;
     ////////////////////////////////////////////////////////////////////////////////

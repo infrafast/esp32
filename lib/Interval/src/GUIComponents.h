@@ -373,7 +373,7 @@ class Widget : public GUI{
         sprite->createSprite(width,height);     
         if (color == TFT_TRANSPARENT) sprite->fillSprite(TFT_TRANSPARENT);
         else sprite->fillSprite(GUI::luminance(color,*brightness * GUI::screenBrightness * 255));            
-        if (debug){DEBUG_PRINT("\tsprite(%i,%i)",width,height);}
+        //if (debug){DEBUG_PRINT("\tsprite(%i,%i)",width,height);}
       }     
     }
 
@@ -431,7 +431,7 @@ class Canva : public Widget{
 // https://boxy-svg.com/app/disk:uSMcdhhJG4 -> https://icomoon.io/app -> https://products.aspose.app/font/generator/ttf-to-ttf -> https://notisrac.github.io/FileToCArray/          ---> preview: https://tophix.com/font-tools/font-editor
 //                                                                    -> https://everythingfonts.com/subsetter
 
-#define LIMIT_TEXT_RENDERING_LENGTH 255    // on affiche pas plus de 15 caracteres sinon le texte est illisible;
+#define LIMIT_TEXT_RENDERING_LENGTH 99    // on affiche pas plus de 15 caracteres sinon le texte est illisible;
 
 class Font : public Widget{  
   public:    

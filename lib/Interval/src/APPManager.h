@@ -59,8 +59,10 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                HttpClient& outHttp,
                                String& outRemoteVersion,
                                String& outFileUrl);
-bool updateSWfromStream(const String& fwUpdateURL, HttpClient& httpStream);
+void updateSWfromStreamTask(void* parameter);
 
+
+void checkAndInstallBinary();
 // Prototypage de la fonction de gestion de la connexion
 //void handleWebConnection(void *parameter);
 
@@ -98,7 +100,10 @@ enum{
   STATE_UTILS_RESTORE_SCREEN,
   STATE_BYE_MODAL_MESSAGE,
   STATE_BYE_GOSLEEP_MESSAGE,
-  STATE_UTILS_TRIGGER_FWUPDATE_PROMPT
+  STATE_UTILS_TRIGGER_FWUPDATE_PROMPT,
+  STATE_UTILS_CHECK_BINARY,
+  STATE_UTILS_INSTALLING_BINARY,
+  STATE_UTILS_SHOW_PROGRESS  
 };
 
 
@@ -718,6 +723,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       hwm->init();  
 
+      #if defined(USE_FTP) && defined(USE_NETWORK)
+        ftp.addUser("ftp", "ftp");  
+        ftp.addFilesystem("LITTLEFS", &LittleFS);
+        ftp.begin();
+      #endif
+
+
       // *********************************
       // SHORTCUTS
       // *********************************
@@ -985,6 +997,22 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       screen.id = SCREEN_PROMPT;
     }
 
+    void singlePromptScreen(String message,String label){
+      promptParams.message = *lang.getString(message);
+      
+      promptParams.labels[0] = "";
+      
+      promptParams.labels[1] = *lang.getString(label);              
+      promptParams.targetScreens[1] = SCREEN_UTILS;   
+      promptParams.targetState[1] = STATE_UTILS_RESTORE_SCREEN;        // back to caller      
+
+      promptParams.labels[2] = "";              
+      
+      promptParams.timeoutMs = 0;             
+      
+      promptScreen();     // branch to prompt screen      
+    }
+
     void SWupdatePromptScreen(uint16_t timeoutMs = 5000){
       DEBUG_PRINT("\nPreparing SW update prompt screen for v%s",newSWversion.c_str());
       // prepare software update promnpt screen
@@ -1046,9 +1074,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     void handlePromptClick(uint8_t buttonID){
-      if (buttonID == hwm->buttons[LEFTB]->getID()) branchFromPrompt(0);
-      else if (buttonID == hwm->buttons[MIDDLEB]->getID() || buttonID == hwm->onOff.getID()) branchFromPrompt(1);
-      else if (buttonID == hwm->buttons[RIGHTB]->getID()) branchFromPrompt(2);
+      // we only handle buttons for which a label has been set
+      if (buttonID == hwm->buttons[LEFTB]->getID() && promptParams.labels[0] != "") branchFromPrompt(0);
+      else if (buttonID == hwm->buttons[MIDDLEB]->getID() && promptParams.labels[1] != "") branchFromPrompt(1);
+      else if (buttonID == hwm->buttons[RIGHTB]->getID() && promptParams.labels[2] != "") branchFromPrompt(2);
     }
 
     void resetPromptTimer(){
@@ -1560,14 +1589,7 @@ void setup() {
       ms.get_root_menu().add_menu(langMenu);              
     }
 
-
-    enum{
-      BINARY_INSTALLFAIL,
-      BINARY_INSTALLED,
-      NOBINARY_INSTALLED
-    };
-
-     void cleanFolder(String path, String fType) {
+    void cleanFolder(String path, String fType) {
       File root = LittleFS.open(path);
       if (!root || !root.isDirectory()) {
         ////DEBUG_PRINT("\nInvalid directory: %s", path.c_str());
@@ -1619,95 +1641,6 @@ void setup() {
       return success;
     }
 
-    bool processArchive(){
-      bool success = true;
-      
-      /*TJpgDec.drawFsJpg(160-40, 0, "/FIRMWARE.jpeg");
-      upperInfoPopup(i18n[EXPANDING_MSG],TFT_BLACK,TFT_WHITE);
-      lowerInfoPopup("waiting",TFT_BLACK,TFT_WHITE);*/
-      
-      bool unpackOk = unpackFile(firmwareUpdateFilename);
-      if (unpackOk){
-
-        uint8_t binStatus = checkAndInstallBinary();
-        switch (binStatus){
-          case BINARY_INSTALLFAIL:
-            //utilitySequence = SEQ_ACTIONFAIL;
-            success = false;
-            // progressBarLabel contains the error message from the archive
-          break;          
-          case BINARY_INSTALLED:
-            /*progressBarLabel = i18n[RESTART_MSG];
-            utilitySequence = SEQ_ACTIONREBOOT;*/
-          break;
-          default: //NOBINARY_INSTALLED 
-            /*progressBarLabel = i18n[DATA_LOADED_MSG];
-            utilitySequence = SEQ_ACTIONSUCCESS;*/
-          break;
-        }
-      }else{
-        //utilitySequence = SEQ_ACTIONFAIL;        
-      }
-      cleanFolder("/", ".fsar"); cleanFolder("/", ".bin.gz"); cleanFolder("/", ".fsaz");  
-      return success;
-    }
-
-    uint8_t checkAndInstallBinary() {
-      uint8_t binaryInstallStatus = NOBINARY_INSTALLED;
-      //DEBUG_PRINT("\nNow checking if a bin need to be installed\n");
-      // we have to rename each file from tmp to the root and check if we have a binary in the pack to install
-      // then we have to clean /tmp
-      File root = LittleFS.open("/");
-      String firmwareFilename = "";
-      
-      if (!root || !root.isDirectory()) {
-        DEBUG_PRINT("\nErreur : Impossible d'ouvrir le dossier racine");
-        return BINARY_INSTALLFAIL;
-      } else {
-        File file = root.openNextFile();
-        while (file) {
-          if (!file.isDirectory()) {
-            String filename = file.name();
-            if (filename.endsWith(".bin.gz") /*|| filename.endsWith(".bin")*/) {
-              firmwareFilename = filename;
-              DEBUG_PRINT("\nbinary update found: %s", firmwareFilename.c_str());
-            }
-          }
-          file = root.openNextFile();
-        }
-      }
-
-      if (firmwareFilename != "") {
-        DEBUG_PRINT("\nPeforming binary update:%s", firmwareFilename.c_str());
-
-/*        utilitySequence = SEQ_PROCESSING;
-        progressBarLabel = i18n[UPDATE_MSG];
-        restoreScreen(UTILITY_SCREEN);
-        upperInfoPopup(i18n[INSTALL_MSG],TFT_BLACK,TFT_WHITE);
-        lowerInfoPopup(firmwareFilename,TFT_BLACK,TFT_WHITE);  /// firmware filename = you could change it to just "firmware" to avoid showing the filename.bin.gz
-*/        
-
-        GzUnpacker GZUnpacker;
-
-        GZUnpacker.setGzProgressCallback( unpackProgressCallback/*BaseUnpacker::defaultProgressCallback*/ );
-        GZUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );
-        int success =  GZUnpacker.gzUpdater(tarGzFS, firmwareFilename.c_str(), 0,/*don't restart after update*/false );
-        if( !success ) {
-          //progressBarLabel = concatStrings(i18n[ERROR_MSG], " ", i18n[UPDATE_MSG], " (", GZUnpacker.tarGzGetError(), ")");
-          binaryInstallStatus = BINARY_INSTALLFAIL;
-        }else{          
-          //progressBarLabel = concatStrings(i18n[UPDATE_MSG], " ", i18n[SUCCESS_MSG]);
-          binaryInstallStatus = BINARY_INSTALLED;     
-        }        
-        //LOG_MESSAGE("firmware", progressBarLabel.c_str(), firmwareFilename.c_str());      
-        if (success){
-          //logger->info();
-        }else{
-          //logger->error();
-        }
-      }
-      return binaryInstallStatus;
-    }
 
     //------------------
     //
@@ -1814,6 +1747,12 @@ void setup() {
       // MANAGE NETWORK
       //
       //------------------
+
+      #if defined(USE_FTP) && defined(USE_NETWORK)
+        //if (hwm->network->state == CONNECTED)
+          ftp.handle();
+      #endif
+
       if (hwm->network->refreshed){ // network changed its statusset
         
         setNetworkIcon();
@@ -2019,14 +1958,25 @@ void setup() {
               restoreScreen();
             break;
             case STATE_UTILS_UPDATEFW_FROM_STREAM:{
-              HttpClient httpStream(*hwm->network->client);
-              if (updateSWfromStream(fwUpdateURL,httpStream)){
-                //ESP.restart();
-                restoreScreen();
-              }else{
-                restoreScreen();
-              }
+              
+              updateProgressLabel = "STATE_UTILS_UPDATEFW_FROM_STREAM";   
+
+              xTaskCreate(
+                updateSWfromStreamTask,         // Tâche à exécuter
+                "PingTask",       // Nom de la tâche
+                4096*2,             // Taille de la pile de la tâche
+                nullptr,           // Paramètres de la tâche (adresse IP et callbacks)
+                2,                // Priorité
+                nullptr
+              );
+
+              screen.id = SCREEN_UTILS;
+              screen.state = STATE_UTILS_SHOW_PROGRESS;
+
             }break;
+            case STATE_UTILS_CHECK_BINARY:
+              checkAndInstallBinary();
+            break;
           }
         break;
         case SCREEN_PROMPT:
