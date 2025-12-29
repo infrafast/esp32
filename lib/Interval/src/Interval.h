@@ -1,7 +1,7 @@
 /*
 0.13 - Interval - Footswitch project
 0.14 - Auto update SW from .bin.gz file on LittleFS root
-
+0.15 - Fix SW update process + auto restart after update
 
 */
 
