@@ -1,5 +1,5 @@
 
-~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C  0x02ad01ca:0x3fcebdb0 0x42128b85:0x3fcebe10 0x42007ae3:0x3fcebeb0 0x4202a3c6:0x3fcebed0 0x4202a4c0:0x3fcebf80 0x4205a711:0x3fcebfa0
+~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C  0x4037766e:0x3fceb9d0 0x40380d51:0x3fceb9f0 0x40386e55:0x3fceba10 0x40381807:0x3fcebb40 0x42061b39:0x3fcebb80 0x4202f917:0x3fcebba0 0x4205a74a:0x3fcebbc0 0x4205cd52:0x3fcebd50 0x4202e955:0x3fcebd80 0x4202b956:0x3fcebf00 0x4202bcc8:0x3fcebf80 0x4206278d:0x3fcebfa0
 
 
 
@@ -255,4 +255,65 @@ void wifiping(const char * host){   // see also https://github.com/espressif/esp
 
 
 //////////////////////////////////////
+
+void fileProgressCallback( uint8_t progress ) {
+  /*static int8_t uzLibLastProgress = -1;
+  size_t totalBytes = LittleFS.totalBytes();
+  size_t usedBytes  = LittleFS.usedBytes();
+  size_t freeBytes  = totalBytes - usedBytes;
+  if( uzLibLastProgress != progress ) {
+    if( uzLibLastProgress == -1 ) {
+      DEBUG_PRINT("Progress: 0% *");
+    }
+    uzLibLastProgress = progress;
+    switch( progress ) {
+      //case   0: DEBUG_PRINT("0% ▓");  break;
+      case  25: DEBUG_PRINT(" 25% ");break;
+      case  50: DEBUG_PRINT(" 50% ");break;
+      case  75: DEBUG_PRINT(" 75% ");break;
+      case 100: DEBUG_PRINT("* 100% [%u=%u-%u]",freeBytes,totalBytes,usedBytes); uzLibLastProgress = -1; break;
+      default: if( progress > 0 && progress < 100) DEBUG_PRINT( "*" ); break;
+    }
+  }*/
+  subProgressPercent = progress;
+  
+}
+
+uint8_t progressPercentInt = 0;   // 0..100
+uint8_t delayedPercent  = 0;       // valeur différée pour l'affichage
+
+size_t delayedDelta = 0;
+
+void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpacked){
+  processedSize += size;
+
+  uint8_t newPercent = (totalGzSize > 0)
+    ? (uint8_t)((processedSize * 100) / totalGzSize)
+    : 0;
+
+  if (newPercent > 100) newPercent = 100;
+
+  // appliquer la valeur différée UNIQUEMENT si elle change
+  if (delayedPercent != progressPercentInt) {
+    delayedDelta = total_unpacked - size;
+    progressPercentInt = delayedPercent;
+    overallProgressPercent = (float)progressPercentInt;  // conversion uniquement ici
+  }
+
+  // préparer la valeur pour le prochain appel
+  delayedPercent = newPercent;
+
+  updateProgressLabel = name;
+
+  if (updateProgressLabel.indexOf("html") >= 0 ) updateProgressLabel = *lang.getString("Web");
+  else if (updateProgressLabel.indexOf("lang") >= 0 || updateProgressLabel.indexOf("i18n") >= 0) updateProgressLabel = *lang.getString("Translations");
+  else if (updateProgressLabel.indexOf("bank") >= 0 || updateProgressLabel.indexOf("user") >= 0) updateProgressLabel = *lang.getString("Configuration");  
+  else if (updateProgressLabel.indexOf("firmware") >= 0) updateProgressLabel = *lang.getString("Firmware");
+  else if (updateProgressLabel.indexOf("jpg") >= 0 || updateProgressLabel.indexOf("ttf") >= 0) updateProgressLabel = *lang.getString("Graphics");
+  else updateProgressLabel = *lang.getString("Data");
+}
+
+
+
+
 

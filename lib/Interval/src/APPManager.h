@@ -42,8 +42,6 @@ void socketConnectionCallback(IWebSocket &ws);
 
 // C to C++ class function wrapper
 void commonFileServerWrapper(Request &req, Response &res);  
-void unpackProgressCallback( uint8_t progress );
-void tarStatusProgressCallback( const char* name, size_t size, size_t total_unpacked );
 void handleWebEthClientTask(void* parameter);
 
 //void gzFileServer(Request &req, Response &res);
@@ -65,6 +63,8 @@ void updateSWfromStreamTask(void* parameter);
 void checkAndInstallBinary();
 // Prototypage de la fonction de gestion de la connexion
 //void handleWebConnection(void *parameter);
+
+bool checkAndDeleteFile(const char* filename) ;
 
 #define VOID_JSON_ITEM "\"void\": 0"
 
@@ -98,6 +98,7 @@ enum{
   STATE_UTILS_UPDATEFW_FROM_STREAM,
   STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
   STATE_UTILS_RESTORE_SCREEN,
+  STATE_UTILS_RESTART_DEVICE,
   STATE_BYE_MODAL_MESSAGE,
   STATE_BYE_GOSLEEP_MESSAGE,
   STATE_UTILS_TRIGGER_FWUPDATE_PROMPT,
@@ -436,6 +437,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     String newSWversion = "";
 
+    String heapSize;    
+    String iconProgress = "";
+    bool updatingFromStreamInprogress = false;
     ///////////////// INTERFACES ///////////////////
     //OSCInterface osc;
     NetworkOSC* networkOSCinterface;
@@ -942,6 +946,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         byeIconColor = &GUI::red; byeIcon = &iconForbid;
         screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
       }        
+      checkAndDeleteFile();  // in case there is a .bin.gz file leftover from previous firmware update
       restoreScreen();       // restore the screen that persists
     }
 
@@ -997,14 +1002,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       screen.id = SCREEN_PROMPT;
     }
 
-    void singlePromptScreen(String message,String label){
+    void singlePromptScreen(String message,String label, uint8_t targetState = STATE_UTILS_RESTORE_SCREEN){
       promptParams.message = *lang.getString(message);
       
       promptParams.labels[0] = "";
       
       promptParams.labels[1] = *lang.getString(label);              
       promptParams.targetScreens[1] = SCREEN_UTILS;   
-      promptParams.targetState[1] = STATE_UTILS_RESTORE_SCREEN;        // back to caller      
+      promptParams.targetState[1] = targetState;        // back to caller      
 
       promptParams.labels[2] = "";              
       
@@ -1014,25 +1019,32 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     void SWupdatePromptScreen(uint16_t timeoutMs = 5000){
-      DEBUG_PRINT("\nPreparing SW update prompt screen for v%s",newSWversion.c_str());
-      // prepare software update promnpt screen
-      promptParams.message = concatStrings(*lang.getString("Update to firmware")," v",newSWversion,"?");              
-      
-      promptParams.labels[0] = *lang.getString("Yes");
-      promptParams.targetScreens[0] = SCREEN_UTILS;  // go to utils screen to perform the update
-      promptParams.targetState[0] = STATE_UTILS_UPDATEFW_FROM_STREAM;
-      
-      promptParams.labels[1] = *lang.getString("No");              
-      promptParams.targetScreens[1] = SCREEN_UTILS;   // back to caller
-      promptParams.targetState[1] = STATE_UTILS_RESTORE_SCREEN;              
 
-      promptParams.labels[2] = *lang.getString("No, never ask");              
-      promptParams.targetScreens[2] = SCREEN_UTILS;  // diable auto update prompt in utils screen
-      promptParams.targetState[2] = STATE_UTILS_DISABLE_SWUPDATE_PROMPT;
-      
-      promptParams.timeoutMs = timeoutMs;                // 5s timeout
-      
-      promptScreen();
+      if (updatingFromStreamInprogress){
+        screen.id = SCREEN_UTILS;  // if an update is already in progress, do not prompt again but branch to the progress screen
+        screen.state = STATE_UTILS_SHOW_PROGRESS;
+        iconProgress = ICON_CLOUD_DOWNLOAD;
+      }else{
+        DEBUG_PRINT("\nPreparing SW update prompt screen for v%s",newSWversion.c_str());
+        // prepare software update promnpt screen
+        promptParams.message = concatStrings(*lang.getString("Update to firmware")," v",newSWversion,"?");              
+        
+        promptParams.labels[0] = *lang.getString("Yes");
+        promptParams.targetScreens[0] = SCREEN_UTILS;  // go to utils screen to perform the update
+        promptParams.targetState[0] = STATE_UTILS_UPDATEFW_FROM_STREAM;
+        
+        promptParams.labels[1] = *lang.getString("No");              
+        promptParams.targetScreens[1] = SCREEN_UTILS;   // back to caller
+        promptParams.targetState[1] = STATE_UTILS_RESTORE_SCREEN;              
+
+        promptParams.labels[2] = *lang.getString("No, never ask");              
+        promptParams.targetScreens[2] = SCREEN_UTILS;  // diable auto update prompt in utils screen
+        promptParams.targetState[2] = STATE_UTILS_DISABLE_SWUPDATE_PROMPT;
+        
+        promptParams.timeoutMs = timeoutMs;                // 5s timeout
+        
+        promptScreen();
+      }
     }
 
 
@@ -1621,27 +1633,6 @@ void setup() {
     }
        
    
-    bool unpackFile(String fileName) {
-      TarGzUnpacker TARGZUnpacker;
-      
-      bool success = false;
-      TARGZUnpacker.setLoggerCallback(BaseUnpacker::targzPrintLoggerCallback);
-      TARGZUnpacker.setTarStatusProgressCallback(tarStatusProgressCallback ); // print the filenames as they're expanded
-      
-      if (fileName.endsWith(".fsar")) {
-        //DEBUG_PRINT("\nstarting tar expansion of: %s",fileName.c_str());
-        TARGZUnpacker.setTarProgressCallback(unpackProgressCallback ); // prints the untarring progress for each individual file    
-        if (TARGZUnpacker.tarExpander(LittleFS, fileName.c_str(), LittleFS, "/") ) success = true;
-      }
-      if (! success){
-        //progressBarLabel = concatStrings(i18n[EXPANDING_MSG], " ", i18n[ERROR_MSG], ": ", TARGZUnpacker.tarGzGetError());
-      }else{
-
-      } 
-      return success;
-    }
-
-
     //------------------
     //
     // MANAGE WEB APPLICATION
@@ -1957,9 +1948,12 @@ void setup() {
             case STATE_UTILS_RESTORE_SCREEN:
               restoreScreen();
             break;
+            case STATE_UTILS_RESTART_DEVICE  :
+              ESP.restart();
+            break;
             case STATE_UTILS_UPDATEFW_FROM_STREAM:{
               
-              updateProgressLabel = "STATE_UTILS_UPDATEFW_FROM_STREAM";   
+              updateProgressLabel = "...";   
 
               xTaskCreate(
                 updateSWfromStreamTask,         // Tâche à exécuter
@@ -1969,7 +1963,7 @@ void setup() {
                 2,                // Priorité
                 nullptr
               );
-
+              iconProgress = ICON_CLOUD_DOWNLOAD;
               screen.id = SCREEN_UTILS;
               screen.state = STATE_UTILS_SHOW_PROGRESS;
 
@@ -3175,7 +3169,6 @@ void setup() {
     IWebSocketServer *wss{ nullptr };        
 
     uint32_t minHeapSize,maxHeapSize;
-    String heapSize;    
 
     ///////////////////////////////////////////////////////////////////////
 

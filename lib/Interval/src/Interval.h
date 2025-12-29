@@ -1,3 +1,11 @@
+/*
+0.13 - Interval - Footswitch project
+0.14 - Auto update SW from .bin.gz file on LittleFS root
+
+
+*/
+
+
 #ifndef Interval_h
 #define Interval_h
 
@@ -63,7 +71,15 @@ typedef std::function<void(bool*)> StdFunctionCallbackVoidBool;
 /// @brief // Callback to report progress during unpacking
 /// @param percent Completed percent (0.0 - 100.0)
 String updateProgressLabel = "";
-float updateProgressPercent = 0.0;
+float subProgressPercent = 0.0;
+float overallProgressPercent = 0.0;
+static uint8_t lastFileProgress = 0;
+uint8_t progressPercentInt = 0;   // 0..100
+size_t proportionalSize = 0;   // 0..100
+size_t processedSize = 0;
+size_t totalGzSize = 100.0;
+
+
 String updateSWerrorString = "";
 
 enum{
@@ -258,6 +274,23 @@ class EventDispatcher {
   #define API_OK 1
   #define API_ERROR 0
 #define API_BODY   "body"
+
+bool checkAndDeleteFile(const char* filename = "/firmware.bin.gz") {
+    if (LittleFS.exists(filename)) {
+        DEBUG_PRINT("⚠️ Fichier trouvé : %s → suppression...\n", filename);
+
+        if (LittleFS.remove(filename)) {
+            DEBUG_PRINT("✅ Fichier supprimé avec succès");
+            return true;
+        } else {
+            DEBUG_PRINT("❌ Échec de la suppression");
+            return false;
+        }
+    }
+
+    DEBUG_PRINT("ℹ️ Aucun fichier .bin.gz à la racine");
+    return false;
+}
 
 
 // Structure pour stocker les données décompressées dans un buffer
@@ -1030,31 +1063,6 @@ void xTaskBackground(void *pvParameters){
   }
 }
 
-void unpackProgressCallback( uint8_t progress ) {
-  static int8_t uzLibLastProgress = -1;
-  if( uzLibLastProgress != progress ) {
-    if( uzLibLastProgress == -1 ) {
-      Serial.print("Progress: 0% *");
-    }
-    uzLibLastProgress = progress;
-    switch( progress ) {
-      //case   0: Serial.print("0% ▓");  break;
-      case  25: Serial.print(" 25% ");break;
-      case  50: Serial.print(" 50% ");break;
-      case  75: Serial.print(" 75% ");break;
-      case 100: Serial.print("* 100%\n"); uzLibLastProgress = -1; break;
-      default: if( progress > 0 && progress < 100) Serial.print( "*" ); break;
-    }
-  }
-
-  updateProgressPercent = progress;
-}
-
-void tarStatusProgressCallback( const char* name, size_t size, size_t total_unpacked ){
-  updateProgressLabel = name;
-  DEBUG_PRINT("[TAR] %-64s %8d bytes - %8d Total bytes\n", name, size, total_unpacked );  
-} 
-
 void commonFileServerWrapper(Request &req, Response &res) {
   app.commonFileServer(req,res);
 }
@@ -1473,120 +1481,175 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
   return 1;
 }
 
+void fileProgressCallback( uint8_t fileProgress ) {
+  /*static int8_t uzLibLastProgress = -1;
+  size_t totalBytes = LittleFS.totalBytes();
+  size_t usedBytes  = LittleFS.usedBytes();
+  size_t freeBytes  = totalBytes - usedBytes;
+  if( uzLibLastProgress != progress ) {
+    if( uzLibLastProgress == -1 ) {
+      DEBUG_PRINT("Progress: 0% *");
+    }
+    uzLibLastProgress = progress;
+    switch( progress ) {
+      //case   0: DEBUG_PRINT("0% ▓");  break;
+      case  25: DEBUG_PRINT(" 25% ");break;
+      case  50: DEBUG_PRINT(" 50% ");break;
+      case  75: DEBUG_PRINT(" 75% ");break;
+      case 100: DEBUG_PRINT("* 100% [%u=%u-%u]",freeBytes,totalBytes,usedBytes); uzLibLastProgress = -1; break;
+      default: if( progress > 0 && progress < 100) DEBUG_PRINT( "*" ); break;
+    }
+  }*/
+  // delta de progression dans le fichier
+  uint8_t delta = (fileProgress >= lastFileProgress)
+                    ? (fileProgress - lastFileProgress)
+                    : fileProgress; // sécurité si ça repart à 0 sans reset
+
+  lastFileProgress = fileProgress;
+  subProgressPercent = fileProgress;
+
+  processedSize += ((size_t)delta * (size_t)proportionalSize) / 100;
+
+  uint8_t newPercent = (totalGzSize > 0)
+    ? (uint8_t)((processedSize * 100) / totalGzSize)
+    : 0;
+
+  if (newPercent > 100) newPercent = 100;
+
+  if (newPercent != progressPercentInt) {
+    progressPercentInt = newPercent;
+    overallProgressPercent = (float)progressPercentInt;
+  }
+
+}
+
+
+void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpacked){ 
+  
+  proportionalSize = size;        // doit être prêt AVANT les callbacks progress
+  lastFileProgress = 0;           // reset pour le nouveau fichier  
+  updateProgressLabel = name;
+
+  if (updateProgressLabel.indexOf("html") >= 0 ) updateProgressLabel = *lang.getString("Web");
+  else if (updateProgressLabel.indexOf("lang") >= 0 || updateProgressLabel.indexOf("i18n") >= 0) updateProgressLabel = *lang.getString("Translations");
+  else if (updateProgressLabel.indexOf("bank") >= 0 || updateProgressLabel.indexOf("user") >= 0) updateProgressLabel = *lang.getString("Configuration");  
+  else if (updateProgressLabel.indexOf("firmware") >= 0) updateProgressLabel = *lang.getString("Firmware");
+  else if (updateProgressLabel.indexOf("jpg") >= 0 || updateProgressLabel.indexOf("ttf") >= 0) updateProgressLabel = *lang.getString("Graphics");
+  else updateProgressLabel = *lang.getString("Data");
+}
 
 TarGzUnpacker* getTarGzUnpacker(){
+    processedSize = 0;
+    progressPercentInt = 0;
+    overallProgressPercent = 0.0;
+    updateProgressLabel = "";
+
     TarGzUnpacker *TARGZUnpacker = new TarGzUnpacker();    
     TARGZUnpacker->haltOnError( false ); // stop on fail (manual restart/reset required)
     TARGZUnpacker->setTarVerify( true ); // true = enables health checks but slows down the overall process
     TARGZUnpacker->setupFSCallbacks( targzTotalBytesFn, targzFreeBytesFn ); // prevent the partition from exploding, recommended
-    TARGZUnpacker->setGzProgressCallback( unpackProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
-    TARGZUnpacker->setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );    // gz log verbosity
-    TARGZUnpacker->setTarProgressCallback( unpackProgressCallback ); // prints the untarring progress for each individual file
+
+    //TARGZUnpacker->setGzProgressCallback( fileGZProgressCallback ); // no effect
+    TARGZUnpacker->setTarProgressCallback( fileProgressCallback ); // prints the untarring progress for each individual file
+    
     TARGZUnpacker->setTarStatusProgressCallback( tarStatusProgressCallback ); // print the filenames as they're expanded
-    TARGZUnpacker->setTarMessageCallback( BaseUnpacker::targzPrintLoggerCallback ); // tar log verbosity
+    //TARGZUnpacker->setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );    // gz log verbosity
+    //TARGZUnpacker->setTarMessageCallback( BaseUnpacker::targzPrintLoggerCallback ); // tar log verbosity
+    
     return TARGZUnpacker;
   }
 
 
-// Tâche de ping non bloquante
-/*
-void pingTask(void* parameter) {
-  // Récupérer les paramètres passés à la tâche
-  PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
-  if (hwm.network->media == WIFI_MEDIA){
-   //DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
-    if (Ping.ping(params->host.c_str())) {
-      params->callback(true);  // Appel du callback en cas de succès
-    } else {
-      params->callback(false);  // Appel du callback en cas d'échec
-    }
-  }else{
-    // IMPLEMENT PING FOR ETHERNET
-    // ... 
-    // as a workaround we call ping failed
-    params->callback(false);  // Appel du callback en cas d'échec
-    DEBUG_PRINT("\n * * * Ethernet pingTask not implemented yet * * *");
+size_t getFileSize(const char* path)
+{
+  if (!LittleFS.exists(path)) {
+    return 0;
   }
 
-  // Libérer la mémoire allouée pour les paramètres
-  delete params;
+  File file = LittleFS.open(path, "r");
+  if (!file) {
+    return 0;
+  }
 
-  // Suspendre la tâche après chaque ping (exécution ponctuelle)
-  vTaskDelete(NULL);
-}*/
-
-enum{
-  BINARY_INSTALLFAIL,
-  BINARY_INSTALLED,
-  NOBINARY_INSTALLED
-};
-
-void installGZBinaryFromFile(void *parameter){
-  String* s = static_cast<String*>(parameter);
-  String firmwareFilename = *s;
-
-  uint8_t binaryInstallStatus = NOBINARY_INSTALLED;
-
-  if (firmwareFilename != "") {
-    DEBUG_PRINT("\nPeforming binary update:%s", firmwareFilename.c_str());
-
-    GzUnpacker GZUnpacker;
-
-    GZUnpacker.setGzProgressCallback( unpackProgressCallback/*BaseUnpacker::defaultProgressCallback*/ );
-    GZUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );
-    int success =  GZUnpacker.gzUpdater(tarGzFS, firmwareFilename.c_str(), 0,/*don't restart after update*/false );
-    if(success ) {
-      app.singlePromptScreen(*lang.getString("Firmware installed successfully. Please restart the device to apply the update."),"Ok");
-    }else{          
-      app.singlePromptScreen(*lang.getString("Firmware install failed"),"Ok");
-    }        
-  }  
+  size_t size = file.size();
+  file.close();
+  return size;
 }
 
 
+void installGZBinaryFromFileTask(void *parameter){
+  String* s = static_cast<String*>(parameter);
+  String firmwareFilename = *s;
 
+  DEBUG_PRINT("\nPeforming binary update:%s", firmwareFilename.c_str());
+
+  GzUnpacker GZUnpacker;
+
+  lastFileProgress = 0;           // reset pour le nouveau fichier    
+  totalGzSize = getFileSize(firmwareFilename.c_str());
+  proportionalSize = totalGzSize;  // we deal with a single file here
+
+  DEBUG_PRINT("\nTotal GZ size = %d\n", totalGzSize);
+
+  GZUnpacker.setGzProgressCallback( fileProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
+  GZUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );
+  int success =  GZUnpacker.gzUpdater(tarGzFS, firmwareFilename.c_str(), 0,/*don't restart after update*/false );
+  if(success ) {
+    app.singlePromptScreen(*lang.getString("Firmware installed successfully. Restart the device to apply the update."),"OK",STATE_UTILS_RESTART_DEVICE);
+  }else{          
+    app.singlePromptScreen(*lang.getString("Firmware install failed"),"OK");
+  }        
+  checkAndDeleteFile(firmwareFilename.c_str());
+  
+  vTaskDelete(NULL);
+}
+
+
+#define UPDATE_FOLDER "/"
 void checkAndInstallBinary() {
   //DEBUG_PRINT("\nNow checking if a bin need to be installed\n");
   // we have to rename each file from tmp to the root and check if we have a binary in the pack to install
   // then we have to clean /tmp
-  File root = LittleFS.open("/");
+  File root = LittleFS.open(UPDATE_FOLDER);
   
   File file = root.openNextFile();
   while (file) {
     if (!file.isDirectory()) {
       String filename = file.name();
       if (filename.endsWith(".bin.gz") /*|| filename.endsWith(".bin")*/) {
+        filename = filename.startsWith("/") ? filename : (concatStrings(UPDATE_FOLDER,filename));        
         DEBUG_PRINT("\nbinary update found: %s", filename.c_str());
-        updateProgressLabel = *lang.getString("Updating firmware");
+        updateProgressLabel = *lang.getString("Flashing");
         screen.id = SCREEN_UTILS;
         screen.state = STATE_UTILS_SHOW_PROGRESS;
+        app.iconProgress = ICON_FWUPDATE;
         // Créer la tâche FreeRTOS pour le ping
         xTaskCreate(
-          installGZBinaryFromFile,         // Tâche à exécuter
-          "installGZBinaryFromFile",       // Nom de la tâche
+          installGZBinaryFromFileTask,         // Tâche à exécuter
+          "installGZBinaryFromFileTask",       // Nom de la tâche
           4096*2,             // Taille de la pile de la tâche
           &filename,           // Paramètres de la tâche (adresse IP et callbacks)
           2,                // Priorité
           nullptr
         );
+        DEBUG_PRINT("\ninstallGZBinaryFromFileTask created");        
         return;
-      }
-      else file = root.openNextFile();   
-    }       
+      }      
+    }  
+    file = root.openNextFile();            
   }
+  DEBUG_PRINT("\nNo binary update found");
   app.restoreScreen();
 }
 
 void updateSWfromStreamTask(void* parameter){
   bool success = false;  
  
-  HttpClient httpStream(*hwm.network->client);
-
   int err = 0;
   // 4) ouvrir le flux sur le fichier retenu
   UrlParts f = parseUrl(app.fwUpdateURL);
   if (f.ok){   
-    httpStream.stop();
+    HttpClient httpStream(*hwm.network->client);
     err = httpStream.startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
     if (err != 0) {
       updateSWerrorString = concatStrings("http request ", String(err));
@@ -1596,30 +1659,36 @@ void updateSWfromStreamTask(void* parameter){
         updateSWerrorString = concatStrings("http response ", String(err));
         httpStream.stop();
       }else{
-        httpStream.skipResponseHeaders();
-        TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
-        if( !TARGZUnpacker->tarGzStreamExpander( &httpStream, tarGzFS ) ) {
-          updateSWerrorString = concatStrings("TARGZUnpacker ", String(TARGZUnpacker->tarGzGetError())  );
-        } else {
-          // print leftover bytes if any (probably zero-fill from the server)
-          while(httpStream.connected() ) {
-            size_t streamSize = httpStream.available();
-            if (streamSize) {
-              DEBUG_PRINT( "%02x ", httpStream.read() );
-            } else break;
+        err = httpStream.skipResponseHeaders();
+        if (err >= 0){
+          totalGzSize = httpStream.contentLength();
+          DEBUG_PRINT("\nContent-Length = %d\n", totalGzSize);
+          
+          TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
+          app.updatingFromStreamInprogress = true;
+          if( !TARGZUnpacker->tarGzStreamExpander( &httpStream, tarGzFS ) ) {
+            updateSWerrorString = concatStrings("TARGZUnpacker ", String(TARGZUnpacker->tarGzGetError())  );
+          } else {
+            success = true;
           }
-          success = true;
+          delete TARGZUnpacker;
+        }else{
+          updateSWerrorString = concatStrings("http skip headers error ", String(err));
         }
-        delete TARGZUnpacker;
       }
     }
+    httpStream.stop();
+  }else{
+    updateSWerrorString = concatStrings("URL parse error: ", app.fwUpdateURL);
   }
   if (success){
+    DEBUG_PRINT("\nUntarGz successful, checking for binary to install");
     screen.id = SCREEN_UTILS;
     screen.state = STATE_UTILS_CHECK_BINARY;    
   }else{
     app.singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Ok");    
   }
+  app.updatingFromStreamInprogress = false;  
   vTaskDelete(NULL);
 }                              
 
@@ -1958,7 +2027,9 @@ void startupScreenBuilder(uint8_t id){
 
 #define ledRadius  TFT_WIDTH/17
 int16_t ledLabelY = GUI::midScreenVertical + ledRadius + SIZE_18;
-String promptLedColor = "blue";
+String leftLedColor = "blue"; 
+String centerLedColor = "blue";
+String rightLedColor = "blue"; 
 
 void promptScreenBuiler(uint8_t id){
   setMenuColors();
@@ -1966,23 +2037,30 @@ void promptScreenBuiler(uint8_t id){
   
   gui.add(new TextArea(&app.promptParams.message, TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
 
+  leftLedColor = "grey"; 
+  centerLedColor = "grey";
+  rightLedColor = "grey"; 
+
   if (app.promptParams.labels[0] != ""){
-    gui.add(new Led(&GUI::hquarter1xPos, &GUI::midScreenVertical, ledRadius, &promptLedColor, &GUI::fullBrightness));
     gui.add(new Label(&app.promptParams.labels[0], Align::Center,&GUI::hquarter1xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
+    leftLedColor = "blue";
   }
+  gui.add(new Led(&GUI::hquarter1xPos, &GUI::midScreenVertical, ledRadius, &leftLedColor, &GUI::fullBrightness));  
   
   if (app.promptParams.labels[1] != ""){
-    gui.add(new Led(&GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
     gui.add(new Label(&app.promptParams.labels[1], Align::Center,&GUI::midScreenHoriz, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));    
     // we only display the arc if there is a timeout
     if (app.promptParams.timeoutMs > 0) gui.add(new Arc(&app.promptRemainingTime, 0, app.promptTimeoutMax, &GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius+8, &GUI::blue, &GUI::transparentColor, 0));
+    centerLedColor = "blue";
   }
+  gui.add(new Led(&GUI::midScreenHoriz, &GUI::midScreenVertical, ledRadius,  &centerLedColor, &GUI::fullBrightness));  
  
     
   if (app.promptParams.labels[2] != ""){
-    gui.add(new Led(&GUI::hquarter4xPos, &GUI::midScreenVertical, ledRadius,  &promptLedColor, &GUI::fullBrightness));
     gui.add(new Label(&app.promptParams.labels[2], Align::Center,&GUI::hquarter4xPos, &ledLabelY,SIZE_18,24,&GUI::defaultFcolor,&GUI::defaultBcolor));    
+    rightLedColor = "blue";
   }
+  gui.add(new Led(&GUI::hquarter4xPos, &GUI::midScreenVertical, ledRadius,  &rightLedColor, &GUI::fullBrightness));  
   
 }
 
@@ -1996,7 +2074,7 @@ void addLeftRightIcons(){
 }
 
 void setAPIconAndText(){
-  gui.add(new TextArea(lang.getString("Connect WiFi Access Point"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+  gui.add(new TextArea(lang.getString("Connect WiFi Access Point "), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   app.leftIcon = ICON_AP;
 }
 
@@ -2025,6 +2103,10 @@ void buildNetworkScreen(){
 }
 
 int16_t brightYpos = GUI::menuIconYpos*1.2;
+String FSstat = "";
+String percentString = "%";
+#define PROGRESSBAR_WIDTH 150
+int16_t halfProgressBarpix = TFT_WIDTH/2 - PROGRESSBAR_WIDTH/2;
 
 void utilsScreenBuilder(uint8_t state){
   //DEBUG_PRINT("\nutilsScreenBuilder(%d)",state);
@@ -2042,16 +2124,29 @@ void utilsScreenBuilder(uint8_t state){
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SHOW_PROGRESS :{
       // this screen is shared with firmware update and binary install and others...
-      gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,SIZE_20,28,&GUI::defaultFcolor,&GUI::defaultBcolor));            
-      //gui.add(new TextArea(&updateProgressLabel, SIZE_20,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::menuTitleY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      gui.add(new ProgressBarH(&updateProgressPercent /*v*/, 0 /*min*/,100 /*max*/, &GUI::tenPixels /*x*/, &GUI::midScreenVertical /*y*/, TFT_WIDTH - 20 /*w*/, TFT_HEIGHT/12 /*h*/, 2 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
+      //gui.add(new RingMeter(&overallProgressPercent, 0, 100, 0, &GUI::midScreenHoriz, &GUI::midScreenVertical, 70, &percentString,&GUI::green,&GUI::transparentColor));      
+      gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
+      gui.add(new Arc(&overallProgressPercent /*v*/, 0 /*min*/,totalGzSize /*max*/, &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::blue, &GUI::transparentColor,30));              
+      gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,SIZE_20,20,&GUI::defaultFcolor,&GUI::defaultBcolor));            
+      gui.add(new ProgressBarH(&subProgressPercent, 0.0,100 , &halfProgressBarpix /*x*/, &GUI::belowBottomTexty /*y*/, PROGRESSBAR_WIDTH /*w*/, 8 /*h*/, 2 /*offset*/, 2 /*radius*/, &GUI::blue /*fc*/ , &GUI::gold/*bc*/, &GUI::fullBrightness));
     }break;
     ////////////////////////////////////////////////////////////////////////////////
-    case STATE_UTILS_INFO:
+    case STATE_UTILS_INFO:{
       //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());     
-      gui.add(new TextArea(lang.getString("!\"#$%%&'()*+,-./ 0123456789 :;<=>?@ ABCCDEFGHIJKLMNNOPQRSTUVWXYZ [\\]^_` abcdefghijklmnopqrstuvwxyz {|}~çèéà"), TFT_WIDTH*0.80,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::midScreenVertical,25,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      gui.add(new Label(&app.vBatLabel, Align::Center,&GUI::midScreenHoriz, &GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,16,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
-    break;
+      
+      gui.add(new Label(lang.getString(concatStrings("v",_V)),Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,25,10,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new Label(&app.vBatLabel, Align::Center,&GUI::midScreenHoriz,&GUI::midScreenVertical ,CONFIG_TEXTAREA_MESSAGE_SIZE,16,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
+
+      size_t totalBytes = LittleFS.totalBytes();
+      size_t usedBytes  = LittleFS.usedBytes();
+      size_t freeBytes  = totalBytes - usedBytes;
+
+      FSstat = concatStrings(("FS: "),String(usedBytes/1024),"/",String(totalBytes/1024),"KB"," Free Space: ",String(freeBytes/1024),"KB");
+      gui.add(new Label(&FSstat, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,CONFIG_TEXTAREA_MESSAGE_SIZE,54,&GUI::defaultFcolor,&GUI::defaultBcolor));      
+      gui.add(new Label(&app.heapSize,Align::Center,&GUI::midScreenHoriz,&GUI::menuIconYpos,24,24,&GUI::defaultFcolor,&GUI::defaultBcolor));              
+
+
+    }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_CONNECTCONFIGMEDIA:
       buildNetworkScreen();

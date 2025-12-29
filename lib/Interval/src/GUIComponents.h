@@ -42,6 +42,8 @@
 #define ICON_CONFIG           "S"
 #define ICON_PROFILES         "D"
 #define ICON_SAVE             "K"
+#define ICON_CLOUD_UPLOAD     "K"
+#define ICON_CLOUD_DOWNLOAD   "J"
 #define ICON_NODOT            ";"
 #define ICON_LEFTDOT          "<"
 #define ICON_RIGHTDOT         "="
@@ -930,6 +932,7 @@ class FromToWidget : public Widget {
   
     virtual bool refresh(bool force=false) { 
       // Par défaut, pas de sprite (le widget peut décider dans refreshFrame/refreshContent)
+      if (sprite != nullptr) delete sprite;
       sprite = nullptr;
 
       bool forceFull = force;
@@ -1398,14 +1401,30 @@ class ProgressBarH : public HorizontalBar{
 
     virtual bool refreshLogic(bool force=false){ 
       refreshed = force;
-      if (oldValue != *value){
-        to = mapFloatToInt(*value,minValue,maxValue,0,width);    
-        //DEBUG_PRINT("\tPB-To: %i",to) ;
+
+      if (oldValue != *value || force){
+
+        // Zone utile: on laisse 1px de marge par rapport au frame
+        int16_t innerMin = (int16_t)frameOffset + 1;
+        int16_t innerMax = (int16_t)width - (int16_t)frameOffset - 1;
+
+        // Sécurité si frameOffset trop grand (ou widget trop petit)
+        if (innerMax < innerMin) innerMax = innerMin;
+
+        to = mapFloatToInt(*value, minValue, maxValue, innerMin, innerMax);
+
+        // Clamp sécurité
+        if (to < innerMin) to = innerMin;
+        if (to > innerMax) to = innerMax;
+
         HorizontalBar::refreshLogic(refreshed);
         oldValue = *value;
       }
+
       return refreshed;
     }
+
+
 
 
 };
@@ -1715,7 +1734,7 @@ class Led : public Widget{
         else if (token == "yellow") ledBaseColor = TFT_YELLOW;
         else if (token == "blue") ledBaseColor = TFT_BLUE;
         else if (token == "green") ledBaseColor = TFT_GREEN;
-        else if (token == "grey" || token == "gray") ledBaseColor = TFT_GREY;
+        else if (token == "grey" || token == "gray") ledBaseColor = TFT_SILVER;
         else if (token == "fast"){
           flashRequested = true;
           flashInterval = FLASH_FAST_INTERVAL;
