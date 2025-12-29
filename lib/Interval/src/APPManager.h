@@ -441,7 +441,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     String heapSize;    
     String iconProgress = "";
     bool updatingFromStreamInprogress = false;
-
+    bool flashBinaryInprogress = false;
+    
     size_t totalBytes ;
     size_t usedBytes ;
     size_t freeBytes ;
@@ -466,7 +467,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     String configClientIP; // ip of the client connect to the AP during configuration    
 
     String firmwareUpdateFilename="";       // from fileStream
-    String fwUpdateURL;                   // from internet
+    String fwUpdateURL="";                   // from internet
 
     Shortcuts shortcuts = Shortcuts(SHORTCUT_GROUP); 
     
@@ -548,6 +549,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           if (systemCfg.getBool(S_SWUPDATE_PROMPT)){            
             screen.id = SCREEN_UTILS;
             screen.state = STATE_UTILS_TRIGGER_FWUPDATE_PROMPT;
+            broadCast(concatStrings("{\""FW_UPDATE_URL"\":\"",fwUpdateURL,"\"}"));
           }else{
             if (screen.id == SCREEN_MENU) triggerRedraw();  // this s to update firmware menu item to be actif or disabled uppon internet check                      
             DEBUG_PRINT("\nStartup update disabled in config");                
@@ -1028,9 +1030,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void SWupdatePromptScreen(uint16_t timeoutMs = 5000){
 
       if (updatingFromStreamInprogress){
-        screen.id = SCREEN_UTILS;  // if an update is already in progress, do not prompt again but branch to the progress screen
-        screen.state = STATE_UTILS_SHOW_PROGRESS;
-        iconProgress = ICON_CLOUD_DOWNLOAD;
+        setFWupdateProgressScreen(); // if an update is already in progress, we go directly to the progress screen
+      }else if (flashBinaryInprogress){
+        setBinaryFlashScreen();
       }else{
         DEBUG_PRINT("\nPreparing SW update prompt screen for v%s",newSWversion.c_str());
         // prepare software update promnpt screen
@@ -1543,6 +1545,8 @@ void setup() {
 
       doc["connectivity"] = getConnectivityState();
 
+      doc[FW_UPDATE_URL] = fwUpdateURL;
+
       DEBUG_PRINT("\nserializing skeletons");
       JsonArray skel = doc["skeletons"].to<JsonArray>();
       stripFactory.serialize(&skel);  
@@ -1723,6 +1727,19 @@ void setup() {
       // this forces the GUI to be rebuild at next refresh
       //DEBUG_PRINT("\ntriggerRedraw()");
       screen.focus = screen.focus - 1;      
+    }
+
+    void setFWupdateProgressScreen(){
+      iconProgress = ICON_CLOUD_DOWNLOAD;
+      screen.id = SCREEN_UTILS;
+      screen.state = STATE_UTILS_SHOW_PROGRESS;      
+    }
+
+    void setBinaryFlashScreen(){
+      iconProgress = ICON_FWUPDATE;
+      screen.id = SCREEN_UTILS;
+      screen.state = STATE_UTILS_FLASH_BINARY;     
+      updateProgressLabel = *lang.getString("Flashing firmware, do not interrupt!");       
     }
 
     bool refresh(bool force=false){
@@ -1956,6 +1973,7 @@ void setup() {
               restoreScreen();
             break;
             case STATE_UTILS_RESTART_DEVICE  :
+              delay(500);
               ESP.restart();
             break;
             case STATE_UTILS_UPDATEFW_FROM_STREAM:{
@@ -1964,15 +1982,13 @@ void setup() {
 
               xTaskCreate(
                 updateSWfromStreamTask,         // Tâche à exécuter
-                "PingTask",       // Nom de la tâche
+                "updateSWfromStreamTask",       // Nom de la tâche
                 4096*2,             // Taille de la pile de la tâche
                 nullptr,           // Paramètres de la tâche (adresse IP et callbacks)
                 2,                // Priorité
                 nullptr
               );
-              iconProgress = ICON_CLOUD_DOWNLOAD;
-              screen.id = SCREEN_UTILS;
-              screen.state = STATE_UTILS_SHOW_PROGRESS;
+              setFWupdateProgressScreen();
 
             }break;
             case STATE_UTILS_FLASH_BINARY:
@@ -2632,7 +2648,7 @@ void setup() {
     #define RET_SAVEBUTTON          "setSaveButton"
     #define RET_COMMANDERROR        "commandError"
     #define RET_POPUP               "commandPopup"
-    #define RET_MODALMESSAGE        "modalMessage"
+    #define RET_MODAL               "modalMessage"
 
     void log(const char* originator, const char* message) {
         const char* logLinePattern = "{\"logWebConsole\":{\"originator\":\"%s\",\"message\":\"%s\"}}";
@@ -2725,7 +2741,7 @@ void setup() {
         }
         // if media is ethernet, we just feedback save button
         else{
-          jsonAnswer.callback = RET_MODALMESSAGE;
+          jsonAnswer.callback = RET_POPUP;
           jsonAnswer.value ="wifiSaved";
         }
 
@@ -2913,6 +2929,11 @@ void setup() {
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;          
         }
+      }else if (command == "flash"){
+        screen.id = SCREEN_UTILS;  // go to utils screen to perform the update
+        screen.state = STATE_UTILS_UPDATEFW_FROM_STREAM;
+        jsonAnswer.callback = RET_MODAL;
+        jsonAnswer.value ="Firmware flash";
       }else if (command == "deviceConfig"){
         // {"command":"deviceConfig","param":{"MixingStation":{"offline":true,"oscIP":"999.999.999.999","oscPort":"99999"}}}
         // Accès à l'objet "param"

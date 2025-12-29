@@ -2,6 +2,7 @@
 0.13 - Interval - Footswitch project
 0.14 - Auto update SW from .bin.gz file on LittleFS root
 0.15 - Fix SW update process + auto restart after update
+0.16 - launch fw update modal from web interface
 
 */
 
@@ -44,6 +45,8 @@
 #define SERVER_SW_UPDATE_PATH "/fwupdate/"
 
 #define WEBAPP_PATH "/webapp"
+
+#define FW_UPDATE_URL "firmware"
 
 bool useUSBMidi = false;
 
@@ -1595,17 +1598,19 @@ void installGZBinaryFromFileTask(void *parameter){
   proportionalSize = totalGzSize;  // we deal with a single file here
   DEBUG_PRINT("\nTotal GZ binary = %d\n", totalGzSize);  
   
-  GZUnpacker.setGzProgressCallback(BaseUnpacker::defaultProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
+  GZUnpacker.setGzProgressCallback(BaseUnpacker::targzNullProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
   GZUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );
+  app.flashBinaryInprogress = true;
   int success =  GZUnpacker.gzUpdater(tarGzFS, firmwareFilename.c_str(), 0,/*don't restart after update*/false );
   if(success ) {
+    app.broadCast("{\"modalMessage\":\"Finished. Close this page\"}");  // inform web interface
     app.singlePromptScreen(*lang.getString("Firmware flashed successfully. Restart the device to apply the update."),"OK",STATE_UTILS_RESTART_DEVICE);
     hwm.persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
   }else{          
     app.singlePromptScreen(*lang.getString("Firmware install failed"),"OK");
   }        
   checkAndDeleteFile(firmwareFilename.c_str());
-  
+  app.flashBinaryInprogress = false;
   vTaskDelete(NULL);
 }
 
@@ -1624,10 +1629,9 @@ void checkAndInstallBinary() {
       if (filename.endsWith(".bin.gz") /*|| filename.endsWith(".bin")*/) {
         filename = filename.startsWith("/") ? filename : (concatStrings(UPDATE_FOLDER,filename));        
         DEBUG_PRINT("\nbinary update found: %s", filename.c_str());
-        updateProgressLabel = *lang.getString("Flashing firmware, do not interrupt!");
-        screen.id = SCREEN_UTILS;
-        screen.state = STATE_UTILS_FLASH_BINARY;
-        app.iconProgress = ICON_FWUPDATE;
+
+        app.setBinaryFlashScreen();
+
         // Créer la tâche FreeRTOS pour le ping
         xTaskCreate(
           installGZBinaryFromFileTask,         // Tâche à exécuter
