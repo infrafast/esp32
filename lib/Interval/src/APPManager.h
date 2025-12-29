@@ -97,6 +97,7 @@ enum{
   STATE_UTILS_WEBAPPCONNECTED,
   STATE_UTILS_UPDATEFW_FROM_STREAM,
   STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
+  STATE_UTILS_FLASH_BINARY,
   STATE_UTILS_RESTORE_SCREEN,
   STATE_UTILS_RESTART_DEVICE,
   STATE_BYE_MODAL_MESSAGE,
@@ -440,6 +441,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     String heapSize;    
     String iconProgress = "";
     bool updatingFromStreamInprogress = false;
+
+    size_t totalBytes ;
+    size_t usedBytes ;
+    size_t freeBytes ;
+    String FSstat = "";
+
     ///////////////// INTERFACES ///////////////////
     //OSCInterface osc;
     NetworkOSC* networkOSCinterface;
@@ -1968,8 +1975,25 @@ void setup() {
               screen.state = STATE_UTILS_SHOW_PROGRESS;
 
             }break;
+            case STATE_UTILS_FLASH_BINARY:
+              // do nothing
+            break;
             case STATE_UTILS_CHECK_BINARY:
               checkAndInstallBinary();
+            break;
+            case STATE_UTILS_INFO:
+
+              static uint32_t t = 0;
+              if (millis() - t >= 500) {
+                t = millis();
+                // refresh file size every 500 ms
+                totalBytes = LittleFS.totalBytes();
+                usedBytes  = LittleFS.usedBytes();
+                freeBytes  = totalBytes - usedBytes;
+                FSstat = concatStrings(("FS: "),String(usedBytes/1024),"/",String(totalBytes/1024),"KB"," Free Space: ",String(freeBytes/1024),"KB"); 
+
+              }
+
             break;
           }
         break;

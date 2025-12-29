@@ -149,15 +149,18 @@ public:
       ledcAttachPin(BUILTIN_LED, 0);   
       ledcWrite(0,255);
 
-      startupState = NORMAL_STARTUP; //return;
-
-
       #define RESET_DELAY 10000
       #define RESET_GRACE_PERIOD RESET_DELAY/3
 
-      startupState = SYSTEM_OFF;
+      startupState = persistants.getUChar(PERSISTANT_STARTUP,SYSTEM_OFF);
+
       onOff.usesLed = false;
-      if (onOff.state == ON_OFF_TRIGGER){
+      if (startupState == SYSTEM_RESTART){        
+        // if system was flag for restart (after a SW update for instance, we go directly to normal startup without having to press a button
+        persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_OFF);  // we set the startup mode so that next time it will be requested to press the button
+        startupState = NORMAL_STARTUP;
+      }else if (onOff.state == ON_OFF_TRIGGER){
+        // else a button has to be pressed to startup
         delay(DEBOUCE_TIME);        
         while(onOff.state == ON_OFF_TRIGGER && startupState == SYSTEM_OFF) {          
           bool released = onOff.refresh();
@@ -187,11 +190,12 @@ public:
             }
           }
         }
-        ledcWrite(0,255);   //led off
-        onOff.usesLed = true;
       }else{
+        // else we do not startup but go back to sleep
         goDeepSleep();
       }
+      ledcWrite(0,255);   //led off
+      onOff.usesLed = true;      
     }
     
     void setScreenAndButtonRotation(){

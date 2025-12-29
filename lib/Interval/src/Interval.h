@@ -87,6 +87,7 @@ enum{
   BATTERY_STARTUP,
   NORMAL_STARTUP,
   WIZARD_STARTUP,
+  SYSTEM_RESTART,
   USB_CDC_AND_FWUPDATE_STARTUP,    
   RESET_STARTUP,  
   NO_FS_STARTUP,  
@@ -910,6 +911,7 @@ void xTaskBackground(void *pvParameters);
 #define PERSISTANT_STRIP_ID       "stripID"
 #define PERSISTANT_TFT_ROTATION   "rotation"
 #define PERSISTANT_BRIGHTNESS     "brightness"
+#define PERSISTANT_STARTUP        "startup"
 
 #include "HWManager.h"
 HardwareManager hwm;
@@ -999,6 +1001,9 @@ void goDeepSleep(){
   // open question: reset the devices ? when back, it will take time to power them on again, how to sync it with the class creation, etc... ?
   //DEBUG_PRINT("\ngoDeepSleep");
   unsigned long start = millis();
+
+  hwm.persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_OFF);        
+
   while (hwm.onOff.state == ON_OFF_TRIGGER && millis()-start < 4000) hwm.onOff.refresh(); //wait button to be released
   
   hwm.setPowerRail(OFF);    
@@ -1588,14 +1593,14 @@ void installGZBinaryFromFileTask(void *parameter){
   lastFileProgress = 0;           // reset pour le nouveau fichier    
   totalGzSize = getFileSize(firmwareFilename.c_str());
   proportionalSize = totalGzSize;  // we deal with a single file here
-
-  DEBUG_PRINT("\nTotal GZ size = %d\n", totalGzSize);
-
-  GZUnpacker.setGzProgressCallback( fileProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
+  DEBUG_PRINT("\nTotal GZ binary = %d\n", totalGzSize);  
+  
+  GZUnpacker.setGzProgressCallback(BaseUnpacker::defaultProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
   GZUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );
   int success =  GZUnpacker.gzUpdater(tarGzFS, firmwareFilename.c_str(), 0,/*don't restart after update*/false );
   if(success ) {
-    app.singlePromptScreen(*lang.getString("Firmware installed successfully. Restart the device to apply the update."),"OK",STATE_UTILS_RESTART_DEVICE);
+    app.singlePromptScreen(*lang.getString("Firmware flashed successfully. Restart the device to apply the update."),"OK",STATE_UTILS_RESTART_DEVICE);
+    hwm.persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
   }else{          
     app.singlePromptScreen(*lang.getString("Firmware install failed"),"OK");
   }        
@@ -1619,9 +1624,9 @@ void checkAndInstallBinary() {
       if (filename.endsWith(".bin.gz") /*|| filename.endsWith(".bin")*/) {
         filename = filename.startsWith("/") ? filename : (concatStrings(UPDATE_FOLDER,filename));        
         DEBUG_PRINT("\nbinary update found: %s", filename.c_str());
-        updateProgressLabel = *lang.getString("Flashing");
+        updateProgressLabel = *lang.getString("Flashing firmware, do not interrupt!");
         screen.id = SCREEN_UTILS;
-        screen.state = STATE_UTILS_SHOW_PROGRESS;
+        screen.state = STATE_UTILS_FLASH_BINARY;
         app.iconProgress = ICON_FWUPDATE;
         // Créer la tâche FreeRTOS pour le ping
         xTaskCreate(
@@ -2103,7 +2108,7 @@ void buildNetworkScreen(){
 }
 
 int16_t brightYpos = GUI::menuIconYpos*1.2;
-String FSstat = "";
+
 String percentString = "%";
 #define PROGRESSBAR_WIDTH 150
 int16_t halfProgressBarpix = TFT_WIDTH/2 - PROGRESSBAR_WIDTH/2;
@@ -2131,18 +2136,20 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new ProgressBarH(&subProgressPercent, 0.0,100 , &halfProgressBarpix /*x*/, &GUI::belowBottomTexty /*y*/, PROGRESSBAR_WIDTH /*w*/, 8 /*h*/, 2 /*offset*/, 2 /*radius*/, &GUI::blue /*fc*/ , &GUI::gold/*bc*/, &GUI::fullBrightness));
     }break;
     ////////////////////////////////////////////////////////////////////////////////
+    case STATE_UTILS_FLASH_BINARY :{
+      // this screen is shared with firmware update and binary install and others...
+      //gui.add(new RingMeter(&overallProgressPercent, 0, 100, 0, &GUI::midScreenHoriz, &GUI::midScreenVertical, 70, &percentString,&GUI::green,&GUI::transparentColor));      
+      gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
+      gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,SIZE_26,50,&GUI::red,&GUI::defaultBcolor));            
+    }break;
+    ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_INFO:{
       //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());     
       
       gui.add(new Label(lang.getString(concatStrings("v",_V)),Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,25,10,&GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Label(&app.vBatLabel, Align::Center,&GUI::midScreenHoriz,&GUI::midScreenVertical ,CONFIG_TEXTAREA_MESSAGE_SIZE,16,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
 
-      size_t totalBytes = LittleFS.totalBytes();
-      size_t usedBytes  = LittleFS.usedBytes();
-      size_t freeBytes  = totalBytes - usedBytes;
-
-      FSstat = concatStrings(("FS: "),String(usedBytes/1024),"/",String(totalBytes/1024),"KB"," Free Space: ",String(freeBytes/1024),"KB");
-      gui.add(new Label(&FSstat, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,CONFIG_TEXTAREA_MESSAGE_SIZE,54,&GUI::defaultFcolor,&GUI::defaultBcolor));      
+      gui.add(new Label(&app.FSstat, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,CONFIG_TEXTAREA_MESSAGE_SIZE,54,&GUI::defaultFcolor,&GUI::defaultBcolor));      
       gui.add(new Label(&app.heapSize,Align::Center,&GUI::midScreenHoriz,&GUI::menuIconYpos,24,24,&GUI::defaultFcolor,&GUI::defaultBcolor));              
 
 
@@ -2171,7 +2178,7 @@ void utilsScreenBuilder(uint8_t state){
       app.iconPending[0] = ICON_LEFTDOT;
       app.iconPending[1] = ICON_RIGHTDOT;      
       gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&GUI::midScreenHoriz, &GUI::midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
-      gui.add(new TextArea(lang.getString("Press button"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new TextArea(lang.getString("Press any button"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Label(lang.getString("Connected"), Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
       app.leftIcon = ICON_LAPTOP;
