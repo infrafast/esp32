@@ -271,6 +271,14 @@ public:
 
   void finish() { _finished = true; }
 
+  size_t write(uint8_t b) override {
+    return push(&b, 1) ? 1 : 0;
+  }
+
+  size_t write(const uint8_t* data, size_t len) override {
+    return push(data, len) ? len : 0;
+  }
+
   int available() override {
     if (!_streamBuffer) return 0;
     size_t avail = xStreamBufferBytesAvailable(_streamBuffer);
