@@ -5,6 +5,8 @@
 #include <LinkedList.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/stream_buffer.h"
 
 #include "interfaces/i_midi.h"
 #include "interfaces/i_dmx.h"
@@ -59,6 +61,11 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                String& outFileUrl);
 void updateSWfromStreamTask(void* parameter);
 
+struct UpdateStreamTaskParams {
+  Stream* stream;
+  bool ownsStream;
+};
+
 
 void checkAndInstallBinary();
 // Prototypage de la fonction de gestion de la connexion
@@ -96,6 +103,7 @@ enum{
   STATE_UTILS_CONNECTWEBAPP,
   STATE_UTILS_WEBAPPCONNECTED,
   STATE_UTILS_UPDATEFW_FROM_URL,
+  STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD,
   STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
   STATE_UTILS_FLASH_BINARY,
   STATE_UTILS_RESTORE_SCREEN,
@@ -231,16 +239,127 @@ struct LittleFsWriter : public ChunkWriter {
   }
 };
 
+class UploadStreamBuffer : public Stream {
+public:
+  explicit UploadStreamBuffer(size_t capacity = 8192)
+    : _capacity(capacity) {
+    _streamBuffer = xStreamBufferCreate(_capacity, 1);
+  }
 
-struct TgzUpdateWriter : public ChunkWriter {
-  bool begin(const String& filename) override { DEBUG_PRINT("\nTgzUpdateWriter %s",filename.c_str()); return true; }
-  bool write(const uint8_t* data, size_t len) override {
-    // TODO: brancher ici esp32tgz (feed chunks)
-    DEBUG_PRINT("\nTgzUpdateWriter wrote: %d bytes", len);
-    (void)data; (void)len;
+  ~UploadStreamBuffer() {
+    if (_streamBuffer) vStreamBufferDelete(_streamBuffer);
+  }
+
+  bool push(const uint8_t* data, size_t len) {
+    if (!_streamBuffer) return false;
+    size_t sent = 0;
+    while (sent < len) {
+      size_t written = xStreamBufferSend(
+        _streamBuffer,
+        data + sent,
+        len - sent,
+        pdMS_TO_TICKS(100)
+      );
+      if (written == 0) {
+        if (_finished) return false;
+        continue;
+      }
+      sent += written;
+    }
     return true;
   }
-  void end(bool ok) override { (void)ok; /* finalize esp32tgz */ }
+
+  void finish() { _finished = true; }
+
+  int available() override {
+    if (!_streamBuffer) return 0;
+    size_t avail = xStreamBufferBytesAvailable(_streamBuffer);
+    return (int)(avail + (_hasPeek ? 1 : 0));
+  }
+
+  int read() override {
+    if (_hasPeek) {
+      _hasPeek = false;
+      return _peekByte;
+    }
+    if (!_streamBuffer) return -1;
+    uint8_t b;
+    while (true) {
+      size_t received = xStreamBufferReceive(
+        _streamBuffer,
+        &b,
+        1,
+        pdMS_TO_TICKS(100)
+      );
+      if (received == 1) return b;
+      if (_finished) return -1;
+    }
+  }
+
+  int peek() override {
+    if (_hasPeek) return _peekByte;
+    if (!_streamBuffer) return -1;
+    uint8_t b;
+    size_t received = xStreamBufferReceive(_streamBuffer, &b, 1, 0);
+    if (received == 1) {
+      _peekByte = b;
+      _hasPeek = true;
+      return _peekByte;
+    }
+    return -1;
+  }
+
+  void flush() override {}
+
+private:
+  StreamBufferHandle_t _streamBuffer = nullptr;
+  size_t _capacity = 0;
+  bool _finished = false;
+  bool _hasPeek = false;
+  uint8_t _peekByte = 0;
+};
+
+
+struct TgzUpdateWriter : public ChunkWriter {
+  UploadStreamBuffer* streamBuffer = nullptr;
+  UpdateStreamTaskParams* taskParams = nullptr;
+
+  bool begin(const String& filename) override {
+    DEBUG_PRINT("\nTgzUpdateWriter %s",filename.c_str());
+
+    streamBuffer = new UploadStreamBuffer();
+    if (!streamBuffer) { _err = "buffer alloc failed"; return false; }
+
+    taskParams = new UpdateStreamTaskParams{streamBuffer, true};
+
+    BaseType_t taskCreated = xTaskCreate(
+      updateSWfromStreamTask,
+      "updateSWfromStreamTask",
+      4096*2,
+      taskParams,
+      2,
+      nullptr
+    );
+    if (taskCreated != pdPASS) {
+      _err = "task create failed";
+      delete taskParams;
+      taskParams = nullptr;
+      delete streamBuffer;
+      streamBuffer = nullptr;
+      return false;
+    }
+    DEBUG_PRINT("\nupdateSWfromStreamTask created (upload)");
+    return true;
+  }
+  bool write(const uint8_t* data, size_t len) override {
+    if (!streamBuffer) { _err = "buffer not ready"; return false; }
+    if (!streamBuffer->push(data, len)) { _err = "buffer write failed"; return false; }
+    return true;
+  }
+  void end(bool ok) override {
+    if (streamBuffer) streamBuffer->finish();
+    (void)ok;
+  }
 };
 
 
@@ -2073,14 +2192,21 @@ void setup() {
                      
                       setFWupdateProgressScreen();
                       
-                      xTaskCreate(
+                      UpdateStreamTaskParams* params = new UpdateStreamTaskParams{httpStream, true};
+                      BaseType_t taskCreated = xTaskCreate(
                         updateSWfromStreamTask,         // Tâche à exécuter
                         "updateSWfromStreamTask",       // Nom de la tâche
                         4096*2,             // Taille de la pile de la tâche
-                        httpStream,           // Paramètres de la tâche (adresse IP et callbacks)
+                        params,           // Paramètres de la tâche (adresse IP et callbacks)
                         2,                // Priorité
                         nullptr
                       );
+                      if (taskCreated != pdPASS) {
+                        updateSWerrorString = "Task creation failed";
+                        delete params;
+                        delete httpStream;
+                        httpStream = nullptr;
+                      }
                     }else{
                       updateSWerrorString = concatStrings("http skip headers error ", String(err));
                     }
@@ -2096,6 +2222,9 @@ void setup() {
               }
             
             }break;
+            case STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD:
+              setFWupdateProgressScreen();
+            break;
             case STATE_UTILS_FLASH_BINARY:
               // do nothing
             break;
@@ -2438,7 +2567,14 @@ void setup() {
       TgzUpdateWriter tgzWriter;
 
       ChunkWriter *writer = nullptr;
-      if (dest == UPLOAD_DEST_TGZUPDATE) writer = &tgzWriter;
+      if (dest == UPLOAD_DEST_TGZUPDATE) {
+        const char* cl = req.get("Content-Length");
+        totalGzSize = cl ? (size_t)atoi(cl) : 0;
+        updateProgressLabel = "...";
+        screen.id = SCREEN_UTILS;
+        screen.state = STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD;
+        writer = &tgzWriter;
+      }
       else if (dest == UPLOAD_DEST_LITTLEFS) writer = &littleWriter;
       else writer = &littleWriter; // fallback: à toi de changer
 
