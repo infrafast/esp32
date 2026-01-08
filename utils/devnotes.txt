@@ -9,7 +9,7 @@ C:\Users\progman\.platformio\packages\framework-arduinoespressif32\tools\sdk\esp
 
 WiFi.setMinSecurity(WIFI_AUTH_WEP)
 
-
+f
 Terminal:
 CTRL+T (call menu) then CTRL+D (start debug/console/reset)
   
@@ -21,7 +21,7 @@ CTRL+T (call menu) then CTRL+D (start debug/console/reset)
 
   // Get the wakeup reason
   wakeup_reason = esp_sleep_get_wakeup_cause();
-
+f
   // Print the wakeup reason
   switch (wakeup_reason)
   {
@@ -317,3 +317,896 @@ void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpac
 
 
 
+
+
+
+
+///////
+
+var i18n,
+    fDefObjet,
+    webStatus,
+    netStatus,
+    iconSelect,
+    selectedIcon,
+    activeModContainer,
+    chNames,
+    heartBeat,
+    urlParams,
+    modules,
+    dropzones,
+    colorsObject,
+    macroProperties,
+    uploadingFile = !1,
+    WiFiSTA = 0,
+    maxprogress = 600,
+    actualprogress = 0,
+    itv = 0,
+    guidedTour = null,
+    CORSproxy = "http://webproxy.infrafast.com/",
+    translatedAssignements = [];
+const shortcutGUIcomponents = [
+        ["NoValueTPL", "", "NoValueTPL", ""],
+        ["DropDownTPL", "Module", "DropDownTPL", "Strip"],
+        ["DropDownTPL", "Action", "DropDownTPL", "Macro"],
+        ["FreeTextTPL", "Command", "NoValueTPL", ""],
+        ["DropDownTPL", "Value", "NoValueTPL", ""],
+        ["DropDownTPL", "Execute", "NoValueTPL", ""],
+        ["DropDownTPL", "Select", "NoValueTPL", ""],
+    ],
+    assignements = ["short", "medium", "hold", "double"],
+    buttons = ["left", "right", "tap"];
+var prevScrollpos = window.pageYOffset;
+function initIndex() {
+    (tourSteps[0] = [
+        { elementId: "tour", triggerNext: "click" },
+        { elementId: "moduleName1", triggerNext: "change" },
+        { elementId: "layout,0,1", triggerNext: "click" },
+        { elementId: "Module1-Slot0", triggerNext: "click" },
+        { elementId: "slotTPL8", triggerNext: "click" },
+        { elementId: "modContainer1", triggerNext: "click" },
+        { elementId: "mychannel", triggerNext: "change" },
+        { elementId: "mybus", triggerNext: "change" },
+        { elementId: "macroDropDown", triggerNext: "click" },
+        { elementId: "macroSpeed", triggerNext: "click" },
+        { elementId: "macroLoop", triggerNext: "click" },
+        { elementId: "recordMacro", triggerNext: "mouseover" },
+        { elementId: "exportMacro", triggerNext: "mouseover" },
+        { elementId: "progressbar", triggerNext: "mouseover" },
+        { elementId: "two-tab", triggerNext: "click" },
+    ]),
+        (tourSteps[1] = [
+            { elementId: "tour", triggerNext: "click" },
+            { elementId: "duration", triggerNext: "change" },
+            { elementId: "faderSpeed", triggerNext: "change" },
+            { elementId: "doubleClic", triggerNext: "change" },
+            { elementId: "shortcuts", triggerNext: "click" },
+            { elementId: "affectation", triggerNext: "click" },
+            { elementId: "three-tab", triggerNext: "click" },
+        ]),
+        (tourSteps[2] = [
+            { elementId: "tour", triggerNext: "click" },
+            { elementId: "wifi", triggerNext: "click" },
+            { elementId: "ipaddress", triggerNext: "mouseover" },
+            { elementId: "apName", triggerNext: "change" },
+            { elementId: "wizswitch", triggerNext: "mouseover" },
+            { elementId: "file1", triggerNext: "mouseover" },
+        ]),
+        commonInit(indexSequence);
+}
+function indexSequence() {
+    var e;
+    for (
+        waiting(),
+            loadParam([
+                "snapshotAction",
+                "playerAction",
+                "colors",
+                "log",
+                "mychannel",
+                "mybus",
+                "modulesNames",
+                "numberOfModules",
+                "numberOfSlotModules",
+                "layout",
+                "duration",
+                "faderSpeed",
+                "muteOthers",
+                "wizard",
+                "doubleClic",
+                "shortcutFDef",
+                "shortcutSettings",
+                "assignementDef",
+                "assignements",
+            ]),
+            resumeTour(),
+            colorsObject = JSON.parse(_("colors").value),
+            ("0.0.0.0" == _("ip").value || "" == _("ip").value) && IPInput(!1),
+            getData("slotTemplate", !1, "CH-BUS"),
+            slotTPLObject = JSON.parse(_("slotTemplate").value),
+            populateDropDown(_("mychannel"), slotTPLObject["CH-BUS"][0], !0, slotTPLObject.srcName),
+            populateDropDown(_("mybus"), slotTPLObject["CH-BUS"][1], !0, slotTPLObject.dstName),
+            retrieveMacroSettings(),
+            isTouchScreen() ||
+                document.querySelectorAll(".mover").forEach((e) => {
+                    e.remove();
+                }),
+            document.addEventListener("dragover", function (e) {
+                e.preventDefault();
+            }),
+            modules = document.querySelectorAll(".module"),
+            populateSlotTemplates(),
+            modID = 0;
+        modID < _("numberOfSlotModules").value;
+        modID++
+    )
+        ((e = cloneComponent(_("moduleSlotTPL"), "moduleSlotcontainer", "modContainer" + modID)).getElementsByClassName(
+            "hs"
+        )[0].id = "moduleslot" + modID),
+            (e.getElementsByClassName("modtitle")[0].value = _("modulesNames").value.split(",")[modID]),
+            (e.getElementsByClassName("modtitle")[0].id = "moduleName" + modID),
+            (e.getElementsByClassName("layout0")[0].id = "layout,0," + modID),
+            (e.getElementsByClassName("layout1")[0].id = "layout,1," + modID),
+            (e.getElementsByClassName("layout2")[0].id = "layout,2," + modID),
+            buildModuleSlot(modID, !0);
+    for (
+        activeModContainer = 0,
+            activateModContainer(1),
+            updateModules(),
+            document.querySelectorAll(".slot").forEach((e) => {
+                e.addEventListener("dragstart", (e) => {
+                    e.dataTransfer.setData("text", e.target.id);
+                });
+            }),
+            document.querySelectorAll(".droptarget").forEach((e) => {
+                e.addEventListener("dragover", (e) => {
+                    e.preventDefault();
+                }),
+                    e.addEventListener("dragleave", (t) => {
+                        e.classList.remove("hover");
+                    }),
+                    e.addEventListener("dragenter", (t) => {
+                        e.classList.add("hover");
+                    }),
+                    e.addEventListener("drop", (t) => {
+                        t.target.classList.contains("droptarget") &&
+                            (t.preventDefault(),
+                            e.classList.remove("hover"),
+                            createStrip((id = t.dataTransfer.getData("text")), (slotContainer = t.target)));
+                    });
+            }),
+            refreshConfigDropDown(),
+            modID = 0;
+        modID < _("numberOfSlotModules").value;
+        modID++
+    )
+        for (
+            ((layoutVal = _("layout").value.split(",")[modID]) <= 0 || void 0 === layoutVal) && (layoutVal = 4), i = 0;
+            i < 3;
+            i++
+        )
+            (layoutClass = 1 & (bitTest = layoutVal >> i) ? "activeLayout" : "greyedout"),
+                (_("layout," + i + "," + modID).className = layoutClass);
+    showHideDoubleclic(),
+        generateshortcutDropDown(),
+        refreshAllshortcutField(),
+        translateAssignements(),
+        populateDropDown(_("assignementTPL"), translatedAssignements, !0),
+        assignements.forEach(function (e, t) {
+            for (i = 0; i < buttons.length; i++)
+                (target = assignements[t] + "-" + buttons[i]),
+                    cloneComponent(_("assignementTPL"), target, target + "-dropDown"),
+                    (_(target + "-dropDown").style.display = "inline");
+        }),
+        (assignmentObj = JSON.parse(_("assignements").value)),
+        buttons.forEach(function (e, t) {
+            for (i = 0; i < assignements.length; i++)
+                _((el = assignements[i] + "-" + e + "-dropDown")).value = assignmentObj[e][i];
+        }),
+        (allSelects = _("buttonAssignementPanel").querySelectorAll("select")).forEach((e) => {
+            handleMutuallyExclusiveSelect(e.id);
+        }),
+        initAcc(".fsl-accordion.multiple", !1),
+        getLastVersion(CORSproxy + "http://" + _("updateroot").value + "/footswitch.php?check", CannotgetVersion),
+        sendMessage("indexSetup=finished");
+}
+function setTour() {
+    setCookie("tourButton", _("tourButton").checked ? 1 : 0, 100),
+        _("tourButton").checked
+            ? ((_("tourNav").className = ""), resumeTour())
+            : (stopTour(), expandItems(!1), (_("tourNav").className = "greyedout"));
+}
+function tourNav(e) {
+    _("tourButton").checked &&
+        ("next" === e
+            ? guidedTour.processStep("next")
+            : guidedTour.currentStepIndex > 2 && ((guidedTour.currentStepIndex -= 2), guidedTour.processStep("next")));
+}
+function stopTour() {
+    null != guidedTour &&
+        ((guidedTour.currentStepIndex = tourSteps[wizardIndex].length - 1),
+        guidedTour.processStep("next"),
+        guidedTour.processStep("next"));
+}
+function setCookie(e, t, o) {
+    var r = new Date();
+    r.setDate(r.getDate() + o), (document.cookie = e + "=" + escape(t) + (null == o ? "" : ";expires=" + r));
+}
+function getCookie(e) {
+    return document.cookie.length > 0 && -1 != (c_start = document.cookie.indexOf(e + "="))
+        ? ((c_start = c_start + e.length + 1),
+          -1 == (c_end = document.cookie.indexOf(";", c_start)) && (c_end = document.cookie.length),
+          unescape(document.cookie.substring(c_start, c_end)))
+        : 1;
+}
+function launchTour() {
+    _("one").checked
+        ? (wizardIndex = 0)
+        : _("two").checked
+          ? (wizardIndex = 1)
+          : _("three").checked
+            ? (wizardIndex = 2)
+            : _("four").checked && (wizardIndex = 3),
+        stopTour(),
+        (guidedTour = new StepsJs(tourSteps[wizardIndex], {
+            duration: 800,
+            styles: { frame: { customClass: "tour-frame" }, hint: { customClass: "tour-hint" } },
+        }));
+}
+function retrieveshortcutFType(e) {
+    return (
+        -1 == (selection = _((fID = e + "shortcutF")).selectedIndex) && (selection = 0),
+        (value = _(fID).options[selection].text),
+        fDefObject[value]
+    );
+}
+function refreshAllshortcutField() {
+    (shortcutObj = JSON.parse(_("shortcutSettings").value)),
+        buttons.forEach(function (e, t) {
+            for (setElemIDVal(e + "shortcutF", shortcutObj[e][0].toString()), designshortcutGUI(e), i = 0; i < 2; i++)
+                populateshortcutFields(e, i), (_((field = e + "Field" + i)).value = shortcutObj[e][i + 1]);
+        });
+}
+function shortcutField1Changed(e) {
+    populateshortcutFields(e, 1), serializeShortcutSetting();
+}
+function serializeShortcutSetting() {
+    (values = {}),
+        buttons.forEach(function (e, t) {
+            (functionID = parseInt(_(e + "shortcutF").value)) || (functionID = 0),
+                (field0 = _(e + "Field0").value) || (field0 = "0"),
+                (field1 = _(e + "Field1").value) || (field1 = "0"),
+                (values[e] = [functionID, field0, field1]);
+        }),
+        transmit("push", "shortcutSettings", (JSONval = JSON.stringify(values))),
+        (_("shortcutSettings").value = JSONval);
+}
+function populateshortcutFields(e, t = 0) {
+    (fType = shortcutGUIcomponents[(button = retrieveshortcutFType(e))][2 * t + 1]),
+        emptyElement(_((field = e + "Field" + t)).id);
+    var o = ["⏹", "⏸", "⏯"];
+    switch (fType) {
+        case "Module":
+            var r = [];
+            for (m = 0, n = _("numberOfSlotModules").value; m < n; m++) r.push(_("moduleName" + m).value);
+            for (j = 0, activeModules = _("userModules").value.split(","); j < activeModules.length; j++)
+                (activeModuleID = activeModules[j]),
+                    activeModules[j] < _("numberOfSlotModules").value &&
+                        addDropDownEntry(_(field), activeModuleID, r[activeModuleID], (className = ""));
+            break;
+        case "Strip":
+            for (
+                ((modID = _(e + "Field0").value) < 0 || !modID) && (modID = 0),
+                    strips = _("moduleslot" + modID).getElementsByClassName("userSlot"),
+                    n = 0;
+                n < strips.length;
+                n++
+            )
+                void 0 ===
+                    (color = (nextSlot = _(
+                        "module" + modID + "Slot" + (slotID = strips[n].id.match(/\d+/g)?.[1])
+                    )).getElementsByClassName("modname")[0].classList[2]) &&
+                    (color = nextSlot.getElementsByClassName("modname")[0].classList[1]),
+                    (source = nextSlot.getElementsByClassName("source")[0]),
+                    (dest = nextSlot.getElementsByClassName("destination")[0]),
+                    addDropDownEntry(
+                        _(field),
+                        slotID,
+                        source.options[source.selectedIndex].text + "->" + dest.options[dest.selectedIndex].text,
+                        (className = color)
+                    );
+            break;
+        case "Macro":
+            var l = [];
+            for (t = 0; t < _("macroDropDown").length; t++) l.push(_("macroDropDown").options[t].text);
+            populateDropDown(_(field), l, !0);
+            break;
+        case "Execute":
+            o.push("⏸⏺"), o.push("⏺"), o.push("⏩"), o.push("⏪"), o.push("⏭"), o.push("⏮");
+        case "Action":
+            populateDropDown(_(field), o, !0), (_(field).style = "font-size: 1em;");
+            break;
+        case "Value":
+            populateDropDown(_(field), ["\uD83D\uDCE5", "\uD83D\uDCE4"], !0), (_(field).style = "font-size: 1em;");
+            break;
+        case "Select":
+            populateDropDown(
+                _(field),
+                [
+                    "\uD83D\uDC48",
+                    "\uD83D\uDC49",
+                    "\uD83D\uDCA2\uD83D\uDC48",
+                    "\uD83D\uDC49\uD83D\uDCA2",
+                    "\uD83D\uDCC2",
+                    "\uD83D\uDCBE",
+                ],
+                !0
+            ),
+                (_(field).style = "font-size: 1em;");
+            break;
+        case "Command":
+            _(field).setAttribute("onChange", "parseOSC('" + e + "')");
+    }
+}
+function parseOSC(e) {
+    void 0 == (command = _(e + "Field0").value.split(" "))[1] || -1 == command[0].indexOf("/")
+        ? alert("Command " + i18n.gettext(e.toUpperCase()) + ": " + i18n.gettext("Bad OSC message"))
+        : shortcutField1Changed(e);
+}
+function designshortcutGUI(e) {
+    for (
+        i = 0,
+            index = retrieveshortcutFType(e),
+            _((containerID = e + "shortcutGUIContainer")).textContent = "",
+            button = retrieveshortcutFType(e);
+        i < 2;
+        i++
+    )
+        (label = shortcutGUIcomponents[button][2 * i + 1]),
+            _(containerID).appendChild(document.createTextNode(label)),
+            (field = _(shortcutGUIcomponents[index][2 * i]).cloneNode(!0)).setAttribute("id", e + "Field" + i),
+            (fCall = "shortcutField1Changed('" + e + "')"),
+            1 == i && (fCall = "serializeShortcutSetting();"),
+            field.setAttribute("onChange", fCall),
+            (field.style.display = "inline"),
+            _(containerID).appendChild(field),
+            populateshortcutFields(e, i);
+}
+function generateshortcutDropDown() {
+    fDefObject = JSON.parse(_("shortcutFDef").value);
+    var e = [];
+    for (let t in ((i = 0), fDefObject)) fDefObject.hasOwnProperty(t) && (e.push(t), i++);
+    buttons.forEach(function (t, o) {
+        populateDropDown(_(buttons[o] + "shortcutF"), e, !0);
+    });
+}
+function showHideDoubleclic() {
+    return (val = _("doubleClic").value), (_("dClicRow").style.opacity = 0 == val ? 0 : 1), val;
+}
+function changeShortcut(e) {
+    transmit("push", "doubleClic", showHideDoubleclic());
+}
+function retrieveMacroSettings() {
+    getData("MacroNames", !1),
+        (macroDropDown = _("MacroNames").value.split(",")),
+        populateDropDown(_("macroDropDown"), macroDropDown, !0, "macroName", !0),
+        getData("macroProperties", !1),
+        (macroProperties = JSON.parse(_("macroProperties").value)),
+        refreshMacroDropDown();
+}
+function updateLayout(e) {
+    for (i = 0, count = 0, elemID = e.id.split(",")[1]; i < 3; i++)
+        "greyedout" == _("layout," + i + "," + activeModContainer).className && i != elemID && count++;
+    if (2 != count) {
+        for (
+            i = 0,
+                layoutClass = "activeLayout" == e.className ? "greyedout" : "activeLayout",
+                e.className = layoutClass,
+                layoutVal = 0;
+            i < 3;
+            i++
+        )
+            (mult = "greyedout" == _("layout," + i + "," + activeModContainer).className ? 0 : 1),
+                (layoutVal += 2 ** i * mult);
+        for (modID = 0, layouts = _("layout").value.split(","); modID < _("numberOfSlotModules").value; modID++)
+            void 0 === layouts[modID] && (layouts[modID] = 4);
+        (layouts[activeModContainer] = layoutVal),
+            (_("layout").value = layouts.toString()),
+            transmit("push", "layout", _("layout").value);
+    }
+}
+function changeStripJpg(e) {
+    ((container = e.parentNode.parentNode.parentNode).getElementsByClassName("dropbtn")[0].firstChild.nextSibling.src =
+        e.src + "?" + new Date().getTime()),
+        sendSlotContent(container.parentNode.parentNode.parentNode.parentNode);
+}
+function isTouchScreen() {
+    return !!(
+        window.matchMedia("(pointer: coarse)").matches ||
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|edge|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    );
+}
+window.onscroll = function () {
+    var e = window.pageYOffset;
+    prevScrollpos > e
+        ? (document.getElementById("navbar").style.top = "0")
+        : (document.getElementById("navbar").style.top = "-150px"),
+        (prevScrollpos = e);
+};
+const getNavigatorLanguage = () =>
+    navigator.languages && navigator.languages.length
+        ? navigator.languages[0]
+        : navigator.userLanguage || navigator.language || navigator.browserLanguage || "en-EN";
+function createStrip(e, t) {
+    (nodeCopy = _(e).cloneNode(!0)),
+        (mod = getIDsfromSlot(t)[0]),
+        (slot = getIDsfromSlot(t)[1]),
+        nodeCopy.setAttribute("id", "module" + mod + "Slot" + slot),
+        (t.textContent = ""),
+        t.appendChild(nodeCopy),
+        renderSlot(t, !0),
+        sendSlotContent(t);
+}
+function updateModuleName(e, t) {
+    transmit("push", e, t), refreshAllshortcutField();
+}
+function pushStrip(e) {
+    for (
+        i = 0, userSlots = _((moduleSlot = "moduleslot" + activeModContainer)).querySelectorAll(".droptarget");
+        i < userSlots.length &&
+        0 != _((modslotID = "Module" + activeModContainer + "-Slot" + i)).getElementsByClassName("userSlot").length;
+        i++
+    );
+    i < 12
+        ? createStrip(e, _(modslotID))
+        : alert("Module Strip is already full. Delete one or more trip first to continue.");
+}
+function activateModContainer(e) {
+    (_("modContainer" + activeModContainer).style.display = "none"),
+        (activeModContainer += e) < 0
+            ? (activeModContainer = _("numberOfModules").value - 1)
+            : activeModContainer == _("numberOfModules").value && (activeModContainer = 0),
+        activeModContainer >= 5 ? (_("stripsPool").style.display = "none") : (_("stripsPool").style.display = "block"),
+        (_("modContainer" + activeModContainer).style.display = "block"),
+        activeModContainer < 5 && scale();
+}
+function scale() {
+    (nChild =
+        null !=
+        (slotContent = (lastUserSlot = _((moduleSlot = "moduleslot" + activeModContainer)).querySelectorAll(
+            ".userSlot:last-child"
+        )).item(lastUserSlot.length - 1))
+            ? parseInt(getIDsfromSlot((slotContainer = slotContent.parentNode))[1], 10) + 1
+            : 0),
+        getZoomObj().style.setProperty("grid-auto-columns", 97 / nChild + "%");
+}
+function getZoomObj() {
+    let e = document.styleSheets[0],
+        t;
+    for (let o = 0; o < e.cssRules.length; o++) ".hs" === e.cssRules[o].selectorText && (t = e.cssRules[o]);
+    return t;
+}
+function zoomBoard(e) {
+    let t = getZoomObj();
+    (ratio = t.style.getPropertyValue("grid-auto-columns")),
+        (ratio = e > 0 ? 1.5 * parseFloat(ratio) : parseFloat(ratio) / 1.5) > 24
+            ? (ratio = 24)
+            : ratio < 8 && (ratio = 8),
+        t.style.setProperty("grid-auto-columns", ratio + "%");
+}
+function trashSlot(e) {
+    (p = e.parentElement).getElementsByClassName("modname")[0].setAttribute("functionID", 0),
+        (p.getElementsByClassName("source")[0].selectedIndex = 0),
+        (p.getElementsByClassName("destination")[0].selectedIndex = 0),
+        (p.getElementsByClassName("color")[0].selectedIndex = 16),
+        (p.getElementsByClassName("dropbtn")[1].firstChild.nextSibling.src = "icon0.jpg"),
+        (p.getElementsByClassName("dropbtn")[0].firstChild.nextSibling.src = "icon0.jpg"),
+        (slot = e.parentElement.parentElement.cloneNode(!0)),
+        e.parentElement.remove(),
+        sendSlotContent(slot);
+}
+function updateMyColorAddresses(e) {
+    for (transmit("push", e.id, e.value), modID = 0; modID < _("numberOfSlotModules").value; modID++)
+        for (i = 0, sources = _("moduleslot" + modID).getElementsByClassName("source"); i < sources.length; i++)
+            (dropDownObj = sources[i]).options[dropDownObj.selectedIndex].className == e.id &&
+                updateSlotColor(sources[i].parentNode.parentNode.parentNode);
+}
+function updateAllColorClass(e) {
+    for (modID = 0; modID < _("numberOfSlotModules").value; modID++)
+        for (i = 0, sources = _("moduleslot" + modID).getElementsByClassName(e); i < sources.length; i++)
+            updateSlotColor(sources[i].parentNode);
+}
+function updateSlotColor(e) {
+    (colorID = (color = e.getElementsByClassName("color")[0]).selectedIndex),
+        (colorClass = color.options[colorID].className),
+        (modNode = e.getElementsByClassName("modname")[0]),
+        "auto" == colorClass &&
+            (!0 == (source = e.getElementsByClassName("source")[0]).disabled &&
+                (source = e.getElementsByClassName("destination")[0]),
+            (srcID = source.selectedIndex),
+            null != (colorClass = modNode.getAttribute("autocolor")) &&
+                ("mychannel" == source.options[srcID].text
+                    ? (srcID = _("mychannel").selectedIndex)
+                    : "mybus" == source.options[srcID].text && (srcID = _("mybus").selectedIndex),
+                (srcID += 1),
+                (address = (colorClass = (colorClass = colorClass.replace(
+                    /%02d/i,
+                    (srcID < 10 ? "0" : "") + srcID
+                )).replace(/%d/i, srcID)).replace("/config/color", "")),
+                (colorClass += " color" + colorsObject[address]))),
+        (modNode.className = "modname " + colorClass);
+}
+function renderSlot(e, t) {
+    t && ((trashTPL = _("trashTPL").cloneNode(!0)).removeAttribute("id"), e.firstChild.appendChild(trashTPL)),
+        e.firstChild.setAttribute("class", "userSlot"),
+        isTouchScreen() && e.getElementsByClassName("mover")[0].remove(),
+        (e.getElementsByClassName("hider")[0].style.display = "block"),
+        e.firstChild.setAttribute("draggable", "false"),
+        e.firstChild.getElementsByClassName("source")[0].childElementCount > 1 &&
+            (e.firstChild.getElementsByClassName("source")[0].disabled = !1),
+        e.firstChild.getElementsByClassName("destination")[0].childElementCount > 1 &&
+            t &&
+            (e.firstChild.getElementsByClassName("destination")[0].disabled = !1),
+        updateSlotColor(e.firstChild);
+}
+function populateSlotTemplates() {
+    for (jpgDrpDownID = 0; jpgDrpDownID < 2; jpgDrpDownID++)
+        for (i = 1, picElement = _("slotTPL").getElementsByClassName("jpgdropdown-content")[jpgDrpDownID]; i <= 20; i++)
+            ((newEntry = document.createElement("a")).innerHTML =
+                "<img src='icon" + i + ".jpg' width='100%' onclick='changeStripJpg(this);'>" + i),
+                picElement.appendChild(newEntry);
+    for (getData("numberOfSlotTPL", !1), i = 1; i < _("numberOfSlotTPL").value; i++)
+        getData("slotTemplate", !1, i),
+            (slotTPLName = Object.keys((slotTPLObject = JSON.parse((slotTPL = _("slotTemplate").value))))[0]),
+            ((modNode = (slotTPLnode = cloneComponent(
+                _("slotTPL"),
+                "availableSlotTPL",
+                "slotTPL" + i
+            )).getElementsByClassName("modname")[0]).innerHTML = slotTPLName),
+            modNode.setAttribute("functionID", i),
+            "" != (colTag = slotTPLObject.colorID) &&
+                ((colTag = colTag.replace(/%s/i, "color")), modNode.setAttribute("autocolor", colTag)),
+            populateDropDown(
+                slotTPLnode.getElementsByClassName("source")[0],
+                slotTPLObject[slotTPLName][0],
+                !0,
+                slotTPLObject.srcName
+            ),
+            populateDropDown(
+                slotTPLnode.getElementsByClassName("destination")[0],
+                slotTPLObject[slotTPLName][1],
+                !0,
+                slotTPLObject.dstName
+            );
+    var e = document.querySelector("#availableSlotTPL"),
+        t = document.querySelectorAll("#availableSlotTPL li");
+    [].slice
+        .call(t)
+        .sort(function (e, t) {
+            return e.textContent > t.textContent ? 1 : -1;
+        })
+        .forEach(function (t) {
+            e.appendChild(t);
+        });
+}
+function buildModuleSlot(e, t) {
+    for (getData("slotDefModule", !1, e), moduleDef = JSON.parse(_("slotDefModule").value), i = 0; i < 12; i++)
+        cloneComponent(_("ModuleXSlotYTPL"), "moduleslot" + e, "Module" + e + "-Slot" + i),
+            (slotTPLid = 0),
+            null != moduleDef[i] && (slotTPLid = moduleDef[i][0]),
+            (recipient = "Module" + e + "-Slot" + i),
+            slotTPLid > 0 &&
+                ((source = (newSlot = cloneComponent(
+                    _("slotTPL" + slotTPLid),
+                    recipient,
+                    "module" + e + "Slot" + i
+                )).getElementsByClassName("source")[0]),
+                (destination = newSlot.getElementsByClassName("destination")[0]),
+                (color = newSlot.getElementsByClassName("color")[0]),
+                (picsource = newSlot.getElementsByClassName("dropbtn")[0].firstChild.nextSibling),
+                (picdest = newSlot.getElementsByClassName("dropbtn")[1].firstChild.nextSibling),
+                (sourceID = moduleDef[i][1]),
+                (destID = moduleDef[i][2]),
+                (colorID = moduleDef[i][3]),
+                (picsourceID = moduleDef[i][4]),
+                (picdestID = moduleDef[i][5]),
+                99 == sourceID ? (sourceID = source.childElementCount - 1) : (sourceID -= 1),
+                99 == destID ? (destID = destination.childElementCount - 1) : (destID -= 1),
+                99 == colorID && (colorID = 16),
+                (source.selectedIndex = sourceID),
+                (destination.selectedIndex = destID),
+                (color.selectedIndex = colorID),
+                (picsource.src = "/icon" + picsourceID + ".jpg"),
+                (picdest.src = "/icon" + picdestID + ".jpg"),
+                renderSlot(_(recipient), t)),
+            1 == Math.floor((i / 4) % 2)
+                ? (_(recipient).style.background = "#fff")
+                : (_(recipient).style.background = "LightGray");
+}
+function saveConfig() {
+    transmit("push", "save", _("configDropdown").value), refreshConfigDropDown();
+}
+function refreshConfigDropDown() {
+    for (
+        getData("confignames", !1),
+            configNames = _("confignames").value.split(","),
+            populateDropDown(_("configDropdown"), configNames, !1),
+            getData("currentConfig", !1),
+            _("configInUse").value = _("currentConfig").value,
+            i = 0;
+        i < _("configDropdown").options.length;
+        i++
+    )
+        _("currentConfig").value == _("configDropdown").options[i].value && (_("configDropdown").selectedIndex = i);
+    enableOrDisableLoadDelButton();
+}
+function loadConfig() {
+    (configInUse = _("configInUse").value),
+        (msg = i18n.gettext("Page will reload with the new settings and footswitch will restart. Do you confirm?")),
+        !0 == (pendingModif = "blink_me" === _("saveBt").className) &&
+            (msg = configInUse + " " + i18n.gettext("unsaved changes will be saved now.") + " " + msg),
+        confirm(msg) &&
+            (!1 == pendingModif && transmit("push", "save", configInUse),
+            transmit("push", "load", _("configDropdown").value),
+            reboot());
+}
+function deleteConfig() {
+    _("currentConfig").value == _("configInUse").value
+        ? confirm("Confirm delete current profile (footswitch will restartanother profile)") &&
+          (transmit("push", "delete", _("configDropdown").value), reboot(), document.location.reload())
+        : confirm("This action is definitive. Confirm?") &&
+          (transmit("push", "delete", _("configDropdown").value, !1), refreshConfigDropDown());
+}
+function enableOrDisableLoadDelButton() {
+    (ifConfExists = (configNames = _("confignames").value.split(",")).includes(_("configDropdown").value)),
+        (_("loadBt").disabled = !ifConfExists),
+        (_("deleteBt").disabled = !ifConfExists),
+        _("configDropdown").options.length <= 1 && (_("deleteBt").disabled = !0);
+}
+function configDropDownChange() {
+    (_("saveBt").disabled = !1), enableOrDisableLoadDelButton();
+}
+function newCurrentConfig() {
+    (currentConfig = _("currentConfig").value),
+        addDropDownEntry(_("configDropdown"), currentConfig, currentConfig),
+        ((select = _("configDropdown")).selectedIndex = select.options.length - 1),
+        configDropDownChange();
+}
+function offlineMixerSelection() {
+    transmit("push", "mixerID", _("mixerID").checked), alert("Page will be refreshed"), document.location.reload();
+}
+function updateModules() {
+    for (getData("userModules", !1), modulesOn = _("userModules").value.split(","), i = 0; i < modulesOn.length; i++)
+        _("modContainer" + modulesOn[i]).getElementsByClassName("modONOFF")[0].checked = !0;
+}
+function getIDsfromSlot(e) {
+    return [(modID = (arrayID = e.id.split("-"))[0].match(/\d+/)), (slotID = arrayID[1].match(/\d+/))];
+}
+function sendSlotContent(e) {
+    (modID = getIDsfromSlot(e)[0]),
+        (slotID = getIDsfromSlot(e)[1]),
+        ((valuesID = [])[0] = parseInt(modID)),
+        (valuesID[1] = parseInt(slotID)),
+        (valuesID[2] = parseInt(e.getElementsByClassName("modname")[0].getAttribute("functionID"))),
+        (source = e.getElementsByClassName("source")[0]),
+        (destination = e.getElementsByClassName("destination")[0]),
+        (color = e.getElementsByClassName("color")[0]),
+        (picturesrcname = (picturesrc = e.getElementsByClassName("dropbtn")[0].firstChild.nextSibling.src).substring(
+            picturesrc.lastIndexOf("/")
+        )),
+        (picturedstname = (picturedst = e.getElementsByClassName("dropbtn")[1].firstChild.nextSibling.src).substring(
+            picturedst.lastIndexOf("/")
+        )),
+        (sourceID = source.selectedIndex),
+        (destID = destination.selectedIndex),
+        (colorID = color.selectedIndex),
+        (srcTxt = source.options[source.selectedIndex].text),
+        (dstTxt = destination.options[destination.selectedIndex].text),
+        "mychannel" == srcTxt || "mybus" == srcTxt ? (sourceID = 99) : (sourceID += 1),
+        "mychannel" == dstTxt || "mybus" == dstTxt ? (destID = 99) : (destID += 1),
+        16 == color.selectedIndex && (colorID = 99),
+        (valuesID[3] = parseInt(sourceID)),
+        (valuesID[4] = parseInt(destID)),
+        (valuesID[5] = parseInt(colorID)),
+        (valuesID[6] = parseInt(picturesrcname.match(/\d+/))),
+        (valuesID[7] = parseInt(picturedstname.match(/\d+/))),
+        updateSlotColor(e),
+        refreshAllshortcutField(),
+        transmit("push", "updateModuleSlot", (JSONSlot = JSON.stringify(valuesID)));
+}
+function cloneComponent(e, t, o) {
+    return ((clone = e.cloneNode(!0)).id = o), _(t).appendChild(clone), clone;
+}
+function IPInput(e) {
+    e || ((_("ip").value = "0.0.0.0"), (_("port").value = ""), (_("autoip").checked = !0)),
+        (_("IPblock").style.display = e ? "block" : "none");
+}
+function toggleAutoIp() {
+    IPInput(!_("autoip").checked), transmit("push", "ip", _("ip").value);
+}
+function updateUserModulesList(e) {
+    if (!e.checked && 1 == _("userModules").value.split(",").length) {
+        alert(i18n.gettext("At least one module must be visible")), (e.checked = !0);
+        return;
+    }
+    for (
+        modID = 0,
+            _("userModules").value = "",
+            m = 0,
+            onOffModules = _("moduleSlotcontainer").getElementsByClassName("modONOFF");
+        modID < _("numberOfModules").value;
+        modID++
+    )
+        onOffModules[modID].checked &&
+            (0 != m && (_("userModules").value += ","),
+            (_("userModules").value += onOffModules[modID].closest(".board").id.match(/\d+/)),
+            m++);
+    refreshAllshortcutField(), transmit("push", "userModules", _("userModules").value);
+}
+function confirmRecord() {
+    (list = _("macroDropDown")),
+        null !=
+            (rep = prompt(
+                i18n.gettext(
+                    "Provide a macro name. Current macro will be replaced by all activity recorded on the mixer. Confirm or cancel."
+                ),
+                list.options[list.selectedIndex].innerHTML
+            )) &&
+            "" != rep &&
+            ((rep = (rep = rep.substring(0, 12)).padEnd(12)),
+            (list.options[list.selectedIndex].innerHTML = rep),
+            refreshAllshortcutField(),
+            sendMacroProperties(),
+            transmit("push", "macroStartRecord", _("macroDropDown").value));
+}
+function macroRecord(e, t) {
+    (actualprogress = t),
+        (itv = setInterval(prog, 100)),
+        (_("macroDropDown").selectedIndex = e),
+        (_("macroDropDown").disabled = !0),
+        (_("recordMacro").disabled = !0),
+        (_("exportMacro").disabled = !0),
+        (_("stopMacro").disabled = !1);
+}
+function macroStop() {
+    clearInterval(itv),
+        (actualprogress = 0),
+        prog(),
+        (_("stopMacro").disabled = !0),
+        (_("macroDropDown").disabled = !1),
+        (_("recordMacro").disabled = !1),
+        (_("exportMacro").disabled = !1);
+}
+function refreshMacroDropDown() {
+    (speedID = macroProperties[(selectedMacroID = _("macroDropDown").selectedIndex)][0]),
+        (loopID = macroProperties[selectedMacroID][1]),
+        (_("macroSpeed").selectedIndex = speedID),
+        (_("macroLoop").selectedIndex = loopID);
+}
+function sendMacroProperties() {
+    (valuesID = []),
+        (list = _("macroDropDown")),
+        (valuesID[0] = list.selectedIndex),
+        (valuesID[1] = list.options[list.selectedIndex].innerHTML),
+        (valuesID[2] = _("macroSpeed").selectedIndex),
+        (valuesID[3] = _("macroLoop").selectedIndex),
+        (macroProperties[list.selectedIndex][0] = valuesID[2]),
+        (macroProperties[list.selectedIndex][1] = valuesID[3]),
+        transmit("push", "setMacroProperties", (JSONSlot = JSON.stringify(valuesID, null, 1)), !1);
+}
+function prog() {
+    if (actualprogress >= maxprogress) {
+        actualprogress = 0;
+        return;
+    }
+    _("progressnum"), (_("indicator").style.width = actualprogress + "%");
+}
+function sub(e) {
+    (fileName = e.value.split("\\")), (_("file-input").innerHTML = "   " + fileName[fileName.length - 1]);
+}
+async function fetchFileFromURL(e) {
+    waiting();
+    var t = await fetch(CORSproxy + "http://firmware.groupe-interval.fr/" + e + ".fsar", {
+        method: "GET",
+        headers: { "X-Requested-With": "XMLHTTPREQUEST" },
+    });
+    console.log(t);
+    var o = await t.blob();
+    console.log(o);
+    var r = new File([o], e + ".fsar", { lastModified: new Date().getTime(), type: o.type });
+    console.log(r), (formdata = new FormData()).append("file1", r);
+    var l = new XMLHttpRequest();
+    l.upload.addEventListener("progress", progressHandler, !1),
+        l.addEventListener("load", completeHandler, !1),
+        l.addEventListener("error", errorHandler, !1),
+        l.addEventListener("abort", abortHandler, !1),
+        l.open("POST", "/upload"),
+        l.send(formdata);
+}
+function fetchFromFile() {
+    waiting();
+    var e = _("file1").files[0],
+        t = new FormData();
+    t.append("file1", e), uploadPackage(t);
+}
+function uploadPackage(e) {
+    var t = new XMLHttpRequest();
+    t.upload.addEventListener("progress", progressHandler, !1),
+        t.addEventListener("load", completeHandler, !1),
+        t.addEventListener("error", errorHandler, !1),
+        t.addEventListener("abort", abortHandler, !1),
+        t.open("POST", "/upload"),
+        t.send(e);
+}
+function progressHandler(e) {
+    _("loaded_n_total").innerHTML = "Total " + e.loaded + " bytes";
+    var t = (e.loaded / e.total) * 100;
+    (_("uploadBar").value = Math.round(t)),
+        (_("status").innerHTML = i18n.gettext("Uploading file") + " " + Math.round(t) + "%"),
+        t >= 100 && (_("status").innerHTML = i18n.gettext("Writing file"));
+}
+function completeHandler(e) {
+    (_("uploadBar").value = 0), (_("status").innerHTML = i18n.gettext("finished")), showPage();
+}
+function errorHandler(e) {
+    (_("status").innerHTML = "Upload Failed"), showPage();
+}
+function abortHandler(e) {
+    (_("status").innerHTML = "Upload Aborted"), showPage();
+}
+function handleMutuallyExclusiveSelect(e) {}
+function assignementChange(e) {
+    handleMutuallyExclusiveSelect(e), serializeAssignement();
+}
+function refreshButtonLang() {
+    translateAssignements();
+    let e = _("buttonAssignementPanel").querySelectorAll("select");
+    e.forEach((e) => {
+        for (i = 0; i < e.options.length; i++) e.options[i].innerHTML = translatedAssignements[e.options[i].value - 1];
+    });
+}
+function serializeAssignement() {
+    for (i = 0, values = {}; i < buttons.length; i++)
+        (s = parseInt(_(assignements[0] + "-" + buttons[i] + "-dropDown").value)),
+            (m = parseInt(_(assignements[1] + "-" + buttons[i] + "-dropDown").value)),
+            (h = parseInt(_(assignements[2] + "-" + buttons[i] + "-dropDown").value)),
+            (d = parseInt(_(assignements[3] + "-" + buttons[i] + "-dropDown").value)),
+            (values[buttons[i]] = [s, m, h, d]);
+    transmit("push", "assignements", (JSONval = JSON.stringify(values)));
+}
+function translateAssignements() {
+    for (i = 0, assignementDef = _("assignementDef").value.split(","); i < assignementDef.length; i++)
+        translatedAssignements[i] = i18n.gettext(assignementDef[i]);
+}
+function getLastVersion(e, t) {
+    let o = new XMLHttpRequest();
+    (o.timeout = 2e3),
+        (o.onreadystatechange = function () {
+            4 === o.readyState &&
+                (200 === o.status
+                    ? ((lastV = parseFloat(o.responseText)),
+                      (currentV = parseFloat(_("footswitchversion").innerHTML)),
+                      (_("versionMsg").innerText = lastV + " " + currentV),
+                      (message =
+                          lastV > currentV
+                              ? i18n.gettext("Please download and install last firmware v") +
+                                "<b><span style='cursor: pointer; text-decoration: underline;' onClick='fetchFileFromURL(" +
+                                o.responseText +
+                                ")' href='https://firmware.groupe-interval.fr/" +
+                                o.responseText +
+                                ".fsar'>" +
+                                o.responseText +
+                                "</span></b>"
+                              : i18n.gettext("Your firmware is up to date")),
+                      (_("versionMsg").innerHTML = message))
+                    : t(o.status));
+        }),
+        o.open("GET", e, !0),
+        o.send(),
+        (o.ontimeout = t(i18n.gettext("Update")));
+}
+function displayData(e) {}
+function CannotgetVersion(e) {
+    _("versionMsg").innerText =
+        i18n.gettext("Firmware update version check failed: Internet connexion issue") + " (" + e + ")";
+}

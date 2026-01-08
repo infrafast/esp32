@@ -80,7 +80,7 @@ static uint8_t lastFileProgress = 0;
 uint8_t progressPercentInt = 0;   // 0..100
 size_t proportionalSize = 0;   // 0..100
 size_t processedSize = 0;
-size_t totalGzSize = 100.0;
+size_t totalGzSize = 0;
 
 
 String updateSWerrorString = "";
@@ -665,11 +665,14 @@ class JsonList{
     virtual const String* getString(const String name, const String defaultValue="") {
       int8_t index;
       index = getIndex(name);
+      DEBUG_PRINT("\ngetString(%s,%s)=>",name.c_str(),defaultValue.c_str());        
       if (index < 0) {
         noToken = defaultValue;
+        DEBUG_PRINT("no token");
         return &noToken;
-      } else {
+      } else {        
         KeyValue* kv = keyValues.get(index);
+        DEBUG_PRINT("%s",kv->value.c_str());
         return &kv->value;
       }
     };
@@ -738,7 +741,7 @@ class JsonList{
     bool updateValue(uint8_t index, String value){
       KeyValue* kv = keyValues.get(index);
       kv->value = value;
-      //DEBUG_PRINT("\n\tupdateValue<%d>(%s,%s)",index,getName(index).c_str(),value.c_str());
+      //DEBUG_PRINT("\n\tupdateValue<%d>(%s,%s)",index,getName(index)->c_str(),value.c_str());
       return true;
     }
 
@@ -978,8 +981,39 @@ private:
     static ApplicationManager* am;
 };
 
-ApplicationManager* Log::am = nullptr;
+//--- utilitaires URL -----------------------------------------------------------
+struct UrlParts {
+  String proto, host, path;
+  uint16_t port = 80;
+  bool ok = false;
+};
 
+static UrlParts parseUrl(const String& url) {
+  UrlParts u;
+  int p = url.indexOf("://");
+  if (p < 0) return u;
+  u.proto = url.substring(0, p);
+  String rest = url.substring(p + 3);
+  int slash = rest.indexOf('/');
+  if (slash >= 0) {
+    u.host = rest.substring(0, slash);
+    u.path = rest.substring(slash);
+  } else {
+    u.host = rest;
+    u.path = "/";
+  }
+  int colon = u.host.indexOf(':');
+  if (colon >= 0) {
+    u.port = (uint16_t)u.host.substring(colon + 1).toInt();
+    u.host = u.host.substring(0, colon);
+  } else {
+    u.port = (u.proto == "https") ? 443 : 80;
+  }
+  u.ok = (u.host.length() > 0);
+  return u;
+}
+
+ApplicationManager* Log::am = nullptr;
 
 #include "APPManager.h"
 
@@ -1075,9 +1109,9 @@ void commonFileServerWrapper(Request &req, Response &res) {
   app.commonFileServer(req,res);
 }
 
-void commonFileServerWrapperPost(Request &req, Response &res) {
+/*void commonFileServerWrapperPost(Request &req, Response &res) {
   app.httpPost(req,res);
-}
+}*/
 
 static TaskHandle_t    hwaitingAnimationThread = nullptr;
 
@@ -1295,38 +1329,6 @@ void connectHTTPTask(void *parameter) {
 
 // tar --format=ustar --exclude='.DS*' -czvf 0.13.tgz -C ./tgztest .
 
-//--- utilitaires URL -----------------------------------------------------------
-struct UrlParts {
-  String proto, host, path;
-  uint16_t port = 80;
-  bool ok = false;
-};
-
-static UrlParts parseUrl(const String& url) {
-  UrlParts u;
-  int p = url.indexOf("://");
-  if (p < 0) return u;
-  u.proto = url.substring(0, p);
-  String rest = url.substring(p + 3);
-  int slash = rest.indexOf('/');
-  if (slash >= 0) {
-    u.host = rest.substring(0, slash);
-    u.path = rest.substring(slash);
-  } else {
-    u.host = rest;
-    u.path = "/";
-  }
-  int colon = u.host.indexOf(':');
-  if (colon >= 0) {
-    u.port = (uint16_t)u.host.substring(colon + 1).toInt();
-    u.host = u.host.substring(0, colon);
-  } else {
-    u.port = (u.proto == "https") ? 443 : 80;
-  }
-  u.ok = (u.host.length() > 0);
-  return u;
-}
-
 static String makeAbsoluteUrl(const String& baseUrl, const String& href) {
   if (href.startsWith("http://") || href.startsWith("https://")) return href;
   bool baseHasSlash = baseUrl.endsWith("/");
@@ -1527,6 +1529,7 @@ void fileProgressCallback( uint8_t fileProgress ) {
   if (newPercent != progressPercentInt) {
     progressPercentInt = newPercent;
     overallProgressPercent = (float)progressPercentInt;
+    DEBUG_PRINT("\nOverall progress callback: %.0f",overallProgressPercent);
   }
 
 }
@@ -1604,7 +1607,7 @@ void installGZBinaryFromFileTask(void *parameter){
   int success =  GZUnpacker.gzUpdater(tarGzFS, firmwareFilename.c_str(), 0,/*don't restart after update*/false );
   if(success ) {
     app.broadCast("{\"modalMessage\":\"Finished. Close this page\"}");  // inform web interface
-    app.singlePromptScreen(*lang.getString("Firmware flashed successfully. Restart the device to apply the update."),"OK",STATE_UTILS_RESTART_DEVICE);
+    app.singlePromptScreen(*lang.getString("Firmware flashed successfully. Device will restart to apply the update."),"OK",STATE_UTILS_RESTART_DEVICE);
     hwm.persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
   }else{          
     app.singlePromptScreen(*lang.getString("Firmware install failed"),"OK");
@@ -1652,44 +1655,20 @@ void checkAndInstallBinary() {
 }
 
 void updateSWfromStreamTask(void* parameter){
-  bool success = false;  
- 
-  int err = 0;
-  // 4) ouvrir le flux sur le fichier retenu
-  UrlParts f = parseUrl(app.fwUpdateURL);
-  if (f.ok){   
-    HttpClient httpStream(*hwm.network->client);
-    err = httpStream.startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
-    if (err != 0) {
-      updateSWerrorString = concatStrings("http request ", String(err));
-    }else{
-      err = httpStream.responseStatusCode();
-      if (err != 200) {
-        updateSWerrorString = concatStrings("http response ", String(err));
-        httpStream.stop();
-      }else{
-        err = httpStream.skipResponseHeaders();
-        if (err >= 0){
-          totalGzSize = httpStream.contentLength();
-          DEBUG_PRINT("\nContent-Length = %d\n", totalGzSize);
-          
-          TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
-          app.updatingFromStreamInprogress = true;
-          if( !TARGZUnpacker->tarGzStreamExpander( &httpStream, tarGzFS ) ) {
-            updateSWerrorString = concatStrings("TARGZUnpacker ", String(TARGZUnpacker->tarGzGetError())  );
-          } else {
-            success = true;
-          }
-          delete TARGZUnpacker;
-        }else{
-          updateSWerrorString = concatStrings("http skip headers error ", String(err));
-        }
-      }
-    }
-    httpStream.stop();
-  }else{
-    updateSWerrorString = concatStrings("URL parse error: ", app.fwUpdateURL);
+
+  Stream* httpStream = static_cast<Stream*>(parameter);
+  DEBUG_PRINT("\ntotalGzSize: %d",totalGzSize);
+
+  bool success = false;   
+  TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
+  app.updatingFromStreamInprogress = true;
+  if( !TARGZUnpacker->tarGzStreamExpander( httpStream, tarGzFS ) ) {
+    updateSWerrorString = concatStrings("TARGZUnpacker ", String(TARGZUnpacker->tarGzGetError())  );
+  } else {
+    success = true;
   }
+  delete TARGZUnpacker;
+  delete parameter;
   if (success){
     DEBUG_PRINT("\nUntarGz successful, checking for binary to install");
     screen.id = SCREEN_UTILS;
@@ -2133,16 +2112,14 @@ void utilsScreenBuilder(uint8_t state){
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SHOW_PROGRESS :{
       // this screen is shared with firmware update and binary install and others...
-      //gui.add(new RingMeter(&overallProgressPercent, 0, 100, 0, &GUI::midScreenHoriz, &GUI::midScreenVertical, 70, &percentString,&GUI::green,&GUI::transparentColor));      
       gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
-      gui.add(new Arc(&overallProgressPercent /*v*/, 0 /*min*/,totalGzSize /*max*/, &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::blue, &GUI::transparentColor,30));              
+      gui.add(new Arc(&overallProgressPercent /*v*/, 0 /*min*/,100 /*max*/, &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::blue, &GUI::transparentColor,30));              
       gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,SIZE_20,20,&GUI::defaultFcolor,&GUI::defaultBcolor));            
       gui.add(new ProgressBarH(&subProgressPercent, 0.0,100 , &halfProgressBarpix /*x*/, &GUI::belowBottomTexty /*y*/, PROGRESSBAR_WIDTH /*w*/, 8 /*h*/, 2 /*offset*/, 2 /*radius*/, &GUI::blue /*fc*/ , &GUI::gold/*bc*/, &GUI::fullBrightness));
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_FLASH_BINARY :{
       // this screen is shared with firmware update and binary install and others...
-      //gui.add(new RingMeter(&overallProgressPercent, 0, 100, 0, &GUI::midScreenHoriz, &GUI::midScreenVertical, 70, &percentString,&GUI::green,&GUI::transparentColor));      
       gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
       gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,SIZE_26,50,&GUI::red,&GUI::defaultBcolor));            
     }break;

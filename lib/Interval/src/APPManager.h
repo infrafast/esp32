@@ -95,7 +95,7 @@ enum{
   STATE_UTILS_CONNECTCONFIGMEDIA,
   STATE_UTILS_CONNECTWEBAPP,
   STATE_UTILS_WEBAPPCONNECTED,
-  STATE_UTILS_UPDATEFW_FROM_STREAM,
+  STATE_UTILS_UPDATEFW_FROM_URL,
   STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
   STATE_UTILS_FLASH_BINARY,
   STATE_UTILS_RESTORE_SCREEN,
@@ -175,6 +175,75 @@ void brightness_menu_item_selected(MenuComponent* p_menu_component);
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component);
 
 void handleConfigConnection();  // 
+
+
+struct ChunkWriter {
+  virtual ~ChunkWriter() {}
+  virtual bool begin(const String& filename) = 0;
+  virtual bool write(const uint8_t* data, size_t len) = 0;
+  virtual void end(bool ok) = 0;
+
+  // optionnel: message d'erreur lisible
+  const char* lastError() const { return _err; }
+protected:
+  const char* _err = "";
+};
+
+
+struct LittleFsWriter : public ChunkWriter {
+  File f;
+  String fullPath;
+
+  // exemple : WEBAPP_PATH = "/www"
+  String baseDir = WEBAPP_PATH;
+
+  bool begin(const String& filename) override {
+    // sécurité minimale: éviter chemin contenant ".."
+    if (filename.indexOf("..") >= 0) { _err = "bad filename"; return false; }
+
+    fullPath = baseDir;
+    if (!fullPath.endsWith("/")) fullPath += "/";
+    fullPath += filename;
+
+    // créer/écraser
+    f = LittleFS.open(fullPath, "w");
+    if (!f) { _err = "open failed"; return false; }
+    return true;
+  }
+
+  bool write(const uint8_t* data, size_t len) override {
+    if (!f) { _err = "file not open"; return false; }
+    size_t w = f.write(data, len);
+    if (w != len) { _err = "write failed"; return false; }
+    return true;
+  }
+
+  void end(bool ok) override {
+    if (f) {
+      // flush peut coûter du temps; à activer si tu veux garantir l'écriture immédiate
+      // f.flush();
+      f.close();
+    }
+    if (!ok) {
+      // optionnel: supprimer fichier partiel
+      if (fullPath.length()) LittleFS.remove(fullPath);
+    }
+  }
+};
+
+
+struct TgzUpdateWriter : public ChunkWriter {
+  bool begin(const String& filename) override { DEBUG_PRINT("\nTgzUpdateWriter %s",filename.c_str()); return true; }
+  bool write(const uint8_t* data, size_t len) override {
+    // TODO: brancher ici esp32tgz (feed chunks)
+    DEBUG_PRINT("\nTgzUpdateWriter wrote: %d bytes", len);
+    (void)data; (void)len;
+    return true;
+  }
+  void end(bool ok) override { (void)ok; /* finalize esp32tgz */ }
+};
+
+
 
 #include "DataManagement.h"
 
@@ -1040,7 +1109,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         
         promptParams.labels[0] = *lang.getString("Yes");
         promptParams.targetScreens[0] = SCREEN_UTILS;  // go to utils screen to perform the update
-        promptParams.targetState[0] = STATE_UTILS_UPDATEFW_FROM_STREAM;
+        promptParams.targetState[0] = STATE_UTILS_UPDATEFW_FROM_URL;
         
         promptParams.labels[1] = *lang.getString("No");              
         promptParams.targetScreens[1] = SCREEN_UTILS;   // back to caller
@@ -1517,6 +1586,7 @@ void setup() {
       doc["oscLibFile"] = OSCLIB_FILENAME;
       doc["wizard"] = (hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD)?true:false;
       doc["lang"] = *systemCfg.getString(S_LANG,"francais"); 
+      doc[S_SWUPDATE_PROMPT] = systemCfg.getBool(S_SWUPDATE_PROMPT);
       JsonArray configs = doc.createNestedArray("configNames");
       configs.add("default"); // parse the file list and add all entries found, at the moment it's empty
       
@@ -1739,7 +1809,7 @@ void setup() {
       iconProgress = ICON_FWUPDATE;
       screen.id = SCREEN_UTILS;
       screen.state = STATE_UTILS_FLASH_BINARY;     
-      updateProgressLabel = *lang.getString("Flashing firmware, do not interrupt!");       
+      updateProgressLabel = *lang.getString("Flashing firmware in progress, do not interrupt!");       
     }
 
     bool refresh(bool force=false){
@@ -1976,20 +2046,55 @@ void setup() {
               delay(500);
               ESP.restart();
             break;
-            case STATE_UTILS_UPDATEFW_FROM_STREAM:{
+            case STATE_UTILS_UPDATEFW_FROM_URL:{
               
+              #define NO_ERROR "ok"
+
+              HttpClient* httpStream = nullptr;
               updateProgressLabel = "...";   
+              updateSWerrorString = NO_ERROR;
+              UrlParts f = parseUrl(fwUpdateURL);
 
-              xTaskCreate(
-                updateSWfromStreamTask,         // Tâche à exécuter
-                "updateSWfromStreamTask",       // Nom de la tâche
-                4096*2,             // Taille de la pile de la tâche
-                nullptr,           // Paramètres de la tâche (adresse IP et callbacks)
-                2,                // Priorité
-                nullptr
-              );
-              setFWupdateProgressScreen();
+              if (f.ok){   
+                httpStream = new HttpClient(*hwm->network->client);
+                int err = httpStream->startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
+                if (err != 0) {
+                  updateSWerrorString = concatStrings("http request ", String(err));
+                }else{
+                  err = httpStream->responseStatusCode();
+                  if (err != 200) {
+                    updateSWerrorString = concatStrings("http response ", String(err));
+                    httpStream->stop();
+                  }else{
+                    err = httpStream->skipResponseHeaders();
+                    if (err >= 0){
+                      
+                      totalGzSize = httpStream->contentLength();
+                     
+                      setFWupdateProgressScreen();
+                      
+                      xTaskCreate(
+                        updateSWfromStreamTask,         // Tâche à exécuter
+                        "updateSWfromStreamTask",       // Nom de la tâche
+                        4096*2,             // Taille de la pile de la tâche
+                        httpStream,           // Paramètres de la tâche (adresse IP et callbacks)
+                        2,                // Priorité
+                        nullptr
+                      );
+                    }else{
+                      updateSWerrorString = concatStrings("http skip headers error ", String(err));
+                    }
+                  }
+                }
+              }else{
+                updateSWerrorString = concatStrings("URL parse error: ", fwUpdateURL);
+              }
 
+              if (updateSWerrorString != NO_ERROR){
+                singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Ok");    
+                if (httpStream != nullptr) delete httpStream;
+              }
+            
             }break;
             case STATE_UTILS_FLASH_BINARY:
               // do nothing
@@ -2111,15 +2216,25 @@ void setup() {
       DEBUG_PRINT("\nwss->begin()...");      
     }
 
+    // Buffers pour headers aWOT (doivent rester valides en RAM)
+    char hdrContentType[120];   // "multipart/form-data; boundary=...."
+    char hdrContentLength[20];  // optionnel    
+
     bool startWebApp(){
       if (hwm->configMedia != nullptr){
         if (hwm->configMedia->state == CONNECTED){
           if (webServer == nullptr){          
             //start webserver     
             DEBUG_PRINT("\nstartWebApp()");       
+            
             webServer = new Application();
             webServer->setTimeout(3000);
-            webServer->use(commonFileServerWrapper);                        
+
+            // Déclarer les headers qu’on veut pouvoir lire avec req.get(...)
+            webServer->header("Content-Type", hdrContentType, sizeof(hdrContentType));
+            webServer->header("Content-Length", hdrContentLength, sizeof(hdrContentLength)); // optionnel
+
+            webServer->use(commonFileServerWrapper);                      
 
             setWSServer();   // ==> websocket server is created and then changed by application refresh() in case the network medium is changed
             //webTaskhandle(WEB_START);                   
@@ -2193,8 +2308,305 @@ void setup() {
         };
 
 
+    void commonFileServer(Request &req, Response &res) {
+      httpServing = true;
+      hwm->network->stopAllUDP();
 
-    void commonFileServer(Request &req, Response &res){    
+      String path = req.path();
+
+      // --- POST: endpoints spéciaux ---
+      if (req.method() == Request::POST) {
+        if (path == "/post/") {
+          httpPost(req, res);
+          httpServing = false;
+          return;
+        }
+        if (path == "/upload") {
+          DEBUG_PRINT("\nupload has been CALLED");
+          httpUpload(req, res);   // <-- nouveau handler
+          httpServing = false;
+          return;
+        }
+
+        res.sendStatus(404);
+        res.set("Content-Type", "text/plain");
+        res.print("POST not found");
+        res.end();
+        httpServing = false;
+        return;
+      }
+
+      // --- GET: serveur de fichiers (ton code inchangé) ---
+      if (path == "/") path = "/index.html";
+
+      bool fileIsCompressed = false;
+
+      String gzCandidate = concatStrings(WEBAPP_PATH, path, ".gz");
+      if (LittleFS.exists(gzCandidate)) {
+        concatString(path, ".gz");
+        fileIsCompressed = true;
+      }
+
+      String filenameRealExtension = path;
+
+      if (filenameRealExtension.endsWith(".gz")) {
+        filenameRealExtension.replace(".gz", "");
+        res.set("Content-Encoding", "gzip");
+      }
+
+      String fullPath = fileIsCompressed ? gzCandidate : concatStrings(WEBAPP_PATH, path);
+
+      if (!LittleFS.exists(fullPath)) {
+        res.sendStatus(404);
+        res.set("Content-Type", "text/html");
+        res.print(fullPath.c_str());
+        res.end();
+        httpServing = false;
+        return;
+      }
+
+      File file = LittleFS.open(fullPath);
+      if (file.isDirectory()) {
+        res.end();
+        httpServing = false;
+        return;
+      }
+
+      String mimeType = mimeTypes[0][1];
+      for (uint8_t i = 0; i < MIME_TYPES_MAX; i++) {
+        if (filenameRealExtension.endsWith(mimeTypes[i][0])) mimeType = mimeTypes[i][1];
+      }
+
+      res.set("Content-Type", mimeType.c_str());
+      res.set("Access-Control-Allow-Origin","*");
+
+      sendFileInChunks(&file, &res);
+      res.end();
+
+      httpServing = false;
+    }
+
+    void httpUpload(Request &req, Response &res) {
+      // aWOT 3.x: headers accessibles via req.get(...) seulement si app.header(...) a été déclaré
+      String ct = String(req.get("Content-Type"));  // ex: multipart/form-data; boundary=----WebKitFormBoundary...
+
+      String boundary;
+      if (!extractBoundary(ct, boundary)) {
+        res.sendStatus(400);
+        res.set("Content-Type", "text/plain");
+        res.print("Missing multipart boundary");
+        res.end();
+        return;
+      }
+
+      const String boundaryLine = String("--") + boundary;
+      DEBUG_PRINT("\nboundary line: %s",boundary.c_str());
+
+      // 1) aller jusqu'à la première boundary
+      String line;
+      while (readLine(req, line)) {
+        if (line == boundaryLine) break;
+      }
+      if (line != boundaryLine) {
+        res.sendStatus(400);
+        res.set("Content-Type", "text/plain");
+        res.print("Bad multipart start");
+        res.end();
+        return;
+      }
+
+      // 2) lire headers de la part (Content-Disposition) jusqu'à ligne vide
+      String cd;
+      while (readLine(req, line)) {
+        if (line.length() == 0) break;
+        if (line.startsWith("Content-Disposition:")) cd = line;
+      }
+
+      String filename = extractFilenameFromContentDisposition(cd);
+      if (filename.length() == 0) {
+        res.sendStatus(400);
+        res.set("Content-Type", "text/plain");
+        res.print("Missing filename");
+        res.end();
+        return;
+      }
+
+      UploadDest dest = decideDestination(filename);
+
+      // 2) choisir writer
+      LittleFsWriter littleWriter;
+      TgzUpdateWriter tgzWriter;
+
+      ChunkWriter *writer = nullptr;
+      if (dest == UPLOAD_DEST_TGZUPDATE) writer = &tgzWriter;
+      else if (dest == UPLOAD_DEST_LITTLEFS) writer = &littleWriter;
+      else writer = &littleWriter; // fallback: à toi de changer
+
+      if (!writer->begin(filename)) {
+        res.sendStatus(500);
+        res.set("Content-Type", "text/plain");
+        res.print("Writer begin failed");
+        res.end();
+        return;
+      }
+
+      bool ok = streamUntilBoundary(req, boundary, *writer);
+      writer->end(ok);
+
+      if (!ok) {
+        res.sendStatus(500);
+        res.set("Content-Type", "text/plain");
+        res.print("Upload failed during write");
+        res.end();
+        return;
+      }
+
+      res.sendStatus(200);
+      res.set("Content-Type", "text/plain");
+      res.print("OK ");
+      res.print(filename.c_str());
+      res.end();
+    }
+
+    typedef enum {
+      UPLOAD_DEST_LITTLEFS,
+      UPLOAD_DEST_TGZUPDATE,
+      UPLOAD_DEST_OTHER
+    } UploadDest;
+
+    // À toi d’implémenter cette logique de routage selon filename:
+    static UploadDest decideDestination(const String &filename) {
+      if (filename.endsWith(".tgz") || filename.endsWith(".gz")) return UPLOAD_DEST_TGZUPDATE;
+      if (filename.endsWith(".bin") || filename.endsWith(".jpg") || filename.endsWith(".i18n") || filename.endsWith(".lang"))
+        return UPLOAD_DEST_LITTLEFS;
+      return UPLOAD_DEST_OTHER;
+    }
+
+static bool streamUntilBoundary(Request &req, const String &boundary, ChunkWriter &writer) {
+  const String needle = String("\r\n--") + boundary;
+  const size_t needleLen = needle.length();
+
+  static const size_t BUF = 1024;
+  uint8_t buf[BUF];
+  String tail;
+
+  // Sécurité
+  uint32_t lastDataMs = millis();
+  uint32_t maxIdleMs  = 5000;   // 5 s sans data => erreur
+  size_t totalRead    = 0;
+
+  // Content-Length (si dispo)
+  size_t contentLen = 0;
+  const char* cl = req.get("Content-Length");
+  if (cl) contentLen = (size_t)atoi(cl);
+
+  while (true) {
+    int avail = req.available();
+
+    if (avail <= 0) {
+      if (millis() - lastDataMs > maxIdleMs) {
+        // plus de données depuis trop longtemps
+        return false;
+      }
+      yield();
+      continue;
+    }
+
+    int toRead = avail;
+    if (toRead > (int)BUF) toRead = (int)BUF;
+
+    int n = req.read(buf, toRead);
+    if (n <= 0) {
+      yield();
+      continue;
+    }
+
+    lastDataMs = millis();
+    totalRead += n;
+
+    // --- traitement boundary (identique à avant) ---
+    String window = tail;
+    window.reserve(tail.length() + (size_t)n);
+    for (int i = 0; i < n; i++) window += (char)buf[i];
+
+    int pos = window.indexOf(needle);
+    if (pos >= 0) {
+      for (int i = 0; i < pos; i++) {
+        uint8_t b = (uint8_t)window[i];
+        if (!writer.write(&b, 1)) return false;
+      }
+      return true;
+    }
+
+    if ((int)window.length() > (int)(needleLen - 1)) {
+      int writeLen = (int)window.length() - (int)(needleLen - 1);
+      for (int i = 0; i < writeLen; i++) {
+        uint8_t b = (uint8_t)window[i];
+        if (!writer.write(&b, 1)) return false;
+      }
+      tail = window.substring(writeLen);
+    } else {
+      tail = window;
+    }
+
+    // Sécurité supplémentaire : on ne doit jamais lire plus que Content-Length
+    if (contentLen > 0 && totalRead >= contentLen) {
+      return false; // boundary non trouvé avant fin de body
+    }
+  }
+}
+
+
+
+    bool readLine(Request &req, String &out, uint32_t timeoutMs = 5000, size_t maxLen = 1024) {
+      out = "";
+      uint32_t t0 = millis();
+      while (millis() - t0 < timeoutMs) {
+        while (req.available()) {
+          char c = (char)req.read();
+          if (c == '\r') continue;
+          if (c == '\n') return true;
+          out += c;
+          if (out.length() >= maxLen) return true;
+        }
+        yield();
+      }
+      return out.length() > 0;
+    }
+
+    bool extractBoundary(const String &contentType, String &boundaryOut) {
+      boundaryOut = "";
+      int idx = contentType.indexOf("boundary=");
+      if (idx < 0) return false;
+      boundaryOut = contentType.substring(idx + 9);
+      boundaryOut.trim();
+      if (boundaryOut.startsWith("\"") && boundaryOut.endsWith("\"") && boundaryOut.length() >= 2) {
+        boundaryOut = boundaryOut.substring(1, boundaryOut.length() - 1);
+      }
+      return boundaryOut.length() > 0;
+    }
+
+    String extractFilenameFromContentDisposition(const String &cd) {
+      int f = cd.indexOf("filename=");
+      if (f < 0) return "";
+      String v = cd.substring(f + 9);
+      v.trim();
+
+      if (v.startsWith("\"")) {
+        int end = v.indexOf("\"", 1);
+        v = (end > 1) ? v.substring(1, end) : v.substring(1);
+      } else {
+        int semi = v.indexOf(';');
+        if (semi > 0) v = v.substring(0, semi);
+      }
+
+      v.replace("\\", "/");
+      int slash = v.lastIndexOf('/');
+      if (slash >= 0) v = v.substring(slash + 1);
+      return v;
+    }
+        
+    void commonFileServer2(Request &req, Response &res){    
       httpServing = true;
       
       hwm->network->stopAllUDP();
@@ -2709,7 +3121,7 @@ void setup() {
           applySystemSettings();      // ===>  propagate config values by giving reference to conf object using parameters instead of using local variable
           systemCfg.save();
           jsonAnswer.callback = RET_SAVEBUTTON;
-          jsonAnswer.value ="1";
+          jsonAnswer.value ="0";      // auto saved
         }else{
           jsonAnswer.callback = RET_COMMANDERROR;
           jsonAnswer.value = jsonInput.as<String>();            
@@ -2931,7 +3343,7 @@ void setup() {
         }
       }else if (command == "flash"){
         screen.id = SCREEN_UTILS;  // go to utils screen to perform the update
-        screen.state = STATE_UTILS_UPDATEFW_FROM_STREAM;
+        screen.state = STATE_UTILS_UPDATEFW_FROM_URL;
         jsonAnswer.callback = RET_MODAL;
         jsonAnswer.value ="Firmware flash";
       }else if (command == "deviceConfig"){
