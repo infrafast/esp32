@@ -1656,19 +1656,26 @@ void checkAndInstallBinary() {
 
 void updateSWfromStreamTask(void* parameter){
 
-  Stream* httpStream = static_cast<Stream*>(parameter);
+  UpdateStreamTaskParams* params = static_cast<UpdateStreamTaskParams*>(parameter);
+  Stream* httpStream = params ? params->stream : nullptr;
+  bool ownsStream = params ? params->ownsStream : false;
   DEBUG_PRINT("\ntotalGzSize: %d",totalGzSize);
 
   bool success = false;   
   TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
   app.updatingFromStreamInprogress = true;
-  if( !TARGZUnpacker->tarGzStreamExpander( httpStream, tarGzFS ) ) {
-    updateSWerrorString = concatStrings("TARGZUnpacker ", String(TARGZUnpacker->tarGzGetError())  );
+  if (!httpStream) {
+    updateSWerrorString = "No stream provided";
   } else {
-    success = true;
+    if( !TARGZUnpacker->tarGzStreamExpander( httpStream, tarGzFS ) ) {
+      updateSWerrorString = concatStrings("TARGZUnpacker ", String(TARGZUnpacker->tarGzGetError())  );
+    } else {
+      success = true;
+    }
   }
   delete TARGZUnpacker;
-  delete parameter;
+  if (ownsStream) delete httpStream;
+  delete params;
   if (success){
     DEBUG_PRINT("\nUntarGz successful, checking for binary to install");
     screen.id = SCREEN_UTILS;
