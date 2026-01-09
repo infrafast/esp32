@@ -173,7 +173,7 @@ public:
               //if (debug) DEBUG_PRINT("\nnormal press");
             }else{
               startupState = BATTERY_STARTUP;
-              //if (debug) DEBUG_PRINT("\nshort press");
+              //if (debug) DEBUG_PRINT("\nshort press ");
             }
           }else{
             if (onOff.pushedTime>RESET_DELAY){

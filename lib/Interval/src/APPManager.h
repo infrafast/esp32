@@ -60,12 +60,7 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                String& outRemoteVersion,
                                String& outFileUrl);
 void updateSWfromStreamTask(void* parameter);
-
-struct UpdateStreamTaskParams {
-  Stream* stream;
-  bool ownsStream;
-};
-
+bool updateSWfromStream(void* parameter);
 
 void checkAndInstallBinary();
 // Prototypage de la fonction de gestion de la connexion
@@ -185,191 +180,42 @@ void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component);
 void handleConfigConnection();  // 
 
 
-struct ChunkWriter {
-  virtual ~ChunkWriter() {}
-  virtual bool begin(const String& filename) = 0;
-  virtual bool write(const uint8_t* data, size_t len) = 0;
-  virtual void end(bool ok) = 0;
+struct StreamProcessor {
 
-  // optionnel: message d'erreur lisible
-  const char* lastError() const { return _err; }
-protected:
-  const char* _err = "";
+  public:
+
+    StreamProcessor(Stream* s, const String& b) : stream(s), boundary(b){}  
+
+    virtual bool process(String filename) = 0;
+
+  protected:
+    Stream* stream;
+    const String& boundary;
+
 };
 
 
-struct LittleFsWriter : public ChunkWriter {
-  File f;
-  String fullPath;
+class TgzUpdateWriter : public StreamProcessor {
 
-  // exemple : WEBAPP_PATH = "/www"
-  String baseDir = WEBAPP_PATH;
+  public:
 
-  bool begin(const String& filename) override {
-    // sécurité minimale: éviter chemin contenant ".."
-    if (filename.indexOf("..") >= 0) { _err = "bad filename"; return false; }
-
-    fullPath = baseDir;
-    if (!fullPath.endsWith("/")) fullPath += "/";
-    fullPath += filename;
-
-    // créer/écraser
-    f = LittleFS.open(fullPath, "w");
-    if (!f) { _err = "open failed"; return false; }
-    return true;
-  }
-
-  bool write(const uint8_t* data, size_t len) override {
-    if (!f) { _err = "file not open"; return false; }
-    size_t w = f.write(data, len);
-    if (w != len) { _err = "write failed"; return false; }
-    return true;
-  }
-
-  void end(bool ok) override {
-    if (f) {
-      // flush peut coûter du temps; à activer si tu veux garantir l'écriture immédiate
-      // f.flush();
-      f.close();
+    TgzUpdateWriter(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
+    bool process(String filename) {
+      UpdateStreamTaskParams* p = new UpdateStreamTaskParams(stream,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
+      return updateSWfromStream(p);     // we call it as a normal task as we are already in a thread from aWot
     }
-    if (!ok) {
-      // optionnel: supprimer fichier partiel
-      if (fullPath.length()) LittleFS.remove(fullPath);
-    }
-  }
-};
-
-class UploadStreamBuffer : public Stream {
-public:
-  explicit UploadStreamBuffer(size_t capacity = 8192)
-    : _capacity(capacity) {
-    _streamBuffer = xStreamBufferCreate(_capacity, 1);
-  }
-
-  ~UploadStreamBuffer() {
-    if (_streamBuffer) vStreamBufferDelete(_streamBuffer);
-  }
-
-  bool push(const uint8_t* data, size_t len) {
-    if (!_streamBuffer) return false;
-    size_t sent = 0;
-    while (sent < len) {
-      size_t written = xStreamBufferSend(
-        _streamBuffer,
-        data + sent,
-        len - sent,
-        pdMS_TO_TICKS(100)
-      );
-      if (written == 0) {
-        if (_finished) return false;
-        continue;
-      }
-      sent += written;
-    }
-    return true;
-  }
-
-  void finish() { _finished = true; }
-
-  size_t write(uint8_t b) override {
-    return push(&b, 1) ? 1 : 0;
-  }
-
-  size_t write(const uint8_t* data, size_t len) override {
-    return push(data, len) ? len : 0;
-  }
-
-  int available() override {
-    if (!_streamBuffer) return 0;
-    size_t avail = xStreamBufferBytesAvailable(_streamBuffer);
-    return (int)(avail + (_hasPeek ? 1 : 0));
-  }
-
-  int read() override {
-    if (_hasPeek) {
-      _hasPeek = false;
-      return _peekByte;
-    }
-    if (!_streamBuffer) return -1;
-    uint8_t b;
-    while (true) {
-      size_t received = xStreamBufferReceive(
-        _streamBuffer,
-        &b,
-        1,
-        pdMS_TO_TICKS(100)
-      );
-      if (received == 1) return b;
-      if (_finished) return -1;
-    }
-  }
-
-  int peek() override {
-    if (_hasPeek) return _peekByte;
-    if (!_streamBuffer) return -1;
-    uint8_t b;
-    size_t received = xStreamBufferReceive(_streamBuffer, &b, 1, 0);
-    if (received == 1) {
-      _peekByte = b;
-      _hasPeek = true;
-      return _peekByte;
-    }
-    return -1;
-  }
-
-  void flush() override {}
-
-private:
-  StreamBufferHandle_t _streamBuffer = nullptr;
-  size_t _capacity = 0;
-  bool _finished = false;
-  bool _hasPeek = false;
-  uint8_t _peekByte = 0;
 };
 
 
-struct TgzUpdateWriter : public ChunkWriter {
-  UploadStreamBuffer* streamBuffer = nullptr;
-  UpdateStreamTaskParams* taskParams = nullptr;
+/*class FirmwareUpdater : public StreamProcessor {
 
-  bool begin(const String& filename) override {
-    DEBUG_PRINT("\nTgzUpdateWriter %s",filename.c_str());
+  public:
 
-    streamBuffer = new UploadStreamBuffer();
-    if (!streamBuffer) { _err = "buffer alloc failed"; return false; }
-
-    taskParams = new UpdateStreamTaskParams{streamBuffer, true};
-
-    BaseType_t taskCreated = xTaskCreate(
-      updateSWfromStreamTask,
-      "updateSWfromStreamTask",
-      4096*2,
-      taskParams,
-      2,
-      nullptr
-    );
-    if (taskCreated != pdPASS) {
-      _err = "task create failed";
-      delete taskParams;
-      taskParams = nullptr;
-      delete streamBuffer;
-      streamBuffer = nullptr;
-      return false;
+    FirmwareUpdater(Request& r, const String& b):StreamProcessor(r,b){}
+    bool process(String filename) {
+      return true;     // we call it as a normal task as we are already in a thread from aWot
     }
-    DEBUG_PRINT("\nupdateSWfromStreamTask created (upload)");
-    return true;
-  }
-  bool write(const uint8_t* data, size_t len) override {
-    if (!streamBuffer) { _err = "buffer not ready"; return false; }
-    if (!streamBuffer->push(data, len)) { _err = "buffer write failed"; return false; }
-    return true;
-  }
-  void end(bool ok) override {
-    if (streamBuffer) streamBuffer->finish();
-    (void)ok;
-  }
-};
-
+};*/
 
 
 #include "DataManagement.h"
@@ -636,7 +482,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     String heapSize;    
     String iconProgress = "";
-    bool updatingFromStreamInprogress = false;
+    bool downloadSreamInprogress = false;
     bool flashBinaryInprogress = false;
     
     size_t totalBytes ;
@@ -1225,8 +1071,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     void SWupdatePromptScreen(uint16_t timeoutMs = 5000){
 
-      if (updatingFromStreamInprogress){
-        setFWupdateProgressScreen(); // if an update is already in progress, we go directly to the progress screen
+      if (downloadSreamInprogress){
+        setCloudDownloadProgressScreen(); // if an update is already in progress, we go directly to the progress screen
       }else if (flashBinaryInprogress){
         setBinaryFlashScreen();
       }else{
@@ -1926,7 +1772,7 @@ void setup() {
       screen.focus = screen.focus - 1;      
     }
 
-    void setFWupdateProgressScreen(){
+    void setCloudDownloadProgressScreen(){
       iconProgress = ICON_CLOUD_DOWNLOAD;
       screen.id = SCREEN_UTILS;
       screen.state = STATE_UTILS_SHOW_PROGRESS;      
@@ -2195,12 +2041,12 @@ void setup() {
                   }else{
                     err = httpStream->skipResponseHeaders();
                     if (err >= 0){
-                      
+                                                     
                       totalGzSize = httpStream->contentLength();
-                     
-                      setFWupdateProgressScreen();
+                      setCloudDownloadProgressScreen();
                       
-                      UpdateStreamTaskParams* params = new UpdateStreamTaskParams{httpStream, true};
+                      UpdateStreamTaskParams* params = new UpdateStreamTaskParams(httpStream,true); // the task owns the httpStream and will take care of deleting it after it is used
+
                       BaseType_t taskCreated = xTaskCreate(
                         updateSWfromStreamTask,         // Tâche à exécuter
                         "updateSWfromStreamTask",       // Nom de la tâche
@@ -2211,8 +2057,8 @@ void setup() {
                       );
                       if (taskCreated != pdPASS) {
                         updateSWerrorString = "Task creation failed";
+                        delete httpStream;          // task didn't use the objects so we both delete them ourselve
                         delete params;
-                        delete httpStream;
                         httpStream = nullptr;
                       }
                     }else{
@@ -2226,12 +2072,12 @@ void setup() {
 
               if (updateSWerrorString != NO_ERROR){
                 singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Ok");    
-                if (httpStream != nullptr) delete httpStream;
+                if (httpStream != nullptr) delete httpStream; // task was unsuccsessul so so we delete the stream ourselves ourselve
               }
             
             }break;
             case STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD:
-              setFWupdateProgressScreen();
+              setCloudDownloadProgressScreen();
             break;
             case STATE_UTILS_FLASH_BINARY:
               // do nothing
@@ -2555,6 +2401,7 @@ void setup() {
       // 2) lire headers de la part (Content-Disposition) jusqu'à ligne vide
       String cd;
       while (readLine(req, line)) {
+        DEBUG_PRINT("\nLine: %s",line.c_str());
         if (line.length() == 0) break;
         if (line.startsWith("Content-Disposition:")) cd = line;
       }
@@ -2570,136 +2417,54 @@ void setup() {
 
       UploadDest dest = decideDestination(filename);
 
-      // 2) choisir writer
-      LittleFsWriter littleWriter;
-      TgzUpdateWriter tgzWriter;
+      TgzUpdateWriter tgzWriter(req,boundary);
+      //FirmwareUpdater fwUpdater(req,boundary);
 
-      ChunkWriter *writer = nullptr;
+      StreamProcessor *writer = nullptr;
       if (dest == UPLOAD_DEST_TGZUPDATE) {
-        const char* cl = req.get("Content-Length");
-        totalGzSize = cl ? (size_t)atoi(cl) : 0;
         updateProgressLabel = "...";
         screen.id = SCREEN_UTILS;
         screen.state = STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD;
         writer = &tgzWriter;
       }
-      else if (dest == UPLOAD_DEST_LITTLEFS) writer = &littleWriter;
-      else writer = &littleWriter; // fallback: à toi de changer
+      //else if (dest == UPLOAD_DEST_FWUPDATE) writer = &fwUpdater;
+      else writer = &tgzWriter; // fallback: à toi de changer
 
-      if (!writer->begin(filename)) {
+      // we are in a thread so blocking, calling the normal workflow would have no effect 
+      /*totalGzSize = req.left();
+      setCloudDownloadProgressScreen();*/
+      // therefore, we use a separate animation thread
+
+      iconProgress = ICON_CLOUD_DOWNLOAD;
+      AnimationTaskParams param(lang.getString("Downloading"),&iconProgress); 
+      startAnimationThread(&param);          
+
+      if (!writer->process(filename)) {
         res.sendStatus(500);
         res.set("Content-Type", "text/plain");
         res.print("Writer begin failed");
         res.end();
-        return;
-      }
-
-      bool ok = streamUntilBoundary(req, boundary, *writer);
-      writer->end(ok);
-
-      if (!ok) {
-        res.sendStatus(500);
+      }else{
+        res.sendStatus(200);
         res.set("Content-Type", "text/plain");
-        res.print("Upload failed during write");
+        res.print("Download complete");
+        res.print(filename.c_str());
         res.end();
-        return;
       }
-
-      res.sendStatus(200);
-      res.set("Content-Type", "text/plain");
-      res.print("OK ");
-      res.print(filename.c_str());
-      res.end();
+      stopAnimationThread();      
     }
 
     typedef enum {
-      UPLOAD_DEST_LITTLEFS,
       UPLOAD_DEST_TGZUPDATE,
-      UPLOAD_DEST_OTHER
+      UPLOAD_DEST_FWUPDATE,
     } UploadDest;
 
     // À toi d’implémenter cette logique de routage selon filename:
-    static UploadDest decideDestination(const String &filename) {
-      if (filename.endsWith(".tgz") || filename.endsWith(".gz")) return UPLOAD_DEST_TGZUPDATE;
-      if (filename.endsWith(".bin") || filename.endsWith(".jpg") || filename.endsWith(".i18n") || filename.endsWith(".lang"))
-        return UPLOAD_DEST_LITTLEFS;
-      return UPLOAD_DEST_OTHER;
+    UploadDest decideDestination(const String &filename) {
+      if (filename.endsWith(".tgz")) return UPLOAD_DEST_TGZUPDATE;
+      if (filename.endsWith(".bin.gz")) return UPLOAD_DEST_FWUPDATE;
+      return UPLOAD_DEST_TGZUPDATE;
     }
-
-static bool streamUntilBoundary(Request &req, const String &boundary, ChunkWriter &writer) {
-  const String needle = String("\r\n--") + boundary;
-  const size_t needleLen = needle.length();
-
-  static const size_t BUF = 1024;
-  uint8_t buf[BUF];
-  String tail;
-
-  // Sécurité
-  uint32_t lastDataMs = millis();
-  uint32_t maxIdleMs  = 5000;   // 5 s sans data => erreur
-  size_t totalRead    = 0;
-
-  // Content-Length (si dispo)
-  size_t contentLen = 0;
-  const char* cl = req.get("Content-Length");
-  if (cl) contentLen = (size_t)atoi(cl);
-
-  while (true) {
-    int avail = req.available();
-
-    if (avail <= 0) {
-      if (millis() - lastDataMs > maxIdleMs) {
-        // plus de données depuis trop longtemps
-        return false;
-      }
-      yield();
-      continue;
-    }
-
-    int toRead = avail;
-    if (toRead > (int)BUF) toRead = (int)BUF;
-
-    int n = req.read(buf, toRead);
-    if (n <= 0) {
-      yield();
-      continue;
-    }
-
-    lastDataMs = millis();
-    totalRead += n;
-
-    // --- traitement boundary (identique à avant) ---
-    String window = tail;
-    window.reserve(tail.length() + (size_t)n);
-    for (int i = 0; i < n; i++) window += (char)buf[i];
-
-    int pos = window.indexOf(needle);
-    if (pos >= 0) {
-      for (int i = 0; i < pos; i++) {
-        uint8_t b = (uint8_t)window[i];
-        if (!writer.write(&b, 1)) return false;
-      }
-      return true;
-    }
-
-    if ((int)window.length() > (int)(needleLen - 1)) {
-      int writeLen = (int)window.length() - (int)(needleLen - 1);
-      for (int i = 0; i < writeLen; i++) {
-        uint8_t b = (uint8_t)window[i];
-        if (!writer.write(&b, 1)) return false;
-      }
-      tail = window.substring(writeLen);
-    } else {
-      tail = window;
-    }
-
-    // Sécurité supplémentaire : on ne doit jamais lire plus que Content-Length
-    if (contentLen > 0 && totalRead >= contentLen) {
-      return false; // boundary non trouvé avant fin de body
-    }
-  }
-}
-
 
 
     bool readLine(Request &req, String &out, uint32_t timeoutMs = 5000, size_t maxLen = 1024) {

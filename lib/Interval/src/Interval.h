@@ -1013,6 +1013,12 @@ static UrlParts parseUrl(const String& url) {
   return u;
 }
 
+struct UpdateStreamTaskParams {
+  Stream* stream;
+  bool ownsStream = false;
+  UpdateStreamTaskParams(Stream* s,bool o):stream(s),ownsStream(o){}
+};
+
 ApplicationManager* Log::am = nullptr;
 
 #include "APPManager.h"
@@ -1654,16 +1660,15 @@ void checkAndInstallBinary() {
   app.restoreScreen();
 }
 
-void updateSWfromStreamTask(void* parameter){
-
+bool updateSWfromStream(void* parameter){
   UpdateStreamTaskParams* params = static_cast<UpdateStreamTaskParams*>(parameter);
   Stream* httpStream = params ? params->stream : nullptr;
-  bool ownsStream = params ? params->ownsStream : false;
+  bool ownsStream = params ? params->ownsStream : false;  
   DEBUG_PRINT("\ntotalGzSize: %d",totalGzSize);
 
   bool success = false;   
   TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
-  app.updatingFromStreamInprogress = true;
+  app.downloadSreamInprogress = true;
   if (!httpStream) {
     updateSWerrorString = "No stream provided";
   } else {
@@ -1673,17 +1678,25 @@ void updateSWfromStreamTask(void* parameter){
       success = true;
     }
   }
+  
   delete TARGZUnpacker;
   if (ownsStream) delete httpStream;
   delete params;
+
   if (success){
     DEBUG_PRINT("\nUntarGz successful, checking for binary to install");
     screen.id = SCREEN_UTILS;
     screen.state = STATE_UTILS_CHECK_BINARY;    
   }else{
+    DEBUG_PRINT("\nUntarGz failed: %s",updateSWerrorString.c_str());
     app.singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Ok");    
   }
-  app.updatingFromStreamInprogress = false;  
+  app.downloadSreamInprogress = false; 
+  return success;
+}
+
+void updateSWfromStreamTask(void* parameter){
+  updateSWfromStream(parameter);
   vTaskDelete(NULL);
 }                              
 
@@ -2196,7 +2209,7 @@ void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, con
 }
 
 void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *reason, uint16_t length) {
-  DEBUG_PRINT("\n\t!!! socketCloseCallback=>code:%i length:%i\n",code,length);
+  DEBUG_PRINT("\n\t!!! socketCloseCallbac =>code:%i length:%i\n",code,length);
   app.webAppConnected = false;
   hwm.configMedia->refreshed = true;    // this is to trigger app manager to refresh the screen showing how to connect.
 }
