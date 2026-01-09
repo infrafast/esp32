@@ -665,7 +665,7 @@ class JsonList{
     virtual const String* getString(const String name, const String defaultValue="") {
       int8_t index;
       index = getIndex(name);
-      DEBUG_PRINT("\ngetString(%s,%s)=>",name.c_str(),defaultValue.c_str());        
+      //DEBUG_PRINT("\ngetString(%s,%s)=>",name.c_str(),defaultValue.c_str());        
       if (index < 0) {
         noToken = defaultValue;
         DEBUG_PRINT("no token");
@@ -949,14 +949,6 @@ struct State{ // used by Strip and Interface
 
 #include "GUIManager.h"
 
-class AnimationTaskParams{ 
-  public:
-    const String* text;
-    const String* icon;
-    AnimationTaskParams(const String* t,const String* i = &GUI::iconMixEthWiFi):text(t),icon(i){}
-};
-
-
 TFT_eSPI* GUI::tft = &hwm.tft;
 GUIManager gui(false);
 OpenFontRender* Label::ofr = &gui.labelOfr;
@@ -1119,74 +1111,56 @@ void commonFileServerWrapper(Request &req, Response &res) {
   app.httpPost(req,res);
 }*/
 
-static TaskHandle_t    hwaitingAnimationThread = nullptr;
+static TaskHandle_t    guiRefreshTaskHandle = nullptr;
 
-#define STEP_MS 500
-
+#define STEP_MS 2
 // ---------- Tâche d’animation ----------
-void waitingAnimationThread(void *param_type) {
-  DEBUG_PRINT("\nwaitingAnimationThread()");
-  AnimationTaskParams* params = static_cast<AnimationTaskParams*>(param_type);
-
-  #define ANIM_FONT_SIZE 40
-  int16_t x = TFT_WIDTH/2, y;
-  TFT_eSprite* sprite;
-  float bright = 0.0;
-
-  GUI::tft->fillScreen(GUI::defaultBcolor);
-  
-  y = TFT_HEIGHT-ANIM_FONT_SIZE;
-  Label message = Label(params->text, Align::Center, &x, &y, ANIM_FONT_SIZE);
-  message.refresh(true);
-  message.sprite->pushSprite(message.getX(),message.getY(),TFT_TRANSPARENT);        
-
-  DEBUG_PRINT("\n<<<<%s>>>>",params->text->c_str());
-
-  y = 5;
-  Icon icon = Icon(params->icon,Align::Center,&x,&y,TFT_WIDTH/2,&GUI::defaultFcolor,&GUI::defaultBcolor, &bright);
-        
+void guiRefreshTask(void *param_type) {
+  DEBUG_PRINT("\nguiRefreshTask()");
+   
   for (int i=0;;) {
     // Vérifie si on nous demande d’arrêter (notification)
     // 0 ms de délai = on ne bloque pas; on anime puis on revérifie à chaque tour
     if (ulTaskNotifyTake(pdTRUE, 0) > 0) {
       // Signale qu’on n’a plus de tâche active
-      hwaitingAnimationThread = nullptr;
+      guiRefreshTaskHandle = nullptr;
       vTaskDelete(nullptr); // termine la tâche
     }
-    if (bright == 1.0) bright = 0.0;    // on fait clignoter l'icone en changeant son brightness de maniere binaire (total/zero)
-    else bright = 1.0;
     vTaskDelay(pdMS_TO_TICKS(STEP_MS));
-    icon.refresh(true);  
-    icon.sprite->pushSprite(icon.getX(),icon.getY(),TFT_TRANSPARENT);
+    gui.refresh();
   }
 }
 
+
 // ---------- Démarrer l’animation ----------
-void startAnimationThread(AnimationTaskParams* param) {
-  if (hwaitingAnimationThread == nullptr) {
-    // Pin sur le core 0 pour décharger loop() (généralement sur core 1)
+void startGUIThread(uint8_t screen, uint8_t state) {
+
+  gui.purge();
+  app.buildGUI(screen,state);  
+
+  if (guiRefreshTaskHandle == nullptr) {
     xTaskCreatePinnedToCore(
-      waitingAnimationThread,
-      "waitingAnimationThread",
+      guiRefreshTask,
+      "guiRefreshTask",
       4096,        // stack
-      param,
+      nullptr,
       3,           // priorité légère
-      &hwaitingAnimationThread,
+      &guiRefreshTaskHandle,
       0            // core 0
     );
   }
 }
 
 // ---------- Arrêter l’animation ----------
-void stopAnimationThread() {
-  if (hwaitingAnimationThread) {
+void stopGUIThread() {
+  if (guiRefreshTaskHandle) {
     // Envoie une notification; la tâche se nettoie puis s’auto-supprime
-    xTaskNotifyGive(hwaitingAnimationThread);
+    xTaskNotifyGive(guiRefreshTaskHandle);
     // Optionnel: attendre qu’elle se termine vraiment
     // (petit spin-wait simple; vous pouvez raffiner avec un EventGroup)
     const uint32_t t0 = millis();
     app.triggerRedraw();            // we call for screen redraw
-    while (hwaitingAnimationThread && (millis() - t0 < 500)) {
+    while (guiRefreshTaskHandle && (millis() - t0 < 500)) {
       vTaskDelay(pdMS_TO_TICKS(10));
     }
   }
@@ -1625,7 +1599,7 @@ void installGZBinaryFromFileTask(void *parameter){
 
 
 #define UPDATE_FOLDER "/"
-void checkAndInstallBinary() {
+void checkAndInstallBinaryFromFile() {
   //DEBUG_PRINT("\nNow checking if a bin need to be installed\n");
   // we have to rename each file from tmp to the root and check if we have a binary in the pack to install
   // then we have to clean /tmp
@@ -1637,7 +1611,7 @@ void checkAndInstallBinary() {
       String filename = file.name();
       if (filename.endsWith(".bin.gz") /*|| filename.endsWith(".bin")*/) {
         filename = filename.startsWith("/") ? filename : (concatStrings(UPDATE_FOLDER,filename));        
-        DEBUG_PRINT("\nbinary update found: %s", filename.c_str());
+        DEBUG_PRINT("\nbinary found: %s", filename.c_str());
 
         app.setBinaryFlashScreen();
 
@@ -1660,7 +1634,7 @@ void checkAndInstallBinary() {
   app.restoreScreen();
 }
 
-bool updateSWfromStream(void* parameter){
+bool expandTGZstreamToFS(void* parameter){
   UpdateStreamTaskParams* params = static_cast<UpdateStreamTaskParams*>(parameter);
   Stream* httpStream = params ? params->stream : nullptr;
   bool ownsStream = params ? params->ownsStream : false;  
@@ -1695,8 +1669,8 @@ bool updateSWfromStream(void* parameter){
   return success;
 }
 
-void updateSWfromStreamTask(void* parameter){
-  updateSWfromStream(parameter);
+void expandTGZstreamToFSTask(void* parameter){
+  expandTGZstreamToFS(parameter);
   vTaskDelete(NULL);
 }                              
 
@@ -1946,11 +1920,9 @@ void setMenuColors(){
 }
 
 void menuScreenBuilder(uint8_t subScreen){
-  //DEBUG_PRINT("\nIN-----------------nmenuScreenBuilder()--------------");    
   setMenuColors();
   addMenuWidgets();
   //LogUDP::sendLog("menuScreenBuilder",hwm.network->udp);
-  //DEBUG_PRINT("\nOUT-----------------nmenuScreenBuilder()--------------");    
 }
 
 void bankSwitchScreenBuilder(uint8_t id){
@@ -2163,16 +2135,15 @@ void utilsScreenBuilder(uint8_t state){
     case STATE_UTILS_CONNECTWEBAPP:
       app.configIconGlowingRedColor.value = &GUI::unUsedColor;
       app.leftIconColor = GUI::menuActiveIconColor;
+      app.menuBottomLabel = ""; // erase the title of the previous menu item
       addLeftRightIcons();  
       app.iconPending[0] = ICON_TIMER;
       app.iconPending[1] = " ";
-      //gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
+      gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&GUI::midScreenHoriz, &GUI::midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
       gui.add(new TextArea(lang.getString("Open browser"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Label(&hwm.configURL, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,30,64,&GUI::defaultFcolor,&GUI::defaultBcolor));      
-
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
-      //DEBUG_PRINT("\nSTATE_UTILS_CONNECTWEBAPP");          
     break;
     case STATE_UTILS_WEBAPPCONNECTED:         
       addLeftRightIcons();
@@ -2185,6 +2156,10 @@ void utilsScreenBuilder(uint8_t state){
       app.leftIcon = ICON_LAPTOP;
       app.rightIcon = ICON_FOOTSWITCH;
       //DEBUG_PRINT("\nSTATE_UTILS_WEBAPPCONNECTED: %s",app.menuTopText.c_str());      
+    break;
+    case STATE_UTILS_BLINK_ICON_TEXT:
+      gui.add(new Label(&app.utilsBlinkLabel, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,40,32, &GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new Icon(&app.utilsBlinkIcon, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE,&app.blinkColorBlue,&GUI::defaultBcolor));
     break;
     ////////////////////////////////////////////////////////////////////////////////
   }

@@ -342,6 +342,17 @@ class GUIManager : public GenericComponent {
       else return false;
     }
 
+    void purge(){
+      while (screenGUIs.size()>0){
+        //DEBUG_PRINT("\nremaining to unstack: %i",gui->screenGUIs.size());
+        Widget* widget = screenGUIs.shift();
+        //DEBUG_PRINT("\nobject: %s ",widget->id.c_str());
+        delete(widget);
+        widget = nullptr;
+      }
+      //gui->screenGUIs.clear();      
+    }
+
     void remove(Widget *w){
       for (uint8_t i=0; i<screenGUIs.size();i++){
         if (screenGUIs.get(i) == w){

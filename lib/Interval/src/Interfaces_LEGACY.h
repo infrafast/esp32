@@ -335,7 +335,7 @@ class OSCInterface: public DeviceInterface{
         }
         
         bool sendOSCMessage(OSCMessage *msg, const IPAddress _ip, const int _port){           
-            OSC_DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString().c_str(),_port);
+            //OSC_DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString().c_str(),_port);
             if (hwm.network->udp == NULL){
                 OSC_DEBUG_PRINT(":null UDP",msg->getAddress());
                 return false;

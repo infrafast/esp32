@@ -189,7 +189,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       
       bool success = false;
 
-      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),OSC_IP.toString().c_str(),OSC_clientPort);
+      //DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),OSC_IP.toString().c_str(),OSC_clientPort);
 
       UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);
       // sempahore protected section

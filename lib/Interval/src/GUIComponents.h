@@ -216,6 +216,7 @@ public:
     static inline void cls(uint16_t color = GUI::defaultBcolor){
       if (color == TFT_TRANSPARENT) color = GUI::defaultBcolor;
       tft->fillScreen(GUI::luminance(color,GUI::screenBrightness * 255));  
+      //DEBUG_PRINT("\nGUI::cls()");
     }
 
     static inline uint16_t width(){

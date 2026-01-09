@@ -51,18 +51,18 @@ void scanNetworksTaskWrapper(void * parameter);         // parrallel task
 void webServerTaskWrapper(void * parameter);            // parrallel task
 void defaultWizardStepFlow();
 
-void startAnimationThread(AnimationTaskParams* param);
-void stopAnimationThread();
+void startGUIThread(uint8_t, uint8_t);
+void stopGUIThread();
 
 int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                const String& currentVersion,
                                HttpClient& outHttp,
                                String& outRemoteVersion,
                                String& outFileUrl);
-void updateSWfromStreamTask(void* parameter);
-bool updateSWfromStream(void* parameter);
+void expandTGZstreamToFSTask(void* parameter);
+bool expandTGZstreamToFS(void* parameter);
 
-void checkAndInstallBinary();
+void checkAndInstallBinaryFromFile();
 // Prototypage de la fonction de gestion de la connexion
 //void handleWebConnection(void *parameter);
 
@@ -108,7 +108,8 @@ enum{
   STATE_UTILS_TRIGGER_FWUPDATE_PROMPT,
   STATE_UTILS_CHECK_BINARY,
   STATE_UTILS_INSTALLING_BINARY,
-  STATE_UTILS_SHOW_PROGRESS  
+  STATE_UTILS_SHOW_PROGRESS,
+  STATE_UTILS_BLINK_ICON_TEXT  
 };
 
 
@@ -195,27 +196,38 @@ struct StreamProcessor {
 };
 
 
-class TgzUpdateWriter : public StreamProcessor {
+class TGZStreamExpander : public StreamProcessor {
 
   public:
 
-    TgzUpdateWriter(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
+    TGZStreamExpander(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
     bool process(String filename) {
       UpdateStreamTaskParams* p = new UpdateStreamTaskParams(stream,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
-      return updateSWfromStream(p);     // we call it as a normal task as we are already in a thread from aWot
+      return expandTGZstreamToFS(p);     // we call it as a normal task as we are already in a thread from aWot
+    }
+};
+
+class GZStreamFWUpdater : public StreamProcessor {
+
+  public:
+
+    GZStreamFWUpdater(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
+    bool process(String filename) {
+      return true;
     }
 };
 
 
-/*class FirmwareUpdater : public StreamProcessor {
+class StreamFileWriter : public StreamProcessor {
 
   public:
 
-    FirmwareUpdater(Request& r, const String& b):StreamProcessor(r,b){}
+    StreamFileWriter(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
     bool process(String filename) {
-      return true;     // we call it as a normal task as we are already in a thread from aWot
+      return true;
     }
-};*/
+};
+
 
 
 #include "DataManagement.h"
@@ -391,7 +403,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
                    
     ///////////////////// OVERLAY ICONS ////////////////////////
     String networkIcon, apIcon;
-    uint16_t networkIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor;   
+    uint16_t networkIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor, blinkColorBlue = TFT_BLUE;   
 
     String batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3};
     String batIcon = ICON_WAIT; // by default we display a timeelapser while battery level is undetermined
@@ -403,9 +415,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     String footSwitchIcon = ICON_FOOTSWITCH;
     String intervalIcon = ICON_INTERVAL;
 
+    String utilsBlinkLabel = "", utilsBlinkIcon = ""; 
+
     AlteredColor networkIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor apIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor configIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
+    AlteredColor blinkColor = AlteredColor{.baseColor = GUI::blue, .value =  &GUI::unUsedColor};
     
     int16_t overlayIconY = TFT_HEIGHT-OVERLAY_ICON_SIZE, apIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE*2;
     int16_t batIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE;
@@ -585,7 +600,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         );
         // enable or disable the firmware update menu item accordingly          
         fmw_update_menu_item->setEnabled(retCode == 1 ? true:false); // if retcode = 1, there is a newer version available
-        DEBUG_PRINT("\n================> fmw_update_menu_item(%s", retCode == 1 ? "enable)":"disable)");          
+        //DEBUG_PRINT("\n================> fmw_update_menu_item(%s", retCode == 1 ? "enable)":"disable)");          
         // BRANCH TO SCREEN PROMPT IF CONFIG ALLOWS IT          
         if (retCode == 1){
           if (systemCfg.getBool(S_SWUPDATE_PROMPT)){            
@@ -941,6 +956,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       GUI::glowingGoldColor.value = &menuActiveIconColor;
       gui->alphaColors.add(&GUI::glowingGoldColor);      
             
+      blinkColor.value = &blinkColorBlue;      
+      gui->alphaColors.add(&blinkColor);      
       gui->alphaColors.add(&networkIconGlowingRedColor);
       gui->alphaColors.add(&apIconGlowingRedColor);
       gui->alphaColors.add(&configIconGlowingRedColor);
@@ -1144,7 +1161,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     void resetPromptTimer(){
-      DEBUG_PRINT("\nresetPromptTimer()");
+      //DEBUG_PRINT("\nresetPromptTimer()");
       promptTimeoutMax = (float)promptParams.timeoutMs;
       promptRemainingTime = promptTimeoutMax;
       promptStartTime = millis();
@@ -1785,6 +1802,27 @@ void setup() {
       updateProgressLabel = *lang.getString("Flashing firmware in progress, do not interrupt!");       
     }
 
+    void buildGUI(uint8_t id, uint8_t state){
+      // then retrive the screen builder and its overlay by ID           
+      for(int i = 0; i < screenBuilders.size(); i++){
+        screenBuilder* builder = screenBuilders.get(i);
+        if (builder->id == id){
+          builder->screenCallback(state);
+          builder->overlayCallback(state);
+          break;
+        }
+      }
+      //DEBUG_PRINT("\nScreen rebuild done");
+      #ifdef DEBUG
+        // DEBUG INDICATORS OVERLAY
+        gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::three,16,5,&GUI::defaultFcolor,&GUI::defaultBcolor));    
+        gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::three,16,24,&GUI::defaultFcolor,&GUI::defaultBcolor));              
+      #endif
+      //DEBUG_PRINT("\nDEBUG DONE");
+      //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
+      if (gui->transparency) gui->clearScreenBuffer();      
+    }
+
     bool refresh(bool force=false){
 
       yield();
@@ -1912,34 +1950,10 @@ void setup() {
         // first we acknowledge the update so it is not done te next round
         //if (debug) DEBUG_PRINT("\n%s changed from screen.id:%i.state:%i.focus:%i to screen.id:%i.state:%i.focus:%i",id.c_str(),oldScreen.id,oldScreen.state,oldScreen.focus, screen.id,screen.state,screen.focus);        
         // first clean up all component of the screen
-        //for(int i = 0; i < gui->screenGUIs.size()-1; i++) delete(gui->screenGUIs.shift());
-        while (gui->screenGUIs.size()>0){
-          //DEBUG_PRINT("\nremaining to unstack: %i",gui->screenGUIs.size());
-          Widget* widget = gui->screenGUIs.shift();
-          //DEBUG_PRINT("\nobject: %s ",widget->id.c_str());
-          delete(widget);
-          widget = nullptr;
-        }
-        //gui->screenGUIs.clear();
+        gui->purge();
+        
+        buildGUI(screen.id, screen.state);
 
-        // then retrive the screen builder and its overlay by ID           
-        for(int i = 0; i < screenBuilders.size(); i++){
-          screenBuilder* builder = screenBuilders.get(i);
-          if (builder->id == screen.id){
-            builder->screenCallback(screen.state);
-            builder->overlayCallback(screen.state);
-            break;
-          }
-        }
-        //DEBUG_PRINT("\nScreen rebuild done");
-        #ifdef DEBUG
-          // DEBUG INDICATORS OVERLAY
-          gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::three,16,5,&GUI::defaultFcolor,&GUI::defaultBcolor));    
-          gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::three,16,24,&GUI::defaultFcolor,&GUI::defaultBcolor));              
-        #endif
-        //DEBUG_PRINT("\nDEBUG DONE");
-        //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
-        if (gui->transparency) gui->clearScreenBuffer();
         oldScreen.value = screen.value;
         // save the bank to restore in case of restoreScreen
         if (screen.id == SCREEN_BANK){
@@ -2048,8 +2062,8 @@ void setup() {
                       UpdateStreamTaskParams* params = new UpdateStreamTaskParams(httpStream,true); // the task owns the httpStream and will take care of deleting it after it is used
 
                       BaseType_t taskCreated = xTaskCreate(
-                        updateSWfromStreamTask,         // Tâche à exécuter
-                        "updateSWfromStreamTask",       // Nom de la tâche
+                        expandTGZstreamToFSTask,         // Tâche à exécuter
+                        "expandTGZstreamToFSTask",       // Nom de la tâche
                         4096*2,             // Taille de la pile de la tâche
                         params,           // Paramètres de la tâche (adresse IP et callbacks)
                         2,                // Priorité
@@ -2083,7 +2097,7 @@ void setup() {
               // do nothing
             break;
             case STATE_UTILS_CHECK_BINARY:
-              checkAndInstallBinary();
+              checkAndInstallBinaryFromFile();
             break;
             case STATE_UTILS_INFO:
 
@@ -2165,17 +2179,18 @@ void setup() {
 
       if (webServer == nullptr) return; // no need to define websocket server if webserver has not been instanciated
 
-      AnimationTaskParams* param = nullptr;
+      utilsBlinkIcon = GUI::iconMixEthWiFi;
+      utilsBlinkLabel = *lang.getString("ReconNet");
+      startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);        
+      
+      delay(100);
+
+      // when you are connected to Eth, if you unplug the cable, the wifi connection goes back 
+      // but sometime the program freeze betweeen the delete wss below and the new WifiWebSocketServer creation
+      // so we create thread that will take care of displaying a waiting message
+      // Lance l’animation pendant que la tache principale travaille
 
       if (wss != nullptr){
-        // when you are connected to Eth, if you unplug the cable, the wifi connection goes back 
-        // but sometime the program freeze betweeen the delete wss below and the new WifiWebSocketServer creation
-        // so we create thread that will take care of displaying a waiting message
-        // Lance l’animation pendant que la tache principale travaille
-        if (hwm->configMedia->media == WIFI_MEDIA){
-          param = new AnimationTaskParams(lang.getString("ReconNet"),&GUI::iconWiFi); 
-          startAnimationThread(param);          
-        }
         wss->shutdown();  // need the patch here: https://github.com/skaarj1989/mWebSockets/discussions/67#       
         DEBUG_PRINT("\ndelete wss");
         delete wss; 
@@ -2186,17 +2201,14 @@ void setup() {
         wss = new EthernetWebSocketServer{};
       }else{
         DEBUG_PRINT("\nnew WiFiWebSocketServer{}");
-        wss = new WiFiWebSocketServer{};        
-        if (param != nullptr){
-          stopAnimationThread();
-          delete param;        
-        }
+        wss = new WiFiWebSocketServer{};                
       }
-
-
+      
       wss->onConnection(socketConnectionCallback);    
       wss->begin();
-      DEBUG_PRINT("\nwss->begin()...");      
+
+      stopGUIThread();
+
     }
 
     // Buffers pour headers aWOT (doivent rester valides en RAM)
@@ -2417,8 +2429,9 @@ void setup() {
 
       UploadDest dest = decideDestination(filename);
 
-      TgzUpdateWriter tgzWriter(req,boundary);
-      //FirmwareUpdater fwUpdater(req,boundary);
+      TGZStreamExpander tgzWriter(req,boundary);
+      GZStreamFWUpdater fwUpdater(req,boundary);
+      StreamFileWriter  fileWriter(req,boundary);
 
       StreamProcessor *writer = nullptr;
       if (dest == UPLOAD_DEST_TGZUPDATE) {
@@ -2427,17 +2440,17 @@ void setup() {
         screen.state = STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD;
         writer = &tgzWriter;
       }
-      //else if (dest == UPLOAD_DEST_FWUPDATE) writer = &fwUpdater;
-      else writer = &tgzWriter; // fallback: à toi de changer
+      else if (dest == UPLOAD_DEST_FWUPDATE) writer = &fwUpdater;
+      else writer = &fileWriter; // fallback: à toi de changer
 
       // we are in a thread so blocking, calling the normal workflow would have no effect 
       /*totalGzSize = req.left();
       setCloudDownloadProgressScreen();*/
       // therefore, we use a separate animation thread
 
-      iconProgress = ICON_CLOUD_DOWNLOAD;
-      AnimationTaskParams param(lang.getString("Downloading"),&iconProgress); 
-      startAnimationThread(&param);          
+      iconProgress =ICON_CLOUD_DOWNLOAD;
+      totalGzSize = req.left();
+      startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS);          
 
       if (!writer->process(filename)) {
         res.sendStatus(500);
@@ -2451,19 +2464,21 @@ void setup() {
         res.print(filename.c_str());
         res.end();
       }
-      stopAnimationThread();      
+
+      stopGUIThread();      
     }
 
     typedef enum {
       UPLOAD_DEST_TGZUPDATE,
       UPLOAD_DEST_FWUPDATE,
+      UPLOAD_DEST_FSFILE,
     } UploadDest;
 
     // À toi d’implémenter cette logique de routage selon filename:
     UploadDest decideDestination(const String &filename) {
       if (filename.endsWith(".tgz")) return UPLOAD_DEST_TGZUPDATE;
       if (filename.endsWith(".bin.gz")) return UPLOAD_DEST_FWUPDATE;
-      return UPLOAD_DEST_TGZUPDATE;
+      return UPLOAD_DEST_FSFILE;
     }
 
 
@@ -2476,7 +2491,8 @@ void setup() {
           if (c == '\r') continue;
           if (c == '\n') return true;
           out += c;
-          if (out.length() >= maxLen) return true;
+          if (out.length() >= maxLen) return true;   
+          delay(1);
         }
         yield();
       }
@@ -2515,86 +2531,6 @@ void setup() {
       return v;
     }
         
-    void commonFileServer2(Request &req, Response &res){    
-      httpServing = true;
-      
-      hwm->network->stopAllUDP();
-      
-      //if (req.method() != Request::GET) return;
-      String path = req.path();
-
-      //DEBUG_PRINT("\n\t\t\thttp:%s",path.c_str());
-
-      if(path=="/post/"){       // POST IS USED TO TRANSFER CONFIGURATION AND PARAMETERS
-        //DEBUG_PRINT("\tPOST ");
-        httpPost(req,res);
-      }else{                    // GET IS USED TO TRANSFER MIME FILES
-        //DEBUG_PRINT("\tGET ");
-        if(path == "/") path = "/index.html"; //path = "/index.html";      INDEX is the only exception were we process the gz here because we remap / to index
-
-        bool fileIsCompressed = false;
-
-        String gzCandidate = concatStrings(WEBAPP_PATH, path, ".gz");
-        if (LittleFS.exists(gzCandidate)){
-          concatString(path, ".gz");
-          fileIsCompressed = true;
-        }
-        
-        String filenameRealExtension = path;
-
-        if (filenameRealExtension.endsWith(".gz")){
-          filenameRealExtension.replace(".gz","");
-          res.set("Content-Encoding", "gzip");
-        }
-
-        String fullPath = fileIsCompressed ? gzCandidate : concatStrings(WEBAPP_PATH, path);
-
-        //DEBUG_PRINT("\t%s",fullPath.c_str());              
-
-        if (!LittleFS.exists(fullPath)){
-          res.sendStatus(404);   //send(404, "text/plain", "Not found");    
-          res.set("Content-Type", "text/html");
-          res.print(fullPath.c_str());
-          res.end();        
-          DEBUG_PRINT("\tnot found");              
-          return;
-        }
-
-        
-        File file = LittleFS.open(fullPath);
-        if (file.isDirectory()){
-          //DEBUG_PRINT("\tdirectory, quit.",fullPath.c_str());
-          res.end();
-          return;
-        }
-        
-        String mimeType = mimeTypes[0][1];
-        for (uint8_t i=0;i<MIME_TYPES_MAX;i++){
-          if (filenameRealExtension.endsWith(mimeTypes[i][0])) mimeType = mimeTypes[i][1];
-        }
-
-        uint32_t free = ESP.getFreeHeap();
-
-        /*DEBUG_PRINT("\tREAL EXTENSION:%s \tMIME:%s",filenameRealExtension.c_str(),mimeType.c_str());
-        DEBUG_PRINT("\t\t<%s> [%d] ->%s : ",mimeType.c_str(), free, fullPath.c_str() );        */
-        res.set("Content-Type", mimeType.c_str());
-
-        /*byte buffer[33] = "Access-Control-Allow-Origin: *\r\n";
-        res.beginHeaders();        
-          res.write(buffer,33);         // does not work
-        res.endHeaders();*/
-        
-        res.set("Access-Control-Allow-Origin","*");
-        //res.set("Connection", "close"); // Important pour éviter le keep-alive (problèmes sur ESP32)
-
-        //while (file.available()){ res.write(file.read()); yield();}
-        
-        sendFileInChunks(&file,&res);
-        res.end();        
-      }
-      httpServing = false;      
-    }
-
 
     void sendFileInChunks(File* file, Response* res) {      
       size_t chunkedDataSize = 64; // for ethernet: 64 is the good value, 128/256/512 = throw ERR_CONNECTION_REFUSED, file.size() = throw DECODE_ERROR

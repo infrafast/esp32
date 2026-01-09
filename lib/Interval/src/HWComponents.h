@@ -839,13 +839,13 @@ class Network : public HWComponent2State{
     }
 
     void stopWiFi(){
-      DEBUG_PRINT("\n---------> stopWiFi() : WiFiEnabled = false <------------");
+      //DEBUG_PRINT("\n---------> stopWiFi() : WiFiEnabled = false <------------");
       WiFiEnabled = false;
       disconnectWifi();
     }
 
     void unpauseWiFi(){
-      DEBUG_PRINT("\n\t\t\t\t---------> unpauseWiFi() : WiFiEnabled = true <------------");
+      //DEBUG_PRINT("\n\t\t\t\t---------> unpauseWiFi() : WiFiEnabled = true <------------");
       WiFiEnabled = true ;      
     }
 
