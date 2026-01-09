@@ -279,7 +279,7 @@ class EventDispatcher {
   #define API_ERROR 0
 #define API_BODY   "body"
 
-bool checkAndDeleteFile(const char* filename = "/firmware.bin.gz") {
+bool checkAndDeleteFile(const char* filename) {
     if (LittleFS.exists(filename)) {
         DEBUG_PRINT("⚠️ Fichier trouvé : %s → suppression...\n", filename);
 
@@ -1005,11 +1005,14 @@ static UrlParts parseUrl(const String& url) {
   return u;
 }
 
-struct UpdateStreamTaskParams {
+struct StreamTaskParams {
   Stream* stream;
   bool ownsStream = false;
-  UpdateStreamTaskParams(Stream* s,bool o):stream(s),ownsStream(o){}
+  StreamTaskParams(Stream* s,bool o):stream(s),ownsStream(o){}
 };
+
+#define UPDATE_FOLDER "/"
+#define FIRMWARE_BIN_FILENAME UPDATE_FOLDER"firmware.bin.gz"
 
 ApplicationManager* Log::am = nullptr;
 
@@ -1509,11 +1512,18 @@ void fileProgressCallback( uint8_t fileProgress ) {
   if (newPercent != progressPercentInt) {
     progressPercentInt = newPercent;
     overallProgressPercent = (float)progressPercentInt;
-    DEBUG_PRINT("\nOverall progress callback: %.0f",overallProgressPercent);
+    //DEBUG_PRINT("\nOverall progress callback: %.0f",overallProgressPercent);
   }
 
 }
 
+void updaterProgressCallback( uint8_t progress ){
+  static int8_t uzLibLastProgress = -1;
+  if( uzLibLastProgress != progress ) {
+    uzLibLastProgress = progress;
+    if( progress > 0 && progress < 100) subProgressPercent = (float)uzLibLastProgress;
+  }
+}
 
 void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpacked){ 
   
@@ -1551,91 +1561,78 @@ TarGzUnpacker* getTarGzUnpacker(){
   }
 
 
-size_t getFileSize(const char* path)
-{
-  if (!LittleFS.exists(path)) {
-    return 0;
-  }
-
-  File file = LittleFS.open(path, "r");
-  if (!file) {
-    return 0;
-  }
-
-  size_t size = file.size();
-  file.close();
-  return size;
-}
-
-
-void installGZBinaryFromFileTask(void *parameter){
-  String* s = static_cast<String*>(parameter);
-  String firmwareFilename = *s;
-
-  DEBUG_PRINT("\nPeforming binary update:%s", firmwareFilename.c_str());
+bool installGZBinaryFromStream(StreamTaskParams* params){
+  bool success = false;
+  app.flashBinaryInprogress = true;
+  DEBUG_PRINT("\nPeforming binary update from stream");
 
   GzUnpacker GZUnpacker;
 
   lastFileProgress = 0;           // reset pour le nouveau fichier    
-  totalGzSize = getFileSize(firmwareFilename.c_str());
   proportionalSize = totalGzSize;  // we deal with a single file here
   DEBUG_PRINT("\nTotal GZ binary = %d\n", totalGzSize);  
   
-  GZUnpacker.setGzProgressCallback(BaseUnpacker::targzNullProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
+  GZUnpacker.setGzProgressCallback(updaterProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
   GZUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );
-  app.flashBinaryInprogress = true;
-  int success =  GZUnpacker.gzUpdater(tarGzFS, firmwareFilename.c_str(), 0,/*don't restart after update*/false );
+  success =  GZUnpacker.gzStreamUpdater(params->stream, /*totalGzSize*/UPDATE_SIZE_UNKNOWN, 0, false );  // see https://github.com/tobozo/ESP32-targz/issues/91#issuecomment-3696925826
   if(success ) {
     app.broadCast("{\"modalMessage\":\"Finished. Close this page\"}");  // inform web interface
-    app.singlePromptScreen(*lang.getString("Firmware flashed successfully. Device will restart to apply the update."),"OK",STATE_UTILS_RESTART_DEVICE);
+    app.singlePromptScreen("Firmware flashed successfully. Device will restart to apply the update.","OK",STATE_UTILS_RESTART_DEVICE);
     hwm.persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
   }else{          
-    app.singlePromptScreen(*lang.getString("Firmware install failed"),"OK");
+    app.singlePromptScreen("Firmware install failed","Abort");
   }        
-  checkAndDeleteFile(firmwareFilename.c_str());
+  if (params->ownsStream) delete params->stream;
+  
+  delete params;  
   app.flashBinaryInprogress = false;
+
+  return success;
+  
+}
+
+void installGZBinaryFromStreamTask(void *parameter){
+  installGZBinaryFromStream(static_cast<StreamTaskParams*>(parameter));
   vTaskDelete(NULL);
 }
 
-
-#define UPDATE_FOLDER "/"
 void checkAndInstallBinaryFromFile() {
   //DEBUG_PRINT("\nNow checking if a bin need to be installed\n");
   // we have to rename each file from tmp to the root and check if we have a binary in the pack to install
   // then we have to clean /tmp
-  File root = LittleFS.open(UPDATE_FOLDER);
   
-  File file = root.openNextFile();
-  while (file) {
-    if (!file.isDirectory()) {
-      String filename = file.name();
-      if (filename.endsWith(".bin.gz") /*|| filename.endsWith(".bin")*/) {
-        filename = filename.startsWith("/") ? filename : (concatStrings(UPDATE_FOLDER,filename));        
-        DEBUG_PRINT("\nbinary found: %s", filename.c_str());
+  if (LittleFS.exists(FIRMWARE_BIN_FILENAME)){
+    DEBUG_PRINT("\nfound %s",FIRMWARE_BIN_FILENAME);
+    File* fileStream = new File(LittleFS.open(FIRMWARE_BIN_FILENAME, FILE_READ));
+    if (!fileStream) {
+      app.singlePromptScreen("Firmware open error","Abort");      
+      return;
+    }
 
-        app.setBinaryFlashScreen();
+    app.setBinaryFlashScreen();
 
-        // Créer la tâche FreeRTOS pour le ping
-        xTaskCreate(
-          installGZBinaryFromFileTask,         // Tâche à exécuter
-          "installGZBinaryFromFileTask",       // Nom de la tâche
-          4096*2,             // Taille de la pile de la tâche
-          &filename,           // Paramètres de la tâche (adresse IP et callbacks)
-          2,                // Priorité
-          nullptr
-        );
-        DEBUG_PRINT("\ninstallGZBinaryFromFileTask created");        
-        return;
-      }      
-    }  
-    file = root.openNextFile();            
+    totalGzSize = fileStream->size();
+
+    StreamTaskParams* params = new StreamTaskParams(fileStream,true);        
+
+    // Créer la tâche FreeRTOS pour le ping
+    xTaskCreate(
+      installGZBinaryFromStreamTask,         // Tâche à exécuter
+      "installGZBinaryFromStreamTask",       // Nom de la tâche
+      4096*2,             // Taille de la pile de la tâche
+      params,           // Paramètres de la tâche (adresse IP et callbacks)
+      2,                // Priorité
+      nullptr
+    );
+    DEBUG_PRINT("\ninstallGZBinaryFromStreamTask created");        
+    return;
   }
   DEBUG_PRINT("\nNo binary update found");
   app.restoreScreen();
 }
 
 bool expandTGZstreamToFS(void* parameter){
-  UpdateStreamTaskParams* params = static_cast<UpdateStreamTaskParams*>(parameter);
+  StreamTaskParams* params = static_cast<StreamTaskParams*>(parameter);
   Stream* httpStream = params ? params->stream : nullptr;
   bool ownsStream = params ? params->ownsStream : false;  
   DEBUG_PRINT("\ntotalGzSize: %d",totalGzSize);
@@ -1663,7 +1660,7 @@ bool expandTGZstreamToFS(void* parameter){
     screen.state = STATE_UTILS_CHECK_BINARY;    
   }else{
     DEBUG_PRINT("\nUntarGz failed: %s",updateSWerrorString.c_str());
-    app.singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Ok");    
+    app.singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Abort");    
   }
   app.downloadSreamInprogress = false; 
   return success;
@@ -2113,7 +2110,8 @@ void utilsScreenBuilder(uint8_t state){
     case STATE_UTILS_FLASH_BINARY :{
       // this screen is shared with firmware update and binary install and others...
       gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
-      gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,SIZE_26,50,&GUI::red,&GUI::defaultBcolor));            
+      gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,SIZE_26,50,&GUI::red,&GUI::defaultBcolor));            
+      gui.add(new ProgressBarH(&subProgressPercent, 0.0,100.0 , &halfProgressBarpix /*x*/, &GUI::belowBottomTexty /*y*/, PROGRESSBAR_WIDTH /*w*/, 8 /*h*/, 2 /*offset*/, 2 /*radius*/, &GUI::blue /*fc*/ , &GUI::gold/*bc*/, &GUI::fullBrightness));      
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_INFO:{

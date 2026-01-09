@@ -61,6 +61,8 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                String& outFileUrl);
 void expandTGZstreamToFSTask(void* parameter);
 bool expandTGZstreamToFS(void* parameter);
+bool installGZBinaryFromStream(StreamTaskParams* params);
+
 
 void checkAndInstallBinaryFromFile();
 // Prototypage de la fonction de gestion de la connexion
@@ -202,7 +204,7 @@ class TGZStreamExpander : public StreamProcessor {
 
     TGZStreamExpander(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
     bool process(String filename) {
-      UpdateStreamTaskParams* p = new UpdateStreamTaskParams(stream,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
+      StreamTaskParams* p = new StreamTaskParams(stream,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
       return expandTGZstreamToFS(p);     // we call it as a normal task as we are already in a thread from aWot
     }
 };
@@ -213,7 +215,8 @@ class GZStreamFWUpdater : public StreamProcessor {
 
     GZStreamFWUpdater(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
     bool process(String filename) {
-      return true;
+      StreamTaskParams* p = new StreamTaskParams(stream,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
+      return installGZBinaryFromStream(p);     // we call it as a normal task as we are already in a thread from aWot      
     }
 };
 
@@ -1014,7 +1017,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         byeIconColor = &GUI::red; byeIcon = &iconForbid;
         screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
       }        
-      checkAndDeleteFile();  // in case there is a .bin.gz file leftover from previous firmware update
+      checkAndDeleteFile(FIRMWARE_BIN_FILENAME);  // in case there is a .bin.gz file leftover from previous firmware update
       restoreScreen();       // restore the screen that persists
     }
 
@@ -2030,6 +2033,7 @@ void setup() {
               restoreScreen();
             break;
             case STATE_UTILS_RESTART_DEVICE  :
+              checkAndDeleteFile(FIRMWARE_BIN_FILENAME);
               delay(500);
               ESP.restart();
             break;
@@ -2059,7 +2063,7 @@ void setup() {
                       totalGzSize = httpStream->contentLength();
                       setCloudDownloadProgressScreen();
                       
-                      UpdateStreamTaskParams* params = new UpdateStreamTaskParams(httpStream,true); // the task owns the httpStream and will take care of deleting it after it is used
+                      StreamTaskParams* params = new StreamTaskParams(httpStream,true); // the task owns the httpStream and will take care of deleting it after it is used
 
                       BaseType_t taskCreated = xTaskCreate(
                         expandTGZstreamToFSTask,         // Tâche à exécuter
