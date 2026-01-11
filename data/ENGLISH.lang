@@ -12,7 +12,7 @@
 "connect failed":"échec connexion",
 "trying":"tentative",
 "offline":"appui court on/off = hors connexion",
-"ReconNet":"Reconnecting network, wait few seconds...",
+"Please wait":"Please wait a few seconds...",
 "PluginUSB":"Plugin your device USB MIDI cable",
 "restartUSB":"Restart to activate USB MIDI"
 }

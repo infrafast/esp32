@@ -256,21 +256,21 @@ void wifiping(const char * host){   // see also https://github.com/espressif/esp
 //////////////////////////////////////
 
 void fileProgressCallback( uint8_t progress ) {
-  /*static int8_t uzLibLastProgress = -1;
+  /*static int8_t lastProgress = -1;
   size_t totalBytes = LittleFS.totalBytes();
   size_t usedBytes  = LittleFS.usedBytes();
   size_t freeBytes  = totalBytes - usedBytes;
-  if( uzLibLastProgress != progress ) {
-    if( uzLibLastProgress == -1 ) {
+  if( lastProgress != progress ) {
+    if( lastProgress == -1 ) {
       DEBUG_PRINT("Progress: 0% *");
     }
-    uzLibLastProgress = progress;
+    lastProgress = progress;
     switch( progress ) {
       //case   0: DEBUG_PRINT("0% ▓");  break;
       case  25: DEBUG_PRINT(" 25% ");break;
       case  50: DEBUG_PRINT(" 50% ");break;
       case  75: DEBUG_PRINT(" 75% ");break;
-      case 100: DEBUG_PRINT("* 100% [%u=%u-%u]",freeBytes,totalBytes,usedBytes); uzLibLastProgress = -1; break;
+      case 100: DEBUG_PRINT("* 100% [%u=%u-%u]",freeBytes,totalBytes,usedBytes); lastProgress = -1; break;
       default: if( progress > 0 && progress < 100) DEBUG_PRINT( "*" ); break;
     }
   }*/

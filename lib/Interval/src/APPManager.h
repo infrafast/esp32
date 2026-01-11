@@ -62,7 +62,7 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
 void expandTGZstreamToFSTask(void* parameter);
 bool expandTGZstreamToFS(void* parameter);
 bool installGZBinaryFromStream(StreamTaskParams* params);
-
+void updaterProgressCallback( uint8_t progress );
 
 void checkAndInstallBinaryFromFile();
 // Prototypage de la fonction de gestion de la connexion
@@ -102,7 +102,7 @@ enum{
   STATE_UTILS_UPDATEFW_FROM_URL,
   STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD,
   STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
-  STATE_UTILS_FLASH_BINARY,
+  STATE_UTILS_SHOW_PROGRESS_SINGLE,
   STATE_UTILS_RESTORE_SCREEN,
   STATE_UTILS_RESTART_DEVICE,
   STATE_BYE_MODAL_MESSAGE,
@@ -110,7 +110,7 @@ enum{
   STATE_UTILS_TRIGGER_FWUPDATE_PROMPT,
   STATE_UTILS_CHECK_BINARY,
   STATE_UTILS_INSTALLING_BINARY,
-  STATE_UTILS_SHOW_PROGRESS,
+  STATE_UTILS_SHOW_PROGRESS_MULTIPLE,
   STATE_UTILS_BLINK_ICON_TEXT  
 };
 
@@ -181,56 +181,6 @@ void brightness_menu_item_selected(MenuComponent* p_menu_component);
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component);
 
 void handleConfigConnection();  // 
-
-
-struct StreamProcessor {
-
-  public:
-
-    StreamProcessor(Stream* s, const String& b) : stream(s), boundary(b){}  
-
-    virtual bool process(String filename) = 0;
-
-  protected:
-    Stream* stream;
-    const String& boundary;
-
-};
-
-
-class TGZStreamExpander : public StreamProcessor {
-
-  public:
-
-    TGZStreamExpander(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
-    bool process(String filename) {
-      StreamTaskParams* p = new StreamTaskParams(stream,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
-      return expandTGZstreamToFS(p);     // we call it as a normal task as we are already in a thread from aWot
-    }
-};
-
-class GZStreamFWUpdater : public StreamProcessor {
-
-  public:
-
-    GZStreamFWUpdater(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
-    bool process(String filename) {
-      StreamTaskParams* p = new StreamTaskParams(stream,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
-      return installGZBinaryFromStream(p);     // we call it as a normal task as we are already in a thread from aWot      
-    }
-};
-
-
-class StreamFileWriter : public StreamProcessor {
-
-  public:
-
-    StreamFileWriter(Request& r, const String& b):StreamProcessor((Stream*)(&r),b){}
-    bool process(String filename) {
-      return true;
-    }
-};
-
 
 
 #include "DataManagement.h"
@@ -1094,6 +1044,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       if (downloadSreamInprogress){
         setCloudDownloadProgressScreen(); // if an update is already in progress, we go directly to the progress screen
       }else if (flashBinaryInprogress){
+        screen.id = SCREEN_UTILS;
+        screen.state = STATE_UTILS_SHOW_PROGRESS_SINGLE;           
         setBinaryFlashScreen();
       }else{
         DEBUG_PRINT("\nPreparing SW update prompt screen for v%s",newSWversion.c_str());
@@ -1795,13 +1747,11 @@ void setup() {
     void setCloudDownloadProgressScreen(){
       iconProgress = ICON_CLOUD_DOWNLOAD;
       screen.id = SCREEN_UTILS;
-      screen.state = STATE_UTILS_SHOW_PROGRESS;      
+      screen.state = STATE_UTILS_SHOW_PROGRESS_MULTIPLE;      
     }
 
     void setBinaryFlashScreen(){
-      iconProgress = ICON_FWUPDATE;
-      screen.id = SCREEN_UTILS;
-      screen.state = STATE_UTILS_FLASH_BINARY;     
+      iconProgress = ICON_FWUPDATE; 
       updateProgressLabel = *lang.getString("Flashing firmware in progress, do not interrupt!");       
     }
 
@@ -2061,6 +2011,7 @@ void setup() {
                     if (err >= 0){
                                                      
                       totalGzSize = httpStream->contentLength();
+                      
                       setCloudDownloadProgressScreen();
                       
                       StreamTaskParams* params = new StreamTaskParams(httpStream,true); // the task owns the httpStream and will take care of deleting it after it is used
@@ -2095,9 +2046,9 @@ void setup() {
             
             }break;
             case STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD:
-              setCloudDownloadProgressScreen();
+              // do nothing
             break;
-            case STATE_UTILS_FLASH_BINARY:
+            case STATE_UTILS_SHOW_PROGRESS_SINGLE:
               // do nothing
             break;
             case STATE_UTILS_CHECK_BINARY:
@@ -2175,6 +2126,37 @@ void setup() {
       // next: delete conf file   
     }
 
+    bool streamToFile(Stream* stream, String filename){
+
+      String path = "/";
+      //depending on the file extension or name, we put it to the right place
+      if (filename.indexOf(".json.gz") >= 0 || filename.indexOf(".html.gz") >= 0 || filename.indexOf(".ttf.gz") >= 0 || filename == "logo.jpg") path = WEBAPP_PATH"/";
+
+      String fullPath = concatStrings(path,filename);
+
+      File f = LittleFS.open(fullPath, FILE_WRITE);
+      if (!f){
+        DEBUG_PRINT(": can't create file");
+        return false;        
+      } 
+
+      DEBUG_PRINT("\nstreamToFile(%s) %i bytes",fullPath.c_str(),totalGzSize);            
+      size_t totalWritten = 0;
+      uint8_t buf[512];   // 256–1024 selon ta RAM
+      while (true) {
+        int n = stream->readBytes(buf, sizeof(buf));
+        if (n <= 0) break;
+
+        size_t w = f.write(buf, n);
+        totalWritten += w;
+        delay(1);   // laisse respirer le CPU
+
+        int percentInt = (int)((totalWritten * 100ULL) / totalGzSize);
+        updaterProgressCallback(percentInt);
+      }
+      f.close();
+      return true;
+    }
 
     #define WEB_STOP false
     #define WEB_START true
@@ -2183,11 +2165,11 @@ void setup() {
 
       if (webServer == nullptr) return; // no need to define websocket server if webserver has not been instanciated
 
-      utilsBlinkIcon = GUI::iconMixEthWiFi;
-      utilsBlinkLabel = *lang.getString("ReconNet");
+      utilsBlinkIcon = ICON_WAIT;
+      utilsBlinkLabel = *lang.getString("Please wait");
       startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);        
       
-      delay(100);
+      delay(500);   //
 
       // when you are connected to Eth, if you unplug the cable, the wifi connection goes back 
       // but sometime the program freeze betweeen the delete wss below and the new WifiWebSocketServer creation
@@ -2399,7 +2381,6 @@ void setup() {
       }
 
       const String boundaryLine = String("--") + boundary;
-      DEBUG_PRINT("\nboundary line: %s",boundary.c_str());
 
       // 1) aller jusqu'à la première boundary
       String line;
@@ -2422,6 +2403,7 @@ void setup() {
         if (line.startsWith("Content-Disposition:")) cd = line;
       }
 
+      // 3) extraire filename
       String filename = extractFilenameFromContentDisposition(cd);
       if (filename.length() == 0) {
         res.sendStatus(400);
@@ -2431,32 +2413,32 @@ void setup() {
         return;
       }
 
+      // 4) what kind of file is it ?
       UploadDest dest = decideDestination(filename);
 
-      TGZStreamExpander tgzWriter(req,boundary);
-      GZStreamFWUpdater fwUpdater(req,boundary);
-      StreamFileWriter  fileWriter(req,boundary);
-
-      StreamProcessor *writer = nullptr;
-      if (dest == UPLOAD_DEST_TGZUPDATE) {
-        updateProgressLabel = "...";
-        screen.id = SCREEN_UTILS;
-        screen.state = STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD;
-        writer = &tgzWriter;
-      }
-      else if (dest == UPLOAD_DEST_FWUPDATE) writer = &fwUpdater;
-      else writer = &fileWriter; // fallback: à toi de changer
+      bool processed;
+      totalGzSize = req.left();
+      StreamTaskParams* streamStruct = new StreamTaskParams(&req,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
 
       // we are in a thread so blocking, calling the normal workflow would have no effect 
-      /*totalGzSize = req.left();
-      setCloudDownloadProgressScreen();*/
-      // therefore, we use a separate animation thread
+      // therefore, we use a separate animation thread which do not alter the screen id and screen state that are restored when thread stops
+      if (dest == UPLOAD_DEST_TGZUPDATE) { 
+        iconProgress = ICON_CLOUD_DOWNLOAD;
+        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_MULTIPLE);           
+        processed = expandTGZstreamToFS(streamStruct);     // we call it as a normal task as we are already in a thread from aWot        
+      }
+      else if (dest == UPLOAD_DEST_FWUPDATE){
+        setBinaryFlashScreen(); // set label and icon
+        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);              
+        processed = installGZBinaryFromStream(streamStruct);
+      }else{
+        iconProgress = ICON_CLOUD_DOWNLOAD;        
+        updateProgressLabel = filename;
+        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);                      
+        processed = streamToFile((Stream*)(&req),filename);
+      }        
 
-      iconProgress =ICON_CLOUD_DOWNLOAD;
-      totalGzSize = req.left();
-      startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS);          
-
-      if (!writer->process(filename)) {
+      if (!processed) {
         res.sendStatus(500);
         res.set("Content-Type", "text/plain");
         res.print("Writer begin failed");
@@ -2469,7 +2451,7 @@ void setup() {
         res.end();
       }
 
-      stopGUIThread();      
+      stopGUIThread();      // back to screen ID
     }
 
     typedef enum {
@@ -2478,7 +2460,6 @@ void setup() {
       UPLOAD_DEST_FSFILE,
     } UploadDest;
 
-    // À toi d’implémenter cette logique de routage selon filename:
     UploadDest decideDestination(const String &filename) {
       if (filename.endsWith(".tgz")) return UPLOAD_DEST_TGZUPDATE;
       if (filename.endsWith(".bin.gz")) return UPLOAD_DEST_FWUPDATE;

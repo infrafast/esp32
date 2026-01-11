@@ -1135,9 +1135,8 @@ void guiRefreshTask(void *param_type) {
 }
 
 
-// ---------- Démarrer l’animation ----------
 void startGUIThread(uint8_t screen, uint8_t state) {
-
+  // 
   gui.purge();
   app.buildGUI(screen,state);  
 
@@ -1475,21 +1474,21 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
 }
 
 void fileProgressCallback( uint8_t fileProgress ) {
-  /*static int8_t uzLibLastProgress = -1;
+  /*static int8_t lastProgress = -1;
   size_t totalBytes = LittleFS.totalBytes();
   size_t usedBytes  = LittleFS.usedBytes();
   size_t freeBytes  = totalBytes - usedBytes;
-  if( uzLibLastProgress != progress ) {
-    if( uzLibLastProgress == -1 ) {
+  if( lastProgress != progress ) {
+    if( lastProgress == -1 ) {
       DEBUG_PRINT("Progress: 0% *");
     }
-    uzLibLastProgress = progress;
+    lastProgress = progress;
     switch( progress ) {
       //case   0: DEBUG_PRINT("0% ▓");  break;
       case  25: DEBUG_PRINT(" 25% ");break;
       case  50: DEBUG_PRINT(" 50% ");break;
       case  75: DEBUG_PRINT(" 75% ");break;
-      case 100: DEBUG_PRINT("* 100% [%u=%u-%u]",freeBytes,totalBytes,usedBytes); uzLibLastProgress = -1; break;
+      case 100: DEBUG_PRINT("* 100% [%u=%u-%u]",freeBytes,totalBytes,usedBytes); lastProgress = -1; break;
       default: if( progress > 0 && progress < 100) DEBUG_PRINT( "*" ); break;
     }
   }*/
@@ -1518,10 +1517,10 @@ void fileProgressCallback( uint8_t fileProgress ) {
 }
 
 void updaterProgressCallback( uint8_t progress ){
-  static int8_t uzLibLastProgress = -1;
-  if( uzLibLastProgress != progress ) {
-    uzLibLastProgress = progress;
-    if( progress > 0 && progress < 100) subProgressPercent = (float)uzLibLastProgress;
+  static int8_t lastProgress = -1;
+  if( lastProgress != progress ) {
+    lastProgress = progress;
+    if( progress > 0 && progress < 100) subProgressPercent = (float)lastProgress;
   }
 }
 
@@ -1613,6 +1612,10 @@ void checkAndInstallBinaryFromFile() {
 
     totalGzSize = fileStream->size();
 
+    app.setBinaryFlashScreen();
+    screen.id = SCREEN_UTILS;
+    screen.state = STATE_UTILS_SHOW_PROGRESS_SINGLE;
+
     StreamTaskParams* params = new StreamTaskParams(fileStream,true);        
 
     // Créer la tâche FreeRTOS pour le ping
@@ -1632,14 +1635,14 @@ void checkAndInstallBinaryFromFile() {
 }
 
 bool expandTGZstreamToFS(void* parameter){
+  app.downloadSreamInprogress = true;
   StreamTaskParams* params = static_cast<StreamTaskParams*>(parameter);
   Stream* httpStream = params ? params->stream : nullptr;
   bool ownsStream = params ? params->ownsStream : false;  
-  DEBUG_PRINT("\ntotalGzSize: %d",totalGzSize);
+  DEBUG_PRINT("\ntotalGzSize: %i",totalGzSize);
 
   bool success = false;   
   TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
-  app.downloadSreamInprogress = true;
   if (!httpStream) {
     updateSWerrorString = "No stream provided";
   } else {
@@ -2079,11 +2082,17 @@ void buildNetworkScreen(){
   gui.add(new Label(&hwm.configMedia->SSID, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));
 }
 
+#define PROGRESSBAR_WIDTH 150
+int16_t halfProgressBarpix = TFT_WIDTH/2 - PROGRESSBAR_WIDTH/2;
+void buildIconProgressScreen(){
+  gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
+  gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,SIZE_20,64,&GUI::defaultFcolor,&GUI::defaultBcolor));            
+  gui.add(new ProgressBarH(&subProgressPercent, 0.0,100 , &halfProgressBarpix /*x*/, &GUI::belowBottomTexty /*y*/, PROGRESSBAR_WIDTH /*w*/, 8 /*h*/, 2 /*offset*/, 2 /*radius*/, &GUI::blue /*fc*/ , &GUI::gold/*bc*/, &GUI::fullBrightness));
+}
+
 int16_t brightYpos = GUI::menuIconYpos*1.2;
 
 String percentString = "%";
-#define PROGRESSBAR_WIDTH 150
-int16_t halfProgressBarpix = TFT_WIDTH/2 - PROGRESSBAR_WIDTH/2;
 
 void utilsScreenBuilder(uint8_t state){
   //DEBUG_PRINT("\nutilsScreenBuilder(%d)",state);
@@ -2099,19 +2108,15 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
     }break;
     ////////////////////////////////////////////////////////////////////////////////
-    case STATE_UTILS_SHOW_PROGRESS :{
-      // this screen is shared with firmware update and binary install and others...
-      gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
+    case STATE_UTILS_SHOW_PROGRESS_MULTIPLE :{      
       gui.add(new Arc(&overallProgressPercent /*v*/, 0 /*min*/,100 /*max*/, &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::blue, &GUI::transparentColor,30));              
-      gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,SIZE_20,20,&GUI::defaultFcolor,&GUI::defaultBcolor));            
-      gui.add(new ProgressBarH(&subProgressPercent, 0.0,100 , &halfProgressBarpix /*x*/, &GUI::belowBottomTexty /*y*/, PROGRESSBAR_WIDTH /*w*/, 8 /*h*/, 2 /*offset*/, 2 /*radius*/, &GUI::blue /*fc*/ , &GUI::gold/*bc*/, &GUI::fullBrightness));
+      // this screen is shared with firmware update and binary install and others...
+      buildIconProgressScreen();
     }break;
     ////////////////////////////////////////////////////////////////////////////////
-    case STATE_UTILS_FLASH_BINARY :{
+    case STATE_UTILS_SHOW_PROGRESS_SINGLE :{
       // this screen is shared with firmware update and binary install and others...
-      gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
-      gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,SIZE_26,50,&GUI::red,&GUI::defaultBcolor));            
-      gui.add(new ProgressBarH(&subProgressPercent, 0.0,100.0 , &halfProgressBarpix /*x*/, &GUI::belowBottomTexty /*y*/, PROGRESSBAR_WIDTH /*w*/, 8 /*h*/, 2 /*offset*/, 2 /*radius*/, &GUI::blue /*fc*/ , &GUI::gold/*bc*/, &GUI::fullBrightness));      
+      buildIconProgressScreen();
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_INFO:{

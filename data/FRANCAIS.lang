@@ -20,7 +20,7 @@
 "offline":"appui court on/off = hors connexion",
 "Connect MIDI session":"Connectez la session midi",
 "Connect Blutooth":"Connectez le blutooth",
-"ReconNet":"Reconnexion, patientez svp...",
+"Please wait":"Un instant svp...",
 "PluginUSB":"Connectez le cable USB de votre dispositif MIDI",
 "restartUSB":"Redemarrez pour activer USB MIDI"
 }
