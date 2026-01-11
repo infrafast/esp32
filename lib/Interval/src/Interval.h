@@ -3,7 +3,7 @@
 0.14 - Auto update SW from .bin.gz file on LittleFS root
 0.15 - Fix SW update process + auto restart after update
 0.16 - launch fw update modal from web interface
-
+0.17 - updates implementation finished 
 */
 
 
