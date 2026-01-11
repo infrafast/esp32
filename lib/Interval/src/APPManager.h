@@ -453,10 +453,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     bool downloadSreamInprogress = false;
     bool flashBinaryInprogress = false;
     
-    size_t totalBytes ;
-    size_t usedBytes ;
-    size_t freeBytes ;
-    String FSstat = "";
+     String FSstat = "";
 
     ///////////////// INTERFACES ///////////////////
     //OSCInterface osc;
@@ -2060,11 +2057,9 @@ void setup() {
               if (millis() - t >= 500) {
                 t = millis();
                 // refresh file size every 500 ms
-                totalBytes = LittleFS.totalBytes();
-                usedBytes  = LittleFS.usedBytes();
-                freeBytes  = totalBytes - usedBytes;
-                FSstat = concatStrings(("FS: "),String(usedBytes/1024),"/",String(totalBytes/1024),"KB"," Free Space: ",String(freeBytes/1024),"KB"); 
-
+                LittleFSInfo fsInfo;
+                getLittleFSInfo(fsInfo);
+                FSstat = concatStrings(("FS: "),String(fsInfo.used/1024),"/",String(fsInfo.total/1024),"KB"," Free Space: ",String(fsInfo.freeSpace/1024),"KB");                 
               }
 
             break;
@@ -2126,7 +2121,7 @@ void setup() {
       // next: delete conf file   
     }
 
-    bool streamToFile(Stream* stream, String filename){
+    bool streamToFile(Stream* stream, String filename, String &message){
 
       String path = "/";
       //depending on the file extension or name, we put it to the right place
@@ -2136,9 +2131,19 @@ void setup() {
 
       File f = LittleFS.open(fullPath, FILE_WRITE);
       if (!f){
-        DEBUG_PRINT(": can't create file");
+        message = "can't create file";
         return false;        
       } 
+
+      LittleFSInfo fsInfo;
+      getLittleFSInfo(fsInfo);     
+      
+      DEBUG_PRINT("\nFree: %i, totalGBsize: %i,  fsInfo.freeSpace - totalGzSize: %i", fsInfo.freeSpace, totalGzSize, fsInfo.freeSpace - totalGzSize);
+
+      if ( (int)((int)fsInfo.freeSpace - (int)totalGzSize) < 1024*8){  
+        message = "file is too big";
+        return false;
+      }
 
       DEBUG_PRINT("\nstreamToFile(%s) %i bytes",fullPath.c_str(),totalGzSize);            
       size_t totalWritten = 0;
@@ -2169,8 +2174,6 @@ void setup() {
       utilsBlinkLabel = *lang.getString("Please wait");
       startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);        
       
-      delay(500);   //
-
       // when you are connected to Eth, if you unplug the cable, the wifi connection goes back 
       // but sometime the program freeze betweeen the delete wss below and the new WifiWebSocketServer creation
       // so we create thread that will take care of displaying a waiting message
@@ -2304,7 +2307,8 @@ void setup() {
         }
         if (path == "/upload") {
           DEBUG_PRINT("\nupload has been CALLED");
-          httpUpload(req, res);   // <-- nouveau handler
+          String message = "Abort";
+          if (!httpUpload(req, res, message)) singlePromptScreen("File upload error",message);
           httpServing = false;
           return;
         }
@@ -2367,7 +2371,7 @@ void setup() {
       httpServing = false;
     }
 
-    void httpUpload(Request &req, Response &res) {
+    bool httpUpload(Request &req, Response &res, String& message) {
       // aWOT 3.x: headers accessibles via req.get(...) seulement si app.header(...) a été déclaré
       String ct = String(req.get("Content-Type"));  // ex: multipart/form-data; boundary=----WebKitFormBoundary...
 
@@ -2375,9 +2379,10 @@ void setup() {
       if (!extractBoundary(ct, boundary)) {
         res.sendStatus(400);
         res.set("Content-Type", "text/plain");
-        res.print("Missing multipart boundary");
+        message = "Missing multipart boundary";
+        res.print(message);
         res.end();
-        return;
+        return false;
       }
 
       const String boundaryLine = String("--") + boundary;
@@ -2390,9 +2395,10 @@ void setup() {
       if (line != boundaryLine) {
         res.sendStatus(400);
         res.set("Content-Type", "text/plain");
-        res.print("Bad multipart start");
+        message = "Bad multipart start";
+        res.print(message);
         res.end();
-        return;
+        return false;
       }
 
       // 2) lire headers de la part (Content-Disposition) jusqu'à ligne vide
@@ -2408,15 +2414,16 @@ void setup() {
       if (filename.length() == 0) {
         res.sendStatus(400);
         res.set("Content-Type", "text/plain");
-        res.print("Missing filename");
+        message = "Missing filename";
+        res.print(message);
         res.end();
-        return;
+        return false;
       }
 
       // 4) what kind of file is it ?
       UploadDest dest = decideDestination(filename);
 
-      bool processed;
+      bool processed = false;
       totalGzSize = req.left();
       StreamTaskParams* streamStruct = new StreamTaskParams(&req,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
 
@@ -2433,25 +2440,24 @@ void setup() {
         processed = installGZBinaryFromStream(streamStruct);
       }else{
         iconProgress = ICON_CLOUD_DOWNLOAD;        
-        updateProgressLabel = filename;
-        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);                      
-        processed = streamToFile((Stream*)(&req),filename);
+        updateProgressLabel = filename;   
+        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);             
+        processed = streamToFile((Stream*)(&req),filename, message);
       }        
 
-      if (!processed) {
-        res.sendStatus(500);
-        res.set("Content-Type", "text/plain");
-        res.print("Writer begin failed");
-        res.end();
-      }else{
-        res.sendStatus(200);
-        res.set("Content-Type", "text/plain");
-        res.print("Download complete");
-        res.print(filename.c_str());
-        res.end();
-      }
-
       stopGUIThread();      // back to screen ID
+
+      res.set("Content-Type", "text/plain");
+      if (processed) {
+        res.print("Download complete");
+        //res.sendStatus(200);
+      } else {
+        res.print("Write failed");
+      }
+      res.end();
+
+      return processed;
+
     }
 
     typedef enum {

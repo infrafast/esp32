@@ -296,6 +296,18 @@ bool checkAndDeleteFile(const char* filename) {
     return false;
 }
 
+typedef struct LittleFSInfo{
+  size_t total;
+  size_t used;
+  size_t freeSpace;
+} ;
+
+void getLittleFSInfo(LittleFSInfo &info) {
+  info.total     = LittleFS.totalBytes();
+  info.used      = LittleFS.usedBytes();
+  info.freeSpace = info.total - info.used;
+}
+
 
 // Structure pour stocker les données décompressées dans un buffer
 struct ByteBuffer : public Stream {
