@@ -4,6 +4,7 @@
 0.15 - Fix SW update process + auto restart after update
 0.16 - launch fw update modal from web interface
 0.17 - updates implementation finished 
+0.18 - full file update implementation with web app sync and error handling
 */
 
 
@@ -1017,14 +1018,15 @@ static UrlParts parseUrl(const String& url) {
   return u;
 }
 
-struct StreamTaskParams {
+struct StreamParams {
   Stream* stream;
   bool ownsStream = false;
-  StreamTaskParams(Stream* s,bool o):stream(s),ownsStream(o){}
+  StreamParams(Stream* s,bool o):stream(s),ownsStream(o){}
 };
 
 #define UPDATE_FOLDER "/"
 #define FIRMWARE_BIN_FILENAME UPDATE_FOLDER"firmware.bin.gz"
+#define IMMEDIATE true
 
 ApplicationManager* Log::am = nullptr;
 
@@ -1571,8 +1573,15 @@ TarGzUnpacker* getTarGzUnpacker(){
     return TARGZUnpacker;
   }
 
+void notifyWebappFlashing(){
+  app.broadCast("{\"freeze\":\"Firmware flash\"}",IMMEDIATE);  // inform web interface  IMMEDIATE because we don't queue the message to be send in next loop , we do it immediately.
+}
 
-bool installGZBinaryFromStream(StreamTaskParams* params){
+void removeFreezeNotification(){
+  app.broadCast("{\"unfreeze\":\"\"}",IMMEDIATE);  // inform web interface  IMMEDIATE because we don't queue the message to be send in next loop , we do it immediately.
+}
+
+bool installGZBinaryFromStream(StreamParams* params){
   bool success = false;
   app.flashBinaryInprogress = true;
   DEBUG_PRINT("\nPeforming binary update from stream");
@@ -1581,16 +1590,17 @@ bool installGZBinaryFromStream(StreamTaskParams* params){
 
   lastFileProgress = 0;           // reset pour le nouveau fichier    
   proportionalSize = totalGzSize;  // we deal with a single file here
-  DEBUG_PRINT("\nTotal GZ binary = %d\n", totalGzSize);  
+  DEBUG_PRINT("\nTotalGZsize = %d\n", totalGzSize);  
   
+  notifyWebappFlashing();
+
   GZUnpacker.setGzProgressCallback(updaterProgressCallback ); // targzNullProgressCallback or defaultProgressCallback
   GZUnpacker.setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );
   success =  GZUnpacker.gzStreamUpdater(params->stream, /*totalGzSize*/UPDATE_SIZE_UNKNOWN, 0, false );  // see https://github.com/tobozo/ESP32-targz/issues/91#issuecomment-3696925826
   if(success ) {
-    app.broadCast("{\"modalMessage\":\"Finished. Close this page\"}");  // inform web interface
-    app.singlePromptScreen("Firmware flashed successfully. Device will restart to apply the update.","OK",STATE_UTILS_RESTART_DEVICE);
-    hwm.persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
+    app.singlePromptScreen("Firmware flashed successfully. Device will restart.","OK",STATE_UTILS_RESTART_DEVICE);
   }else{          
+    removeFreezeNotification();
     app.singlePromptScreen("Firmware install failed","Abort");
   }        
   if (params->ownsStream) delete params->stream;
@@ -1603,7 +1613,7 @@ bool installGZBinaryFromStream(StreamTaskParams* params){
 }
 
 void installGZBinaryFromStreamTask(void *parameter){
-  installGZBinaryFromStream(static_cast<StreamTaskParams*>(parameter));
+  installGZBinaryFromStream(static_cast<StreamParams*>(parameter));
   vTaskDelete(NULL);
 }
 
@@ -1620,15 +1630,13 @@ void checkAndInstallBinaryFromFile() {
       return;
     }
 
-    app.setBinaryFlashScreen();
 
     totalGzSize = fileStream->size();
-
     app.setBinaryFlashScreen();
     screen.id = SCREEN_UTILS;
     screen.state = STATE_UTILS_SHOW_PROGRESS_SINGLE;
 
-    StreamTaskParams* params = new StreamTaskParams(fileStream,true);        
+    StreamParams* params = new StreamParams(fileStream,true);        
 
     // Créer la tâche FreeRTOS pour le ping
     xTaskCreate(
@@ -1646,9 +1654,10 @@ void checkAndInstallBinaryFromFile() {
   app.restoreScreen();
 }
 
-bool expandTGZstreamToFS(void* parameter){
+bool expandTGZstreamToFS(StreamParams* params){
+  
   app.downloadSreamInprogress = true;
-  StreamTaskParams* params = static_cast<StreamTaskParams*>(parameter);
+  
   Stream* httpStream = params ? params->stream : nullptr;
   bool ownsStream = params ? params->ownsStream : false;  
   DEBUG_PRINT("\ntotalGzSize: %i",totalGzSize);
@@ -1656,14 +1665,17 @@ bool expandTGZstreamToFS(void* parameter){
   bool success = false;   
   TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
   if (!httpStream) {
-    updateSWerrorString = "No stream provided";
+    updateSWerrorString = "Missing stream";
   } else {
-    if( !TARGZUnpacker->tarGzStreamExpander( httpStream, tarGzFS ) ) {
-      updateSWerrorString = concatStrings("TARGZUnpacker ", String(TARGZUnpacker->tarGzGetError())  );
+    notifyWebappFlashing();
+    if( !TARGZUnpacker->tarGzStreamExpander( httpStream, tarGzFS ) ) {   // https://github.com/tobozo/ESP32-targz/issues/93
+      updateSWerrorString = concatStrings("Package error ", String(TARGZUnpacker->tarGzGetError())  );
     } else {
       success = true;
     }
   }
+  removeFreezeNotification();
+  app.broadCast("{\"askRestart\":\"EffectAtNextStartup\"}",IMMEDIATE);  // inform web interface  IMMEDIATE because we don't queue the message to be send in next loop , we do it immediately.
   
   delete TARGZUnpacker;
   if (ownsStream) delete httpStream;
@@ -1682,7 +1694,7 @@ bool expandTGZstreamToFS(void* parameter){
 }
 
 void expandTGZstreamToFSTask(void* parameter){
-  expandTGZstreamToFS(parameter);
+  expandTGZstreamToFS(static_cast<StreamParams*>(parameter));
   vTaskDelete(NULL);
 }                              
 
@@ -2099,7 +2111,7 @@ int16_t halfProgressBarpix = TFT_WIDTH/2 - PROGRESSBAR_WIDTH/2;
 void buildIconProgressScreen(){
   gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
   gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,SIZE_20,64,&GUI::defaultFcolor,&GUI::defaultBcolor));            
-  gui.add(new ProgressBarH(&subProgressPercent, 0.0,100 , &halfProgressBarpix /*x*/, &GUI::belowBottomTexty /*y*/, PROGRESSBAR_WIDTH /*w*/, 8 /*h*/, 2 /*offset*/, 2 /*radius*/, &GUI::blue /*fc*/ , &GUI::gold/*bc*/, &GUI::fullBrightness));
+  gui.add(new ProgressBarH(&subProgressPercent, 0.0,100.0 , &halfProgressBarpix /*x*/, &GUI::belowBottomTexty /*y*/, PROGRESSBAR_WIDTH /*w*/, 8 /*h*/, 2 /*offset*/, 2 /*radius*/, &GUI::blue /*fc*/ , &GUI::gold/*bc*/, &GUI::fullBrightness));
 }
 
 int16_t brightYpos = GUI::menuIconYpos*1.2;
@@ -2134,7 +2146,7 @@ void utilsScreenBuilder(uint8_t state){
     case STATE_UTILS_INFO:{
       //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());     
       
-      gui.add(new Label(lang.getString(concatStrings("v",_V)),Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,25,10,&GUI::defaultFcolor,&GUI::defaultBcolor));
+      gui.add(new Label(lang.getString(concatStrings("v",_V)),Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,SIZE_20,32,&GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Label(&app.vBatLabel, Align::Center,&GUI::midScreenHoriz,&GUI::midScreenVertical ,CONFIG_TEXTAREA_MESSAGE_SIZE,16,&GUI::menuActiveIconColor,&GUI::menuBackGroundColor));      
 
       gui.add(new Label(&app.FSstat, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,CONFIG_TEXTAREA_MESSAGE_SIZE,54,&GUI::defaultFcolor,&GUI::defaultBcolor));      

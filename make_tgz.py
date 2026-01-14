@@ -93,23 +93,27 @@ def make_tgz(*args, **kwargs):
     if r.returncode != 0:
         sys.exit(r.returncode)
 
-    # --- Déplacement vers DEST_FOLDER (compatible cross-device) ---
+    # --- Déplacement de l'archive .tgz vers DEST_FOLDER ---
     DEST_FOLDER.mkdir(parents=True, exist_ok=True)
-    dest_path = DEST_FOLDER / output_file.name
+    tgz_dest = DEST_FOLDER / output_file.name
+    shutil.move(str(output_file), str(tgz_dest))
+    print(f"Archive déplacée vers : {tgz_dest}")        
 
-    shutil.move(str(output_file), str(dest_path))
-    print(f"Archive déplacée vers : {dest_path}")
-
-    # --- Nettoyage : suppression du firmware .bin.gz dans data ---
+    # --- Déplacement du firmware .bin.gz vers DEST_FOLDER avec version ---
     progname = env.subst("$PROGNAME")
     data_dir = Path(env["PROJECT_DIR"]) / "data"
     fw_gz = data_dir / f"{progname}.bin.gz"
 
     if fw_gz.exists():
-        fw_gz.unlink()
-        print(f"Fichier supprimé : {fw_gz}")
+        DEST_FOLDER.mkdir(parents=True, exist_ok=True)
+
+        fw_dest = DEST_FOLDER / f"{progname}.{version}.bin.gz"
+        shutil.move(str(fw_gz), str(fw_dest))
+
+        print(f"Firmware déplacé vers : {fw_dest}")
     else:
-        print(f"Aucun firmware .bin.gz à supprimer dans {data_dir}")
+        print(f"Aucun firmware .bin.gz à déplacer dans {data_dir}")
+
 
 
 # Hook fiable après compilation

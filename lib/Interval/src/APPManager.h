@@ -60,8 +60,8 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                String& outRemoteVersion,
                                String& outFileUrl);
 void expandTGZstreamToFSTask(void* parameter);
-bool expandTGZstreamToFS(void* parameter);
-bool installGZBinaryFromStream(StreamTaskParams* params);
+bool expandTGZstreamToFS(StreamParams* params);
+bool installGZBinaryFromStream(StreamParams* params);
 void updaterProgressCallback( uint8_t progress );
 
 void checkAndInstallBinaryFromFile();
@@ -99,7 +99,7 @@ enum{
   STATE_UTILS_CONNECTCONFIGMEDIA,
   STATE_UTILS_CONNECTWEBAPP,
   STATE_UTILS_WEBAPPCONNECTED,
-  STATE_UTILS_UPDATEFW_FROM_URL,
+  STATE_UTILS_DOWNLOAD_FROM_URL,
   STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD,
   STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
   STATE_UTILS_SHOW_PROGRESS_SINGLE,
@@ -1051,7 +1051,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         
         promptParams.labels[0] = *lang.getString("Yes");
         promptParams.targetScreens[0] = SCREEN_UTILS;  // go to utils screen to perform the update
-        promptParams.targetState[0] = STATE_UTILS_UPDATEFW_FROM_URL;
+        promptParams.targetState[0] = STATE_UTILS_DOWNLOAD_FROM_URL;
         
         promptParams.labels[1] = *lang.getString("No");              
         promptParams.targetScreens[1] = SCREEN_UTILS;   // back to caller
@@ -1981,10 +1981,12 @@ void setup() {
             break;
             case STATE_UTILS_RESTART_DEVICE  :
               checkAndDeleteFile(FIRMWARE_BIN_FILENAME);
+              broadCast("{\"freeze\":\"Finished\"}",IMMEDIATE);  // inform web interface immediatley without queuing the mesage for next loop
+              hwm->persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
               delay(500);
               ESP.restart();
             break;
-            case STATE_UTILS_UPDATEFW_FROM_URL:{
+            case STATE_UTILS_DOWNLOAD_FROM_URL:{
               
               #define NO_ERROR "ok"
 
@@ -2011,7 +2013,7 @@ void setup() {
                       
                       setCloudDownloadProgressScreen();
                       
-                      StreamTaskParams* params = new StreamTaskParams(httpStream,true); // the task owns the httpStream and will take care of deleting it after it is used
+                      StreamParams* params = new StreamParams(httpStream,true); // the task owns the httpStream and will take care of deleting it after it is used
 
                       BaseType_t taskCreated = xTaskCreate(
                         expandTGZstreamToFSTask,         // Tâche à exécuter
@@ -2098,21 +2100,29 @@ void setup() {
       return refreshed;
     }
 
-    void broadCast(String msg){
-      if (webAppConnected) broadcastQueue.push_back(msg);      
+    
+    void broadCast(String msg, bool immediate=false){
+      if (webAppConnected){
+        if (immediate) _wssBrodcast(msg);
+        else broadcastQueue.push_back(msg);      
+      }
     }
 
     void processBroadcastQueue() {
       while (!broadcastQueue.empty()) {
         String msg = broadcastQueue.front();  // lire le 1er message
         broadcastQueue.erase(broadcastQueue.begin());  // le retirer de la file
-        if (hwm->configMedia != nullptr){
-          if (webAppConnected && hwm->configMedia->state == CONNECTED){
-            wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());  
-            DEBUG_PRINT("\n\n\t\t * * * * broadCast(%s) * * * ",msg.c_str());
-          }
-        }
+        _wssBrodcast(msg);
       }
+    }
+
+    void _wssBrodcast(String& msg){
+      if (hwm->configMedia != nullptr){
+        if (webAppConnected && hwm->configMedia->state == CONNECTED){
+          wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());  
+          DEBUG_PRINT("\n\n\t\t * * * * broadCast(%s) * * * ",msg.c_str());
+        }
+      }     
     }
 
     void reset(){      
@@ -2121,7 +2131,7 @@ void setup() {
       // next: delete conf file   
     }
 
-    bool streamToFile(Stream* stream, String filename, String &message){
+    bool streamToFile(Stream* stream, String filename){
 
       String path = "/";
       //depending on the file extension or name, we put it to the right place
@@ -2131,7 +2141,7 @@ void setup() {
 
       File f = LittleFS.open(fullPath, FILE_WRITE);
       if (!f){
-        message = "can't create file";
+        singlePromptScreen("Can't create file","Abort");
         return false;        
       } 
 
@@ -2141,7 +2151,7 @@ void setup() {
       DEBUG_PRINT("\nFree: %i, totalGBsize: %i,  fsInfo.freeSpace - totalGzSize: %i", fsInfo.freeSpace, totalGzSize, fsInfo.freeSpace - totalGzSize);
 
       if ( (int)((int)fsInfo.freeSpace - (int)totalGzSize) < 1024*8){  
-        message = "file is too big";
+        singlePromptScreen("file is too big","Abort");
         return false;
       }
 
@@ -2308,7 +2318,7 @@ void setup() {
         if (path == "/upload") {
           DEBUG_PRINT("\nupload has been CALLED");
           String message = "Abort";
-          if (!httpUpload(req, res, message)) singlePromptScreen("File upload error",message);
+          httpUpload(req, res);
           httpServing = false;
           return;
         }
@@ -2371,17 +2381,19 @@ void setup() {
       httpServing = false;
     }
 
-    bool httpUpload(Request &req, Response &res, String& message) {
+    bool httpUpload(Request &req, Response &res) {
       // aWOT 3.x: headers accessibles via req.get(...) seulement si app.header(...) a été déclaré
       String ct = String(req.get("Content-Type"));  // ex: multipart/form-data; boundary=----WebKitFormBoundary...
+      String message;
 
       String boundary;
       if (!extractBoundary(ct, boundary)) {
-        res.sendStatus(400);
+        res.sendStatus(202);
         res.set("Content-Type", "text/plain");
         message = "Missing multipart boundary";
         res.print(message);
         res.end();
+        singlePromptScreen(message, "Abort");
         return false;
       }
 
@@ -2393,11 +2405,12 @@ void setup() {
         if (line == boundaryLine) break;
       }
       if (line != boundaryLine) {
-        res.sendStatus(400);
+        res.sendStatus(202);
         res.set("Content-Type", "text/plain");
         message = "Bad multipart start";
         res.print(message);
         res.end();
+        singlePromptScreen(message,"Abort");
         return false;
       }
 
@@ -2412,11 +2425,12 @@ void setup() {
       // 3) extraire filename
       String filename = extractFilenameFromContentDisposition(cd);
       if (filename.length() == 0) {
-        res.sendStatus(400);
+        res.sendStatus(202);
         res.set("Content-Type", "text/plain");
         message = "Missing filename";
         res.print(message);
         res.end();
+        singlePromptScreen(message,"Abort");
         return false;
       }
 
@@ -2425,24 +2439,24 @@ void setup() {
 
       bool processed = false;
       totalGzSize = req.left();
-      StreamTaskParams* streamStruct = new StreamTaskParams(&req,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
+      StreamParams* params = new StreamParams(&req,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
 
       // we are in a thread so blocking, calling the normal workflow would have no effect 
       // therefore, we use a separate animation thread which do not alter the screen id and screen state that are restored when thread stops
       if (dest == UPLOAD_DEST_TGZUPDATE) { 
         iconProgress = ICON_CLOUD_DOWNLOAD;
         startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_MULTIPLE);           
-        processed = expandTGZstreamToFS(streamStruct);     // we call it as a normal task as we are already in a thread from aWot        
+        processed = expandTGZstreamToFS(params);     // we call it as a normal task as we are already in a thread from aWot        
       }
       else if (dest == UPLOAD_DEST_FWUPDATE){
         setBinaryFlashScreen(); // set label and icon
         startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);              
-        processed = installGZBinaryFromStream(streamStruct);
+        processed = installGZBinaryFromStream(params);
       }else{
         iconProgress = ICON_CLOUD_DOWNLOAD;        
         updateProgressLabel = filename;   
         startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);             
-        processed = streamToFile((Stream*)(&req),filename, message);
+        processed = streamToFile((Stream*)(&req),filename);
       }        
 
       stopGUIThread();      // back to screen ID
@@ -2452,7 +2466,7 @@ void setup() {
         res.print("Download complete");
         //res.sendStatus(200);
       } else {
-        res.print("Write failed");
+        res.print("Could not process file");
       }
       res.end();
 
@@ -2886,6 +2900,11 @@ void setup() {
       return success;
     }
 
+    void restart(){
+      screen.id = SCREEN_UTILS;
+      screen.state = STATE_UTILS_RESTART_DEVICE;            
+    }
+
     /////////////////////////////////////////////////////////////////////////////////////
 
     #define BAD_BANK_MSG "Bad bank"
@@ -3177,11 +3196,15 @@ void setup() {
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;          
         }
+      }else if (command == "restart"){
+        restart();
+        jsonAnswer.callback = RET_SAVEBUTTON;
+        jsonAnswer.value = "0";         
       }else if (command == "flash"){
         screen.id = SCREEN_UTILS;  // go to utils screen to perform the update
-        screen.state = STATE_UTILS_UPDATEFW_FROM_URL;
-        jsonAnswer.callback = RET_MODAL;
-        jsonAnswer.value ="Firmware flash";
+        screen.state = STATE_UTILS_DOWNLOAD_FROM_URL;
+        jsonAnswer.callback = "save";
+        jsonAnswer.value ="0";
       }else if (command == "deviceConfig"){
         // {"command":"deviceConfig","param":{"MixingStation":{"offline":true,"oscIP":"999.999.999.999","oscPort":"99999"}}}
         // Accès à l'objet "param"
