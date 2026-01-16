@@ -65,11 +65,33 @@ bool useUSBMidi = false;
 
 #define DEFAULT_STORAGE_TYPE_ESP32 STORAGE_LITTLEFS
 
+struct PingEcho{
+  bool alive = false;
+  uint16_t latency = 255;
+  String host;
+  IPAddress ip;  
+};
+
+typedef std::function<void(PingEcho)> PingCallback; // Utilisation de std::function pour plus de flexibilité
+
+class PingParameters {
+public:
+  PingParameters(){
+    //DEBUG_PRINT("\nPingParameters created");
+  }
+  ~PingParameters(){
+    //DEBUG_PRINT("\nPingParameters deleted");
+  }
+  PingEcho echo;
+  PingCallback callback;
+};
+
+
 typedef void (*VoidCallback)();
 typedef void (*VoidIntCallback)(int);
 typedef void (*VoidDoubleIntCallback)(int,int);
 typedef String (*ReturnStringCallback)();
-typedef std::function<void(bool*)> StdFunctionCallbackVoidBool; 
+typedef std::function<void(PingEcho&)> StdFunctionCallbackVoidPingEcho; 
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief // Callback to report progress during unpacking
@@ -1192,7 +1214,7 @@ void scanNetworksTaskWrapper(void * parameter){
 // Tâche de ping non bloquante
 /*void pingTask(void* parameter) {
   // Récupérer les paramètres passés à la tâche
-  PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
+  PingParameters* params = static_cast<PingParameters*>(parameter);
   if (hwm.network->media == WIFI_MEDIA){
    //DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
     if (Ping.ping(params->host.c_str())) {
@@ -1217,40 +1239,45 @@ void scanNetworksTaskWrapper(void * parameter){
 #include <EthernetICMP.h>  // fixed by  https://github.com/arduino-libraries/Ethernet/pull/107/files
 
 // Choix du socket ICMP (0–7 sur W5x00) + identifiant ICMP
-void pingTask(void* parameter) {
-  // Récupérer les paramètres passés à la tâche
-  PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
+void ping(PingParameters* params) {
+  // NB: host resolution doesnt work
+  if (WiFi.hostByName(params->echo.host.c_str(), params->echo.ip) == 1){
 
-  if (hwm.network->media == WIFI_MEDIA){
-   //DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
-    if (Ping.ping(params->host.c_str())) {
-      params->callback(true);  // Appel du callback en cas de succès
-    } else {
-      params->callback(false);  // Appel du callback en cas d'échec
+    DEBUG_PRINT("\npingTask running...");  
+    if (hwm.network->media == WIFI_MEDIA){    
+      if (Ping.ping(params->echo.host.c_str())) {
+        params->callback(params->echo);  // Appel du callback en cas de succès
+      } else {
+        params->callback(params->echo);  // Appel du callback en cas d'échec
+      }
+    }else{
+      // IMPLEMENT PING FOR ETHERNET
+      EthernetICMPPing ping(7, 1);
+      //EthernetICMPPing::setTimeout(3000); // ms
+      
+      // Lance le ping avec 3 retries
+      EthernetICMPEchoReply reply = ping(params->echo.ip, 3);
+      if (reply.status == SUCCESS) {
+        DEBUG_PRINT("\nPing OK RTT:%lu, TTL:%i",reply.data.time,reply.ttl);
+        params->callback(params->echo);  // Appel du callback en cas de succès
+      } else {
+        DEBUG_PRINT("\nPing FAIL, status=%i",(int)reply.status);
+        params->callback(params->echo);  // Appel du callback en cas de succès
+      }
     }
-  }else{
-    // IMPLEMENT PING FOR ETHERNET
-    EthernetICMPPing ping(7, 42);
-    EthernetICMPPing::setTimeout(3000); // ms
-    
-    // Lance le ping avec 3 retries
-    EthernetICMPEchoReply reply = ping(params->ip, 3);
-    if (reply.status == SUCCESS) {
-      DEBUG_PRINT("\nPing OK RTT:%lu, TTL:%i",reply.data.time,reply.ttl);
-      params->callback(true);  // Appel du callback en cas de succès
-    } else {
-      DEBUG_PRINT("\nPing FAIL, status=%i",(int)reply.status);
-      params->callback(false);  // Appel du callback en cas de succès
-    }
+
+  }else {
+    DEBUG_PRINT("\nasyncPing(%s) hostname unresovable",params->echo.host.c_str());
   }
-
-  // Libérer la mémoire allouée pour les paramètres
-  delete params;
-
-  // Suspendre la tâche après chaque ping (exécution ponctuelle)
-  vTaskDelete(NULL);
 }
 
+void pingTask(void* params){
+  ping(static_cast<PingParameters*>(params));
+  // Libérer la mémoire allouée pour les paramètres
+  delete params;
+  // Suspendre la tâche après chaque ping (exécution ponctuelle)
+  vTaskDelete(NULL);  
+}
 
 
 // Prototype pour la tâche de connexion

@@ -578,22 +578,6 @@ uint8_t LadderButton::bCount = 0;
   #warning "USE_HSPI_PORT ACTIVATED"
 #endif
 
-typedef std::function<void(bool)> PingCallback; // Utilisation de std::function pour plus de flexibilité
-
-class PingTaskParameters {
-public:
-  PingTaskParameters(){
-    //DEBUG_PRINT("\nPingTaskParameters created");
-  }
-  ~PingTaskParameters(){
-    //DEBUG_PRINT("\nPingTaskParameters deleted");
-  }
-  String host;
-  IPAddress ip;
-  PingCallback callback;
-};
-
-
 //typedef std::function<void()> StdFunctionCallbackVoid; 
 typedef std::function<void(const char*)> StdFunctionCallbackStringPointer;
 
@@ -734,7 +718,7 @@ class Network : public HWComponent2State{
 
     SemaphoreHandle_t networkBusy;
 
-    StdFunctionCallbackVoidBool internetCallback = nullptr;    
+    StdFunctionCallbackVoidPingEcho internetCallback = nullptr;    
     // Déclarer un pointeur générique pour le client
     //IWebSocket* wsClient = nullptr;  //     wsClient = wifiClient;   
 
@@ -748,8 +732,8 @@ class Network : public HWComponent2State{
     IPAddress IP, gateway,subnet;
     //HttpClient* http = NULL;    
     Client* client = NULL;   
-    bool internet = false; 
-    uint16_t WANlatency = 250, LANlatency = 38;
+    PingEcho internet; 
+    uint16_t LANlatency = 38;
 
     bool ethEnabled = true;
     bool WiFiEnabled = true;
@@ -771,7 +755,7 @@ class Network : public HWComponent2State{
     virtual WebSocketReadyState clientSocketState()=0;
     virtual EthernetLinkStatus getLink() = 0;
     virtual String getConnectedDeviceIP() = 0;
-    virtual void asyncPing(String ipAddress, PingCallback callback)=0;
+    virtual void asyncPing(PingEcho& echo, PingCallback callBack)=0;
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
 
     virtual void init(){
@@ -1367,7 +1351,8 @@ class WiFiEth : public Network{
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
             // common destruction
-            internet = false;          
+            internet.alive = false;
+            internet.latency = 255;
 
             //if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
             if (client != NULL){client->stop(); delete client; client = NULL;} 
@@ -1395,26 +1380,16 @@ class WiFiEth : public Network{
       return refreshed;
     }
 
-    void onInternetPing(bool online) {
-        internet = online;
-        DEBUG_PRINT("\n\n\n\t\t\t * * * * PING %s * * * *",internet?"OK":"fail");
-        if (internetCallback !=nullptr) internetCallback(&internet);
+    void onInternetPing(PingEcho& echo) {
+        if (internetCallback !=nullptr) internetCallback(echo);
+        DEBUG_PRINT("\n\n\n\t\t\t * * * * onInternetPing %s * * * *",echo.alive?"OK":"fail");        
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
-    virtual void asyncPing(String host, PingCallback callBack) {
-      // Allouer la mémoire pour stocker les paramètres de la tâche
-      PingTaskParameters* params = new PingTaskParameters;
-
-      // NB: host resolution doesnt work
-      if (WiFi.hostByName(host.c_str(), params->ip) == 1) params->host = params->ip.toString();
-      else {
-        DEBUG_PRINT("\nasyncPing(%s) hostname unresovable",host.c_str());
-        return;
-      }
-
+    virtual void asyncPing(PingEcho& echo, PingCallback callBack) {
+      PingParameters* params = new PingParameters;
+      params->echo = echo;
       params->callback = callBack;
-      // Créer la tâche FreeRTOS pour le ping
       xTaskCreate(
         pingTask,         // Tâche à exécuter
         "PingTask",       // Nom de la tâche
@@ -1423,7 +1398,7 @@ class WiFiEth : public Network{
         2,                // Priorité
         &pingTaskHandle   // Handle de la tâche
       );
-      DEBUG_PRINT("\nasyncPing(%s) task created",host.c_str());
+      DEBUG_PRINT("\nasyncPing(%s) task created",echo.host.c_str());
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
@@ -1467,14 +1442,14 @@ class WiFiEth : public Network{
       DEBUG_PRINT("\n\n\tcheckInternet => ");
       // Utiliser des lambdas pour passer les méthodes membres comme callbacks
       asyncPing(
-        "12.8.8.8",
-        [&](bool online) { onInternetPing(online); }
+        internet,
+        [&](PingEcho echo) { onInternetPing(echo); }
       );
       // latency
       //if (LAN) 
       //LANlatency = 20;
       //else 
-      WANlatency = 150;
+      DEBUG_PRINT("\nInternet latency:%i",internet.latency);
     }
 
     void restoreWiFiSSID(){
@@ -1593,7 +1568,7 @@ class  NoNetwork: public Network{
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
     virtual EthernetLinkStatus getLink(){return LinkOFF;}
     virtual String getConnectedDeviceIP(){return "";}
-    virtual void asyncPing(String ipAddress, PingCallback callback){}
+    virtual void asyncPing(PingEcho& echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
 
 };
@@ -1632,7 +1607,7 @@ class AccessPoint : public Network{
     virtual UdpSlot* getUDPslot(int i){return nullptr;}
     virtual int requestUDPslotID(int port){return 0;}
     virtual void stopAllUDP(){}
-    virtual void asyncPing(String ipAddress, PingCallback callback){};
+    virtual void asyncPing(PingEcho& echo, PingCallback callBack){};
     virtual bool asyncConnect(AsyncHttpClient *clientParam){ return false;}
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}
     virtual void clientSocketSend(const char *message){};

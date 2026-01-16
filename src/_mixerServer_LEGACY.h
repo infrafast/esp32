@@ -183,7 +183,7 @@ class MixerServer: public HWComponent2State{
     unsigned long lastDetectionAttemptTime = 0;
 
     AsyncHttpClient msHttpClientParam;
-    OSCPingTaskParameters pingParam;
+    OSCPingParameters pingParam;
 
 
     void connect() { 

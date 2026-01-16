@@ -189,7 +189,7 @@ typedef std::function<void(bool, int)> OSCPingCallback;    // ping success true/
 
 class OSCInterface;
 
-struct OSCPingTaskParameters {
+struct OSCPingParameters {
   String address;
   JsonObject data;
   IPAddress ip;
@@ -370,7 +370,7 @@ class OSCInterface: public DeviceInterface{
         }        
 
         // Fonction pour démarrer la tâche de ping non bloquante
-        virtual bool asyncPing(OSCPingTaskParameters* params) {
+        virtual bool asyncPing(OSCPingParameters* params) {
             OSC_DEBUG_PRINT("\nOSCasyncPing %s %s:%d T.O:%d",params->data->expectedStr,params->ip.toString().c_str(),params->port,params->timeOut);
             if (params->isPinging){
                 OSC_DEBUG_PRINT("\t=>ping pending, no more allowed, stop.");
@@ -477,7 +477,7 @@ class OSCInterface: public DeviceInterface{
 void OSCpingTask(void* parameter) {
 
     // Récupérer les paramètres passés à la tâche
-    OSCPingTaskParameters* params = static_cast<OSCPingTaskParameters*>(parameter);
+    OSCPingParameters* params = static_cast<OSCPingParameters*>(parameter);
 
     if (xSemaphoreTake(hwm.network->networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){ 
 
