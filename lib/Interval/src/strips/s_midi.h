@@ -112,7 +112,7 @@ class OneValueMidiStrip : public TwoSelectStrip{
       char* buf = (char*)malloc( strlen(ADDRESS_MIDIVALUE1)*sizeof(char)+5);    // 5 digit max
       sprintf(buf, ADDRESS_MIDIVALUE1,String(midiValue1).c_str());
       properties.add(String(buf));
-      delete buf;
+      free(buf);
 
     }
 

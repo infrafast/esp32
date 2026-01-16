@@ -608,7 +608,7 @@ class TwoSelectStrip : public Strip{
       char* buf = (char*)malloc(select2PropertyAddress.length()*sizeof(char*));
       sprintf(buf,select2PropertyAddress.c_str(),select2ID);
       properties.add(String(buf));
-      delete buf;
+      free(buf);
 
     }
 
@@ -650,7 +650,7 @@ class ThreeSelectStrip: public TwoSelectStrip{
       char* buf = (char*)malloc(select3PropertyAddress.length()*sizeof(char*));
       sprintf(buf,select3PropertyAddress.c_str(),select3ID);
       properties.add(String(buf));
-      delete buf;
+      free(buf);
 
     }
 

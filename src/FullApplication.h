@@ -235,12 +235,12 @@ class OSCTestStrip : public TextStrip, public StripMixer{
       char* buf = (char*)malloc(portPropertyAddress.length()*sizeof(char*));
       sprintf(buf,portPropertyAddress.c_str(),String(port).c_str());
       properties.add(String(buf));
-      delete buf;
+      free(buf);
 
       buf = (char*)malloc(msgPropertyAddress.length()*sizeof(char*));
       sprintf(buf,msgPropertyAddress.c_str(),message.c_str());
       properties.add(String(buf));
-      delete buf;            
+      free(buf);            
     }
     
     virtual bool actionCallback(uint8_t trigger){
