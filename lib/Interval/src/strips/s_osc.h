@@ -115,7 +115,7 @@ class OSCStrip : public Strip{  // should inherit from MidiStrip before so metho
       sprintf(buf,ADDRESS_OSCMSG,oscKey);
       properties.add(String(buf)); //force la copie
       //DEBUG_PRINT("\nserializeProperties: %s",buf);
-      delete buf;
+      free(buf);
     }
 
     virtual void deserializeProperty(String property){

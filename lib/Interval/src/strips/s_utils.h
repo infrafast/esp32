@@ -36,14 +36,14 @@ class TextStrip : public Strip{
       if (sscanf(property.c_str(), textPropertyAddress.c_str(), buf) == 1){
         text = buf;
       }           
-      delete buf;
+      free(buf);
     }
 
     virtual void serializeProperties(){
       char* buf = (char*)malloc(textPropertyAddress.length()*sizeof(char*)+TEXT_MAX_LENGHT);
       sprintf(buf,textPropertyAddress.c_str(),text.c_str());
       properties.add(String(buf));
-      delete buf;
+      free(buf);
 
     }
 

@@ -48,17 +48,17 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
       sprintf(buf,ADDRESS_OSCPORT,OSC_clientPort);
       properties.add(String(buf)); 
-      delete buf;
+      free(buf);
 
       buf = (char*)malloc((strlen(ADDRESS_IP)+OSC_IP.toString().length())*sizeof(char*)+1);
       sprintf(buf,ADDRESS_IP,OSC_IP.toString());
       properties.add(String(buf)); 
-      delete buf;    
+      free(buf);    
       
       buf = (char*)malloc((strlen(ADDRESS_PING)+OSC_ping.length())*sizeof(char*)+1);
       sprintf(buf,ADDRESS_IP,OSC_ping);
       properties.add(String(buf)); 
-      delete buf;        
+      free(buf);        
     }
 
     virtual void handlePropertyChange(){
