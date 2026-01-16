@@ -402,7 +402,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       netHelper.monitor();
     }
 
-    virtual void derivedMonitor(){
+    virtual void derivedNetworkMonitor(){
       if (hwm.network->midiClient != nullptr){
         // the read trigger callback like connection, hence it has to be called independantly from being connected to a session or not
         //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time        
@@ -512,8 +512,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     virtual void goOffline(bool _offline){
       MIDIInterface::goOffline(_offline);      
-      if (_offline) disconnect();     // force disconnect in all case: either you will reconnect 
-      else connect();
+      if (_offline) disconnectNetwork();     // force disconnect in all case: either you will reconnect 
+      else connectNetwork();
       // maybe add a if (_offline) {} else {}
     }
 
@@ -546,7 +546,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       //DEBUG_PRINT("\tAppleMIDIInterface::derivedBegin()");
       MIDIInterface::init();
       appleInstancePtr = this;   // do not forget otherwise callback function will crash
-      return disconnect();      
+      return disconnectNetwork();      
     }
 
     virtual bool end(){
@@ -554,8 +554,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return true;
     }
 
-    virtual bool connect(){
-      DEBUG_PRINT("\tAppleMIDIInterface::connect()");
+    virtual bool connectNetwork(){
+      DEBUG_PRINT("\n%s::connectNetwork()",name.c_str());
       setStatePendingSession();    // network has just connected so we now wait for a session to connect
 
       // we connect the midi client to its callback
@@ -573,7 +573,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return true;
     }
 
-    virtual bool disconnect(){
+    virtual bool disconnectNetwork() {
       DEBUG_PRINT("\nAppleMIDIInterface::disconnect()");
       MidiClient* midiClient = hwm.network->midiClient; 
       if (midiClient == nullptr){

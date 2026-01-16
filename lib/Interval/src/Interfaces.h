@@ -320,9 +320,9 @@ class DeviceInterface  : public SerializableDataset{
 
 class NetWorkInterface{
   public:
-    virtual void derivedMonitor() = 0;
-    virtual bool connect() = 0;           // called when network is connected
-    virtual bool disconnect() = 0;        // called when network is disconnected
+    virtual void derivedNetworkMonitor() = 0;
+    virtual bool connectNetwork() = 0;           // called when network is connected
+    virtual bool disconnectNetwork() = 0;        // called when network is disconnected
 };
 
 class NetworkInterfaceMonitor{
@@ -334,17 +334,17 @@ class NetworkInterfaceMonitor{
     
     NetworkInterfaceMonitor(NetWorkInterface* _netif, DeviceInterface* _devif):networkInterface(_netif),deviceInterface(_devif){}
    
-    void networkDown(){
+    void setNetworkStateDown(){
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;           
       deviceInterface->state.led = "red medium";
-      deviceInterface->state.details = *lang.getString("networkDown");                // connect Eth cable or attempt to connect a previous SSID
+      deviceInterface->state.details = *lang.getString("setNetworkStateDown");                // connect Eth cable or attempt to connect a previous SSID
     }
 
-    void networkUp(){
+    void setNetworkStateUp(){
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
-      deviceInterface->state.details = *lang.getString("networkUp");      
+      deviceInterface->state.details = *lang.getString("setNetworkStateUp");      
       deviceInterface->state.led = "red";
       deviceInterface->state.progress = -1;
     }    
@@ -355,21 +355,21 @@ class NetworkInterfaceMonitor{
         bool success = false;
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.offline){
-            DEBUG_PRINT("\n%s->connect<OFFLINE>() ignored",deviceInterface->interfaceName.c_str());
+            DEBUG_PRINT("\n%s->monitor<OFFLINE>() ignored",deviceInterface->interfaceName.c_str());
             return;
           }else{
-            networkUp();
-            success = networkInterface->connect();
-            DEBUG_PRINT("\n%s->connect<ONLINE>()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");                    
+            setNetworkStateUp();
+            success = networkInterface->connectNetwork();
+            DEBUG_PRINT("\n%s->monitor<ONLINE>()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");                    
           }
         }else{
-          networkDown();    
-          success = networkInterface->disconnect();
-          DEBUG_PRINT("\n%s->disconnect()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");
+          setNetworkStateDown();    
+          success = networkInterface->disconnectNetwork();
+          DEBUG_PRINT("\n%s->monitor()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");
         }
       }
       // we only monitor networkdevices when network is on
-      if (hwm.network->state == CONNECTED) networkInterface->derivedMonitor();
+      if (hwm.network->state == CONNECTED) networkInterface->derivedNetworkMonitor();
       else{
         // otherwise we report on progress and the network we try to connect         
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;

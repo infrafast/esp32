@@ -63,7 +63,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void handlePropertyChange(){
       DEBUG_PRINT("\n%s::handlePropertyChange() : call disconnect",interfaceName.c_str());
-      disconnect();
+      disconnectNetwork();
     }
 
     virtual void restoreProperty(const char* property){
@@ -91,7 +91,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       netHelper.monitor();
     }    
 
-    virtual void derivedMonitor(){
+    virtual void derivedNetworkMonitor(){
       // Check if packet was received
       dataAvailable = readOSC();
 
@@ -121,9 +121,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
         UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);   // request UDP slot
 
-        if (udpSlot == NULL){
-            return 0;                
-        } 
+        if (udpSlot == NULL) return 0;                
 
         UDP* udp = udpSlot->udp;
 
@@ -189,7 +187,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       
       bool success = false;
 
-      //DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),OSC_IP.toString().c_str(),OSC_clientPort);
+      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),OSC_IP.toString().c_str(),OSC_clientPort);
 
       UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);
       // sempahore protected section
@@ -225,7 +223,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return true;
     }
 
-    virtual bool connect(){
+    virtual bool connectNetwork(){
       // network connection has just been established :-)
       setStateQueryingDevice();         // we are not yet connected to the OSC device
       lastQueryTime = 0; // force ping to be triggered
@@ -234,7 +232,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return false;
     }
 
-    virtual bool disconnect(){
+    virtual bool disconnectNetwork() {
       lastQueryTime = 0; // force immediate ping attempt
       setStateQueryingDevice();
       return true;

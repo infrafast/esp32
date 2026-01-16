@@ -2,8 +2,8 @@
 "Connect":"Connect your computer/mobile to the WiFi indicated below or plug an Ethernet cable to the Footswitch",
 "Open browser":"Open a browser on your computer/mobile at the below address. Care http and not https.",
 "Press button":"You alreay have a browser connected to the footswitch. Press a button to exit."
-"networkDown":"Network connection pending",
-"networkUp":"Device is disconnected from network",
+"setNetworkDownState":"Network connection pending",
+"setNetworkUpState":"Device is disconnected from network",
 "disconnected":"déconnecté",
 "connected":"connecté",
 "idle":"attente connexion",

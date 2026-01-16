@@ -55,13 +55,13 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkInterface {
       return false;      
     }
 
-    virtual void derivedMonitor(){}
+    virtual void derivedNetworkMonitor(){}
 
-    virtual bool connect(){
+    virtual bool connectNetwork(){
       return false;
     }
 
-    virtual bool disconnect(){
+    virtual bool disconnectNetwork() {
       return false;
     }
 
