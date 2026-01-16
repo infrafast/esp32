@@ -1190,7 +1190,7 @@ void scanNetworksTaskWrapper(void * parameter){
 }
 
 // Tâche de ping non bloquante
-void pingTask(void* parameter) {
+/*void pingTask(void* parameter) {
   // Récupérer les paramètres passés à la tâche
   PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
   if (hwm.network->media == WIFI_MEDIA){
@@ -1213,7 +1213,44 @@ void pingTask(void* parameter) {
 
   // Suspendre la tâche après chaque ping (exécution ponctuelle)
   vTaskDelete(NULL);
+}*/
+#include <EthernetICMP.h>  // fixed by  https://github.com/arduino-libraries/Ethernet/pull/107/files
+
+// Choix du socket ICMP (0–7 sur W5x00) + identifiant ICMP
+void pingTask(void* parameter) {
+  // Récupérer les paramètres passés à la tâche
+  PingTaskParameters* params = static_cast<PingTaskParameters*>(parameter);
+
+  if (hwm.network->media == WIFI_MEDIA){
+   //DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
+    if (Ping.ping(params->host.c_str())) {
+      params->callback(true);  // Appel du callback en cas de succès
+    } else {
+      params->callback(false);  // Appel du callback en cas d'échec
+    }
+  }else{
+    // IMPLEMENT PING FOR ETHERNET
+    EthernetICMPPing ping(7, 42);
+    EthernetICMPPing::setTimeout(3000); // ms
+    
+    // Lance le ping avec 3 retries
+    EthernetICMPEchoReply reply = ping(params->ip, 3);
+    if (reply.status == SUCCESS) {
+      DEBUG_PRINT("\nPing OK RTT:%lu, TTL:%i",reply.data.time,reply.ttl);
+      params->callback(true);  // Appel du callback en cas de succès
+    } else {
+      DEBUG_PRINT("\nPing FAIL, status=%i",(int)reply.status);
+      params->callback(false);  // Appel du callback en cas de succès
+    }
+  }
+
+  // Libérer la mémoire allouée pour les paramètres
+  delete params;
+
+  // Suspendre la tâche après chaque ping (exécution ponctuelle)
+  vTaskDelete(NULL);
 }
+
 
 
 // Prototype pour la tâche de connexion

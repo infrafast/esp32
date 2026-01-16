@@ -109,7 +109,7 @@ class OneValueMidiStrip : public TwoSelectStrip{
       TwoSelectStrip::serializeProperties();
 
       // ""/midi/channel/%d"    => DSmidiValue.address.pattern
-      char* buf = (char*)malloc( strlen(ADDRESS_MIDIVALUE1)*sizeof(char*)+5);    // 5 digit max
+      char* buf = (char*)malloc( strlen(ADDRESS_MIDIVALUE1)*sizeof(char)+5);    // 5 digit max
       sprintf(buf, ADDRESS_MIDIVALUE1,String(midiValue1).c_str());
       properties.add(String(buf));
       delete buf;
@@ -143,10 +143,10 @@ class TwoValuesMidiStrip: public OneValueMidiStrip{
     void serializeProperties(){
       OneValueMidiStrip::serializeProperties();
       // "/midi/value2/127"     => DSmidiValue.address.pattern
-      char* buf = (char*)malloc( strlen(ADDRESS_MIDIVALUE1)*sizeof(char*)+5);    // 5 digit max
+      char* buf = (char*)malloc( strlen(ADDRESS_MIDIVALUE1)*sizeof(char)+5);    // 5 digit max
       sprintf(buf, ADDRESS_MIDIVALUE2,String(midiValue2).c_str());
       properties.add(String(buf));
-      delete buf;
+      free(buf);
     }
 
 
@@ -182,10 +182,10 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       TwoValuesMidiStrip::serializeProperties();
 
       //#define ADDRESS_MIDINOTE   "/midi/note/%s"
-      char* buf = (char*)malloc( strlen(ADDRESS_MIDINOTE)*sizeof(char*)+NOTE_VALUE_LENGTH);    // on/off takes 4 char
+      char* buf = (char*)malloc( strlen(ADDRESS_MIDINOTE)*sizeof(char)+NOTE_VALUE_LENGTH);    // on/off takes 4 char
       sprintf(buf, ADDRESS_MIDINOTE,String(note).c_str());
       properties.add(String(buf));
-      delete buf;
+      free(buf);
 
     }
 
@@ -362,11 +362,11 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
     }
 
     virtual void serializeProperties(){
-      char* buf = (char*)malloc((strlen(ADDRESS_SYSEX)+sysexKey.length())*sizeof(char*)+1);
+      char* buf = (char*)malloc((strlen(ADDRESS_SYSEX)+sysexKey.length())*sizeof(char)+1);
       sprintf(buf,ADDRESS_SYSEX,sysexKey);
       properties.add(String(buf)); //force la copie
       //DEBUG_PRINT("\nserializeProperties: %s",buf);
-      delete buf;
+      free(buf);
     }
 
     virtual void deserializeProperty(String property){

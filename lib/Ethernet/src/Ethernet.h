@@ -39,12 +39,12 @@
 #define MAX_SOCK_NUM 8
 #endif
 
-// By default, each socket uses 2K buffers inside the WIZnet chip.  If
+// By default, each socket uses 2K buffers inside the Wiznet chip.  If
 // MAX_SOCK_NUM is set to fewer than the chip's maximum, uncommenting
-// this will use larger buffers within the WIZnet chip.  Large buffers
+// this will use larger buffers within the Wiznet chip.  Large buffers
 // can really help with UDP protocols like Artnet.  In theory larger
 // buffers should allow faster TCP over high-latency links, but this
-// does not always seem to work in practice (maybe WIZnet bugs?)
+// does not always seem to work in practice (maybe Wiznet bugs?)
 //#define ETHERNET_LARGE_BUFFERS
 
 
@@ -84,7 +84,7 @@ public:
 	static EthernetLinkStatus linkStatus();
 	static EthernetHardwareStatus hardwareStatus();
 
-	// Manual configuration
+	// Manaul configuration
 	static void begin(uint8_t *mac, IPAddress ip);
 	static void begin(uint8_t *mac, IPAddress ip, IPAddress dns);
 	static void begin(uint8_t *mac, IPAddress ip, IPAddress dns, IPAddress gateway);
@@ -108,6 +108,7 @@ public:
 	friend class EthernetClient;
 	friend class EthernetServer;
 	friend class EthernetUDP;
+	friend class EthernetICMP;
 private:
 	// Opens a socket(TCP or UDP or IP_RAW mode)
 	static uint8_t socketBegin(uint8_t protocol, uint16_t port);
@@ -213,9 +214,8 @@ public:
 
 class EthernetClient : public Client {
 public:
-	EthernetClient() : _sockindex(MAX_SOCK_NUM), _timeout(1000) { }
-	EthernetClient(uint8_t s) : _sockindex(s), _timeout(1000) { }
-	virtual ~EthernetClient() {};
+	EthernetClient() : sockindex(MAX_SOCK_NUM), _timeout(1000) { }
+	EthernetClient(uint8_t s) : sockindex(s), _timeout(1000) { }
 
 	uint8_t status();
 	virtual int connect(IPAddress ip, uint16_t port);
@@ -231,7 +231,7 @@ public:
 		connect(host, port);
 		setConnectionTimeout(timeout);
 	}
-#endif
+#endif	
 	virtual int availableForWrite(void);
 	virtual size_t write(uint8_t);
 	virtual size_t write(const uint8_t *buf, size_t size);
@@ -242,12 +242,12 @@ public:
 	virtual void flush();
 	virtual void stop();
 	virtual uint8_t connected();
-	virtual operator bool() { return _sockindex < MAX_SOCK_NUM; }
+	virtual operator bool() { return sockindex < MAX_SOCK_NUM; }
 	virtual bool operator==(const bool value) { return bool() == value; }
 	virtual bool operator!=(const bool value) { return bool() != value; }
 	virtual bool operator==(const EthernetClient&);
 	virtual bool operator!=(const EthernetClient& rhs) { return !this->operator==(rhs); }
-	uint8_t getSocketNumber() const { return _sockindex; }
+	uint8_t getSocketNumber() const { return sockindex; }
 	virtual uint16_t localPort();
 	virtual IPAddress remoteIP();
 	virtual uint16_t remotePort();
@@ -258,7 +258,7 @@ public:
 	using Print::write;
 
 private:
-	uint8_t _sockindex; // MAX_SOCK_NUM means client not in use
+	uint8_t sockindex; // MAX_SOCK_NUM means client not in use
 	uint16_t _timeout;
 };
 

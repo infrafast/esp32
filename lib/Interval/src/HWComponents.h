@@ -2,12 +2,11 @@
 #define HWComponents_h
 
 #include "Interval.h"
-#include <Ethernet.h>
+#include <Ethernet.h>       // apply following fix: https://github.com/arduino-libraries/Ethernet/pull/107/files
 #include <EthernetUdp.h>
-#include <WiFiGeneric.cpp>   // for tipipinit
-#include <ArduinoOTA.h>           // for WIFI_MEDIA program upload 
+#include <WiFiGeneric.cpp>  // for tipipinit
+#include <ArduinoOTA.h>     // for WIFI_MEDIA program upload 
 #include <ESP32Ping.h>      // for WiFi
-//#include <EthernetICMP.h>
 
 #include <HttpClient.h> // amcewen/HttpClient@^2.2.0 as opposed to the std lib #include <HTTPClient.h> which only handle WiFIclient
 #include <WiFiClientSecure.h>
@@ -15,8 +14,6 @@
 #include <ESPmDNS.h>          // for WIFI registration
 #include <EthernetBonjour.h>  //for Eth registration
 
-// https://github.com/andrew-susanto/Arduino-Ethernet-Icmp.git	 => platform IO: works but corrupt the WiFi
-//#include <EthernetICMP.h>
 
 #include <WebSocketClient.hpp>    // https://github.com/skaarj1989/mWebSockets#meta     // use a local repository with SOCKETBUFFER SIZE CHANGED one because of https://github.com/skaarj1989/mWebSockets/issues/72
 //#include <WebSocket.hpp>
@@ -592,6 +589,7 @@ public:
     //DEBUG_PRINT("\nPingTaskParameters deleted");
   }
   String host;
+  IPAddress ip;
   PingCallback callback;
 };
 
@@ -1408,9 +1406,8 @@ class WiFiEth : public Network{
       // Allouer la mémoire pour stocker les paramètres de la tâche
       PingTaskParameters* params = new PingTaskParameters;
 
-      IPAddress ipAddr; 
       // NB: host resolution doesnt work
-      if (WiFi.hostByName(host.c_str(), ipAddr) == 1) params->host = ipAddr.toString();
+      if (WiFi.hostByName(host.c_str(), params->ip) == 1) params->host = params->ip.toString();
       else {
         DEBUG_PRINT("\nasyncPing(%s) hostname unresovable",host.c_str());
         return;
@@ -1470,7 +1467,7 @@ class WiFiEth : public Network{
       DEBUG_PRINT("\n\n\tcheckInternet => ");
       // Utiliser des lambdas pour passer les méthodes membres comme callbacks
       asyncPing(
-        "8.8.8.8",
+        "12.8.8.8",
         [&](bool online) { onInternetPing(online); }
       );
       // latency
