@@ -505,7 +505,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       promptTimeoutMax = 1;
       promptRemainingTime = 0;
        
-      hwm->network->internetCallback = [this](PingEcho& internet) {
+      hwm->network->internetCallback = [this](PingEcho* internet) {
           this->internetCallBack(internet);
       };         
 
@@ -573,9 +573,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-    void internetCallBack(PingEcho& echo){
+    void internetCallBack(PingEcho* echo){
       ///////////////////////// do what application manager has to do when internet is connected/disconnected      
-      if (echo.alive){
+      if (echo->alive){
         //checkRemoteVersion();
       }else{
         DEBUG_PRINT("\nNo internet connection");          
@@ -583,7 +583,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
        
       ///////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
-      evt.data = &echo;
+      evt.data = echo;
       fireEvent(&evt);
     }
 

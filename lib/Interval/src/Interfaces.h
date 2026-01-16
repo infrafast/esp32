@@ -320,6 +320,7 @@ class DeviceInterface  : public SerializableDataset{
 
 class NetWorkInterface{
   public:
+    PingEcho* destination;
     virtual void derivedNetworkMonitor() = 0;
     virtual bool connectNetwork() = 0;           // called when network is connected
     virtual bool disconnectNetwork() = 0;        // called when network is disconnected

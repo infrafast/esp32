@@ -65,24 +65,31 @@ bool useUSBMidi = false;
 
 #define DEFAULT_STORAGE_TYPE_ESP32 STORAGE_LITTLEFS
 
-struct PingEcho{
-  bool alive = false;
-  uint16_t latency = 255;
-  String host;
-  IPAddress ip;  
+class PingEcho{
+  public:
+    bool alive = false;
+    uint16_t latency = 30;      // normal latency on TCP/IP
+    String host;
+    IPAddress ip;  
+    PingEcho(String h):host(h){
+      DEBUG_PRINT("\nPingEcho created");
+    }
+    ~PingEcho(){
+      DEBUG_PRINT("\nPingEcho deleted");
+    }   
 };
 
-typedef std::function<void(PingEcho)> PingCallback; // Utilisation de std::function pour plus de flexibilité
+typedef std::function<void(PingEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité
 
 class PingParameters {
 public:
   PingParameters(){
-    //DEBUG_PRINT("\nPingParameters created");
+    DEBUG_PRINT("\nPingParameters created");
   }
   ~PingParameters(){
-    //DEBUG_PRINT("\nPingParameters deleted");
+    DEBUG_PRINT("\nPingParameters deleted");
   }
-  PingEcho echo;
+  PingEcho* echo;
   PingCallback callback;
 };
 
@@ -91,7 +98,7 @@ typedef void (*VoidCallback)();
 typedef void (*VoidIntCallback)(int);
 typedef void (*VoidDoubleIntCallback)(int,int);
 typedef String (*ReturnStringCallback)();
-typedef std::function<void(PingEcho&)> StdFunctionCallbackVoidPingEcho; 
+typedef std::function<void(PingEcho*)> StdFunctionCallbackVoidPingEcho; 
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief // Callback to report progress during unpacking
@@ -707,7 +714,7 @@ class JsonList{
         return &noToken;
       } else {        
         KeyValue* kv = keyValues.get(index);
-        DEBUG_PRINT("%s",kv->value.c_str());
+        //DEBUG_PRINT("%s",kv->value.c_str());
         return &kv->value;
       }
     };
@@ -1241,33 +1248,38 @@ void scanNetworksTaskWrapper(void * parameter){
 // Choix du socket ICMP (0–7 sur W5x00) + identifiant ICMP
 void ping(PingParameters* params) {
   // NB: host resolution doesnt work
-  if (WiFi.hostByName(params->echo.host.c_str(), params->echo.ip) == 1){
+  if (WiFi.hostByName(params->echo->host.c_str(), params->echo->ip) == 1){
 
     DEBUG_PRINT("\npingTask running...");  
     if (hwm.network->media == WIFI_MEDIA){    
-      if (Ping.ping(params->echo.host.c_str())) {
-        params->callback(params->echo);  // Appel du callback en cas de succès
+      if (Ping.ping(params->echo->host.c_str())) {
+        params->echo->alive = true;
+        params->echo->latency = Ping.averageTime();
       } else {
-        params->callback(params->echo);  // Appel du callback en cas d'échec
-      }
+        params->echo->alive = false;
+      }    
+
     }else{
       // IMPLEMENT PING FOR ETHERNET
       EthernetICMPPing ping(7, 1);
       //EthernetICMPPing::setTimeout(3000); // ms
       
+      uint32_t t0 = millis();
       // Lance le ping avec 3 retries
-      EthernetICMPEchoReply reply = ping(params->echo.ip, 3);
+      EthernetICMPEchoReply reply = ping(params->echo->ip, 3);
+      uint32_t t1 = millis();
       if (reply.status == SUCCESS) {
-        DEBUG_PRINT("\nPing OK RTT:%lu, TTL:%i",reply.data.time,reply.ttl);
-        params->callback(params->echo);  // Appel du callback en cas de succès
+        params->echo->alive = true;
+        params->echo->latency = t1 - t0;   // ✅ latence en ms
       } else {
-        DEBUG_PRINT("\nPing FAIL, status=%i",(int)reply.status);
-        params->callback(params->echo);  // Appel du callback en cas de succès
+        params->echo->alive = false;
       }
     }
 
+    params->callback(params->echo);  // Appel du callback en cas de succès
+
   }else {
-    DEBUG_PRINT("\nasyncPing(%s) hostname unresovable",params->echo.host.c_str());
+    DEBUG_PRINT("\nasyncPing(%s) hostname unresovable\n",params->echo->host.c_str());
   }
 }
 

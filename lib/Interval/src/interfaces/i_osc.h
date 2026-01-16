@@ -12,6 +12,12 @@
 
 #define ADDRESS_OSCPORT "/oscport/%d"
 
+class OSCPing: public PingEcho{
+  public:
+    OSCPing(String host, String _command):PingEcho(host), pingCommand(_command){}
+    String pingCommand; //the command used to monitor the connection
+};
+
 class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should derive OSCInterface
 
   public:
@@ -19,9 +25,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
     FreeTextAddress* addressOSCport = new FreeTextAddress(ADDRESS_OSCPORT,"OSCport", REGEX_0to65535);
-
-    IPAddress OSC_IP;
-    String OSC_ping;        // the command used to monitor the connection
+    
     int OSC_clientPort;
     int OSC_localPort;
 
@@ -29,10 +33,13 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual const String& getDataProviderNameForThisInterface(){ return interfaceName;}
 
-    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String ping, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_ping(ping), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
       icon = "g";     
 
-      if (!OSC_IP.fromString(_OSC_IPaddress)) OSC_IP = IPAddress(0,0,0,0);
+      destination = new OSCPing(_OSC_IPaddress,pingCommand);
+      
+
+      if (!(OSCPing*)destination->ip.fromString(_OSC_IPaddress)) destination->ip = IPAddress(0,0,0,0);
 
       registerDataSetAddress(addressOSCport);
       registerDataSetAddress(&addressIP);           // global      
@@ -44,19 +51,23 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     }
 
+    ~NetworkOSC(){
+      delete destination;
+    }
+
     virtual void serializeProperties(JsonArray& properties) override{
       char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
       sprintf(buf,ADDRESS_OSCPORT,OSC_clientPort);
       properties.add(String(buf)); 
       free(buf);
 
-      buf = (char*)malloc((strlen(ADDRESS_IP)+OSC_IP.toString().length())*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_IP,OSC_IP.toString());
+      buf = (char*)malloc((strlen(ADDRESS_IP)+destination->ip.toString().length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,destination->ip.toString());
       properties.add(String(buf)); 
       free(buf);    
       
-      buf = (char*)malloc((strlen(ADDRESS_PING)+OSC_ping.length())*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_IP,OSC_ping);
+      buf = (char*)malloc((strlen(ADDRESS_PING)+((OSCPing*)destination)->pingCommand.length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,((OSCPing*)destination)->pingCommand);
       properties.add(String(buf)); 
       free(buf);        
     }
@@ -76,14 +87,14 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
         IPAddress ip;
         if (ip.fromString(inputStr)){
-          if (OSC_IP != ip)  state.trigger.handleChange = true;
-          OSC_IP = ip;      
+          if (destination->ip != ip)  state.trigger.handleChange = true;
+          destination->ip = ip;      
         }else{
           DEBUG_PRINT("\ninvalid IP address:%s",inputStr);
         }
       }else if (sscanf(property, ADDRESS_PING, &inputStr)) {
-        if (OSC_ping != inputStr)  state.trigger.handleChange = true;
-        OSC_ping = inputStr;    
+        if (((OSCPing*)destination)->pingCommand != inputStr)  state.trigger.handleChange = true;
+        ((OSCPing*)destination)->pingCommand = inputStr;    
       }
     }        
 
@@ -143,7 +154,25 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
             }else{
               char addr[64];
               osc.getAddress(addr, 0);
-              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,OSC_IP.toString().c_str(),OSC_clientPort);
+              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_clientPort);
+              if ( ((OSCPing*)destination)->pingCommand == addr ){
+                /* we got a pingCommand echo, so we calculate the latency
+                Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
+                ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
+                */
+                unsigned long latency = millis()-lastQueryTime;
+
+                // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
+                if (latency > 500) latency = destination->latency;
+
+                // α entre 0.1 (très lisse) et 0.3 (réactif)
+                #define LAT_ALPHA 0.2f                
+                destination->latency =
+                    destination->latency * (1.0f - LAT_ALPHA) +
+                    latency * LAT_ALPHA;                
+
+                DEBUG_PRINT("\t latency: %i",destination->latency);
+              }
             }              
             // ✔ message valide
             // retour : au moins 1, même si aucun argument
@@ -160,7 +189,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       //DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
       state.code = IF_READY;      
       state.label = IF_STATE_CONNECTED;
-      state.subState = OSC_IP.toString();      
+      state.subState = destination->ip.toString();      
       state.details = *lang.getString("Connected");
       state.led = "green";
       state.progress = -1;      
@@ -171,7 +200,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       // network is connected but not the OSC device is not answering
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
-      state.subState = OSC_IP.toString();      
+      state.subState = destination->ip.toString();      
       state.details = *lang.getString("Trying to connect");
       state.led = "red medium";
       state.progress = -1;      
@@ -179,7 +208,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     void ping(){
       lastQueryTime = millis();       
-      OSCMessage msg(OSC_ping.c_str());
+      OSCMessage msg(((OSCPing*)destination)->pingCommand.c_str());
       sendOSCMessage(&msg);
     }
 
@@ -187,7 +216,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       
       bool success = false;
 
-      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),OSC_IP.toString().c_str(),OSC_clientPort);
+      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_clientPort);
 
       UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);
       // sempahore protected section
@@ -200,7 +229,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       UDP* udp = udpSlot->udp;
 
       if (udp != nullptr){
-        udp->beginPacket(OSC_IP, OSC_clientPort);
+        udp->beginPacket(destination->ip, OSC_clientPort);
         msg->send(*udp);
         udp->endPacket();
         success = true;

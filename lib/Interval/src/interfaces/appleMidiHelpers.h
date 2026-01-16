@@ -72,6 +72,11 @@ public:
   virtual void begin(){
     DEBUG_PRINT("\nmidiClient(%s)->begin()",session->getName());
     session->begin();    
+
+    session->setHandleReceivedRtp([](const APPLEMIDI_NAMESPACE::ssrc_t & ssrc, const APPLEMIDI_NAMESPACE::Rtp_t & rtp, const int32_t& latency) {
+      //Serial.printf("\nsession->setHandleReceivedRtp latency: %i",latency);
+    });
+
   }
 
   void read() override {
@@ -107,7 +112,7 @@ public:
   }
 
   virtual void setHandleControlChange(void (*fptr)(byte , byte , byte )){
-    appleMIDI->setHandleControlChange(fptr);
+    appleMIDI->setHandleControlChange(fptr);    
   }
   /////////////////////////
   void sendNoteOn(byte note, byte velocity, byte channel) override {

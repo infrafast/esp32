@@ -732,7 +732,7 @@ class Network : public HWComponent2State{
     IPAddress IP, gateway,subnet;
     //HttpClient* http = NULL;    
     Client* client = NULL;   
-    PingEcho internet; 
+    PingEcho internet = PingEcho("8.8.8.8"); 
     uint16_t LANlatency = 38;
 
     bool ethEnabled = true;
@@ -755,7 +755,7 @@ class Network : public HWComponent2State{
     virtual WebSocketReadyState clientSocketState()=0;
     virtual EthernetLinkStatus getLink() = 0;
     virtual String getConnectedDeviceIP() = 0;
-    virtual void asyncPing(PingEcho& echo, PingCallback callBack)=0;
+    virtual void asyncPing(PingEcho* echo, PingCallback callBack)=0;
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
 
     virtual void init(){
@@ -1380,13 +1380,13 @@ class WiFiEth : public Network{
       return refreshed;
     }
 
-    void onInternetPing(PingEcho& echo) {
+    void onInternetPing(PingEcho* echo) {
         if (internetCallback !=nullptr) internetCallback(echo);
-        DEBUG_PRINT("\n\n\n\t\t\t * * * * onInternetPing %s * * * *",echo.alive?"OK":"fail");        
+        DEBUG_PRINT("\n\n\n\t\t\t * * * * onInternetPing %s latency:%i * * * *",echo->alive?"OK":"fail",echo->latency);        
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
-    virtual void asyncPing(PingEcho& echo, PingCallback callBack) {
+    virtual void asyncPing(PingEcho* echo, PingCallback callBack) {
       PingParameters* params = new PingParameters;
       params->echo = echo;
       params->callback = callBack;
@@ -1398,7 +1398,7 @@ class WiFiEth : public Network{
         2,                // Priorité
         &pingTaskHandle   // Handle de la tâche
       );
-      DEBUG_PRINT("\nasyncPing(%s) task created",echo.host.c_str());
+      DEBUG_PRINT("\nasyncPing(%s) task created",echo->host.c_str());
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
@@ -1442,14 +1442,13 @@ class WiFiEth : public Network{
       DEBUG_PRINT("\n\n\tcheckInternet => ");
       // Utiliser des lambdas pour passer les méthodes membres comme callbacks
       asyncPing(
-        internet,
-        [&](PingEcho echo) { onInternetPing(echo); }
+        &internet,
+        [&](PingEcho* echo) { onInternetPing(echo); }
       );
       // latency
       //if (LAN) 
       //LANlatency = 20;
       //else 
-      DEBUG_PRINT("\nInternet latency:%i",internet.latency);
     }
 
     void restoreWiFiSSID(){
@@ -1568,7 +1567,7 @@ class  NoNetwork: public Network{
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
     virtual EthernetLinkStatus getLink(){return LinkOFF;}
     virtual String getConnectedDeviceIP(){return "";}
-    virtual void asyncPing(PingEcho& echo, PingCallback callBack){}
+    virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
 
 };
@@ -1607,7 +1606,7 @@ class AccessPoint : public Network{
     virtual UdpSlot* getUDPslot(int i){return nullptr;}
     virtual int requestUDPslotID(int port){return 0;}
     virtual void stopAllUDP(){}
-    virtual void asyncPing(PingEcho& echo, PingCallback callBack){};
+    virtual void asyncPing(PingEcho* echo, PingCallback callBack){};
     virtual bool asyncConnect(AsyncHttpClient *clientParam){ return false;}
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}
     virtual void clientSocketSend(const char *message){};

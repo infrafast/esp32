@@ -385,8 +385,6 @@ class DINMIDIInterface: public MIDIInterface{
 
 };
 
-
-
 #define APPLEMIDI_INTERFACE "AppleMIDI"
 class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
   #define CONFIG_APPLE "voidAppleMidiParam"
@@ -418,7 +416,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       state.subState = IF_STATE_CONNECTED;
       state.details = String(name);// + concatStrings(" (", hwm.network->midiClient->getParticipantDetails(ssrc), ")");
       state.progress = -1;
-      state.led = "green";
+      state.led = "green";     
     }    
 
     void handleDisconnected(const ssrc_t& ssrc) {
@@ -570,6 +568,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       midiClient->setHandleException(OnAppleMidiExceptionStatic);
       midiClient->setHandleSystemExclusive(handleSysexStatic);
       midiClient->setHandleControlChange(handleChangeControlStatic);
+
       return true;
     }
 
