@@ -388,13 +388,82 @@ class DINMIDIInterface: public MIDIInterface{
 #define APPLEMIDI_INTERFACE "AppleMIDI"
 class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
   #define CONFIG_APPLE "voidAppleMidiParam"
+  #define ADDRESS_MIDISESSION   "/session/%d"
+  #define ADDRESS_RTPPORT "/rtpPort/%d"
+
   public: 
+
+    FreeTextAddress* addressAppleMidiPort = new FreeTextAddress(ADDRESS_RTPPORT,"rtpPort", REGEX_0to65535);
+    DropDownAddress* addressAppleMidiSession = new DropDownAddress(ADDRESS_MIDISESSION);
 
     NetworkInterfaceMonitor netHelper = NetworkInterfaceMonitor(this,this);
 
+    int appleMidiPort;
+    int sessionType;
+    
     AppleMIDIInterface(bool _configurable):MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
+
+      registerDataSetAddress(addressAppleMidiPort);
+      registerDataSetAddress(addressAppleMidiSession);
+      registerDataSetAddress(&addressIP);           // global     
+      
+      destination = new PingEcho("0.0.0.0");
+
+      jsonInputRepo.add(this); 
+
     }
+
+
+    ~AppleMIDIInterface(){
+      delete destination;
+    }    
+
+    //virtual const String& getDataProviderNameForThisInterface(){ return interfaceName;}   // we are our own provider do not forget it!
+
+    virtual void serializeProperties(JsonArray& properties) override{
+      char* buf = (char*)malloc((strlen(ADDRESS_RTPPORT)+6)*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_RTPPORT,appleMidiPort);
+      properties.add(String(buf)); 
+      free(buf);
+
+      buf = (char*)malloc((strlen(ADDRESS_IP)+destination->ip.toString().length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,destination->ip.toString());
+      properties.add(String(buf)); 
+      free(buf);         
+    
+      buf = (char*)malloc((strlen(ADDRESS_MIDISESSION)+6)*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_MIDISESSION,sessionType);
+      properties.add(String(buf)); 
+      free(buf);
+
+    }
+
+    virtual void handlePropertyChange(){
+      DEBUG_PRINT("\n%s::handlePropertyChange() : call disconnect",interfaceName.c_str());
+      disconnectNetwork();
+    }
+
+    virtual void restoreProperty(const char* property){
+      uint16_t intVal;
+      #define MAXLENGHTINPUT 32
+      char inputStr[MAXLENGHTINPUT];      
+      if (sscanf(property, ADDRESS_RTPPORT, &intVal) == 1) {
+        if (intVal != appleMidiPort)   state.trigger.handleChange = true;
+        appleMidiPort = intVal;       
+      }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
+        IPAddress ip;
+        if (ip.fromString(inputStr)){
+          if (destination->ip != ip)  state.trigger.handleChange = true;
+          destination->ip = ip;      
+        }else{
+          DEBUG_PRINT("\ninvalid IP address:%s",inputStr);
+        }
+      }else if (sscanf(property, ADDRESS_MIDISESSION, &intVal) == 1) {
+        if (intVal != sessionType)   state.trigger.handleChange = true;
+        sessionType = intVal;       
+      }
+    }      
 
     virtual void monitor(){     
       netHelper.monitor();

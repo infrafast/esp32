@@ -31,7 +31,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     OSCMessage osc;
 
-    virtual const String& getDataProviderNameForThisInterface(){ return interfaceName;}
+    virtual const String& getDataProviderNameForThisInterface(){ return interfaceName;}   // we are our own provider do not forget it!
 
     NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
       icon = "g";     

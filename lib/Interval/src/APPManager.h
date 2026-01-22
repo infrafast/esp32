@@ -751,21 +751,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
 
       // *********************************
-      // SHORTCUTS
-      // *********************************
-      //*buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":[\"freetext\"]}]}]";          
-    
-      /*jumpToSD.registerDataSetAddress(dsStripIDs.address);
-      macroSD.registerDataSetAddress(dsMacroNames.address);
-      macroSD.registerDataSetAddress(dsDropDownActions.address);
-
-      advancedSD.registerDataSetAddress(dsCommand.address);
-      
-      jsonInputRepo.add(&jumpToSD);     
-      jsonInputRepo.add(&macroSD);     
-      jsonInputRepo.add(&advancedSD);  */
-
-      // *********************************
       // SKELETONS & DATA SETS
       // *********************************
       //
@@ -1544,8 +1529,12 @@ void setup() {
       String tempJsonString="";
 
       DEBUG_PRINT("\nserializing dataRepository");
-      JsonArray ds = doc["datasets"].to<JsonArray>();  
-      dataRepository.serialize(&ds);       
+      /*JsonArray ds = doc["datasets"].to<JsonArray>();  
+      dataRepository.serialize(&ds);       */
+
+      JsonObject ds = doc.createNestedObject("datasets");
+      dataRepository.serialize(ds);
+
 
       DEBUG_PRINT("\nserializing input (shortcuts & interfaces fields)");
       JsonArray ji = doc["jsonInput"].to<JsonArray>();
@@ -3253,17 +3242,20 @@ void setup() {
             }else{
               // then resend the banks with updated datasets
 
-              //{bulkConfig:{$datasets,$banks}}';
-              jsonAnswer.callback = "bulkConfig";          
-
               JsonDocument doc;      
 
-              JsonArray ds = doc["datasets"].to<JsonArray>();  
-              dataRepository.serialize(&ds); 
+              /*JsonArray ds = doc["datasets"].to<JsonArray>();  
+              dataRepository.serialize(&ds); */
+              JsonObject ds = doc.createNestedObject("datasets");
+              dataRepository.serialize(ds);
+
 
               String banksString = serializeBanks();      
               doc["banks"]=banksString;
                   
+              //{bulkConfig:{$datasets,$banks}}';
+              jsonAnswer.callback = "bulkConfig";          
+
               serializeJson(doc, jsonAnswer.value);  
               removeJsonQuote(&jsonAnswer.value);              
               

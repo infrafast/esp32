@@ -38,7 +38,7 @@ class MixerServer: public HWComponent2State{
 
     String name;
     MixerInterface *mixerInterface;  // Pointeur vers l'interface abstraite (HAL)  
-    DataRepository* dataRepository;
+    DataRepository* stripDataRepository;
     OSCInterface* osc;
 
     MixerServer() : HWComponent2State(0){}
@@ -48,7 +48,7 @@ class MixerServer: public HWComponent2State{
     void init(/*Config* conf, Network* net*/){      
       //network = net;     
       //config = conf;
-      dataRepository = &app.dataRepository;
+      stripDataRepository = &app.stripDataRepository;
       osc = new OSCInterface("mixerOSC",NO_CAPTURE);
       disconnect(); // this sets default mixer as offline and force trying to reconnect at next refresh
       

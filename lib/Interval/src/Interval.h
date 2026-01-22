@@ -71,12 +71,7 @@ class PingEcho{
     uint16_t latency = 30;      // normal latency on TCP/IP
     String host;
     IPAddress ip;  
-    PingEcho(String h):host(h){
-      DEBUG_PRINT("\nPingEcho created");
-    }
-    ~PingEcho(){
-      DEBUG_PRINT("\nPingEcho deleted");
-    }   
+    PingEcho(String h):host(h){}
 };
 
 typedef std::function<void(PingEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité
@@ -710,7 +705,7 @@ class JsonList{
       //DEBUG_PRINT("\ngetString(%s,%s)=>",name.c_str(),defaultValue.c_str());        
       if (index < 0) {
         noToken = defaultValue;
-        DEBUG_PRINT("no token");
+        DEBUG_PRINT("\tno token");
         return &noToken;
       } else {        
         KeyValue* kv = keyValues.get(index);
@@ -2242,7 +2237,7 @@ void utilsScreenBuilder(uint8_t state){
       addLeftRightIcons();  
       app.iconPending[0] = ICON_TIMER;
       app.iconPending[1] = " ";
-      gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&GUI::midScreenHoriz, &GUI::midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
+      //gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&GUI::midScreenHoriz, &GUI::midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
       gui.add(new TextArea(lang.getString("Open browser"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Label(&hwm.configURL, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,30,64,&GUI::defaultFcolor,&GUI::defaultBcolor));      
       app.leftIcon = ICON_LAPTOP;

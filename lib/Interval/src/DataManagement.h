@@ -87,19 +87,21 @@ class FreeTextAddress: public Address{
 FreeTextAddress addressIP = FreeTextAddress(ADDRESS_IP, "ip", REGEX_IPADDRESS);    
 FreeTextAddress addressPing = FreeTextAddress(ADDRESS_PING, "ping", REGEX_STRING);    
 
+String errorDatasetOOR = "outOfRange";
+
 class DataSet{
   public:
     String name ="";
     Address* address = nullptr;
-
-    String errorDatasetOOR = "outOfRange";
 
     DataSet(Address* adress, const String& name);
     ~DataSet(); 
 
     virtual uint16_t getSize() = 0;
     virtual const String* getValuePtr(uint16_t i) = 0;
-    virtual String serialize();
+    virtual JsonObject serialize(JsonObject o);
+    void serializeContent(JsonObject o);
+
 
 };
 
@@ -126,14 +128,35 @@ class DataRepository{
     void removeDataSet(DataSet*);
 
 
-    void serialize(JsonArray* jsonDataSets){
+    /*void serializeOLD(JsonArray* jsonDataSets){
       for (uint8_t i=0;i<dataSets.size();i++){        
         //DEBUG_PRINT("\nDataRepository::serialize(*): %d ",i);
         DataSet* ds = dataSets[i];
         //DEBUG_PRINT("%s %s",ds == nullptr?"null":ds->name.c_str(),ds->address == nullptr?"null":ds->address->pattern.c_str());
         jsonDataSets->add(ds->serialize());
       }
+    }*/
+    
+
+    void serialize(JsonObject jsonByProvider) {
+      for (uint8_t i = 0; i < dataSets.size(); i++) {
+        DataSet* ds = dataSets[i];
+        if (!ds || !ds->name) continue;
+
+        JsonArray arr;
+        if (jsonByProvider.containsKey(ds->name)) {
+          arr = jsonByProvider[ds->name].as<JsonArray>();
+        } else {
+          arr = jsonByProvider.createNestedArray(ds->name);
+        }
+
+        JsonObject o = arr.createNestedObject();
+        ds->serializeContent(o);   // ✅ factorisation propre
+      }
     }
+
+
+
 
     int size(){
       return dataSets.size();
@@ -153,42 +176,32 @@ DataSet::~DataSet() {
   dataRepository.removeDataSet(this);
 };
 
-String DataSet::serialize(){
-  JsonDocument doc;
-  doc["provider"] = name;
+
+void DataSet:: serializeContent(JsonObject o) {
+  if (address == nullptr) return;
+
+  o["address"] = address->pattern;
 
   uint16_t n = getSize();
-
-  if (address == nullptr) {
-    doc["address"] = "undef";
-    doc["values"] = "undef";
-  }else{
-    doc["address"] = address->pattern;
-    
-    // a dataset either return an array of value from a data provider (size>0)
-    // or a no value (size=0) which is the name of a javascript function callback    
-    if (n>0){
-      // {"provider":"system","address":"/provider/Mixer/%s","values":["X+Mseries-Network(OSC)","MixingStation"]}
-      JsonArray values = doc["values"].to<JsonArray>();
-      for (uint8_t i=0; i< n; i++) values.add(*getValuePtr(i));
-    }else{
-      /*
-      {"provider":"system","address":"/module/name/%s","values":"getModuleNames"}    => getModuleNames
-          or
-      {"provider":"system","address":"/midi/channel/%d","values":{"getNvalues":{"size":16,"label":"channel"}}} => {"getNvalues":{"size":16,"label":"channel"}}
-                                              with: getNvalues is the javacript function to call and {"size":16,"label":"channel"} are the parameters
-      */
-      doc["values"] = *getValuePtr(0);
+  if (n > 0) {
+    JsonArray values = o.createNestedArray("values");
+    for (uint16_t k = 0; k < n; k++) {
+      const String* p = getValuePtr(k);
+      values.add(p ? *p : "");
     }
+  } else {
+    const String* p0 = getValuePtr(0);
+    o["values"] = p0 ? *p0 : "";
   }
-  String data;
-  serializeJson(doc,data);
-  removeJsonQuote(&data);      
+}
 
-  //DEBUG_PRINT("\nDataSet::serialize() <%s,%s> size:%d ==> %s",name.c_str(),doc["address"].as<String>().c_str(),n,data.c_str());
 
-  return data;
-} 
+JsonObject DataSet:: serialize(JsonObject o) {
+  o["provider"] = name;
+  serializeContent(o);
+  return o;
+}
+
 
 class DynamicDataSet : public DataSet{
   public:
@@ -289,7 +302,7 @@ class SerializableDataset {
         retVal = ds->getValuePtr(index);
       }
 
-      //DEBUG_PRINT("<%s>",retVal->c_str());
+      DEBUG_PRINT("\nSerializableDataset::getValuePtr<%s>",retVal->c_str());
 
       return retVal;
     }    

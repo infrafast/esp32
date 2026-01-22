@@ -220,7 +220,7 @@ class DataSetSynced: public DataSet{
 class MixerInterface: public DeviceInterface{
   public:
     String model;
-    DataRepository* dataRepository = nullptr;
+    DataRepository* stripDataRepository = nullptr;
     String addresses[ADDR_MAX];
 
     String interfaceSubState = "";
@@ -238,7 +238,7 @@ class MixerInterface: public DeviceInterface{
     DataSetSynced* mainNames;
 
     MixerInterface(String _model, uint8_t _capture = CAPTURE_OUT):DeviceInterface(_model,_capture){  
-      dataRepository = &app.dataRepository;
+      stripDataRepository = &app.stripDataRepository;
       if (_model == "") model = MIXING_STATION_MODEL;
       else model = _model;          
 
@@ -267,7 +267,7 @@ class MixerInterface: public DeviceInterface{
       mainNames = new DataSetSynced(MS_MAIN_SHORTNAME,ADDRESS_MAINNAME, INPUTSELECT,mainSize,UNSYNC_PATTERN "MAIN",1);
 
       dsNames = { chNames, busNames, auxNames, fxRetNames,  mainNames};
-      for (const auto& dsName : dsNames) dataRepository->addDataSet(dsName);      
+      for (const auto& dsName : dsNames) stripDataRepository->addDataSet(dsName);      
 
 
     }
@@ -308,7 +308,7 @@ class MixerInterface: public DeviceInterface{
 
     virtual ~MixerInterface(){
       for (const auto& dsName : dsNames){
-        dataRepository->removeDataSet(dsName);
+        stripDataRepository->removeDataSet(dsName);
         delete dsName;
       } 
       //DEBUG_PRINT("\n\n~MixerInterface()");

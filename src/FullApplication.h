@@ -37,8 +37,6 @@
 
 #define ADDRESS_MACRONAME   "/macro/name/%s"
 #define ADDRESS_ACTION      "/action/%s"
-#define ADDRESS_IP          "/ip/%s"
-#define ADDRESS_PORT        "/port/%s"
 #define ADDRESS_MESSAGE     "/message/%s"
 
 ///////////////////////////////////////////////////////////////////
@@ -1017,11 +1015,11 @@ Serial.println(velocity);
   stripFactory.add(stripChGainSkel);
   stripFactory.add(stripOSCSkel);*/
 
-  /*app.dataRepository.addDataSet(&macroNames);   
-  app.dataRepository.addDataSet(&actionPlay);  
-  app.dataRepository.addDataSet(&ipDS);  
-  app.dataRepository.addDataSet(&portDS);  
-  app.dataRepository.addDataSet(&msgDS);  */
+  /*app.stripDataRepository.addDataSet(&macroNames);   
+  app.stripDataRepository.addDataSet(&actionPlay);  
+  app.stripDataRepository.addDataSet(&ipDS);  
+  app.stripDataRepository.addDataSet(&portDS);  
+  app.stripDataRepository.addDataSet(&msgDS);  */
 
   app.registerCallback(eventHandling);
 
