@@ -40,19 +40,19 @@ typedef Strip* (*StripBuilderCallback)(/*String values*/);
 
 #define MAXNUMBER_OF_SKELPROPERTY 10
 
-class StripSkeleton: public SerializableDataset{
+class StripSkeleton: public SerializableParameters{
   public:
     unsigned char icon;
     StripBuilderCallback constructor;
     //JsonObject variable;
-    using SerializableDataset::serialize;  // 🔴 réexpose String serialize()
+    using SerializableParameters::serialize;  // 🔴 réexpose String serialize()
 
     StripSkeleton(String id, String g, StripBuilderCallback b, unsigned char i='!');
 
     // 🚩 Redéfinition : on enrichit simplement le JsonObject
     void serialize(JsonObject& json) override {
         // Appelle la version de base
-        SerializableDataset::serialize(json);
+        SerializableParameters::serialize(json);
         // Ajoute la donnée spécifique
         json[C_ICON] = icon;
     }
@@ -114,7 +114,7 @@ class StripFactory{
     }
 }stripFactory;
 
-StripSkeleton::StripSkeleton(String id, String g, StripBuilderCallback c, unsigned char i):SerializableDataset(id,g),constructor(c){
+StripSkeleton::StripSkeleton(String id, String g, StripBuilderCallback c, unsigned char i):SerializableParameters(id,g, &dataRepo),constructor(c){
   stripFactory.add(this);
 }
 
@@ -180,7 +180,7 @@ class Strip {
     }
   
     virtual uint8_t getNumberOfProperties(){
-      return skeleton->dataSetAddresses.size();      
+      return skeleton->parameterAddresses.size();      
     }
 
     virtual bool actionCallback(uint8_t trigger)=0;

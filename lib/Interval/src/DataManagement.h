@@ -126,17 +126,7 @@ class DataRepository{
 
     bool addDataSet(DataSet*);
     void removeDataSet(DataSet*);
-
-
-    /*void serializeOLD(JsonArray* jsonDataSets){
-      for (uint8_t i=0;i<dataSets.size();i++){        
-        //DEBUG_PRINT("\nDataRepository::serialize(*): %d ",i);
-        DataSet* ds = dataSets[i];
-        //DEBUG_PRINT("%s %s",ds == nullptr?"null":ds->name.c_str(),ds->address == nullptr?"null":ds->address->pattern.c_str());
-        jsonDataSets->add(ds->serialize());
-      }
-    }*/
-    
+  
 
     void serialize(JsonObject jsonByProvider) {
       for (uint8_t i = 0; i < dataSets.size(); i++) {
@@ -155,25 +145,22 @@ class DataRepository{
       }
     }
 
-
-
-
     int size(){
       return dataSets.size();
     }
 
   private:
-    //LinkedList<DataSet*> dataSets = LinkedList<DataSet*>();
     std::vector<DataSet*> dataSets;
 
-}dataRepository;
+}dataRepo,    // used by skeletons, Shortcuts, SystemInterface
+IFconfigRepo; // used by Interfaces
 
 DataSet::DataSet(Address* addr, const String& _name): address(addr), name(_name) {
-    dataRepository.addDataSet(this);
+    dataRepo.addDataSet(this);
 };
 
 DataSet::~DataSet() {
-  dataRepository.removeDataSet(this);
+  dataRepo.removeDataSet(this);
 };
 
 
@@ -246,23 +233,23 @@ void DataRepository::removeDataSet(DataSet* ds) {
 
 #define DATASET_PROPERTIES "properties"
 
-class SerializableDataset {
+class SerializableParameters {
   public:
     String name;
     String group;
 
-    SerializableDataset(const String& n, const String& g) : name(n), group(g) {}    
+    SerializableParameters(const String& n, const String& g, DataRepository* r) : name(n), group(g), repo(r ) {}    
 
     bool registerDataSetAddress(Address* address){
-      dataSetAddresses.push_back(address);
+      parameterAddresses.push_back(address);
       return true;
     }
 
     Address* getDataSetAddress(size_t index) const {
-      if (index >= dataSetAddresses.size()){
+      if (index >= parameterAddresses.size()){
         return nullptr;
       }
-      return dataSetAddresses[index];
+      return parameterAddresses[index];
     }
 
     String serialize(){
@@ -280,7 +267,7 @@ class SerializableDataset {
         json[name] = group;
 
         JsonArray properties = json[DATASET_PROPERTIES].to<JsonArray>();
-        for (Address* address : dataSetAddresses) {
+        for (Address* address : parameterAddresses) {
             if (!address) continue;
 
             JsonDocument prop;
@@ -296,18 +283,19 @@ class SerializableDataset {
       const String *retVal = &emptyString;
 
       //DEBUG_PRINT("\nSerializableDataset<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
-      DataSet* ds = dataRepository.getDataSet(provider, address);
+      DataSet* ds = repo->getDataSet(provider, address);
 
       if (ds != nullptr){
         retVal = ds->getValuePtr(index);
       }
 
-      DEBUG_PRINT("\nSerializableDataset::getValuePtr<%s>",retVal->c_str());
+      DEBUG_PRINT("\nSerializableParameters::getValuePtr<%s>",retVal->c_str());
 
       return retVal;
     }    
 
-    std::vector<Address*> dataSetAddresses;
+    std::vector<Address*> parameterAddresses;
+    DataRepository* repo;
 
 };
 
@@ -315,16 +303,16 @@ class SerializableDataset {
 
 class JsonTemplateRepository{
   public:
-    std::vector<SerializableDataset*> jsonTemplateRepo;
+    std::vector<SerializableParameters*> jsonTemplateRepo;
 
     void serialize(JsonArray* jsonTPLArray){
       for (uint8_t i=0;i<jsonTemplateRepo.size();i++){
-        SerializableDataset* jsonTPL = jsonTemplateRepo[i];
+        SerializableParameters* jsonTPL = jsonTemplateRepo[i];
         jsonTPLArray->add(jsonTPL->serialize());
       }
     }
 
-    bool add(SerializableDataset* sd){
+    bool add(SerializableParameters* sd){
       jsonTemplateRepo.push_back(sd);
       return true;
     }

@@ -250,9 +250,9 @@ class Shortcuts: public DataProvider{
   public:
 
     /////////////// SHORTCUTS ////////////////////
-    SerializableDataset jumpToSD = SerializableDataset("jump", SHORTCUT_GROUP);
-    SerializableDataset macroSD = SerializableDataset("macro", SHORTCUT_GROUP);
-    SerializableDataset advancedSD = SerializableDataset("advanced", SHORTCUT_GROUP);
+    SerializableParameters jumpToSD = SerializableParameters("jump", SHORTCUT_GROUP, &dataRepo);
+    SerializableParameters macroSD = SerializableParameters("macro", SHORTCUT_GROUP, &dataRepo);
+    SerializableParameters advancedSD = SerializableParameters("advanced", SHORTCUT_GROUP, &dataRepo);
 
 
     DynamicDataSet dsStripIDs = DynamicDataSet(new DropDownAddress(ADDRESS_STIPID),this);
@@ -1528,12 +1528,13 @@ void setup() {
       JsonDocument doc;      
       String tempJsonString="";
 
-      DEBUG_PRINT("\nserializing dataRepository");
-      /*JsonArray ds = doc["datasets"].to<JsonArray>();  
-      dataRepository.serialize(&ds);       */
-
+      DEBUG_PRINT("\nserializing dataRepo");
       JsonObject ds = doc.createNestedObject("datasets");
-      dataRepository.serialize(ds);
+      dataRepo.serialize(ds);
+
+      DEBUG_PRINT("\nserializing IFconfig");
+      JsonObject ifcfg = doc.createNestedObject("ifconfigs");
+      IFconfigRepo.serialize(ifcfg);
 
 
       DEBUG_PRINT("\nserializing input (shortcuts & interfaces fields)");
@@ -3245,9 +3246,9 @@ void setup() {
               JsonDocument doc;      
 
               /*JsonArray ds = doc["datasets"].to<JsonArray>();  
-              dataRepository.serialize(&ds); */
+              dataRepo.serialize(&ds); */
               JsonObject ds = doc.createNestedObject("datasets");
-              dataRepository.serialize(ds);
+              dataRepo.serialize(ds);
 
 
               String banksString = serializeBanks();      

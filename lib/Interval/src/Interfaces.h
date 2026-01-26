@@ -8,7 +8,7 @@
 
 #define ADDRESS_CHANGETOPARAMETERNAME "/config/%s"
 
-class DeviceInterface  : public SerializableDataset{
+class DeviceInterface  : public SerializableParameters{
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
   #define INTERFACE_EXPOSED     "exposed"
@@ -419,7 +419,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
   #define GROUP_INTERFACE_SYSTEM "utils"
   public:    
 
-    SerializableDataset systemDS = SerializableDataset(SYSTEM_INTERFACE, GROUP_INTERFACE_SYSTEM);   // one instance
+    SerializableParameters systemDS = SerializableParameters(SYSTEM_INTERFACE, GROUP_INTERFACE_SYSTEM, &dataRepo);   // one instance
         
     DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_STRING),this);  // create as many parameters as required
 
@@ -510,7 +510,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     
 }systemInterface(false);
 
-DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable), SerializableDataset(name,_group){
+DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable), SerializableParameters(name,_group,&IFconfigRepo){   // the interfaces uses its own repository to store parameters to avoid conflict with data sets groups
   interfaceRepo.interfaces.push_back(this);
   interfaceName = name;
   group = _group;
