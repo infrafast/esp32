@@ -115,9 +115,22 @@ class DataSet{
     virtual uint16_t getSize() = 0;
     virtual const String* getValuePtr(uint16_t i) = 0;
     virtual JsonObject serialize(JsonObject o);
-    void serializeContent(JsonObject o);
+    virtual void serializeContent(JsonObject o);
 
 
+};
+
+class ConfigDataSet : public DataSet{
+  public:
+    ConfigDataSet(Address* addr, const String& name, DataRepository* targetRepo = nullptr)
+      : DataSet(addr, name, targetRepo) {}
+
+    virtual uint16_t getSize() { return 0; }
+    virtual const String* getValuePtr(uint16_t) { return &emptyString; }
+    virtual void serializeContent(JsonObject o) {
+      if (address == nullptr) return;
+      o["address"] = address->pattern;
+    }
 };
 
 class DataRepository{
@@ -258,10 +271,23 @@ class SerializableParameters {
     String name;
     String group;
 
-    SerializableParameters(const String& n, const String& g, DataRepository* r) : name(n), group(g), repo(r ) {}    
+    SerializableParameters(const String& n, const String& g, DataRepository* r, bool autoRegisterConfigDataSets = false)
+      : name(n),
+        group(g),
+        repo(r),
+        registerConfigDataSets(autoRegisterConfigDataSets) {}
+    virtual ~SerializableParameters() {
+      for (DataSet* ds : ownedDataSets) {
+        delete ds;
+      }
+      ownedDataSets.clear();
+    }
 
     bool registerDataSetAddress(Address* address){
       parameterAddresses.push_back(address);
+      if (registerConfigDataSets) {
+        ownedDataSets.push_back(new ConfigDataSet(address, name, repo));
+      }
       return true;
     }
 
@@ -310,7 +336,9 @@ class SerializableParameters {
     }    
 
     std::vector<Address*> parameterAddresses;
+    std::vector<DataSet*> ownedDataSets;
     DataRepository* repo;
+    bool registerConfigDataSets = false;
 
 };
 
