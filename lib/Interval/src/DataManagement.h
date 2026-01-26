@@ -53,14 +53,26 @@ class Address {
 
     String serialize(){      
       JsonDocument doc;
-      //DEBUG_PRINT("\n%s.serialize() => ",pattern.c_str());
-      rules = doc[pattern].to<JsonArray>();     
-      rules[(int)ADDRESS_TYPE] = object;             // base      
-      serializeProperties();
+      serializeTo(doc, doc.as<JsonObject>());
       String data;
       serializeJson(doc, data);
       //DEBUG_PRINT("\t%s",data.c_str());
       return data;
+    }
+
+    void serializeTo(JsonDocument& doc, JsonObject parent){
+      //DEBUG_PRINT("\n%s.serialize() => ",pattern.c_str());
+      rules = parent[pattern].to<JsonArray>();
+      rules[(int)ADDRESS_TYPE] = object;             // base      
+      serializeProperties();
+      doc.shrinkToFit();
+    }
+
+    void serializeTo(JsonArray properties){
+      JsonObject entry = properties.createNestedObject();
+      rules = entry[pattern].to<JsonArray>();
+      rules[(int)ADDRESS_TYPE] = object;
+      serializeProperties();
     }
 
 };
@@ -89,12 +101,15 @@ FreeTextAddress addressPing = FreeTextAddress(ADDRESS_PING, "ping", REGEX_STRING
 
 String errorDatasetOOR = "outOfRange";
 
+class DataRepository;
+
 class DataSet{
   public:
     String name ="";
     Address* address = nullptr;
+    DataRepository* repo = nullptr;
 
-    DataSet(Address* adress, const String& name);
+    DataSet(Address* adress, const String& name, DataRepository* targetRepo = nullptr);
     ~DataSet(); 
 
     virtual uint16_t getSize() = 0;
@@ -155,12 +170,15 @@ class DataRepository{
 }dataRepo,    // used by skeletons, Shortcuts, SystemInterface
 IFconfigRepo; // used by Interfaces
 
-DataSet::DataSet(Address* addr, const String& _name): address(addr), name(_name) {
-    dataRepo.addDataSet(this);
+DataSet::DataSet(Address* addr, const String& _name, DataRepository* targetRepo): address(addr), name(_name) {
+    repo = targetRepo ? targetRepo : &dataRepo;
+    repo->addDataSet(this);
 };
 
 DataSet::~DataSet() {
-  dataRepo.removeDataSet(this);
+  if (repo){
+    repo->removeDataSet(this);
+  }
 };
 
 
@@ -194,7 +212,9 @@ class DynamicDataSet : public DataSet{
   public:
     DataProvider* dataProvider;    
 
-    DynamicDataSet(Address* addr, DataProvider* dp): dataProvider(dp), DataSet(addr, dp->dataProviderName) {}
+    DynamicDataSet(Address* addr, DataProvider* dp, DataRepository* targetRepo = nullptr)
+      : dataProvider(dp),
+        DataSet(addr, dp->dataProviderName, targetRepo) {}
 
     // Ensure dataProvider is valid before accessing it
     virtual uint16_t getSize() {
@@ -224,7 +244,7 @@ bool DataRepository::addDataSet(DataSet* ds){
 
 void DataRepository::removeDataSet(DataSet* ds) {
   for (auto it = dataSets.begin(); it != dataSets.end(); ++it) {
-    if ((*it)->address->pattern == ds->address->pattern) {  
+    if (*it == ds) {  
       dataSets.erase(it);
       break;
     }
@@ -270,12 +290,7 @@ class SerializableParameters {
         for (Address* address : parameterAddresses) {
             if (!address) continue;
 
-            JsonDocument prop;
-            if (deserializeJson(prop, address->serialize())) {
-                DEBUG_PRINT("\naddress properties serialization failed: %s", address->pattern.c_str());
-                continue;
-            }
-            properties.add(prop);
+            address->serializeTo(properties);
         }
     }
     
