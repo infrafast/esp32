@@ -271,7 +271,11 @@ class SerializableParameters {
     String name;
     String group;
 
-    SerializableParameters(const String& n, const String& g, DataRepository* r) : name(n), group(g), repo(r ) {}    
+    SerializableParameters(const String& n, const String& g, DataRepository* r, bool autoRegisterConfigDataSets = false)
+      : name(n),
+        group(g),
+        repo(r),
+        registerConfigDataSets(autoRegisterConfigDataSets) {}
     virtual ~SerializableParameters() {
       for (DataSet* ds : ownedDataSets) {
         delete ds;
@@ -281,7 +285,7 @@ class SerializableParameters {
 
     bool registerDataSetAddress(Address* address){
       parameterAddresses.push_back(address);
-      if (repo == &IFconfigRepo) {
+      if (registerConfigDataSets) {
         ownedDataSets.push_back(new ConfigDataSet(address, name, repo));
       }
       return true;
@@ -334,6 +338,7 @@ class SerializableParameters {
     std::vector<Address*> parameterAddresses;
     std::vector<DataSet*> ownedDataSets;
     DataRepository* repo;
+    bool registerConfigDataSets = false;
 
 };
 

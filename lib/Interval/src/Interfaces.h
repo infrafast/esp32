@@ -511,7 +511,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     
 }systemInterface(false);
 
-DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable), SerializableParameters(name,_group,&IFconfigRepo){   // the interfaces uses its own repository to store parameters to avoid conflict with data sets groups
+DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable), SerializableParameters(name,_group,&IFconfigRepo, true){   // the interfaces uses its own repository to store parameters to avoid conflict with data sets groups
   interfaceRepo.interfaces.push_back(this);
   interfaceName = name;
   group = _group;
