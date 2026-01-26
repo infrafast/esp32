@@ -50,6 +50,7 @@ class DeviceInterface  : public SerializableParameters{
         /////////////////////////////////////
 
     virtual const String& getDataProviderNameForThisInterface(){ return group;}
+    virtual const String& getDataProviderNameForConfig(){ return getDataProviderNameForThisInterface(); }
 
     String serializeState(){
       JsonDocument doc;
@@ -93,7 +94,7 @@ class DeviceInterface  : public SerializableParameters{
         // that's the attribute we do not serialize in case of partial serialization
         config[INTERFACE_EXPOSED] = exposed;
         config[INTERFACE_GROUP] = group;
-        config[INTERFACE_PROVIDER] = getDataProviderNameForThisInterface();      
+        config[INTERFACE_PROVIDER] = getDataProviderNameForConfig();      
         config[INTERFACE_ICON] = icon;
       }
 
