@@ -419,7 +419,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       delete destination;
     }    
 
-    //virtual const String& getDataProviderNameForThisInterface(){ return interfaceName;}   // we are our own provider do not forget it!
+    virtual const String& getDataProviderNameForConfig() override { return interfaceName; } // dedicated config provider
 
     virtual void serializeProperties(JsonArray& properties) override{
       char* buf = (char*)malloc((strlen(ADDRESS_RTPPORT)+6)*sizeof(char*)+1);
