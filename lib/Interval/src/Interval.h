@@ -1066,6 +1066,8 @@ struct StreamParams {
 #define FIRMWARE_BIN_FILENAME UPDATE_FOLDER"firmware.bin.gz"
 #define IMMEDIATE true
 
+#define PRESS_TIME_TO_POWEROFF 4000     // 4s to shutdown
+
 ApplicationManager* Log::am = nullptr;
 
 #include "APPManager.h"
@@ -1104,6 +1106,7 @@ void goDeepSleep(){
   esp_deep_sleep_start();      
 }
 
+
 void xTaskBackground(void *pvParameters){  
   while (true){
   
@@ -1131,7 +1134,7 @@ void xTaskBackground(void *pvParameters){
         // wait the switch to change state, the loop program continues normally
         //ets_printf("\n\t\ton/off pushed for %u ms",push);
         unsigned long t = millis();
-        while (digitalRead(ONOFF_PIN)==ON_OFF_TRIGGER && millis()-t<4000){
+        while (digitalRead(ONOFF_PIN)==ON_OFF_TRIGGER && millis()-t<PRESS_TIME_TO_POWEROFF){
           yield();
           //ets_printf(".");
         }

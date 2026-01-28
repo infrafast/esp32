@@ -330,7 +330,7 @@ class SerializableParameters {
         retVal = ds->getValuePtr(index);
       }
 
-      DEBUG_PRINT("\nSerializableParameters::getValuePtr<%s>",retVal->c_str());
+      //DEBUG_PRINT("\nSerializableParameters::getValuePtr<%s>",retVal->c_str());
 
       return retVal;
     }    

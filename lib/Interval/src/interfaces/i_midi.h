@@ -184,12 +184,12 @@ class BLEMIDIInterface: public MIDIInterface{
       
       bleMIDI.setHandleSystemExclusive(handleSysexStatic);
 
-      if (alreadyBegun){
-        DEBUG_PRINT("\n%s begin() ignored (alreadyBegun)",interfaceName.c_str());   // this is a workaround becaue of offline may recall it 
+      if (hasBegun){
+        DEBUG_PRINT("\n%s begin() ignored (hasBegun)",interfaceName.c_str());   // this is a workaround becaue of offline may recall it 
       }else if (!state.offline){
         DEBUG_PRINT("\n%s begin()",interfaceName.c_str());
         bleMIDI.begin();
-        alreadyBegun = true;
+        hasBegun = true;
       }else{
         DEBUG_PRINT("\n%s begin() ignored (offline))",interfaceName.c_str());
       }
@@ -263,7 +263,6 @@ class BLEMIDIInterface: public MIDIInterface{
 
   private:
     static inline BLEMIDIInterface* bleInstancePtr = nullptr;    
-    bool alreadyBegun = false;
 
 };
 
@@ -331,7 +330,7 @@ class USBMIDIInterface: public MIDIInterface{
     }
 
     virtual bool end(){
-      return false;
+      return true;
     }     
 
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){      
@@ -439,6 +438,19 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       delete destination;
     }    
 
+    virtual bool begin(){      
+      DEBUG_PRINT("\nAppleMIDIInterface::begin()");
+      MIDIInterface::init();
+      appleInstancePtr = this;   // do not forget otherwise callback function will crash
+      return true;      
+    }
+
+    virtual bool end(){
+      DEBUG_PRINT("\nAppleMIDIInterface::end()");
+      goOffline(true);
+      return true;
+    }    
+
     virtual void serializeProperties(JsonArray& properties) override{
       char* buf = (char*)malloc((strlen(ADDRESS_RTPPORT)+6)*sizeof(char*)+1);
       sprintf(buf,ADDRESS_RTPPORT,rtpPort);
@@ -502,7 +514,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
         if (state.code != IF_READY) {
           if (millis() - lastInvite >= MIDI_INVITE_PERIOD) {
-            lastInvite = millis();
             startSession();
           }
         }
@@ -512,12 +523,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     
     // Méthode de l'instance réellement appelée
     void handleConnected(const ssrc_t& ssrc, const char* name) {
+      DEBUG_PRINT("\n\nappleMidi session #%i %s connected\n", ssrc, name);
       midiSessionName = String(name);
       setStateConnected();
     }    
 
     void handleDisconnected(const ssrc_t& ssrc) {
-      DEBUG_PRINT("\n\nDisconnected from session\n");     
+      DEBUG_PRINT("\n\nappleMidi session #%i disconnected\n", ssrc);
       setStateDisconnected();
     }
 
@@ -619,7 +631,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
 
     void setStatePassiveSession(){
-      DEBUG_PRINT("\nAppleMIDIInterface::passive, waiting for invitation");      
+      DEBUG_PRINT("\nAppleMIDIInterface::setStatePassiveSession");      
       //"details": "footswitch (192.168.0.56/5004) ready to be invited",
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
@@ -645,12 +657,12 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     void setStateActiveSession(){
-      //"details": "Invitation sent to 10.0.0.5/5004 pending reply",      
+      DEBUG_PRINT("\nAppleMIDIInterface::setStateActiveSession() to %s:%d",destination->host.c_str(), rtpPort);  
 
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;
 
       appleMidiClient->sendInvite(destination->ip, rtpPort);
-      DEBUG_PRINT("\nsetStateActiveSession::sendInvite() to %s:%d",destination->host.c_str(), rtpPort);  
+
 
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
@@ -669,7 +681,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     void setStateConnected(){
-      DEBUG_PRINT("\n\nConnected to session: %s\n", midiSessionName.c_str());
+      DEBUG_PRINT("\nAppleMIDIInterface::setStateConnected");      
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
       state.subState = IF_STATE_CONNECTED;
@@ -679,6 +691,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     void setStateDisconnected(){
+      DEBUG_PRINT("\nAppleMIDIInterface::setStateDisconnected");      
       state.code = IF_NOT_READY;
       state.progress = -1;
       state.led = "red fast";     
@@ -692,19 +705,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       }
     }    
 
-    virtual bool begin(){      
-      //DEBUG_PRINT("\tAppleMIDIInterface::derivedBegin()");
-      MIDIInterface::init();
-      appleInstancePtr = this;   // do not forget otherwise callback function will crash
-      return disconnectDeviceFromNetwork();      
-    }
-
-    virtual bool end(){
-      //DEBUG_PRINT("\n\tAppleMIDIInterface->end()...");
-      return true;
-    }
-
     void startSession(){
+      lastInvite = millis();    // we reset the timer that controls the periodicity of the invites
       if (sessionType == APPLEMIDI_ACTIVE) setStateActiveSession();
       else setStatePassiveSession();
     }

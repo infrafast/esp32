@@ -976,16 +976,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
         break;
         case IntervalButton::BUTTON_HOLD:
-          
+
         break;
         case IntervalButton::BUTTON_LONG_CLIC:
           //DEBUG_PRINT("\nmenuSwitchCallback");
           menuSwitchCallback(btnEvt->buttonId,btnEvt->time);
         break;
         case IntervalButton::BUTTON_RELEASE_HOLD:
-          
-
-
+     
         break;
         case IntervalButton::BUTTON_SIMPLE_CLIC:
           simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
@@ -1763,6 +1761,8 @@ void setup() {
       if (gui->transparency) gui->clearScreenBuffer();      
     }
 
+    bool shutdownDone = false;
+
     bool refresh(bool force=false){
 
       yield();
@@ -2076,7 +2076,14 @@ void setup() {
               if (millis()-goSleepCountdownStart>BAT_REFRESH_RATE*BAT_NUM_READINGS*2) goDeepSleep(); // we bootSprite two full cycle of battery voltage acquisition before shuting down
             break;
             case STATE_BYE_MODAL_MESSAGE: 
-              // we do not shutdown, we leave it on so we can go to the menu for instance to perform some action like update or ftp ...            
+              // perform some action like update or ftp and shutting down properly (like interfaces...)
+              if (!shutdownDone){
+                DEBUG_PRINT("\nshuting down interfaces");     
+                shutdownDone = true;           
+                for (const auto& interface : interfaceRepo.interfaces){       
+                  interface->end();
+                }
+              }
             break;
           }
         break;
@@ -2939,7 +2946,7 @@ void setup() {
       jsonAnswer.callback = RET_UNDPROCESSEDJSON;
       jsonAnswer.value = jsonInput.as<String>();
 
-      DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
+      //DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
       
       String command = jsonInput["command"];
 
@@ -3301,7 +3308,7 @@ void setup() {
       serializeJson(jsonOutput,jsonString);
       removeJsonQuote(&jsonString);
 
-      DEBUG_PRINT("\nbuildJsonOuput: %s[...]",jsonString.substring(0,100).c_str());
+      //DEBUG_PRINT("\nbuildJsonOuput: %s[...]",jsonString.substring(0,100).c_str());
       jsonOutput.shrinkToFit();
       return jsonString;
 

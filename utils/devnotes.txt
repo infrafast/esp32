@@ -369,3 +369,123 @@ void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpac
 
 
        appleMidiClient->sendInvite(destination->ip, rtpPort); // port is 5004 by default 
+
+
+       Disconnected (read failed: [Errno 6] Device not configured)
+Reconnecting to /dev/cu.usbmodem11301 .  Connected!
+[  2429][E][esp32-hal-tinyusb.c:552] tinyusb_load_enabled_interfaces(): Descriptor Load Failed
+
+JsonListFile::load(/webapp/sysexlib.json.gz) ok
+
+JsonListFile::load(/webapp/osclib.json.gz) ok
+
+BLEMidi disconnected
+[  2691][E][vfs_api.cpp:105] open(): /littlefs/system_if.cfg does not exist, no permits for creation
+        system::load : impossible d'ouvrir system_if.cfg
+system->init() failed or is not fully implemented
+USBMIDI->restore({"offline":true,"properties":[]})
+USBMIDI restore(JsonObject<...>)
+USBMIDI goOffline=>true
+::handlePropertyChange() : void USBMIDI::setHandleSystemExclusive(f*)
+BLEMIDI->restore({"offline":false,"properties":[]})
+BLEMIDI restore(JsonObject<...>)
+BLEMIDI goOffline=>false
+BLEMIDI begin()
+BLEMIDI begin() ignored (hasBegun)[  3001][E][vfs_api.cpp:105] open(): /littlefs/DINMIDI_if.cfg does not exist, no permits for creation
+        DINMIDI::load : impossible d'ouvrir DINMIDI_if.cfg
+DINMIDI->init() failed or is not fully implemented
+sysOSC->restore({"offline":true,"properties":["/oscport/5000","/ip/1.1.1.1","/ip//info"]})
+sysOSC restore(JsonObject<...>)
+sysOSC goOffline=>true
+invalid IP address:/info
+sysOSC::handlePropertyChange() : call disconnect
+Artnet::load() not applicable
+Artnet->init() failed or is not fully implemented
+3PinDMX::load() not applicable
+3PinDMX->init() failed or is not fully implemented
+AppleMIDI->restore({"offline":false,"properties":["/rtpPort/5004","/ip/192.168.2.1","/session/2"]})
+AppleMIDI restore(JsonObject<...>)
+AppleMIDI goOffline=>false
+AppleMIDI::connectDeviceToNetwork()
+appleMidiClient (nullptr)
+AppleMIDI::handlePropertyChange()
+AppleMIDIInterface::disconnectDeviceFromNetwork()       (nullptr)
+AppleMIDI::connectDeviceToNetwork()
+appleMidiClient (nullptr)       AppleMIDIInterface::begin()
+AppleMIDIInterface::disconnectDeviceFromNetwork()       (nullptr)
+AppleMIDI->init() failed or is not fully implemented
+JsonListFile::load(/settings.sys) ok
+
+JsonListFile::load(/FRANCAIS.lang) ok
+[  3213][E][vfs_api.cpp:105] open(): /littlefs/FRANCAIS.i18n does not exist, no permits for creation
+
+JsonListFile::file /FRANCAIS.i18n doesnt exit, use default values
+
+JsonListFile::load(/default.user) ok
+
+
+ systemCfg:     {"pushDelay":"852","dClicReactivity":"251","profile":"default","apName":"footswitch","lastSSID":"intervalmix1","lang":"francais","hostname":"infrafast.fr","startupUpdate":"false","faderSpeed":"157","ssid":{"intervalmix1":"intervalpop74","infrafast":"Mf9k8iie2","intervalmix":"intervalpop74","IpTch":" [...]
+
+ userCfg:       null [...]
+
+ langfile:      {"Connect Blutooth":"Connectez le blutooth","Trying to connect":"Trying to connect","PROFILE":"PROFIL","LANGUAGE":"LANGUE","QUIT":"QUITTER","File Error":"Erreur de fichier","Connect":"Connectez votre PC/mobile au WiFi ou branchez un cable ethernet à la pédale.","Open browser":"Ouvrez un navigateur [...]
+example of langfile token: Connect:<Connectez votre PC/mobile au WiFi ou branchez un cable ethernet à la pédale.>
+
+ userLang:      null [...]      no token        no token        no token        no token        no token        no token        no token        no token        no token        no token        no token        no token        no token        no token[  3902][E][vfs_api.cpp:105] open(): /littlefs/firmware.bin.gz does not exist, no permits for creation
+ℹ️ Aucun fichier .bin.gz à la racine.
+WiFiEth~6 changed state => cable:1, media:1
+Artnet->monitor()...failed or is not implemented
+AppleMIDIInterface::disconnectDeviceFromNetwork()       (nullptr)
+AppleMIDI->monitor()...failed or is not implemented
+Ethernet.begin() => got IP:192.168.2.2  ...all Eth object instantiated
+
+WiFiEth~6 changed state => cable:1, media:1
+midiClient(footswitch)->begin()
+
+        checkInternet => 
+PingParameters created
+asyncPing(8.8.8.8) task created
+pingTask running...
+
+
+                         * * * * onInternetPing OK latency:15 * * * *
+(v0.19) Listing: http://infrafast.fr/fwupdate/   host: infrafast.fr, port:80, path: /fwupdate/
+Nouvelle version: 0.20 @ http://infrafast.fr/fwupdate/0.20.tgz
+Startup update disabled in config
+Artnet->monitor connectDeviceToNetwork()...failed or is not implemented
+AppleMIDI::connectDeviceToNetwork()
+AppleMIDIInterface::setStateActiveSession() to 192.168.2.1:5004
+AppleMIDI->monitor connectDeviceToNetwork()...ok
+AppleMIDIInterface::setStateActiveSession() to 192.168.2.1:5004
+AppleMIDI Exception: UndefinedException (value:0)
+
+appleMidi session #1220440073 iMac de T connected
+
+AppleMIDIInterface::setStateConnected
+AppleMIDI Exception: UndefinedException (value:0)
+
+appleMidi session #1220440073 iMac de T connected
+
+AppleMIDIInterface::setStateConnected
+AppleMIDI Exception: MaxAttempts (value:0)
+
+appleMidi session #1220440073 disconnected
+
+AppleMIDIInterface::setStateDisconnected
+AppleMIDIInterface::setStateActiveSession() to 192.168.2.1:5004
+AppleMIDI Exception: UndefinedException (value:0)
+
+appleMidi session #1220440073 iMac de T connected
+
+AppleMIDIInterface::setStateConnected
+AppleMIDI Exception: MaxAttempts (value:0)
+
+appleMidi session #1220440073 disconnected
+
+AppleMIDIInterface::setStateDisconnected
+AppleMIDIInterface::setStateActiveSession() to 192.168.2.1:5004
+AppleMIDI Exception: UndefinedException (value:0)
+
+appleMidi session #1220440073 iMac de T connected
+
+AppleMIDIInterface::setStateConnected

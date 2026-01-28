@@ -116,10 +116,10 @@ class DeviceInterface  : public SerializableParameters{
         return false;
       }
       JsonObject configJson = doc.as<JsonObject>();
-      return restore(configJson);    
+      return restore(configJson, false);       // true means => trigger an interface property change check that may lead to disconnecting/reconnecting , which is not the case when we start the interface
     }
 
-    virtual bool restore(const JsonObject& config){   // == deserialize = from string to variable
+    virtual bool restore(const JsonObject& config, bool triggerPropertyChange = true){   // == trigger or not the handlePropertyChange at the end of the restore
       bool changed = false;
 
       DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
@@ -128,7 +128,7 @@ class DeviceInterface  : public SerializableParameters{
         bool offline = config[INTERFACE_OFFLINE];
         if (offline != state.offline) changed = true;   
         state.offline = offline;
-        goOffline(state.offline);                        
+        //goOffline(state.offline);                        // NO DUPLICATE WITH HANDLEPROPERTY CHANGE FOR DECO/RECO
       }
 
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -137,7 +137,7 @@ class DeviceInterface  : public SerializableParameters{
      
       // properties triggering a callback
       // like interface who would need to reconnect because the IP address has changed 
-      if (changed){
+      if (changed && triggerPropertyChange){
         handlePropertyChange();
         state.broadcast = true;   // we signal that the interface state has changed because of a property change
       }
@@ -311,6 +311,7 @@ class DeviceInterface  : public SerializableParameters{
 
   protected:
     String icon = ICON_LINK;
+    bool hasBegun = false;
 
 };
 
@@ -355,14 +356,14 @@ class NetworkInterfaceMonitor{
             DEBUG_PRINT("\n%s->monitor<OFFLINE>() ignored",deviceInterface->interfaceName.c_str());
             return;
           }else{
+            DEBUG_PRINT("\n%s->monitor connectDeviceToNetwork()",deviceInterface->interfaceName.c_str());
             success = networkInterface->connectDeviceToNetwork();
-            if (!success) setDeviceStateDisconnected();
-            DEBUG_PRINT("\n%s->monitor connectDeviceToNetwork()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");                    
+            if (!success) setDeviceStateDisconnected();            
           }
         }else{
           setNetworkStateDown();    
           success = networkInterface->disconnectDeviceFromNetwork();
-          DEBUG_PRINT("\n%s->monitor()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");
+          DEBUG_PRINT("\n%s->disconnectDeviceFromNetwork()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");
         }
       }
       // we only monitor networkdevices when network is on
