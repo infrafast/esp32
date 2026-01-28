@@ -31,7 +31,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     OSCMessage osc;
 
-    virtual const String& getDataProviderNameForThisInterface(){ return interfaceName;}   // we are our own provider do not forget it!
+    virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
     NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
       icon = "g";     
@@ -74,35 +74,37 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void handlePropertyChange(){
       DEBUG_PRINT("\n%s::handlePropertyChange() : call disconnect",interfaceName.c_str());
-      disconnectNetwork();
+      disconnectDeviceFromNetwork();
     }
 
-    virtual void restoreProperty(const char* property){
+    virtual bool restoreProperty(const char* property) override{
+      bool changed = false;
       uint16_t OSCport;
       #define MAXLENGHTINPUT 32
       char inputStr[MAXLENGHTINPUT];      
       if (sscanf(property, ADDRESS_OSCPORT, &OSCport) == 1) {
-        if (OSCport != OSC_clientPort)   state.trigger.handleChange = true;
+        if (OSCport != OSC_clientPort)   changed = true;
         OSC_clientPort = OSCport;       
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
         IPAddress ip;
         if (ip.fromString(inputStr)){
-          if (destination->ip != ip)  state.trigger.handleChange = true;
+          if (destination->ip != ip)  changed = true;
           destination->ip = ip;      
         }else{
           DEBUG_PRINT("\ninvalid IP address:%s",inputStr);
         }
       }else if (sscanf(property, ADDRESS_PING, &inputStr)) {
-        if (((OSCPing*)destination)->pingCommand != inputStr)  state.trigger.handleChange = true;
+        if (((OSCPing*)destination)->pingCommand != inputStr)  changed = true;
         ((OSCPing*)destination)->pingCommand = inputStr;    
       }
+      return changed;
     }        
 
     virtual void monitor(){           
       netHelper.monitor();
     }    
 
-    virtual void derivedNetworkMonitor(){
+    virtual void connectedNetworkMonitor(){
       // Check if packet was received
       dataAvailable = readOSC();
 
@@ -252,7 +254,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return true;
     }
 
-    virtual bool connectNetwork(){
+    virtual bool connectDeviceToNetwork(){
       // network connection has just been established :-)
       setStateQueryingDevice();         // we are not yet connected to the OSC device
       lastQueryTime = 0; // force ping to be triggered
@@ -261,7 +263,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return false;
     }
 
-    virtual bool disconnectNetwork() {
+   virtual bool disconnectDeviceFromNetwork(){
       lastQueryTime = 0; // force immediate ping attempt
       setStateQueryingDevice();
       return true;

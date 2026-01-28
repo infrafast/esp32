@@ -5,6 +5,7 @@
 0.16 - launch fw update modal from web interface
 0.17 - updates implementation finished 
 0.18 - full file update implementation with web app sync and error handling
+0.19 - ping class refactor + progress during fw update + interface state broadcast management + revamp of datasets + iMidi hardening
 */
 
 
@@ -956,6 +957,17 @@ void xTaskBackground(void *pvParameters);
 #define PERSISTANT_BRIGHTNESS     "brightness"
 #define PERSISTANT_STARTUP        "startup"
 
+
+// ====== Liste simple des endpoints découverts ======
+int epCount = 0;
+struct RtpmidiEndpoint {
+  char name[64];        // nom d'instance (ex: "Mon MacBook Pro")
+  IPAddress ip;
+  uint16_t port;
+  uint32_t lastSeenMs;
+};
+
+
 #include "HWManager.h"
 HardwareManager hwm;
 
@@ -966,13 +978,6 @@ enum{
 
 #include "interfaces/i_states.h"
 
-struct Trigger{ 
-  bool redraw = false;         //   
-  bool broadcast = false;  
-  bool handleChange = false;  //indicate if callback should be triggered
-  bool save = false;
-};
-
 struct State{ // used by Strip and Interface
   uint8_t code = IF_NOT_READY;
   String label = IF_STATE_UNAVAILABLE;
@@ -980,8 +985,17 @@ struct State{ // used by Strip and Interface
   String details = "Interface not implemented";
   String led = "black";
   bool offline = false;
-  float progress = -1;
-  Trigger trigger;
+  float progress,previous = -1;
+
+  String previousStateLabel = "";
+  String previousLed = "";
+  uint8_t previousStateCode = 0;
+  bool previousOffline = false;
+  float previousProgress = -1;
+
+  bool changed = false;
+  bool broadcast = false;
+
 };
 
 #include "GUIManager.h"
@@ -1770,7 +1784,7 @@ void expandTGZstreamToFSTask(void* parameter){
 }                              
 
 //////////////////////////////////////////////////////////////
-////                WIFI EVENT HANDLER                ///////
+////                EVENT HANDLER                ///////
 //////////////////////////////////////////////////////////////  
 void OnWiFiEvent(WiFiEvent_t event){
   app.evt.type = EventDispatcher::EVENT_NETWORK;
@@ -1781,6 +1795,71 @@ void OnWiFiEvent(WiFiEvent_t event){
     hwm.network->wiFiTimeout = 10000; // we let 10s to get the IP and setup the wifi link
   }
 }
+
+static const int MAX_EP = 3;
+RtpmidiEndpoint eps[MAX_EP];
+
+
+static void upsertEndpoint(const char* instanceName, const byte ipBytes[4], unsigned short port) {
+  IPAddress ip(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]);
+
+  // dédoublonnage simple : même IP + port
+  for (int i = 0; i < epCount; i++) {
+    if (eps[i].ip == ip && eps[i].port == port) {
+      strncpy(eps[i].name, instanceName ? instanceName : "?", sizeof(eps[i].name) - 1);
+      eps[i].name[sizeof(eps[i].name) - 1] = '\0';
+      eps[i].lastSeenMs = millis();
+      return;
+    }
+  }
+
+  if (epCount >= MAX_EP) return;
+
+  RtpmidiEndpoint &e = eps[epCount++];
+  strncpy(e.name, instanceName ? instanceName : "?", sizeof(e.name) - 1);
+  e.name[sizeof(e.name) - 1] = '\0';
+  e.ip = ip;
+  e.port = port;
+  e.lastSeenMs = millis();
+}
+
+
+// ====== Callback EthernetBonjour quand un service est trouvé ======
+// Signature d'après la doc EthernetBonjour :
+// (serviceType, proto, serviceName, ip[4], port, txt) :contentReference[oaicite:1]{index=1}
+void onEthernetBonjourServiceFoundCallback(const char* serviceType,
+                           MDNSServiceProtocol_t proto,
+                           const char* serviceName,
+                           const byte ipAddr[4],
+                           unsigned short port,
+                           const char* txt) {
+  // Quand le timeout est atteint, la lib rappelle une fois avec serviceName==NULL :contentReference[oaicite:2]{index=2}
+  if (serviceName == nullptr || ipAddr == nullptr) {
+    DEBUG_PRINT("\n[Bonjour] Scan terminé (timeout).");
+    Serial.printf("\n[Bonjour] %d endpoint(s) mémorisé(s)\n", epCount);
+    for (int i = 0; i < epCount; i++) {
+      DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i, eps[i].name, eps[i].ip.toString().c_str(), eps[i].port);
+    }
+    return;
+  }
+
+  // Sécurité : on ne garde que l'UDP + _apple-midi
+  if (proto != MDNSServiceUDP) return;
+  if (strcmp(serviceType, "_apple-midi") != 0) return;
+
+  upsertEndpoint(serviceName, ipAddr, port);
+
+  DEBUG_PRINT("\n[RTP-MIDI] trouvé: %s  %u.%u.%u.%u:%u\n",
+                serviceName,
+                ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3],
+                port);
+
+  if (txt) {
+
+    DEBUG_PRINT("\n         TXT: %s",txt);
+  }
+}
+
 
 //////////////////////////////////////////////////////////////
 ////                MENU ACTION ITEM CALLBACKS         ///////

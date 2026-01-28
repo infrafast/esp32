@@ -55,6 +55,13 @@ void socketClientOnOpenCallback(IWebSocket &ws) {
   ws.send(WebSocketDataType::TEXT, message, strlen(message));  */
 }
 
+void onEthernetBonjourServiceFoundCallback(const char* serviceType,
+                           MDNSServiceProtocol_t proto,
+                           const char* serviceName,
+                           const byte ipAddr[4],
+                           unsigned short port,
+                           const char* txt);
+
 void socketClientOnMessageCallback(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length){
   switch (dataType) {
     case net::WebSocketDataType::TEXT:
@@ -726,7 +733,7 @@ class Network : public HWComponent2State{
     //UDP* udp = NULL;
     Server* server=NULL;
 
-    MidiClient* midiClient = nullptr;
+    MidiClient* appleMidiClient = nullptr;
 
     uint8_t media = NO_MEDIA;
     IPAddress IP, gateway,subnet;
@@ -919,6 +926,8 @@ class WiFiEth : public Network{
       }else{
         //if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
       }
+      EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);
+
       if (!ethEnabled){
         // power off the ethernet
         stopEthernet();
@@ -1192,11 +1201,11 @@ class WiFiEth : public Network{
                   if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
                   //if (udp == NULL) udp = new EthernetUDP;
                   if (wsEthClient == nullptr) wsEthClient = new EthernetWebSocketClient{}; 
-                  if (midiClient == nullptr) midiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);
-                  String midiName = concatStrings(midiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
-                  String httpName = concatStrings(midiClient->getName(), "._http");
+                  if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);
+                  String midiName = concatStrings(appleMidiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
+                  String httpName = concatStrings(appleMidiClient->getName(), "._http");
                   if (EthernetBonjour.begin(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str())){
-                    EthernetBonjour.addServiceRecord(midiName.c_str(), midiClient->getPort(),MDNSServiceUDP);
+                    EthernetBonjour.addServiceRecord(midiName.c_str(), appleMidiClient->getPort(),MDNSServiceUDP);
                     EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
                   }else{
                      DEBUG_PRINT("\nEthernetBonjour registration <%s> failed", systemCfg.getString(S_AP_NAME)->c_str());
@@ -1259,12 +1268,12 @@ class WiFiEth : public Network{
               if (server == NULL){ server = new WiFiServer(80,3);}
               //if (udp == NULL) udp = new WiFiUDP; 
               if (wsWiFiClient == nullptr) wsWiFiClient = new WiFiWebSocketClient{};
-              if (midiClient == nullptr) midiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(/*APPLE_MIDIWIFICLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);             
+              if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(/*APPLE_MIDIWIFICLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);             
               if (MDNS.begin(systemCfg.getString(S_AP_NAME)->c_str())){
-                MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", midiClient->getPort());
+                MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", appleMidiClient->getPort());
                 MDNS.addService("http", "tcp", 80);                                
               }else{
-                DEBUG_PRINT("\nMDNS registration <%s> failed",midiClient->getName());
+                DEBUG_PRINT("\nMDNS registration <%s> failed",appleMidiClient->getName());
               }
               xSemaphoreGive(networkBusy);
             }else{
@@ -1282,7 +1291,7 @@ class WiFiEth : public Network{
         }else{
           // we are connected so do whatever is required to refresh common network object here
           
-          //if (midiClient != nullptr) midiClient->read();   // we prefer to put it into the AppleMIDIInterface monitor() as we will save some time in case interface is offline
+          //if (appleMidiClient != nullptr) appleMidiClient->read();   // we prefer to put it into the AppleMIDIInterface monitor() as we will save some time in case interface is offline
           
           //and monitoring the connexion + do whatever is required to refresh specialized network object here
           if (media == CABLE_MEDIA){
@@ -1324,7 +1333,7 @@ class WiFiEth : public Network{
           // initialiser of common object to both Wifi and Ethernet goes here
           
           //if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888 
-          midiClient->begin();
+          appleMidiClient->begin();
           // then specific to ETH or WIFI
           
           if (media == WIFI_MEDIA){
@@ -1338,6 +1347,19 @@ class WiFiEth : public Network{
             lastConnectedSSID = SSID;
             //DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
             unpauseWiFi();
+
+            // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
+            /*int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
+            DEBUG_PRINT("\nTrouvé %d service(s) AppleMIDI\n", n);
+            for (int i = 0; i < n; i++) {
+              DEBUG_PRINT("  #%d: %s  %s:%u\n",
+                            i,
+                            MDNS.hostname(i).c_str(),
+                            MDNS.IP(i).toString().c_str(),
+                            MDNS.port(i));
+            }*/
+
+
           }else{
             // ETHERNET        
             gateway = Ethernet.gatewayIP();
@@ -1345,6 +1367,13 @@ class WiFiEth : public Network{
             wsEthClient->onMessage(socketClientOnMessageCallback);
             wsEthClient->onError(socketClientOnErrorCallback);
             wsEthClient->onClose(socketClientOnClose);            
+
+            /*
+            epCount = 0;
+            // Découvre le type de service "_apple-midi" en UDP
+            EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 3000); // :contentReference[oaicite:3]{index=3} 
+            DEBUG_PRINT("\n[Bonjour] Scan RTP-MIDI lancé…");            
+            */
           }
           checkInternet();
           //DEBUG_PRINT("\n...all network component begin() done");
@@ -1359,7 +1388,7 @@ class WiFiEth : public Network{
             if (server != NULL){delete server; server  = NULL;} 
             if (wsWiFiClient != nullptr){ delete wsWiFiClient; wsWiFiClient = nullptr;}
             if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr;}
-            if (midiClient != nullptr){ delete midiClient; midiClient = nullptr;}
+            if (appleMidiClient != nullptr){ delete appleMidiClient; appleMidiClient = nullptr;}
             
             // specific destruction to WIFI or ETH
             if (media == CABLE_MEDIA){              

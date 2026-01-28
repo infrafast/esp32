@@ -4,6 +4,7 @@
 #define USE_EXT_CALLBACKS     // as from example => required for MIDI callbacks
 
 //#define SerialMon Serial
+#define APPLEMIDI_INITIATOR   // to be able to send invitations
 
 #include <AppleMIDI.h>
 
@@ -30,6 +31,7 @@ public:
   virtual void setHandleSystemExclusive(void (*fptr)(byte* , unsigned )) = 0;
   virtual void setHandleControlChange(void (*fptr)(byte , byte , byte )) = 0;
   virtual void endSession() = 0;
+  virtual bool sendInvite(IPAddress ip, uint16_t port = DEFAULT_CONTROL_PORT) = 0;
   //virtual String getParticipantDetails(const ssrc_t& ssrc) = 0;
   virtual const char *getName() = 0;
   virtual const uint16_t getPort() = 0;
@@ -76,7 +78,6 @@ public:
     session->setHandleReceivedRtp([](const APPLEMIDI_NAMESPACE::ssrc_t & ssrc, const APPLEMIDI_NAMESPACE::Rtp_t & rtp, const int32_t& latency) {
       //Serial.printf("\nsession->setHandleReceivedRtp latency: %i",latency);
     });
-
   }
 
   void read() override {
@@ -85,6 +86,10 @@ public:
 
   virtual void endSession(){
     session->sendEndSession();
+  }
+
+  virtual bool sendInvite(IPAddress ip, uint16_t port = DEFAULT_CONTROL_PORT) {
+    return session->sendInvite(ip, port);
   }
 
   virtual const char *getName(){

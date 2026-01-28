@@ -1867,7 +1867,11 @@ void setup() {
         }
         #endif
 
-        if (interface->update()) broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
+        interface->update();
+        if (interface->state.broadcast){
+          broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
+          interface->state.broadcast = false; // acknowledged
+        }
       }
 
       //------------------
@@ -3218,7 +3222,9 @@ void setup() {
               jsonAnswer.callback=RET_COMMANDERROR;
               jsonAnswer.value = "interface save error";                
             }
+
           }else{
+            DEBUG_PRINT("\nInterface no change");
             jsonAnswer.callback=RET_SAVEBUTTON;
             jsonAnswer.value ="0";            
           }

@@ -18,11 +18,6 @@ class DMXInterface : public DeviceInterface{
       DEBUG_PRINT("\n%s::save() not applicable",interfaceName.c_str());
       return true;      
     }    
-
-    virtual void restoreProperty(const char* property){
-      DEBUG_PRINT("\n%s::restoreProperty() not applicable");
-    }     
-
 };
 
 #define ARTNETDMX_INTERFACE "Artnet"
@@ -35,10 +30,6 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkInterface {
     ArtnetDMXInterface(bool _configurable):DMXInterface(ARTNETDMX_INTERFACE, GROUP_INTERFACE_DMX, _configurable){
       icon = "b";
     }
-
-    virtual void restoreProperty(const char* property){
-      DEBUG_PRINT("\n%s::restoreProperty() not applicable");
-    }  
 
     virtual void monitor(){     
       netHelper.monitor();
@@ -55,13 +46,13 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkInterface {
       return false;      
     }
 
-    virtual void derivedNetworkMonitor(){}
+    virtual void connectedNetworkMonitor(){}
 
-    virtual bool connectNetwork(){
+    virtual bool connectDeviceToNetwork(){
       return false;
     }
 
-    virtual bool disconnectNetwork() {
+   virtual bool disconnectDeviceFromNetwork(){
       return false;
     }
 
@@ -81,10 +72,6 @@ class ThreePinDMXInterface: public DMXInterface{
     virtual void monitor(){
 
     } 
-
-    virtual void restoreProperty(const char* property){
-      DEBUG_PRINT("\n%s::restoreProperty() not applicable");
-    }  
 
     virtual void* read(){return nullptr;}
 

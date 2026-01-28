@@ -508,11 +508,11 @@ class Strip {
 
     void pushIFState4x4(){
       if (!interface) return;
-      gui.add(new Label(&interface->state.label, Align::Center,&GUI::midScreenHoriz, &GUI::topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::transparentColor));    
+      gui.add(new Label(&interface->state.label, Align::Center,&GUI::midScreenHoriz, &GUI::topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));    
       gui.add(new Led(&GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20, &interface->state.led));      
       gui.add(new Arc(&interface->state.progress, 0,1.0 , &GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20+10, &GUI::gold, &GUI::transparentColor,0));
-      gui.add(new Icon(interface->getIcon(),Align::Right,&GUI::rightMenuIconXpos, &GUI::iconY,MEDIUM_ICON_SIZE,&GUI::gold,&GUI::transparentColor));   
-      gui.add(new TextArea(&interface->state.details,TFT_WIDTH/2 ,Align::Left,Align::Center,&GUI::midScreenHoriz,&GUI::iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::transparentColor));           
+      gui.add(new Icon(interface->getIcon(),Align::Right,&GUI::rightMenuIconXpos, &GUI::iconY,MEDIUM_ICON_SIZE,&GUI::gold,&GUI::defaultBcolor));   
+      gui.add(new TextArea(&interface->state.details,TFT_WIDTH/2.3 ,Align::Left,Align::Center,&GUI::midScreenHoriz,&GUI::iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));           
       gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&GUI::midScreenHoriz, &GUI::belowBottomTexty,SIZE_14,40,&GUI::green,&GUI::transparentColor));          
       gui.add(new Label(&interface->state.subState, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));
     }   
@@ -562,11 +562,10 @@ class Strip {
     void drawWidgetsFrames(uint8_t layout){
       
       if (interface->state.offline) frameColor = TFT_RED;
-      else frameColor = TFT_GOLD;
+      else frameColor = GUI::luminance(TFT_GOLD,127);     // dark frame
 
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         // having a frame when we are 4x4 is useless unless we want to indicate interface is offline
-        //if (interface->state.offline) gui.add(new 
           gui.add(new Canva(&topX, &topY, WIDGET4X4W, WIDGET4X4H,4, &frameColor, &GUI::transparentColor,&brightness));  
       }
       else if ( size == SHAPE1X4) gui.add(new Canva(&topX, &topY, WIDGET1X4W, WIDGET1X4H, 4,&frameColor, &GUI::transparentColor,&brightness));
@@ -619,7 +618,7 @@ class TwoSelectStrip : public Strip{
     void deserializeProperty(String property){
       if (!interface) return;
       if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
-        select2Content = skeleton->getValuePtr(interface->getDataProviderNameForThisInterface(),select2PropertyAddress,select2ID);
+        select2Content = skeleton->getValuePtr(interface->getProviderNameForData(),select2PropertyAddress,select2ID);
       }
     }  
 
@@ -663,7 +662,7 @@ class ThreeSelectStrip: public TwoSelectStrip{
       if (!interface) return;
       TwoSelectStrip::deserializeProperty(property);
       if (sscanf(property.c_str(), select3PropertyAddress.c_str(), &select3ID)) {
-        select3Content = skeleton->getValuePtr(interface->getDataProviderNameForThisInterface(),select3PropertyAddress,select3ID-1);         
+        select3Content = skeleton->getValuePtr(interface->getProviderNameForData(),select3PropertyAddress,select3ID-1);         
       }
     }  
 

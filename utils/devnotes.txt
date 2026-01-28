@@ -322,3 +322,50 @@ void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpac
 
 ///////
 
+
+
+
+
+
+
+
+
+
+
+
+            /*/ message varies if we have an active or passive session
+      "details": "footswitch (192.168.0.56/5004) ready to be invited",
+      "details": "Invitation sent to 10.0.0.5/5004 pending reply",      
+      */
+      if (sessionType == APPLEMIDI_ACTIVE){
+        state.subState = destination->host;      
+        state.details = concatStrings(
+          *lang.getString("invitation sent to"),
+          " ",
+          destination->host,
+          "/",
+          rtpPort
+        );
+      }
+      }else{
+        // passive
+        if (hwm.network->appleMidiClient != nullptr){
+            midiSessionName = hwm.network->appleMidiClient->getName();
+            port = hwm.network->appleMidiClient->getPort();
+        }
+        state.subState = midiSessionName;      
+        state.details = concatStrings(
+          midiSessionName,
+          " (",
+          hwm.network->IP.toString(),
+          "/",
+          port,
+          ") ",
+          *lang.getString("ready to be invited")
+        );
+      }
+      state.led = "green slow";
+      state.progress = -1;
+
+
+       appleMidiClient->sendInvite(destination->ip, rtpPort); // port is 5004 by default 

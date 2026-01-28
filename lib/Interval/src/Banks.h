@@ -53,7 +53,7 @@ namespace Interval {
           // some may only do that if they are visible        
           if (strip != nullptr){
             strip->process();
-            if (strip->visible && strip->interface->state.trigger.redraw) redraw = true;
+            if (strip->visible && strip->interface->state.changed) redraw = true;
           }
         }
         return redraw;

@@ -66,10 +66,6 @@ class MIDIInterface: public DeviceInterface{
       data = &midiData;      
     }
 
-    virtual void restoreProperty(const char* property){
-      DEBUG_PRINT("\n%s::restoreProperty() not applicable");
-    }      
-
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
@@ -217,7 +213,7 @@ class BLEMIDIInterface: public MIDIInterface{
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
       state.subState = IF_STATE_CONNECTED;
-      state.details = ""; //String(name);// + concatStrings(" (", hwm.network->midiClient->getParticipantDetails(ssrc), ")");
+      state.details = ""; //String(name);// + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");
       state.led = "blue";
       state.progress = -1;
     }    
@@ -385,27 +381,52 @@ class DINMIDIInterface: public MIDIInterface{
 
 };
 
+enum{
+  APPLEMIDI_PASSIVE=1,
+  APPLEMIDI_ACTIVE
+};
+
 #define APPLEMIDI_INTERFACE "AppleMIDI"
+#define ADDRESS_APPLEMIDISESSION   "/session/%d"
+class AppleMidiSessionType : public DataSet{
+  #define APPLEMIDI_SESSIONS_NUMBER   2
+  public:
+    String sessionsNames[APPLEMIDI_SESSIONS_NUMBER] = {"passive","active"};
+
+    AppleMidiSessionType(Address* _address): DataSet(_address, APPLEMIDI_INTERFACE, &IFconfigRepo){}
+    virtual const String* getValuePtr(uint16_t index){
+      if (index>getSize()-1) return &errorDatasetOOR;
+      return &sessionsNames[index];    //local javascript function 
+    }  
+
+    virtual uint16_t getSize(){
+      return APPLEMIDI_SESSIONS_NUMBER;
+    }
+
+}dsAppleMidiSessions(new DropDownAddress(ADDRESS_APPLEMIDISESSION));
+
+
+
 class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
   #define CONFIG_APPLE "voidAppleMidiParam"
-  #define ADDRESS_MIDISESSION   "/session/%d"
   #define ADDRESS_RTPPORT "/rtpPort/%d"
 
   public: 
 
     FreeTextAddress* addressAppleMidiPort = new FreeTextAddress(ADDRESS_RTPPORT,"rtpPort", REGEX_0to65535);
-    DropDownAddress* addressAppleMidiSession = new DropDownAddress(ADDRESS_MIDISESSION);
-
+    String midiSessionName ="undef";
     NetworkInterfaceMonitor netHelper = NetworkInterfaceMonitor(this,this);
 
-    int appleMidiPort;
-    int sessionType;
+    int rtpPort = 5004;;
+    int sessionType = APPLEMIDI_PASSIVE; // 0:passive, 1:active
     
+    String exception = "";
+
     AppleMIDIInterface(bool _configurable):MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
 
       registerDataSetAddress(addressAppleMidiPort);
-      registerDataSetAddress(addressAppleMidiSession);
+      registerDataSetAddress(dsAppleMidiSessions.address);
       registerDataSetAddress(&addressIP);           // global     
       
       destination = new PingEcho("0.0.0.0");
@@ -414,16 +435,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     }
 
-
     ~AppleMIDIInterface(){
       delete destination;
     }    
 
-    virtual const String& getDataProviderNameForConfig() override { return interfaceName; } // dedicated config provider
-
     virtual void serializeProperties(JsonArray& properties) override{
       char* buf = (char*)malloc((strlen(ADDRESS_RTPPORT)+6)*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_RTPPORT,appleMidiPort);
+      sprintf(buf,ADDRESS_RTPPORT,rtpPort);
       properties.add(String(buf)); 
       free(buf);
 
@@ -432,83 +450,92 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       properties.add(String(buf)); 
       free(buf);         
     
-      buf = (char*)malloc((strlen(ADDRESS_MIDISESSION)+6)*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_MIDISESSION,sessionType);
+      buf = (char*)malloc((strlen(ADDRESS_APPLEMIDISESSION)+6)*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_APPLEMIDISESSION,sessionType);
       properties.add(String(buf)); 
       free(buf);
 
     }
 
-    virtual void handlePropertyChange(){
-      DEBUG_PRINT("\n%s::handlePropertyChange() : call disconnect",interfaceName.c_str());
-      disconnectNetwork();
+    virtual void handlePropertyChange() override{
+      DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
+      disconnectDeviceFromNetwork();
+      connectDeviceToNetwork();  // is called by handleDisconnect()
     }
 
-    virtual void restoreProperty(const char* property){
+    virtual bool restoreProperty(const char* property) override{
+      bool changed = false;
       uint16_t intVal;
       #define MAXLENGHTINPUT 32
       char inputStr[MAXLENGHTINPUT];      
       if (sscanf(property, ADDRESS_RTPPORT, &intVal) == 1) {
-        if (intVal != appleMidiPort)   state.trigger.handleChange = true;
-        appleMidiPort = intVal;       
+        if (intVal != rtpPort)   changed = true;
+        rtpPort = intVal;       
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
         IPAddress ip;
         if (ip.fromString(inputStr)){
-          if (destination->ip != ip)  state.trigger.handleChange = true;
+          if (destination->ip != ip)  changed = true;
           destination->ip = ip;      
+          destination->host = ip.toString();
         }else{
           DEBUG_PRINT("\ninvalid IP address:%s",inputStr);
         }
-      }else if (sscanf(property, ADDRESS_MIDISESSION, &intVal) == 1) {
-        if (intVal != sessionType)   state.trigger.handleChange = true;
+      }else if (sscanf(property, ADDRESS_APPLEMIDISESSION, &intVal) == 1) {
+        if (intVal != sessionType)   changed = true;
         sessionType = intVal;       
       }
+      return changed;
     }      
 
     virtual void monitor(){     
       netHelper.monitor();
     }
 
-    virtual void derivedNetworkMonitor(){
-      if (hwm.network->midiClient != nullptr){
+    #define MIDI_INVITE_PERIOD 3000
+    virtual void connectedNetworkMonitor(){
+      MidiClient* appleMidiClient = hwm.network->appleMidiClient;  
+      
+      if (appleMidiClient != nullptr){
         // the read trigger callback like connection, hence it has to be called independantly from being connected to a session or not
         //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time        
-        hwm.network->midiClient->read();                       
+        hwm.network->appleMidiClient->read();                       
+
+        if (state.code != IF_READY) {
+          if (millis() - lastInvite >= MIDI_INVITE_PERIOD) {
+            lastInvite = millis();
+            startSession();
+          }
+        }
+
       }            
     }
     
     // Méthode de l'instance réellement appelée
     void handleConnected(const ssrc_t& ssrc, const char* name) {
-      DEBUG_PRINT("\nConnected to session: %s\n", name);
-      state.code = IF_READY;
-      state.label = IF_STATE_CONNECTED;
-      state.subState = IF_STATE_CONNECTED;
-      state.details = String(name);// + concatStrings(" (", hwm.network->midiClient->getParticipantDetails(ssrc), ")");
-      state.progress = -1;
-      state.led = "green";     
+      midiSessionName = String(name);
+      setStateConnected();
     }    
 
     void handleDisconnected(const ssrc_t& ssrc) {
-      DEBUG_PRINT("\nDisconnected from session\n");
-      setStatePendingSession();
+      DEBUG_PRINT("\n\nDisconnected from session\n");     
+      setStateDisconnected();
     }
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override{                  
-      if (state.code == IF_READY) hwm.network->midiClient->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
+      if (state.code == IF_READY) hwm.network->appleMidiClient->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
       else return false;
       return true; 
     }
     
 
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-      if (state.code == IF_READY) hwm.network->midiClient->sendNoteOn(inNoteNumber,inVelocity, inChannel);
+      if (state.code == IF_READY) hwm.network->appleMidiClient->sendNoteOn(inNoteNumber,inVelocity, inChannel);
       else return false;
-      return true;       
-        
+      return true;              
     };
 
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){     
-      if (state.code == IF_READY) hwm.network->midiClient->sendNoteOff(inNoteNumber,inVelocity, inChannel);
+      if (state.code == IF_READY) hwm.network->appleMidiClient->sendNoteOff(inNoteNumber,inVelocity, inChannel);
       else return false;
       return true;       
 
@@ -533,87 +560,143 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
         }      
     }    
 
+    #define UNDEF_EXCEPTION "UndefinedException"
     void OnAppleMidiException(const ssrc_t& ssrc, const Exception& e, const int32_t value ) {
       switch (e){
         case APPLEMIDI_NAMESPACE::Exception::BufferFullException:
-          DEBUG_PRINT("\n***MIDI BufferFullException\n");
+          exception = "BufferFullException";
           break;
         case APPLEMIDI_NAMESPACE::Exception::ParseException:
-          DEBUG_PRINT("\n***MIDI ParseException\n");
+          exception = "ParseException";
           break;
         case APPLEMIDI_NAMESPACE::Exception::TooManyParticipantsException:
-          DEBUG_PRINT("\n***MIDI TooManyParticipantsException\n");
+          exception = "TooManyParticipants";
           break;
         case APPLEMIDI_NAMESPACE::Exception::UnexpectedInviteException:
-          DEBUG_PRINT("\n***MIDI UnexpectedInviteException\n");
+          exception = "UnexpectedInvite";
           break;
         case APPLEMIDI_NAMESPACE::Exception::ParticipantNotFoundException:
-          DEBUG_PRINT("\n***MIDI ParticipantNotFoundException\n");
+          exception = "ParticipantNotFound";
           break;
         case APPLEMIDI_NAMESPACE::Exception::ComputerNotInDirectory:
-          DEBUG_PRINT("\n***MIDI ComputerNotInDirectory\n");
+          exception = "ComputerNotInDirectory";
           break;
         case APPLEMIDI_NAMESPACE::Exception::NotAcceptingAnyone:
-          DEBUG_PRINT("\n***MIDI NotAcceptingAnyone\n");
+          exception = "NotAcceptingAnyone";
           break;
         case APPLEMIDI_NAMESPACE::Exception::ListenerTimeOutException:
-          DEBUG_PRINT("\n***MIDI ListenerTimeOutException\n");
+          exception = "ListenerTimeOut";
           break;
         case APPLEMIDI_NAMESPACE::Exception::MaxAttemptsException:
-          DEBUG_PRINT("\n***MIDI MaxAttemptsException\n");
+          exception = "MaxAttempts";
           break;
         case APPLEMIDI_NAMESPACE::Exception::NoResponseFromConnectionRequestException:
-          DEBUG_PRINT("\n***MIDI:yyy did't respond to the connection request. Check the address and port, and any firewall or router settings. (time)\n");
+          exception ="NoResponse";
           break;
         case APPLEMIDI_NAMESPACE::Exception::SendPacketsDropped:
-          DEBUG_PRINT("\n***MIDI SendPacketsDropped\n");
+          exception = "SendPacketsDropped";
           break;
         case APPLEMIDI_NAMESPACE::Exception::ReceivedPacketsDropped:
-          DEBUG_PRINT("\n***MIDI***************************************** ReceivedPacketsDropped\n");
+          exception = "ReceivedPacketsDropped";
           break;
         case APPLEMIDI_NAMESPACE::Exception::UdpBeginPacketFailed:
-          DEBUG_PRINT("\n***MIDI UdpBeginPacketFailed\n");
+          exception = "UdpBeginPacketFailed";
+          break;
+        default:
+          exception = UNDEF_EXCEPTION;
           break;
       }
+      DEBUG_PRINT("\nAppleMIDI Exception: %s (value:%ld)",exception.c_str(),value);
+      //handleDisconnected(); is then called by the library
     }    
 
     virtual void goOffline(bool _offline){
       MIDIInterface::goOffline(_offline);      
-      if (_offline) disconnectNetwork();     // force disconnect in all case: either you will reconnect 
-      else connectNetwork();
+      if (_offline) disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 
+      else connectDeviceToNetwork();
       // maybe add a if (_offline) {} else {}
     }
 
 
-    void setStatePendingSession(){
-      // network is connected but not the session
+    void setStatePassiveSession(){
+      DEBUG_PRINT("\nAppleMIDIInterface::passive, waiting for invitation");      
+      //"details": "footswitch (192.168.0.56/5004) ready to be invited",
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
-      String midiSessionName = "null";
+      state.led = "green slow";
+      state.progress = -1;
+
       int port = 0;
-      if (hwm.network->midiClient != nullptr){
-          midiSessionName = hwm.network->midiClient->getName();
-          port = hwm.network->midiClient->getPort();
+      if (hwm.network->appleMidiClient != nullptr){
+          midiSessionName = hwm.network->appleMidiClient->getName();
+          port = hwm.network->appleMidiClient->getPort();
       }
       state.subState = midiSessionName;      
       state.details = concatStrings(
-          *lang.getString("Connect MIDI session"),
-          " ",
-          midiSessionName,
-          " (",
-          hwm.network->IP.toString(),
-          ", port: ",
-          port,
-          ")");
+        midiSessionName,
+        " (",
+        hwm.network->IP.toString(),
+        "/",
+        port,
+        ") ",
+        *lang.getString("ready to be invited")
+      );
+
+    }
+
+    void setStateActiveSession(){
+      //"details": "Invitation sent to 10.0.0.5/5004 pending reply",      
+
+      MidiClient* appleMidiClient = hwm.network->appleMidiClient;
+
+      appleMidiClient->sendInvite(destination->ip, rtpPort);
+      DEBUG_PRINT("\nsetStateActiveSession::sendInvite() to %s:%d",destination->host.c_str(), rtpPort);  
+
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_PENDING;
+
       state.led = "green slow";
       state.progress = -1;
+
+      state.subState = destination->host;      
+      state.details = concatStrings(
+        *lang.getString("Inviting "),
+        " ",
+        destination->host,
+        "/",
+        rtpPort
+      );
     }
+
+    void setStateConnected(){
+      DEBUG_PRINT("\n\nConnected to session: %s\n", midiSessionName.c_str());
+      state.code = IF_READY;
+      state.label = IF_STATE_CONNECTED;
+      state.subState = IF_STATE_CONNECTED;
+      state.details = String(name);// + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");
+      state.progress = -1;
+      state.led = "green";     
+    }
+
+    void setStateDisconnected(){
+      state.code = IF_NOT_READY;
+      state.progress = -1;
+      state.led = "red fast";     
+      if (exception != ""){
+        state.label = IF_STATE_ERROR;
+        state.details = *lang.getString(exception);
+        exception = ""; //acknowledged
+      }else{
+        state.label = IF_STATE_DISCONNECTED;
+        state.details = *lang.getString("session disconnected");
+      }
+    }    
 
     virtual bool begin(){      
       //DEBUG_PRINT("\tAppleMIDIInterface::derivedBegin()");
       MIDIInterface::init();
       appleInstancePtr = this;   // do not forget otherwise callback function will crash
-      return disconnectNetwork();      
+      return disconnectDeviceFromNetwork();      
     }
 
     virtual bool end(){
@@ -621,41 +704,50 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return true;
     }
 
-    virtual bool connectNetwork(){
-      DEBUG_PRINT("\n%s::connectNetwork()",name.c_str());
-      setStatePendingSession();    // network has just connected so we now wait for a session to connect
+    void startSession(){
+      if (sessionType == APPLEMIDI_ACTIVE) setStateActiveSession();
+      else setStatePassiveSession();
+    }
 
+    virtual bool connectDeviceToNetwork(){
+      DEBUG_PRINT("\n%s::connectDeviceToNetwork()",name.c_str());
       // we connect the midi client to its callback
       // this should not go to the begin
-      MidiClient* midiClient = hwm.network->midiClient;      
-      if (midiClient == nullptr){
-        DEBUG_PRINT("\t(nullptr)\t");
+      
+      MidiClient* appleMidiClient = hwm.network->appleMidiClient;      
+      
+      if (appleMidiClient == nullptr){
+        DEBUG_PRINT("\nappleMidiClient (nullptr)");
         return false;
       }
-      midiClient->setHandleDisconnected(handleDisconnectedStatic);
-      midiClient->setHandleConnected(handleConnectedStatic);
-      midiClient->setHandleException(OnAppleMidiExceptionStatic);
-      midiClient->setHandleSystemExclusive(handleSysexStatic);
-      midiClient->setHandleControlChange(handleChangeControlStatic);
+
+      appleMidiClient->setHandleDisconnected(handleDisconnectedStatic);
+      appleMidiClient->setHandleConnected(handleConnectedStatic);
+      appleMidiClient->setHandleException(OnAppleMidiExceptionStatic);
+      appleMidiClient->setHandleSystemExclusive(handleSysexStatic);
+      appleMidiClient->setHandleControlChange(handleChangeControlStatic);
+
+      startSession();
 
       return true;
     }
 
-    virtual bool disconnectNetwork() {
-      DEBUG_PRINT("\nAppleMIDIInterface::disconnect()");
-      MidiClient* midiClient = hwm.network->midiClient; 
-      if (midiClient == nullptr){
+    virtual bool disconnectDeviceFromNetwork() {      
+      DEBUG_PRINT("\nAppleMIDIInterface::disconnectDeviceFromNetwork()");     
+      MidiClient* appleMidiClient = hwm.network->appleMidiClient; 
+      if (appleMidiClient == nullptr){
         DEBUG_PRINT("\t(nullptr)\t");
         return false;
       }
-      midiClient->endSession();
+      appleMidiClient->endSession();
+      setStateDisconnected();
       return true;
     }
 
 
   private:
     static inline AppleMIDIInterface* appleInstancePtr = nullptr;
-
+    unsigned long lastInvite = 0;
 
 };
 
