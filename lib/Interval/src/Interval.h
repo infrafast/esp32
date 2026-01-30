@@ -967,6 +967,33 @@ struct RtpmidiEndpoint {
   uint32_t lastSeenMs;
 };
 
+static const int MAX_RTP_DIR_ENDPOINTS = 3;
+RtpmidiEndpoint rtpDirectory[MAX_RTP_DIR_ENDPOINTS];
+
+
+static void upsertEndpoint(const char* instanceName, const byte ipBytes[4], unsigned short port) {
+  IPAddress ip(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]);
+
+  // dédoublonnage simple : même IP + port
+  for (int i = 0; i < epCount; i++) {
+    if (rtpDirectory[i].ip == ip && rtpDirectory[i].port == port) {
+      strncpy(rtpDirectory[i].name, instanceName ? instanceName : "?", sizeof(rtpDirectory[i].name) - 1);
+      rtpDirectory[i].name[sizeof(rtpDirectory[i].name) - 1] = '\0';
+      rtpDirectory[i].lastSeenMs = millis();
+      return;
+    }
+  }
+
+  if (epCount >= MAX_RTP_DIR_ENDPOINTS) return;
+
+  RtpmidiEndpoint &e = rtpDirectory[epCount++];
+  strncpy(e.name, instanceName ? instanceName : "?", sizeof(e.name) - 1);
+  e.name[sizeof(e.name) - 1] = '\0';
+  e.ip = ip;
+  e.port = port;
+  e.lastSeenMs = millis();
+}
+
 
 #include "HWManager.h"
 HardwareManager hwm;
@@ -985,7 +1012,7 @@ struct State{ // used by Strip and Interface
   String details = "Interface not implemented";
   String led = "black";
   bool offline = false;
-  float progress,previous = -1;
+  float progress = -1;
 
   String previousStateLabel = "";
   String previousLed = "";
@@ -1799,34 +1826,6 @@ void OnWiFiEvent(WiFiEvent_t event){
   }
 }
 
-static const int MAX_EP = 3;
-RtpmidiEndpoint eps[MAX_EP];
-
-
-static void upsertEndpoint(const char* instanceName, const byte ipBytes[4], unsigned short port) {
-  IPAddress ip(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]);
-
-  // dédoublonnage simple : même IP + port
-  for (int i = 0; i < epCount; i++) {
-    if (eps[i].ip == ip && eps[i].port == port) {
-      strncpy(eps[i].name, instanceName ? instanceName : "?", sizeof(eps[i].name) - 1);
-      eps[i].name[sizeof(eps[i].name) - 1] = '\0';
-      eps[i].lastSeenMs = millis();
-      return;
-    }
-  }
-
-  if (epCount >= MAX_EP) return;
-
-  RtpmidiEndpoint &e = eps[epCount++];
-  strncpy(e.name, instanceName ? instanceName : "?", sizeof(e.name) - 1);
-  e.name[sizeof(e.name) - 1] = '\0';
-  e.ip = ip;
-  e.port = port;
-  e.lastSeenMs = millis();
-}
-
-
 // ====== Callback EthernetBonjour quand un service est trouvé ======
 // Signature d'après la doc EthernetBonjour :
 // (serviceType, proto, serviceName, ip[4], port, txt) :contentReference[oaicite:1]{index=1}
@@ -1839,9 +1838,9 @@ void onEthernetBonjourServiceFoundCallback(const char* serviceType,
   // Quand le timeout est atteint, la lib rappelle une fois avec serviceName==NULL :contentReference[oaicite:2]{index=2}
   if (serviceName == nullptr || ipAddr == nullptr) {
     DEBUG_PRINT("\n[Bonjour] Scan terminé (timeout).");
-    Serial.printf("\n[Bonjour] %d endpoint(s) mémorisé(s)\n", epCount);
+    DEBUG_PRINT("\n[Bonjour] %d endpoint(s) mémorisé(s)\n", epCount);
     for (int i = 0; i < epCount; i++) {
-      DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i, eps[i].name, eps[i].ip.toString().c_str(), eps[i].port);
+      DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i, rtpDirectory[i].name, rtpDirectory[i].ip.toString().c_str(), rtpDirectory[i].port);
     }
     return;
   }
@@ -1858,7 +1857,6 @@ void onEthernetBonjourServiceFoundCallback(const char* serviceType,
                 port);
 
   if (txt) {
-
     DEBUG_PRINT("\n         TXT: %s",txt);
   }
 }

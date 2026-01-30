@@ -390,12 +390,11 @@ enum{
 class AppleMidiSessionType : public DataSet{
   #define APPLEMIDI_SESSIONS_NUMBER   2
   public:
-    String sessionsNames[APPLEMIDI_SESSIONS_NUMBER] = {"passive","active"};
-
+    String sessionTypesString[APPLEMIDI_SESSIONS_NUMBER] = {"passive","active"};
     AppleMidiSessionType(Address* _address): DataSet(_address, APPLEMIDI_INTERFACE, &IFconfigRepo){}
     virtual const String* getValuePtr(uint16_t index){
       if (index>getSize()-1) return &errorDatasetOOR;
-      return &sessionsNames[index];    //local javascript function 
+      return &sessionTypesString[index];    //local javascript function 
     }  
 
     virtual uint16_t getSize(){
@@ -411,7 +410,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
   #define ADDRESS_RTPPORT "/rtpPort/%d"
 
   public: 
-
+    RtpmidiEndpoint* rtpDir;     // directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
+    // size: MAX_RTP_DIR_ENDPOINTS
     FreeTextAddress* addressAppleMidiPort = new FreeTextAddress(ADDRESS_RTPPORT,"rtpPort", REGEX_0to65535);
     String midiSessionName ="undef";
 
@@ -420,7 +420,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     
     String exception = "";
 
-    AppleMIDIInterface(bool _configurable):MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
+    AppleMIDIInterface(bool _configurable, RtpmidiEndpoint* _rtpDir): rtpDir(_rtpDir),MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
       attachDeviceInterface(this);
 
@@ -670,8 +670,24 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       state.led = "green slow";
       state.progress = -1;
 
+      String directory = ""; 
+
+      for (uint8_t i = 0; i<MAX_RTP_DIR_ENDPOINTS; i++){
+        directory = concatStrings(
+          directory,
+          rtpDir[i].name,": ",
+          rtpDir[i].ip.toString(),"/",
+          String(rtpDir[i].port),
+          "<br>"
+        );
+
+      }
+
+      
       state.subState = destination->host;      
       state.details = concatStrings(
+        *lang.getString("Available sessions are"),":",
+        directory,
         *lang.getString("Inviting "),
         " ",
         destination->host,
@@ -685,7 +701,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       state.code = IF_READY;
       state.label = IF_STATE_CONNECTED;
       state.subState = IF_STATE_CONNECTED;
-      state.details = String(name);// + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");
+      state.details = String(midiSessionName);// + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");
       state.progress = -1;
       state.led = "green";     
     }
@@ -768,7 +784,7 @@ class MIDIOSC/*: public OSCInterface*/{
     }
 
     void instantiate(String midiInterface, bool _configurable){
-      if (midiInterface == APPLEMIDI_INTERFACE) midiTransport = new AppleMIDIInterface(_configurable);
+      if (midiInterface == APPLEMIDI_INTERFACE) midiTransport = new AppleMIDIInterface(_configurable, rtpDirectory);
       else if (midiInterface == BLEMIDI_INTERFACE) midiTransport = new BLEMIDIInterface(_configurable);
       else midiTransport = new USBMIDIInterface(_configurable);      
     }

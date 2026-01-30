@@ -922,11 +922,12 @@ class WiFiEth : public Network{
           ethEnabled = false;
         }else{
           if (debug) DEBUG_PRINT("\n%s Using WiFi & Ethernet",id.c_str());
+          EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);
         }
       }else{
         //if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
       }
-      EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);
+     
 
       if (!ethEnabled){
         // power off the ethernet
@@ -1349,17 +1350,12 @@ class WiFiEth : public Network{
             unpauseWiFi();
 
             // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
-            /*int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
+            int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
             DEBUG_PRINT("\nTrouvé %d service(s) AppleMIDI\n", n);
             for (int i = 0; i < n; i++) {
-              DEBUG_PRINT("  #%d: %s  %s:%u\n",
-                            i,
-                            MDNS.hostname(i).c_str(),
-                            MDNS.IP(i).toString().c_str(),
-                            MDNS.port(i));
-            }*/
-
-
+              uint8_t ipBytes[4] = {MDNS.IP(i)[0], MDNS.IP(i)[1], MDNS.IP(i)[2], MDNS.IP(i)[3]};
+              upsertEndpoint(MDNS.hostname(i).c_str(),  ipBytes, MDNS.port(i));
+            }
           }else{
             // ETHERNET        
             gateway = Ethernet.gatewayIP();

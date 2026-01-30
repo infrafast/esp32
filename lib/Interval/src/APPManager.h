@@ -790,7 +790,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       artnetDMXInterface = new ArtnetDMXInterface(true);
       threePinDMXInterface = new ThreePinDMXInterface(true);     
       // RTPMIDI
-      appleMIDIInterface = new AppleMIDIInterface(true);
+      appleMIDIInterface = new AppleMIDIInterface(true,rtpDirectory);
       //AppleMIDIInterface::setInstance(appleMIDIInterface);
 
       std::vector<String> groupesUniques;
@@ -2234,7 +2234,7 @@ void setup() {
             setWSServer();   // ==> websocket server is created and then changed by application refresh() in case the network medium is changed
             //webTaskhandle(WEB_START);                   
           }
-          hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"," (http://",hwm->network->IP.toString(),")"); // hwm->configMedia->IP.toString();
+          hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"," (http://",hwm->configMedia->IP.toString(),")"); // hwm->configMedia->IP.toString();
           DEBUG_PRINT("\nWebserver serving on %s",hwm->configURL.c_str() );
           return true;
         }
