@@ -21,8 +21,6 @@ class OSCPing: public PingEcho{
 class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should derive OSCInterface
 
   public:
-    NetworkInterfaceMonitor netHelper = NetworkInterfaceMonitor(this,this);
-
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
     FreeTextAddress* addressOSCport = new FreeTextAddress(ADDRESS_OSCPORT,"OSCport", REGEX_0to65535);
     
@@ -35,6 +33,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
       icon = "g";     
+      attachDeviceInterface(this);
 
       destination = new OSCPing(_OSC_IPaddress,pingCommand);
       
@@ -101,7 +100,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }        
 
     virtual void monitor(){           
-      netHelper.monitor();
+      monitorNetworkInterface();
     }    
 
     virtual void connectedNetworkMonitor(){

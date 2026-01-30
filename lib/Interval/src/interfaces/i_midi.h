@@ -414,7 +414,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     FreeTextAddress* addressAppleMidiPort = new FreeTextAddress(ADDRESS_RTPPORT,"rtpPort", REGEX_0to65535);
     String midiSessionName ="undef";
-    NetworkInterfaceMonitor netHelper = NetworkInterfaceMonitor(this,this);
 
     int rtpPort = 5004;;
     int sessionType = APPLEMIDI_PASSIVE; // 0:passive, 1:active
@@ -423,6 +422,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     AppleMIDIInterface(bool _configurable):MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
+      attachDeviceInterface(this);
 
       registerDataSetAddress(addressAppleMidiPort);
       registerDataSetAddress(dsAppleMidiSessions.address);
@@ -500,7 +500,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }      
 
     virtual void monitor(){     
-      netHelper.monitor();
+      monitorNetworkInterface();
     }
 
     #define MIDI_INVITE_PERIOD 3000

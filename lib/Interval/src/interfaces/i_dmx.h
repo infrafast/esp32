@@ -25,14 +25,14 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkInterface {
 
   public:
     String voidArtnetParam = "artnet123";
-    NetworkInterfaceMonitor netHelper = NetworkInterfaceMonitor(this,this);
 
     ArtnetDMXInterface(bool _configurable):DMXInterface(ARTNETDMX_INTERFACE, GROUP_INTERFACE_DMX, _configurable){
       icon = "b";
+      attachDeviceInterface(this);
     }
 
     virtual void monitor(){     
-      netHelper.monitor();
+      monitorNetworkInterface();
     }
 
   
