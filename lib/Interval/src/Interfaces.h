@@ -321,18 +321,16 @@ class NetWorkInterface{
     virtual void connectedNetworkMonitor() = 0;
     virtual bool connectDeviceToNetwork() = 0;           // called when network is connected
    virtual bool disconnectDeviceFromNetwork()= 0;        // called when network is disconnected
-};
 
-class NetworkInterfaceMonitor{
+    void attachDeviceInterface(DeviceInterface* _devif){
+      deviceInterface = _devif;
+    }
 
-  public:
-
-    NetWorkInterface* networkInterface = nullptr;
+  protected:
     DeviceInterface* deviceInterface = nullptr;
-    
-    NetworkInterfaceMonitor(NetWorkInterface* _netif, DeviceInterface* _devif):networkInterface(_netif),deviceInterface(_devif){}
-   
+
     void setNetworkStateDown(){
+      if (!deviceInterface) return;
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;           
       deviceInterface->state.led = "red medium";
@@ -340,6 +338,7 @@ class NetworkInterfaceMonitor{
     }
 
     void setDeviceStateDisconnected(){
+      if (!deviceInterface) return;
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
       deviceInterface->state.details = *lang.getString("setDeviceStateDisconnected");      
@@ -347,8 +346,8 @@ class NetworkInterfaceMonitor{
       deviceInterface->state.progress = -1;
     }    
     
-
-    virtual void monitor(){         
+    void monitorNetworkInterface(){         
+      if (!deviceInterface) return;
       if (hwm.network->refreshed){
         bool success = false;
         if (hwm.network->state == CONNECTED){
@@ -357,17 +356,17 @@ class NetworkInterfaceMonitor{
             return;
           }else{
             DEBUG_PRINT("\n%s->monitor connectDeviceToNetwork()",deviceInterface->interfaceName.c_str());
-            success = networkInterface->connectDeviceToNetwork();
+            success = connectDeviceToNetwork();
             if (!success) setDeviceStateDisconnected();            
           }
         }else{
           setNetworkStateDown();    
-          success = networkInterface->disconnectDeviceFromNetwork();
+          success = disconnectDeviceFromNetwork();
           DEBUG_PRINT("\n%s->disconnectDeviceFromNetwork()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");
         }
       }
       // we only monitor networkdevices when network is on
-      if (hwm.network->state == CONNECTED) networkInterface->connectedNetworkMonitor();
+      if (hwm.network->state == CONNECTED) connectedNetworkMonitor();
       else{
         // otherwise we report on progress and the network we try to connect         
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
