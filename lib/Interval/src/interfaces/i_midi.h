@@ -526,6 +526,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       DEBUG_PRINT("\n\nappleMidi session #%i %s connected\n", ssrc, name);
       midiSessionName = String(name);
       setStateConnected();
+      // wake up
+      // sendRealTime
     }    
 
     void handleDisconnected(const ssrc_t& ssrc) {
