@@ -790,7 +790,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       artnetDMXInterface = new ArtnetDMXInterface(true);
       threePinDMXInterface = new ThreePinDMXInterface(true);     
       // RTPMIDI
-      appleMIDIInterface = new AppleMIDIInterface(true,rtpDirectory);
+      appleMIDIInterface = new AppleMIDIInterface(true,&rtpDir);
       //AppleMIDIInterface::setInstance(appleMIDIInterface);
 
       std::vector<String> groupesUniques;
@@ -858,6 +858,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         this->onOffCallback(event);
       });
 
+      hwm->network->registerCallback([this](Event* event) {
+        this->networkCallback(event);
+      });
+      
       back_menu_item = new MenuItem(quitMenuString, &back_menu_item_selected);
       info_menu_item = new MenuItem(infoMenuString, &info_item_selected);
       config_menu_item = new MenuItem(configMenuString,&config_menu_item_selected);
@@ -954,6 +958,17 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     // EVENTS HANDLING
+
+
+    void networkCallback(Event* event){
+      switch(event->type){
+        case EVENT_EP_DIRECTORY_UPDATED:
+          epDirectoryUpdated();
+        break;
+      }
+      // propagate the event
+      fireEvent(event);      
+    }
 
 
     void onOffCallback(Event* event){
@@ -1868,10 +1883,14 @@ void setup() {
         #endif
 
         interface->update();
-        if (interface->state.broadcast){
+        if (interface->state.broadcastState){
           broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
-          interface->state.broadcast = false; // acknowledged
+          interface->state.broadcastState = false; // acknowledged
         }
+        if (interface->state.broadcastConfig){
+          broadCast(concatStrings("{\"deviceCfg\":", interface->serializeConfig(), "}")); // inform web interface
+          interface->state.broadcastConfig = false; // acknowledged
+        }        
       }
 
       //------------------
@@ -3232,6 +3251,7 @@ void setup() {
 
           }else{
             DEBUG_PRINT("\nInterface no change");
+            interface->userRequestedRefreshInterface(); // to call for specific things like refreshing the exposed params list            
             jsonAnswer.callback=RET_SAVEBUTTON;
             jsonAnswer.value ="0";            
           }
@@ -3452,6 +3472,40 @@ void setup() {
       res.end();
       //DEBUG_PRINT("\tend()");      
     }     
+
+    void epDirectoryUpdated(){
+      for (int i = 0; i < rtpDir.epCount; i++) {
+        DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
+      }
+      // midi interface has to update its config and regenerate its state
+      JsonDocument doc;
+
+      JsonObject ifcfg = doc.createNestedObject("ifconfigs");
+      IFconfigRepo.serialize(ifcfg);
+
+      JsonObject device = doc.createNestedObject("device");
+
+      JsonDocument appleMidiIF;
+      appleMIDIInterface->serialize(appleMidiIF);
+      // copie du contenu dans "device"
+      device.set(appleMidiIF.as<JsonObject>());
+
+      jsonAnswer.callback = "bulkConfig";       
+
+      serializeJson(doc, jsonAnswer.value);  
+      removeJsonQuote(&jsonAnswer.value);       
+
+      JsonDocument jsonOutput;
+      jsonOutput[jsonAnswer.callback] = jsonAnswer.value;
+
+      String jsonString;
+      serializeJson(jsonOutput,jsonString);
+      removeJsonQuote(&jsonString);
+
+      jsonOutput.shrinkToFit();
+      broadCast(jsonString);
+
+    }
 
   private:
     HardwareManager* hwm;

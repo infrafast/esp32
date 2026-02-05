@@ -386,51 +386,61 @@ enum{
 };
 
 #define APPLEMIDI_INTERFACE "AppleMIDI"
-#define ADDRESS_APPLEMIDISESSION   "/session/%d"
+#define APPLEMIDI_SESSIONS_NUMBER   MAX_RTP_DIR_ENDPOINTS+1     // the dropdown will contains as many sessions as there are RTP endpoints + 1 for "passive"
+
+struct SessionOptions{
+  String name[APPLEMIDI_SESSIONS_NUMBER];
+  int count = 0;
+};
+
+#define ADDRESS_APPLEMIDISESSION   "/session/%s"
+#define PASSIVE_SESSION_NAME "passive"
 class AppleMidiSessionType : public DataSet{
-  #define APPLEMIDI_SESSIONS_NUMBER   2
+  
   public:
-    String sessionTypesString[APPLEMIDI_SESSIONS_NUMBER] = {"passive","active"};
-    AppleMidiSessionType(Address* _address): DataSet(_address, APPLEMIDI_INTERFACE, &IFconfigRepo){}
+    SessionOptions* sessionOptions = nullptr;
+   
+    AppleMidiSessionType(Address* _address, SessionOptions* s): sessionOptions(s), DataSet(_address, APPLEMIDI_INTERFACE, &IFconfigRepo){}
+    
     virtual const String* getValuePtr(uint16_t index){
       if (index>getSize()-1) return &errorDatasetOOR;
-      return &sessionTypesString[index];    //local javascript function 
+      return &sessionOptions->name[index];    //local javascript function 
     }  
 
     virtual uint16_t getSize(){
-      return APPLEMIDI_SESSIONS_NUMBER;
+      return sessionOptions->count;
     }
-
-}dsAppleMidiSessions(new DropDownAddress(ADDRESS_APPLEMIDISESSION));
-
+};
 
 
 class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
   #define CONFIG_APPLE "voidAppleMidiParam"
-  #define ADDRESS_RTPPORT "/rtpPort/%d"
+  #define SESSION_DESC_LENGHT 128
 
   public: 
-    RtpmidiEndpoint* rtpDir;     // directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
-    // size: MAX_RTP_DIR_ENDPOINTS
-    FreeTextAddress* addressAppleMidiPort = new FreeTextAddress(ADDRESS_RTPPORT,"rtpPort", REGEX_0to65535);
-    String midiSessionName ="undef";
+    
+    SessionOptions sessionOptions;
+    AppleMidiSessionType dsAppleMidiSessions = AppleMidiSessionType(new DropDownAddress(ADDRESS_APPLEMIDISESSION),&sessionOptions);
+    RtpDirectory* rtpDirectory;     // directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
+    
+    String midiSessionName = PASSIVE_SESSION_NAME;
+    int sessionType = APPLEMIDI_PASSIVE; // 0:passive, 1:active
 
     int rtpPort = 5004;;
-    int sessionType = APPLEMIDI_PASSIVE; // 0:passive, 1:active
     
     String exception = "";
 
-    AppleMIDIInterface(bool _configurable, RtpmidiEndpoint* _rtpDir): rtpDir(_rtpDir),MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
+    AppleMIDIInterface(bool _configurable, RtpDirectory* _rtpDirectory): rtpDirectory(_rtpDirectory),MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
       attachDeviceInterface(this);
 
-      registerDataSetAddress(addressAppleMidiPort);
       registerDataSetAddress(dsAppleMidiSessions.address);
-      registerDataSetAddress(&addressIP);           // global     
       
       destination = new PingEcho("0.0.0.0");
 
       jsonInputRepo.add(this); 
+
+      populateSessionOptionss();      
 
     }
 
@@ -451,23 +461,130 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return true;
     }    
 
-    virtual void serializeProperties(JsonArray& properties) override{
-      char* buf = (char*)malloc((strlen(ADDRESS_RTPPORT)+6)*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_RTPPORT,rtpPort);
-      properties.add(String(buf)); 
-      free(buf);
-
-      buf = (char*)malloc((strlen(ADDRESS_IP)+destination->ip.toString().length())*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_IP,destination->ip.toString());
-      properties.add(String(buf)); 
-      free(buf);         
-    
-      buf = (char*)malloc((strlen(ADDRESS_APPLEMIDISESSION)+6)*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_APPLEMIDISESSION,sessionType);
-      properties.add(String(buf)); 
-      free(buf);
-
+    virtual void userRequestedRefreshInterface(){
+      hwm.network->startDirectoryServiceDiscovery();      // we request a directory service discovery to refresh the list of available sessions
     }
+
+
+    void populateSessionOptionss(){
+      sessionOptions.name[0] = PASSIVE_SESSION_NAME;   // first entry is always "passive"
+      for (int i = 0; i < MAX_RTP_DIR_ENDPOINTS; i++) {
+        if (rtpDirectory->ep[i].name != "") {
+          sessionOptions.name[i+1] = concatStrings(rtpDirectory->ep[i].name, " (", rtpDirectory->ep[i].ip.toString(), ":", rtpDirectory->ep[i].port, ")");          
+        } else {
+          sessionOptions.name[i+1] = "";  // empty entry
+        }
+      }
+      sessionOptions.count = rtpDirectory->epCount+1;
+    }
+
+    virtual void serializeProperties(JsonArray& properties) override{   
+      
+      String sessionOptions = "";
+      if (sessionType == APPLEMIDI_ACTIVE){
+        sessionOptions = concatStrings(midiSessionName, " (", destination->ip.toString(), ":", rtpPort, ")");  // /sessions/session name (192.168.0.1:5004)
+      }else{
+        sessionOptions = PASSIVE_SESSION_NAME;     // /session/passive
+      }
+      
+
+      char* buf = (char*)malloc((strlen(ADDRESS_APPLEMIDISESSION)+sessionOptions.length()+1)*sizeof(char*));
+      sprintf(buf,ADDRESS_APPLEMIDISESSION,sessionOptions.c_str());
+      properties.add(String(buf)); 
+      free(buf);
+    }
+
+    /*
+      "/session/session name (192.168.0.1:5004)"
+      Objectif :
+      sessionOptions → "session name (192.168.0.1:5004)"
+      sessionName → "session name"
+      IPaddress → "192.168.0.1"
+      port → 5004
+      return true si OK, false si erreur de parsing
+
+      Si la partie après /session/ vaut exactement "passive" (ou commence par "passive" et ne contient pas (), alors c’est OK et :
+      sessionOptions = "passive"
+      sessionName = "passive"
+      ipAddress = ""
+      port = 0
+      retour true
+      Sinon, on applique le parsing normal "name (ip:port)".      
+    */
+    bool parseSession(const char* input,
+                      char* sessionOptions,
+                      size_t sessionDescriptorSize,
+                      char* sessionName,
+                      size_t sessionNameSize,
+                      char* ipAddress,
+                      size_t ipAddressSize,
+                      int& port)
+    {
+        if (!input || !sessionOptions || !sessionName || !ipAddress)
+            return false;
+
+        // Init sorties (évite les restes)
+        sessionOptions[0] = '\0';
+        sessionName[0] = '\0';
+        ipAddress[0] = '\0';
+        port = 0;
+
+        // 1) Chercher "/session/"
+        const char* base = strstr(input, "/session/");
+        if (!base) return false;
+        base += strlen("/session/");
+
+        if (*base == '\0') return false; // rien après /session/
+
+        // 2) Copier sessionOptions (tout ce qui suit)
+        size_t descLen = strlen(base);
+        if (descLen + 1 > sessionDescriptorSize) return false;
+        strcpy(sessionOptions, base);
+
+        // --- Cas spécial: "/session/passive" ---
+        // OK si pas de '(' et que le contenu est exactement "passive"
+        // (si tu veux tolérer des espaces autour, dis-moi et je l'ajuste)
+        if (strcmp(sessionOptions, "passive") == 0) {
+            if (strlen("passive") + 1 > sessionNameSize) return false;
+            strcpy(sessionName, "passive");
+            // ipAddress déjà "", port déjà 0
+            return true;
+        }
+
+        // 3) Parsing normal : "<name> (<ip>:<port>)"
+        const char* parenOpen = strchr(sessionOptions, '(');
+        if (!parenOpen) return false;
+
+        // Vérifier qu'il y a bien un espace avant '('
+        if (parenOpen == sessionOptions || *(parenOpen - 1) != ' ')
+            return false;
+
+        // 4) sessionName = avant " ("
+        size_t nameLen = (size_t)(parenOpen - sessionOptions) - 1;
+        if (nameLen == 0 || nameLen + 1 > sessionNameSize) return false;
+
+        strncpy(sessionName, sessionOptions, nameLen);
+        sessionName[nameLen] = '\0';
+
+        // 5) Extraire IP et port depuis "(IP:PORT)"
+        // NOTE: ipAddressSize limite la copie finale, sscanf n'en tient pas compte.
+        // On lit d'abord dans un buffer local pour éviter overflow.
+        char ipTmp[64];
+        ipTmp[0] = '\0';
+        int pTmp = 0;
+
+        int parsed = sscanf(parenOpen, "(%63[^:]:%d)", ipTmp, &pTmp);
+        if (parsed != 2) return false;
+
+        if (strlen(ipTmp) + 1 > ipAddressSize) return false;
+        strcpy(ipAddress, ipTmp);
+
+        if (pTmp <= 0 || pTmp > 65535) return false;
+        port = pTmp;
+
+        return true;
+    }
+
 
     virtual void handlePropertyChange() override{
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
@@ -476,26 +593,45 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     virtual bool restoreProperty(const char* property) override{
+
+      char sessionOptions[SESSION_DESC_LENGHT];
+      char sessionName[64];
+      char ipAddress[32];
+      int port = 0;      
+
+
       bool changed = false;
-      uint16_t intVal;
-      #define MAXLENGHTINPUT 32
-      char inputStr[MAXLENGHTINPUT];      
-      if (sscanf(property, ADDRESS_RTPPORT, &intVal) == 1) {
-        if (intVal != rtpPort)   changed = true;
-        rtpPort = intVal;       
-      }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
-        IPAddress ip;
-        if (ip.fromString(inputStr)){
-          if (destination->ip != ip)  changed = true;
-          destination->ip = ip;      
-          destination->host = ip.toString();
-        }else{
-          DEBUG_PRINT("\ninvalid IP address:%s",inputStr);
+      if (parseSession(property, sessionOptions, sizeof(sessionOptions), sessionName, sizeof(sessionName), ipAddress, sizeof(ipAddress), port)){
+
+        DEBUG_PRINT("\nParsed sessionOptions: %s", sessionOptions);
+        DEBUG_PRINT("\nsessionName: %s", sessionName);
+        DEBUG_PRINT("\nipAddress: %s", ipAddress);
+        DEBUG_PRINT("\nport: %d", port);
+
+        if (strcmp(sessionName, PASSIVE_SESSION_NAME) == 0) {
+            if (sessionType != APPLEMIDI_PASSIVE) changed = true;
+            sessionType = APPLEMIDI_PASSIVE;
+        } else {
+          if (sessionType != APPLEMIDI_ACTIVE) changed = true;
+          sessionType = APPLEMIDI_ACTIVE;
+
+          if (rtpPort != port) changed = true;   
+          rtpPort = port;
+
+          midiSessionName = String(sessionName);
+
+          if (destination->host != String(ipAddress))   changed = true;
+          destination->host = String(ipAddress);
+          destination->ip.fromString(ipAddress);            
+
+          // the session description is added to the list of end point so it appears on the drop down even if it was not detected (recall from saved interface parameter)
+          uint8_t ipBytes[4] = {destination->ip[0], destination->ip[1], destination->ip[2], destination->ip[3]};          
+          rtpDirectory->upsertEndpoint(sessionName, ipBytes, port);          
         }
-      }else if (sscanf(property, ADDRESS_APPLEMIDISESSION, &intVal) == 1) {
-        if (intVal != sessionType)   changed = true;
-        sessionType = intVal;       
-      }
+       
+
+      }      
+
       return changed;
     }      
 
@@ -503,7 +639,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       monitorNetworkInterface();
     }
 
-    #define MIDI_INVITE_PERIOD 3000
+    #define MIDI_INVITE_PERIOD 15000   // should be bigger than the timeout of invite()
     virtual void connectedNetworkMonitor(){
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;  
       
@@ -633,7 +769,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
 
     void setStatePassiveSession(){
-      DEBUG_PRINT("\nAppleMIDIInterface::setStatePassiveSession");      
+            DEBUG_PRINT("\nAppleMIDIInterface::setStatePassiveSession");      
       //"details": "footswitch (192.168.0.56/5004) ready to be invited",
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
@@ -655,7 +791,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
         ") ",
         *lang.getString("ready to be invited")
       );
-
     }
 
     void setStateActiveSession(){
@@ -665,31 +800,14 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
       appleMidiClient->sendInvite(destination->ip, rtpPort);
 
-
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
 
       state.led = "green slow";
       state.progress = -1;
-
-      String directory = ""; 
-
-      for (uint8_t i = 0; i<MAX_RTP_DIR_ENDPOINTS; i++){
-        directory = concatStrings(
-          directory,
-          rtpDir[i].name,": ",
-          rtpDir[i].ip.toString(),"/",
-          String(rtpDir[i].port),
-          "<br>"
-        );
-
-      }
-
-      
+    
       state.subState = destination->host;      
       state.details = concatStrings(
-        *lang.getString("Available sessions are"),":",
-        directory,
         *lang.getString("Inviting "),
         " ",
         destination->host,
@@ -723,7 +841,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       }
     }    
 
-    void startSession(){
+    void startSession(){      
+      populateSessionOptionss();   // refresh the session descriptors in case the rtp directory has changed
       lastInvite = millis();    // we reset the timer that controls the periodicity of the invites
       if (sessionType == APPLEMIDI_ACTIVE) setStateActiveSession();
       else setStatePassiveSession();
@@ -753,14 +872,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     virtual bool disconnectDeviceFromNetwork() {      
-      DEBUG_PRINT("\nAppleMIDIInterface::disconnectDeviceFromNetwork()");     
-      MidiClient* appleMidiClient = hwm.network->appleMidiClient; 
-      if (appleMidiClient == nullptr){
-        DEBUG_PRINT("\t(nullptr)\t");
-        return false;
-      }
-      appleMidiClient->endSession();
       setStateDisconnected();
+
+      MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
+      if (appleMidiClient != nullptr) appleMidiClient->endSession();
       return true;
     }
 
@@ -786,7 +901,7 @@ class MIDIOSC/*: public OSCInterface*/{
     }
 
     void instantiate(String midiInterface, bool _configurable){
-      if (midiInterface == APPLEMIDI_INTERFACE) midiTransport = new AppleMIDIInterface(_configurable, rtpDirectory);
+      if (midiInterface == APPLEMIDI_INTERFACE) midiTransport = new AppleMIDIInterface(_configurable, &rtpDir);
       else if (midiInterface == BLEMIDI_INTERFACE) midiTransport = new BLEMIDIInterface(_configurable);
       else midiTransport = new USBMIDIInterface(_configurable);      
     }

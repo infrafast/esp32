@@ -279,7 +279,8 @@ class EventDispatcher {
         EVENT_NETWORK_CHANGED_STATE,
         EVENT_NETWORK,
         EVENT_INTERNET_PING,
-        EVENT_APPLICATION
+        EVENT_APPLICATION,
+        EVENT_EP_DIRECTORY_UPDATED
       };
 
 
@@ -959,7 +960,6 @@ void xTaskBackground(void *pvParameters);
 
 
 // ====== Liste simple des endpoints découverts ======
-int epCount = 0;
 struct RtpmidiEndpoint {
   char name[64];        // nom d'instance (ex: "Mon MacBook Pro")
   IPAddress ip;
@@ -968,31 +968,41 @@ struct RtpmidiEndpoint {
 };
 
 static const int MAX_RTP_DIR_ENDPOINTS = 3;
-RtpmidiEndpoint rtpDirectory[MAX_RTP_DIR_ENDPOINTS];
+class RtpDirectory{
 
+  public:
 
-static void upsertEndpoint(const char* instanceName, const byte ipBytes[4], unsigned short port) {
-  IPAddress ip(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]);
+    int epCount = 0;
+    RtpmidiEndpoint ep[MAX_RTP_DIR_ENDPOINTS];
 
-  // dédoublonnage simple : même IP + port
-  for (int i = 0; i < epCount; i++) {
-    if (rtpDirectory[i].ip == ip && rtpDirectory[i].port == port) {
-      strncpy(rtpDirectory[i].name, instanceName ? instanceName : "?", sizeof(rtpDirectory[i].name) - 1);
-      rtpDirectory[i].name[sizeof(rtpDirectory[i].name) - 1] = '\0';
-      rtpDirectory[i].lastSeenMs = millis();
-      return;
+    void upsertEndpoint(const char* instanceName, const byte ipBytes[4], unsigned short port) {
+      //DEBUG_PRINT("\nupsertEndpoint(%s,%d.%d.%d.%d,%d)", instanceName,ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3], port);
+      IPAddress ip(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]);
+
+      // dédoublonnage simple : même IP + port
+      for (int i = 0; i < epCount; i++) {
+        if (ep[i].ip == ip && ep[i].port == port) {
+          strncpy(ep[i].name, instanceName ? instanceName : "?", sizeof(ep[i].name) - 1);
+          ep[i].name[sizeof(ep[i].name) - 1] = '\0';
+          ep[i].lastSeenMs = millis();
+          return;
+        }
+      }
+
+      if (epCount >= MAX_RTP_DIR_ENDPOINTS) return;
+
+      RtpmidiEndpoint &e = ep[epCount++];
+      strncpy(e.name, instanceName ? instanceName : "?", sizeof(e.name) - 1);
+      e.name[sizeof(e.name) - 1] = '\0';
+      e.ip = ip;
+      e.port = port;
+      e.lastSeenMs = millis();
+      //DEBUG_PRINT("\nAdded endpoint: %s at %s:%d", e.name, e.ip.toString().c_str(), e.port);
     }
-  }
+  
+}rtpDir;
 
-  if (epCount >= MAX_RTP_DIR_ENDPOINTS) return;
 
-  RtpmidiEndpoint &e = rtpDirectory[epCount++];
-  strncpy(e.name, instanceName ? instanceName : "?", sizeof(e.name) - 1);
-  e.name[sizeof(e.name) - 1] = '\0';
-  e.ip = ip;
-  e.port = port;
-  e.lastSeenMs = millis();
-}
 
 
 #include "HWManager.h"
@@ -1021,7 +1031,8 @@ struct State{ // used by Strip and Interface
   float previousProgress = -1;
 
   bool changed = false;
-  bool broadcast = false;
+  bool broadcastState = false;
+  bool broadcastConfig = false;
 
 };
 
@@ -1838,10 +1849,8 @@ void onEthernetBonjourServiceFoundCallback(const char* serviceType,
   // Quand le timeout est atteint, la lib rappelle une fois avec serviceName==NULL :contentReference[oaicite:2]{index=2}
   if (serviceName == nullptr || ipAddr == nullptr) {
     DEBUG_PRINT("\n[Bonjour] Scan terminé (timeout).");
-    DEBUG_PRINT("\n[Bonjour] %d endpoint(s) mémorisé(s)\n", epCount);
-    for (int i = 0; i < epCount; i++) {
-      DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i, rtpDirectory[i].name, rtpDirectory[i].ip.toString().c_str(), rtpDirectory[i].port);
-    }
+    DEBUG_PRINT("\n[Bonjour] %d endpoint(s) mémorisé(s)\n", rtpDir.epCount);
+    app.epDirectoryUpdated();
     return;
   }
 
@@ -1849,16 +1858,16 @@ void onEthernetBonjourServiceFoundCallback(const char* serviceType,
   if (proto != MDNSServiceUDP) return;
   if (strcmp(serviceType, "_apple-midi") != 0) return;
 
-  upsertEndpoint(serviceName, ipAddr, port);
+  rtpDir.upsertEndpoint(serviceName, ipAddr, port);
 
-  DEBUG_PRINT("\n[RTP-MIDI] trouvé: %s  %u.%u.%u.%u:%u\n",
+  /*DEBUG_PRINT("\n[RTP-MIDI] trouvé: %s  %u.%u.%u.%u:%u\n",
                 serviceName,
                 ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3],
                 port);
 
   if (txt) {
     DEBUG_PRINT("\n         TXT: %s",txt);
-  }
+  }*/
 }
 
 

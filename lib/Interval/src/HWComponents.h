@@ -86,9 +86,10 @@ void pingTask(void*);
 void connectHTTPTask(void*);
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-class HWComponent: public GenericComponent{
+class HWComponent: public GenericComponent, public EventDispatcher{
   public:
     uint8_t CSPin;
+    Event evt;
 
     HWComponent(uint8_t pin, boolean d=true):GenericComponent(d){
       CSPin = pin;
@@ -327,7 +328,7 @@ struct ButtonEvent {
 #define DEFAULT_DCLIC_DELAY 250
 
 namespace Interval {
-class Button : public HWComponent2State, public EventDispatcher{
+class Button : public HWComponent2State{
   public:
 
     enum EventID {
@@ -344,7 +345,6 @@ class Button : public HWComponent2State, public EventDispatcher{
     uint16_t push_reactivity = DEFAULT_PUSH_DELAY, dClic_reactivity = DEFAULT_DCLIC_DELAY;    
 
     ButtonEvent btEvent;
-    Event evt;
 
     Button(uint8_t p, int e=LOW, boolean d=true, uint16_t push=DEFAULT_PUSH_DELAY, uint16_t dClic=DEFAULT_DCLIC_DELAY): HWComponent2State(p,!e,d){
        // we set the initial state to the opposite of the state we want to detect so it doesnt trigger the event at startup
@@ -764,6 +764,7 @@ class Network : public HWComponent2State{
     virtual String getConnectedDeviceIP() = 0;
     virtual void asyncPing(PingEcho* echo, PingCallback callBack)=0;
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
+    virtual void startDirectoryServiceDiscovery()=0;
 
     virtual void init(){
       //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
@@ -922,7 +923,8 @@ class WiFiEth : public Network{
           ethEnabled = false;
         }else{
           if (debug) DEBUG_PRINT("\n%s Using WiFi & Ethernet",id.c_str());
-          EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);
+          DEBUG_PRINT("\nregistering onEthernetBonjourServiceFoundCallback");
+          EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);            
         }
       }else{
         //if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
@@ -1290,11 +1292,14 @@ class WiFiEth : public Network{
           state = DISCONNECTED; // cable will try reconnect at next refresh
           lastEthAttempt = 0; // with no delay
         }else{
+          // *********************************************************************************
           // we are connected so do whatever is required to refresh common network object here
-          
+          // *********************************************************************************          
+                          
+          // then read incoming midi packets
           //if (appleMidiClient != nullptr) appleMidiClient->read();   // we prefer to put it into the AppleMIDIInterface monitor() as we will save some time in case interface is offline
           
-          //and monitoring the connexion + do whatever is required to refresh specialized network object here
+          // finally do whatever is required to refresh specialized network object here
           if (media == CABLE_MEDIA){
             if (cable == LinkON){
               // do whatever is required when we are connected by cable
@@ -1335,8 +1340,9 @@ class WiFiEth : public Network{
           
           //if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888 
           appleMidiClient->begin();
-          // then specific to ETH or WIFI
-          
+          startDirectoryServiceDiscovery();
+          // then specific to ETH or WIFI          
+
           if (media == WIFI_MEDIA){
             wsWiFiClient->onOpen(socketClientOnOpenCallback);
             wsWiFiClient->onMessage(socketClientOnMessageCallback);
@@ -1349,13 +1355,7 @@ class WiFiEth : public Network{
             //DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
             unpauseWiFi();
 
-            // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
-            int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
-            DEBUG_PRINT("\nTrouvé %d service(s) AppleMIDI\n", n);
-            for (int i = 0; i < n; i++) {
-              uint8_t ipBytes[4] = {MDNS.IP(i)[0], MDNS.IP(i)[1], MDNS.IP(i)[2], MDNS.IP(i)[3]};
-              upsertEndpoint(MDNS.hostname(i).c_str(),  ipBytes, MDNS.port(i));
-            }
+        
           }else{
             // ETHERNET        
             gateway = Ethernet.gatewayIP();
@@ -1363,14 +1363,9 @@ class WiFiEth : public Network{
             wsEthClient->onMessage(socketClientOnMessageCallback);
             wsEthClient->onError(socketClientOnErrorCallback);
             wsEthClient->onClose(socketClientOnClose);            
+                                
 
-            /*
-            epCount = 0;
-            // Découvre le type de service "_apple-midi" en UDP
-            EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 3000); // :contentReference[oaicite:3]{index=3} 
-            DEBUG_PRINT("\n[Bonjour] Scan RTP-MIDI lancé…");            
-            */
-          }
+           }
           checkInternet();
           //DEBUG_PRINT("\n...all network component begin() done");
         }else if (state == DISCONNECTED){
@@ -1384,7 +1379,7 @@ class WiFiEth : public Network{
             if (server != NULL){delete server; server  = NULL;} 
             if (wsWiFiClient != nullptr){ delete wsWiFiClient; wsWiFiClient = nullptr;}
             if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr;}
-            if (appleMidiClient != nullptr){ delete appleMidiClient; appleMidiClient = nullptr;}
+            if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
             
             // specific destruction to WIFI or ETH
             if (media == CABLE_MEDIA){              
@@ -1403,6 +1398,29 @@ class WiFiEth : public Network{
         }
       }
       return refreshed;
+    }
+
+    virtual void startDirectoryServiceDiscovery() override{
+      // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
+      if (state == CONNECTED){
+        rtpDir.epCount = 0;
+        int n = 0;
+        if (media == CABLE_MEDIA){
+          // Découvre le type de service "_apple-midi" en UDP
+          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 3000); // :contentReference[oaicite:3]{index=3} 
+          DEBUG_PRINT("\n[Bonjour] Scan RTP-MIDI lancé...");  
+        }else{
+          int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
+          DEBUG_PRINT("\nTrouvé %d service(s) AppleMIDI\n", n);
+          for (int i = 0; i < n; i++) {
+            uint8_t ipBytes[4] = {MDNS.IP(i)[0], MDNS.IP(i)[1], MDNS.IP(i)[2], MDNS.IP(i)[3]};
+            rtpDir.upsertEndpoint(MDNS.hostname(i).c_str(),  ipBytes, MDNS.port(i));
+          }
+          evt.type = EVENT_EP_DIRECTORY_UPDATED;
+          fireEvent(&evt);
+        }
+
+      }
     }
 
     void onInternetPing(PingEcho* echo) {
@@ -1594,6 +1612,7 @@ class  NoNetwork: public Network{
     virtual String getConnectedDeviceIP(){return "";}
     virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
+    virtual void startDirectoryServiceDiscovery() override{}
 
 };
 
@@ -1637,6 +1656,7 @@ class AccessPoint : public Network{
     virtual void clientSocketSend(const char *message){};
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){}
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
+    virtual void startDirectoryServiceDiscovery() override{}
 
 
     virtual void init(){

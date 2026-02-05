@@ -107,6 +107,10 @@ class DeviceInterface  : public SerializableParameters{
       return success && begin();
     }
 
+    virtual void userRequestedRefreshInterface(){
+      DEBUG_PRINT("\n%s->userRequestedRefreshInterface() : void",interfaceName.c_str());           
+    }
+
     bool restore(const char* config){    
       DEBUG_PRINT("\n%s->restore(%s)",interfaceName.c_str(),config);           
       JsonDocument doc;
@@ -122,7 +126,7 @@ class DeviceInterface  : public SerializableParameters{
     virtual bool restore(const JsonObject& config, bool triggerPropertyChange = true){   // == trigger or not the handlePropertyChange at the end of the restore
       bool changed = false;
 
-      DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
+      //DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_OFFLINE)){
         bool offline = config[INTERFACE_OFFLINE];
@@ -139,7 +143,7 @@ class DeviceInterface  : public SerializableParameters{
       // like interface who would need to reconnect because the IP address has changed 
       if (changed && triggerPropertyChange){
         handlePropertyChange();
-        state.broadcast = true;   // we signal that the interface state has changed because of a property change
+        state.broadcastState = true;   // we signal that the interface state has changed because of a property change
       }
       return changed;
     }      
@@ -202,14 +206,14 @@ class DeviceInterface  : public SerializableParameters{
         // a progress change is captured so applicatoin manager can broadcast it to the webclient but is not a state change
         // indeed, a state change would trigger redraw which we do not want
         state.previousProgress = state.progress;   
-        state.broadcast = true;     
+        state.broadcastState = true;     
       }
       if (state.led != state.previousLed){
         state.changed  = true;
         state.previousLed = state.led;
       }
 
-      if (state.changed) state.broadcast = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
+      if (state.changed) state.broadcastState = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
 
       //call the specific interface internal workflow
       if (!state.offline){      
