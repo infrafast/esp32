@@ -89,7 +89,7 @@ void connectHTTPTask(void*);
 class HWComponent: public GenericComponent, public EventDispatcher{
   public:
     uint8_t CSPin;
-    Event evt;
+    //Event evt;  // in EventDispatcher
 
     HWComponent(uint8_t pin, boolean d=true):GenericComponent(d){
       CSPin = pin;
@@ -764,8 +764,7 @@ class Network : public HWComponent2State{
     virtual String getConnectedDeviceIP() = 0;
     virtual void asyncPing(PingEcho* echo, PingCallback callBack)=0;
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
-    virtual void startDirectoryServiceDiscovery()=0;
-
+    
     virtual void init(){
       //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
       WiFi.setAutoConnect(false); 
@@ -1340,7 +1339,6 @@ class WiFiEth : public Network{
           
           //if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888 
           appleMidiClient->begin();
-          startDirectoryServiceDiscovery();
           // then specific to ETH or WIFI          
 
           if (media == WIFI_MEDIA){
@@ -1398,29 +1396,6 @@ class WiFiEth : public Network{
         }
       }
       return refreshed;
-    }
-
-    virtual void startDirectoryServiceDiscovery() override{
-      // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
-      if (state == CONNECTED){
-        rtpDir.epCount = 0;
-        int n = 0;
-        if (media == CABLE_MEDIA){
-          // Découvre le type de service "_apple-midi" en UDP
-          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 3000); // :contentReference[oaicite:3]{index=3} 
-          DEBUG_PRINT("\n[Bonjour] Scan RTP-MIDI lancé...");  
-        }else{
-          int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
-          DEBUG_PRINT("\nTrouvé %d service(s) AppleMIDI\n", n);
-          for (int i = 0; i < n; i++) {
-            uint8_t ipBytes[4] = {MDNS.IP(i)[0], MDNS.IP(i)[1], MDNS.IP(i)[2], MDNS.IP(i)[3]};
-            rtpDir.upsertEndpoint(MDNS.hostname(i).c_str(),  ipBytes, MDNS.port(i));
-          }
-          evt.type = EVENT_EP_DIRECTORY_UPDATED;
-          fireEvent(&evt);
-        }
-
-      }
     }
 
     void onInternetPing(PingEcho* echo) {
@@ -1612,7 +1587,6 @@ class  NoNetwork: public Network{
     virtual String getConnectedDeviceIP(){return "";}
     virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
-    virtual void startDirectoryServiceDiscovery() override{}
 
 };
 
@@ -1656,8 +1630,6 @@ class AccessPoint : public Network{
     virtual void clientSocketSend(const char *message){};
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){}
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
-    virtual void startDirectoryServiceDiscovery() override{}
-
 
     virtual void init(){
       #define VISIBLE 0

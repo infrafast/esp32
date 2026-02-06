@@ -8,7 +8,7 @@
 
 #define ADDRESS_CHANGETOPARAMETERNAME "/config/%s"
 
-class DeviceInterface  : public SerializableParameters{
+class DeviceInterface  : public SerializableParameters, public EventDispatcher{
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
   #define INTERFACE_EXPOSED     "exposed"
@@ -23,6 +23,8 @@ class DeviceInterface  : public SerializableParameters{
   public:
 
     State state;
+
+    //Event evt;  // in EventDispatcher
 
     uint8_t stripCount = 0;      // indicate if an interface is not refered by any strip
 
@@ -102,7 +104,8 @@ class DeviceInterface  : public SerializableParameters{
       return output;
     }  
 
-    bool init(){
+    bool init(EventCallback cb){
+      registerCallback(cb);
       bool success = load();
       return success && begin();
     }
@@ -509,7 +512,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     
 }systemInterface(false);
 
-DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable), SerializableParameters(name,_group,&IFconfigRepo, true){   // the interfaces uses its own repository to store parameters to avoid conflict with data sets groups
+DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable), SerializableParameters(name,_group,&IFdataRepo, true){   // the interfaces uses its own repository to store parameters to avoid conflict with data sets groups
   interfaceRepo.interfaces.push_back(this);
   interfaceName = name;
   group = _group;

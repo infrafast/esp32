@@ -400,7 +400,7 @@ class AppleMidiSessionType : public DataSet{
   public:
     SessionOptions* sessionOptions = nullptr;
    
-    AppleMidiSessionType(Address* _address, SessionOptions* s): sessionOptions(s), DataSet(_address, APPLEMIDI_INTERFACE, &IFconfigRepo){}
+    AppleMidiSessionType(Address* _address, SessionOptions* s): sessionOptions(s), DataSet(_address, APPLEMIDI_INTERFACE, &IFdataRepo){}
     
     virtual const String* getValuePtr(uint16_t index){
       if (index>getSize()-1) return &errorDatasetOOR;
@@ -423,12 +423,15 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     AppleMidiSessionType dsAppleMidiSessions = AppleMidiSessionType(new DropDownAddress(ADDRESS_APPLEMIDISESSION),&sessionOptions);
     RtpDirectory* rtpDirectory;     // directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
     
+    State savedState;
+
     String midiSessionName = PASSIVE_SESSION_NAME;
     int sessionType = APPLEMIDI_PASSIVE; // 0:passive, 1:active
 
     int rtpPort = 5004;;
     
-    String exception = "";
+    #define UNDEF_EXCEPTION "UndefinedException"
+    String exception = UNDEF_EXCEPTION;
 
     AppleMIDIInterface(bool _configurable, RtpDirectory* _rtpDirectory): rtpDirectory(_rtpDirectory),MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
@@ -440,7 +443,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
       jsonInputRepo.add(this); 
 
-      populateSessionOptionss();      
+      populateSessionOptions();      
 
     }
 
@@ -461,12 +464,22 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return true;
     }    
 
-    virtual void userRequestedRefreshInterface(){
-      hwm.network->startDirectoryServiceDiscovery();      // we request a directory service discovery to refresh the list of available sessions
+
+    virtual void userRequestedRefreshInterface(){      
+      evt.type = EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE;
+      fireEvent(&evt);
+      savedState = state;     // save current state
+      setStateRefreshing();
     }
 
+    void interfaceRefreshedDone(){
+      state = savedState;              // recall the state we had before refresh request
+      state.broadcastState = true; // communicate the new state
+      populateSessionOptions();  // regenerate the config data set
+      state.broadcastConfig = true; // communicate the new parameters
+    }
 
-    void populateSessionOptionss(){
+    void populateSessionOptions(){
       sessionOptions.name[0] = PASSIVE_SESSION_NAME;   // first entry is always "passive"
       for (int i = 0; i < MAX_RTP_DIR_ENDPOINTS; i++) {
         if (rtpDirectory->ep[i].name != "") {
@@ -653,6 +666,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
             startSession();
           }
         }
+        
+        // we indicate that we are connected so we compare to the interface internal state, this
+        // is to be able to catch up state in case of unsync.
+        if (state.code == CONNECTED){
+          
+        }
+        
 
       }            
     }
@@ -710,7 +730,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
         }      
     }    
 
-    #define UNDEF_EXCEPTION "UndefinedException"
     void OnAppleMidiException(const ssrc_t& ssrc, const Exception& e, const int32_t value ) {
       switch (e){
         case APPLEMIDI_NAMESPACE::Exception::BufferFullException:
@@ -793,6 +812,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       );
     }
 
+    void setStateRefreshing(){
+      state.details = "Getting things up to date...";   // retour semantique for the user, without changing the interface state
+      state.broadcastState = true; // no interface change but inform the webapp that we triggered startDirectoryServiceDiscovery
+      state.progress = -1;  // hide the progress bar
+      state.led = "green fast";
+    }
+
     void setStateActiveSession(){
       DEBUG_PRINT("\nAppleMIDIInterface::setStateActiveSession() to %s:%d",destination->host.c_str(), rtpPort);  
 
@@ -831,18 +857,23 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       state.code = IF_NOT_READY;
       state.progress = -1;
       state.led = "red fast";     
-      if (exception != ""){
-        state.label = IF_STATE_ERROR;
-        state.details = *lang.getString(exception);
-        exception = ""; //acknowledged
-      }else{
+      state.subState = destination->host;      
+      if (exception == UNDEF_EXCEPTION){
+        // no exception were raised, hence it is a normal disconnect
         state.label = IF_STATE_DISCONNECTED;
-        state.details = *lang.getString("session disconnected");
+        state.details = *lang.getString("session disconnected");        
+      }else{
+        // oherwise, this is considered as an error
+        state.label = IF_STATE_ERROR;        
+        state.details = *lang.getString(exception);
+        exception = UNDEF_EXCEPTION; //acknowledged
+
       }
     }    
 
     void startSession(){      
-      populateSessionOptionss();   // refresh the session descriptors in case the rtp directory has changed
+      state.progress = -1;  // hide the progress bar      
+      populateSessionOptions();   // refresh the session descriptors in case the rtp directory has changed
       lastInvite = millis();    // we reset the timer that controls the periodicity of the invites
       if (sessionType == APPLEMIDI_ACTIVE) setStateActiveSession();
       else setStatePassiveSession();

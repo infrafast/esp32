@@ -49,6 +49,7 @@ void handleWebEthClientTask(void* parameter);
 //void gzFileServer(Request &req, Response &res);
 void scanNetworksTaskWrapper(void * parameter);         // parrallel task
 void webServerTaskWrapper(void * parameter);            // parrallel task
+void WiFiRTPDiscoveryTask(void* parameter);             // parrallel task
 void defaultWizardStepFlow();
 
 void startGUIThread(uint8_t, uint8_t);
@@ -339,7 +340,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     std::queue<EthernetClient*> clientQueue;
 
-    Event evt;
+    //Event evt;  // in EventDispatcher
     std::vector<String> broadcastQueue;
 
     Application* webServer = nullptr;
@@ -428,6 +429,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     const char* fmwUpdateMenuString{ICON_FWUPDATE":FIRMWARE"};
 
     #define NO_BANK_MENU_ITEM "No bank"
+
+    // Serialization 
+    #define ifdatasets    "ifdatasets"
+    #define stripdatasets "stripdatasets"
+    #define bulkconfig  "bulkConfig"
 
     ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
 
@@ -800,7 +806,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       */
       for (const auto& interface : interfaceRepo.interfaces){
         
-        if (!interface->init()){
+        if (!interface->init([this](Event* event) {
+          this->interfaceEventHandler(event);
+        })){
           DEBUG_PRINT("\n%s->init() failed or is not fully implemented",interface->interfaceName.c_str());    
         }
         
@@ -855,11 +863,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
 
       hwm->onOff.registerCallback([this](Event* event) {
-        this->onOffCallback(event);
+        this->onOffBtnEventHandler(event);
       });
 
       hwm->network->registerCallback([this](Event* event) {
-        this->networkCallback(event);
+        this->networkEventHandler(event);
       });
       
       back_menu_item = new MenuItem(quitMenuString, &back_menu_item_selected);
@@ -958,12 +966,22 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     // EVENTS HANDLING
-
-
-    void networkCallback(Event* event){
-      switch(event->type){
-        case EVENT_EP_DIRECTORY_UPDATED:
+    void networkEventHandler(Event* event){
+      /*switch(event->type){
+        case XXXXX:
           epDirectoryUpdated();
+        break;
+      }*/
+      // propagate the event
+      fireEvent(event);      
+    }
+
+
+
+    void interfaceEventHandler(Event* event){
+      switch(event->type){
+        case EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE:
+          startDirectoryServiceDiscovery();
         break;
       }
       // propagate the event
@@ -971,7 +989,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-    void onOffCallback(Event* event){
+    void onOffBtnEventHandler(Event* event){
       ButtonEvent* btnEvt = (ButtonEvent*) event->data;
       switch(btnEvt->id){
         case IntervalButton::BUTTON_DOUBLE_CLIC:
@@ -1542,12 +1560,12 @@ void setup() {
       String tempJsonString="";
 
       DEBUG_PRINT("\nserializing dataRepo");
-      JsonObject ds = doc.createNestedObject("datasets");
+      JsonObject ds = doc.createNestedObject(stripdatasets);
       dataRepo.serialize(ds);
 
       DEBUG_PRINT("\nserializing IFconfig");
-      JsonObject ifcfg = doc.createNestedObject("ifconfigs");
-      IFconfigRepo.serialize(ifcfg);
+      JsonObject ifcfg = doc.createNestedObject(ifdatasets);
+      IFdataRepo.serialize(ifcfg);
 
 
       DEBUG_PRINT("\nserializing input (shortcuts & interfaces fields)");
@@ -1815,7 +1833,10 @@ void setup() {
         //userNetworkChangeStateCallback(hwm->network->state);
 
         if (hwm->network->state == CONNECTED){    
-           
+
+          // discover RTP services available on the network
+          startDirectoryServiceDiscovery();
+
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                   
 
@@ -1888,7 +1909,8 @@ void setup() {
           interface->state.broadcastState = false; // acknowledged
         }
         if (interface->state.broadcastConfig){
-          broadCast(concatStrings("{\"deviceCfg\":", interface->serializeConfig(), "}")); // inform web interface
+          //broadCast(concatStrings("{\"deviceCfg\":", interface->serializeConfig(), "}")); // inform web interface
+          broadcastIFconfig(interface);
           interface->state.broadcastConfig = false; // acknowledged
         }        
       }
@@ -2983,7 +3005,7 @@ void setup() {
         }else if (param == "connectivity"){
           jsonAnswer.value = getConnectivityState();
         }else if(param == "fullConfig"){
-          jsonAnswer.callback = "bulkConfig";          
+          jsonAnswer.callback = bulkconfig;          
           serialize(&jsonAnswer.value);
         }
       }else if (command == "set"){
@@ -3278,9 +3300,9 @@ void setup() {
 
               JsonDocument doc;      
 
-              /*JsonArray ds = doc["datasets"].to<JsonArray>();  
+              /*JsonArray ds = doc[stripdatasets].to<JsonArray>();  
               dataRepo.serialize(&ds); */
-              JsonObject ds = doc.createNestedObject("datasets");
+              JsonObject ds = doc.createNestedObject(stripdatasets);
               dataRepo.serialize(ds);
 
 
@@ -3288,7 +3310,7 @@ void setup() {
               doc["banks"]=banksString;
                   
               //{bulkConfig:{$datasets,$banks}}';
-              jsonAnswer.callback = "bulkConfig";          
+              jsonAnswer.callback = bulkconfig;          
 
               serializeJson(doc, jsonAnswer.value);  
               removeJsonQuote(&jsonAnswer.value);              
@@ -3473,38 +3495,38 @@ void setup() {
       //DEBUG_PRINT("\tend()");      
     }     
 
+    void startDirectoryServiceDiscovery(){
+      // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
+      if (hwm->network->state == CONNECTED){
+        rtpDir.clear();
+        int n = 0;
+        if (hwm->network->media == CABLE_MEDIA){
+          // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
+          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 3000); // :contentReference[oaicite:3]{index=3} 
+          DEBUG_PRINT("\n[Bonjour] Scan RTP-MIDI lancé...");  
+        }else{
+          // Wifi = bloquant
+          xTaskCreate(
+            WiFiRTPDiscoveryTask,  // Function to implement the task
+            "WiFiRTPDiscoveryTask",     // Name of the task
+            4096,              // Stack size in words
+            NULL,               // Task input parameter
+            1,                  // Priority of the task
+            NULL                // Task handle
+          );          
+        }
+
+      }
+    }
+
     void epDirectoryUpdated(){
+      DEBUG_PRINT("\n[RTP] Scan terminé (timeout).");
+      DEBUG_PRINT("\n[RTP] %d endpoint(s) mémorisé(s)\n", rtpDir.epCount);      
       for (int i = 0; i < rtpDir.epCount; i++) {
         DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
       }
-      // midi interface has to update its config and regenerate its state
-      JsonDocument doc;
-
-      JsonObject ifcfg = doc.createNestedObject("ifconfigs");
-      IFconfigRepo.serialize(ifcfg);
-
-      JsonObject device = doc.createNestedObject("device");
-
-      JsonDocument appleMidiIF;
-      appleMIDIInterface->serialize(appleMidiIF);
-      // copie du contenu dans "device"
-      device.set(appleMidiIF.as<JsonObject>());
-
-      jsonAnswer.callback = "bulkConfig";       
-
-      serializeJson(doc, jsonAnswer.value);  
-      removeJsonQuote(&jsonAnswer.value);       
-
-      JsonDocument jsonOutput;
-      jsonOutput[jsonAnswer.callback] = jsonAnswer.value;
-
-      String jsonString;
-      serializeJson(jsonOutput,jsonString);
-      removeJsonQuote(&jsonString);
-
-      jsonOutput.shrinkToFit();
-      broadCast(jsonString);
-
+      // midi interface has to update its config and regenerate its state      
+      appleMIDIInterface->interfaceRefreshedDone();     
     }
 
   private:
@@ -3547,6 +3569,36 @@ void setup() {
     uint32_t minHeapSize,maxHeapSize;
 
     ///////////////////////////////////////////////////////////////////////
+
+    void broadcastIFconfig(DeviceInterface* interface){
+      // when broadcasting the config you also have to broadcast the interface data sets as it is likely to have been updated
+      JsonDocument doc;
+
+      JsonObject ifds = doc.createNestedObject(ifdatasets);
+      IFdataRepo.serialize(ifds);
+
+      JsonObject device = doc.createNestedObject("device");
+
+      JsonDocument ifJson;
+      interface->serialize(ifJson);
+      // copie du contenu dans "device"
+      device.set(ifJson.as<JsonObject>());
+
+      jsonAnswer.callback = bulkconfig;       
+
+      serializeJson(doc, jsonAnswer.value);  
+      removeJsonQuote(&jsonAnswer.value);       
+
+      JsonDocument jsonOutput;
+      jsonOutput[jsonAnswer.callback] = jsonAnswer.value;
+
+      String jsonString;
+      serializeJson(jsonOutput,jsonString);
+      removeJsonQuote(&jsonString);
+
+      jsonOutput.shrinkToFit();
+      broadCast(jsonString);      
+    }
 
     void populateFileList(String extension, String folder, LinkedList<String*> *list, String prefix="", bool withExtension=true) {
       //we first clean all items from the list

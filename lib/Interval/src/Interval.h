@@ -269,7 +269,7 @@ class EventDispatcher {
       struct Event{
         uint8_t type;
         void* data;
-      };
+      }evt;
 
       using EventCallback = std::function<void(Event*)>;
 
@@ -280,7 +280,7 @@ class EventDispatcher {
         EVENT_NETWORK,
         EVENT_INTERNET_PING,
         EVENT_APPLICATION,
-        EVENT_EP_DIRECTORY_UPDATED
+        EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE
       };
 
 
@@ -975,6 +975,10 @@ class RtpDirectory{
     int epCount = 0;
     RtpmidiEndpoint ep[MAX_RTP_DIR_ENDPOINTS];
 
+    RtpDirectory(){
+      clear();
+    }
+
     void upsertEndpoint(const char* instanceName, const byte ipBytes[4], unsigned short port) {
       //DEBUG_PRINT("\nupsertEndpoint(%s,%d.%d.%d.%d,%d)", instanceName,ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3], port);
       IPAddress ip(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]);
@@ -999,6 +1003,16 @@ class RtpDirectory{
       e.lastSeenMs = millis();
       //DEBUG_PRINT("\nAdded endpoint: %s at %s:%d", e.name, e.ip.toString().c_str(), e.port);
     }
+
+    void clear(){
+      epCount = 0;
+      // dédoublonnage simple : même IP + port
+      for (int i = 0; i < MAX_RTP_DIR_ENDPOINTS; i++) {
+        strcpy(ep[i].name,"");
+        ep[i].port = 0;
+        ep[i].ip = {0,0,0,0};
+      }      
+    }    
   
 }rtpDir;
 
@@ -1267,6 +1281,18 @@ void scanNetworksTaskWrapper(void * parameter){
   // Delete the task itself
   vTaskDelete(NULL);
 }
+
+void WiFiRTPDiscoveryTask(void* parameter){
+    int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
+    DEBUG_PRINT("\nTrouvé %d service(s) AppleMIDI\n", n);
+    for (int i = 0; i < n; i++) {
+      uint8_t ipBytes[4] = {MDNS.IP(i)[0], MDNS.IP(i)[1], MDNS.IP(i)[2], MDNS.IP(i)[3]};
+      rtpDir.upsertEndpoint(MDNS.hostname(i).c_str(),  ipBytes, MDNS.port(i));
+    }
+    app.epDirectoryUpdated();
+    vTaskDelete(NULL);
+}
+
 
 // Tâche de ping non bloquante
 /*void pingTask(void* parameter) {
@@ -1848,8 +1874,6 @@ void onEthernetBonjourServiceFoundCallback(const char* serviceType,
                            const char* txt) {
   // Quand le timeout est atteint, la lib rappelle une fois avec serviceName==NULL :contentReference[oaicite:2]{index=2}
   if (serviceName == nullptr || ipAddr == nullptr) {
-    DEBUG_PRINT("\n[Bonjour] Scan terminé (timeout).");
-    DEBUG_PRINT("\n[Bonjour] %d endpoint(s) mémorisé(s)\n", rtpDir.epCount);
     app.epDirectoryUpdated();
     return;
   }
