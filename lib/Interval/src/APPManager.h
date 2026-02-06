@@ -2016,7 +2016,7 @@ void setup() {
             break;
             case STATE_UTILS_RESTART_DEVICE  :
               checkAndDeleteFile(FIRMWARE_BIN_FILENAME);
-              broadCast("{\"freeze\":\"Finished\"}",IMMEDIATE);  // inform web interface immediatley without queuing the mesage for next loop
+              sendTerminateMessageToWebApp();
               hwm->persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
               delay(500);
               ESP.restart();
@@ -2124,6 +2124,7 @@ void setup() {
                 for (const auto& interface : interfaceRepo.interfaces){       
                   interface->end();
                 }
+                sendTerminateMessageToWebApp(); // tell the webapp to close
               }
             break;
           }
@@ -2213,6 +2214,10 @@ void setup() {
       }
       f.close();
       return true;
+    }
+
+    void sendTerminateMessageToWebApp(){
+      broadCast("{\"freeze\":\"Finished\"}",IMMEDIATE);  // inform web interface immediatley without queuing the mesage for next loop      
     }
 
     #define WEB_STOP false

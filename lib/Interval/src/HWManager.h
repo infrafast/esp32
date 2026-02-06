@@ -166,7 +166,7 @@ public:
           bool released = onOff.refresh();
           if (released){
             if (onOff.pushedTime>RESET_GRACE_PERIOD ){ 
-              startupState = USB_CDC_AND_FWUPDATE_STARTUP; //WIZARD_STARTUP;
+              startupState = USB_CDC_AND_FWUPDATE_STARTUP; //instead of WIZARD_STARTUP;
               //if (debug) DEBUG_PRINT("\nlong press");
             }else if (onOff.pushedTime>pressTime ){ 
               startupState = NORMAL_STARTUP;

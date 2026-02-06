@@ -665,15 +665,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
           if (millis() - lastInvite >= MIDI_INVITE_PERIOD) {
             startSession();
           }
-        }
-        
-        // we indicate that we are connected so we compare to the interface internal state, this
-        // is to be able to catch up state in case of unsync.
-        if (state.code == CONNECTED){
-          
-        }
-        
-
+        }              
       }            
     }
     
