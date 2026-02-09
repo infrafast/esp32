@@ -18,5 +18,9 @@
         "initializer_list": "cpp",
         "utility": "cpp"
     },
-    "C_Cpp.errorSquiggles": "enabled"
+    "C_Cpp.errorSquiggles": "enabled",
+    "platformio-ide.useBuiltinPIOCore": true,
+    "platformio-ide.pioCoreExecutable": "/usr/local/bin/pio",
+    "platformio-ide.coreDir": "/config/.platformio",
+    "platformio-ide.disablePIOHome": true,
 }

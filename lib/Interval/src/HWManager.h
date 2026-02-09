@@ -2,7 +2,7 @@
 #define HWMManager_h
 
 #include <LinkedList.h>
-#include <spi.h>
+#include <SPI.h>
 #include <LittleFS.h>
 
 #include "lwip/err.h"

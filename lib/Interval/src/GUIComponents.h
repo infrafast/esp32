@@ -3,7 +3,7 @@
 
 #include <OpenFontRender.h>
 #include <vector>
-#include "interval.h"
+#include "Interval.h"
 
 #define ICON_LAPTOP           "/"
 #define ICON_EARTH            "L"
