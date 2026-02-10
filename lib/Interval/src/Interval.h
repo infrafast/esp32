@@ -6,6 +6,7 @@
 0.17 - updates implementation finished 
 0.18 - full file update implementation with web app sync and error handling
 0.19 - ping class refactor + progress during fw update + interface state broadcast management + revamp of datasets + iMidi hardening
+0.20 - compatibility with code server
 */
 
 
@@ -308,7 +309,7 @@ class EventDispatcher {
 
 bool checkAndDeleteFile(const char* filename) {
     if (LittleFS.exists(filename)) {
-        DEBUG_PRINT("⚠️ Fichier trouvé : %s → suppression...\n", filename);
+        DEBUG_PRINT("⚠️ Fichier trouvé: %s → suppression...\n", filename);
 
         if (LittleFS.remove(filename)) {
             DEBUG_PRINT("✅ Fichier supprimé avec succès");
