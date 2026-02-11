@@ -106,6 +106,7 @@ enum{
   STATE_UTILS_SHOW_PROGRESS_SINGLE,
   STATE_UTILS_RESTORE_SCREEN,
   STATE_UTILS_RESTART_DEVICE,
+  STATE_UTILS_SHUTDOWN,
   STATE_BYE_MODAL_MESSAGE,
   STATE_BYE_GOSLEEP_MESSAGE,
   STATE_UTILS_TRIGGER_FWUPDATE_PROMPT,
@@ -969,7 +970,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void networkEventHandler(Event* event){
       /*switch(event->type){
         case XXXXX:
-          epDirectoryUpdated();
+          
         break;
       }*/
       // propagate the event
@@ -1795,6 +1796,14 @@ void setup() {
     }
 
     bool shutdownDone = false;
+    void shutdown(){
+      DEBUG_PRINT("\nshuting down interfaces");     
+      shutdownDone = true;           
+      for (const auto& interface : interfaceRepo.interfaces){       
+        interface->end();
+      }
+      sendTerminateMessageToWebApp(); // tell the webapp to close      
+    }    
 
     bool refresh(bool force=false){
 
@@ -2118,14 +2127,7 @@ void setup() {
             break;
             case STATE_BYE_MODAL_MESSAGE: 
               // perform some action like update or ftp and shutting down properly (like interfaces...)
-              if (!shutdownDone){
-                DEBUG_PRINT("\nshuting down interfaces");     
-                shutdownDone = true;           
-                for (const auto& interface : interfaceRepo.interfaces){       
-                  interface->end();
-                }
-                sendTerminateMessageToWebApp(); // tell the webapp to close
-              }
+              if (!shutdownDone) shutdown();
             break;
           }
         break;
@@ -3504,10 +3506,9 @@ void setup() {
       // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
       if (hwm->network->state == CONNECTED){
         rtpDir.clear();
-        int n = 0;
         if (hwm->network->media == CABLE_MEDIA){
           // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
-          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 3000); // :contentReference[oaicite:3]{index=3} 
+          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
           DEBUG_PRINT("\n[Bonjour] Scan RTP-MIDI lancé...");  
         }else{
           // Wifi = bloquant

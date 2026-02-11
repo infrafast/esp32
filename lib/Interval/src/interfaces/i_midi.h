@@ -468,7 +468,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     virtual void userRequestedRefreshInterface(){      
       evt.type = EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE;
       fireEvent(&evt);
-      savedState = state;     // save current state
       setStateRefreshing();
     }
 
@@ -869,6 +868,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       lastInvite = millis();    // we reset the timer that controls the periodicity of the invites
       if (sessionType == APPLEMIDI_ACTIVE) setStateActiveSession();
       else setStatePassiveSession();
+      savedState = state;     // save current state as it may be recall after the refreshState
     }
 
     virtual bool connectDeviceToNetwork(){
@@ -890,7 +890,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       appleMidiClient->setHandleControlChange(handleChangeControlStatic);
 
       startSession();
-
+      
       return true;
     }
 

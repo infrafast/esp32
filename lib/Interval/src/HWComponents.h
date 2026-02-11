@@ -1001,7 +1001,10 @@ class WiFiEth : public Network{
 
     virtual UdpSlot* getUDPslot(int i) {
 
-      if (udpSlots[i].udp == nullptr || i>= MAX_UDP_SLOT) return nullptr;
+      if (udpSlots[i].udp == nullptr || i>= MAX_UDP_SLOT){
+        DEBUG_PRINT("\ngetUDPslot(%d) failed",i);
+        return nullptr;
+      }
 
       // Prendre le mutex du slot
       if (xSemaphoreTake(udpSlots[i].mutex,  pdMS_TO_TICKS(50)) != pdTRUE) {
@@ -1197,7 +1200,8 @@ class WiFiEth : public Network{
                   // save power    
                   disconnectWifi();
                   // we just connected ETH so we do everything related to ETH specialized object instanciation
-                  IP = Ethernet.localIP();         
+                  IP = Ethernet.localIP();      
+                  subnet = Ethernet.subnetMask();   
                   DEBUG_PRINT("\nEthernet.begin() => got IP:%s",IP.toString().c_str());  
                   if (client == NULL) client = new EthernetClient();
                   if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
@@ -1264,6 +1268,7 @@ class WiFiEth : public Network{
 
             if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
               IP = WiFi.localIP();
+              subnet = WiFi.subnetMask();
               DEBUG_PRINT("\t => got IP:%s",IP.toString().c_str()); 
               //if (debug) DEBUG_PRINT("\nWifi.begin() => got IP: %s, %idb",IP.toString().c_str(),WiFi.RSSI());
               if (client == NULL) client = new WiFiClient();

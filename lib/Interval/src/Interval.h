@@ -970,55 +970,113 @@ struct RtpmidiEndpoint {
 };
 
 static const int MAX_RTP_DIR_ENDPOINTS = 3;
-class RtpDirectory{
+class RtpDirectory {
+public:
+  RtpmidiEndpoint ep[MAX_RTP_DIR_ENDPOINTS];
+  int epCount;
 
-  public:
 
-    int epCount = 0;
-    RtpmidiEndpoint ep[MAX_RTP_DIR_ENDPOINTS];
+  RtpDirectory() : epCount(0) {}
 
-    RtpDirectory(){
-      clear();
-    }
+  void clear() { epCount = 0; }
 
-    void upsertEndpoint(const char* instanceName, const byte ipBytes[4], unsigned short port) {
-      //DEBUG_PRINT("\nupsertEndpoint(%s,%d.%d.%d.%d,%d)", instanceName,ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3], port);
-      IPAddress ip(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]);
+  int count() const { return epCount; }
 
-      // dédoublonnage simple : même IP + port
-      for (int i = 0; i < epCount; i++) {
-        if (ep[i].ip == ip && ep[i].port == port) {
-          strncpy(ep[i].name, instanceName ? instanceName : "?", sizeof(ep[i].name) - 1);
-          ep[i].name[sizeof(ep[i].name) - 1] = '\0';
-          ep[i].lastSeenMs = millis();
-          return;
-        }
+  const RtpmidiEndpoint& get(int idx) const { return ep[idx]; }
+
+  // Upsert robuste: fusion par nom + règles IP/port
+  void upsertEndpoint(const char* instanceName, const byte ipBytes[4], unsigned short port) {
+    if (!ipBytes) return;
+
+    IPAddress ip(ipBytes[0], ipBytes[1], ipBytes[2], ipBytes[3]);
+    const char* name = instanceName ? instanceName : "?";
+    const unsigned long now = millis();
+
+    // 1) Déjà présent exactement (IP + port) -> refresh + nom
+    for (int i = 0; i < epCount; i++) {
+      if (ep[i].ip == ip && ep[i].port == port) {
+        safeCopyName(ep[i].name, sizeof(ep[i].name), name);
+        ep[i].lastSeenMs = now;
+        return;
       }
-
-      if (epCount >= MAX_RTP_DIR_ENDPOINTS) return;
-
-      RtpmidiEndpoint &e = ep[epCount++];
-      strncpy(e.name, instanceName ? instanceName : "?", sizeof(e.name) - 1);
-      e.name[sizeof(e.name) - 1] = '\0';
-      e.ip = ip;
-      e.port = port;
-      e.lastSeenMs = millis();
-      //DEBUG_PRINT("\nAdded endpoint: %s at %s:%d", e.name, e.ip.toString().c_str(), e.port);
     }
 
-    void clear(){
-      epCount = 0;
-      // dédoublonnage simple : même IP + port
-      for (int i = 0; i < MAX_RTP_DIR_ENDPOINTS; i++) {
-        strcpy(ep[i].name,"");
-        ep[i].port = 0;
-        ep[i].ip = {0,0,0,0};
-      }      
-    }    
-  
+    // 2) Fusion par nom (instanceName)
+    for (int i = 0; i < epCount; i++) {
+      if (sameName(ep[i].name, name)) {
+        // Port : on accepte la mise à jour (utile quand SRV/infos arrivent sur une autre interface)
+        if (ep[i].port != port && port != 0) {
+          ep[i].port = port;
+        }
+
+        // IP : anti-écrasement par link-local 169.254.x.x
+        const bool oldLL = isLinkLocal169(ep[i].ip);
+        const bool newLL = isLinkLocal169(ip);
+
+        if (ep[i].ip != ip) {
+          if (!newLL && oldLL) {
+            // link-local -> LAN : on remplace (bon)
+            ep[i].ip = ip;
+          } else if (!newLL && !oldLL) {
+            // Deux IP LAN possibles (Wi-Fi/Ethernet). Par défaut: on garde la première (stable).
+            // Si tu préfères la dernière, décommente:
+            // ep[i].ip = ip;
+          } else if (newLL && !oldLL) {
+            // Nouvelle link-local, ancienne LAN: on ignore l'IP reçue
+          } else {
+            // Deux link-local: on peut remplacer
+            ep[i].ip = ip;
+          }
+        }
+
+        ep[i].lastSeenMs = now;
+        return;
+      }
+    }
+
+    // 3) Sinon, nouvelle entrée
+    if (epCount >= MAX_RTP_DIR_ENDPOINTS) return;
+
+    RtpmidiEndpoint &e = ep[epCount++];
+    safeCopyName(e.name, sizeof(e.name), name);
+    e.ip = ip;
+    e.port = port;
+    e.lastSeenMs = now;
+  }
+
+  // Optionnel: petit "nettoyage" des entrées trop vieilles (si tu veux)
+  void pruneOlderThanMs(unsigned long maxAgeMs) {
+    const unsigned long now = millis();
+    int w = 0;
+    for (int r = 0; r < epCount; r++) {
+      if ((now - ep[r].lastSeenMs) <= maxAgeMs) {
+        if (w != r) ep[w] = ep[r];
+        w++;
+      }
+    }
+    epCount = w;
+  }
+
+private:
+
+static bool isLinkLocal169(const IPAddress& ip) {
+    return ip[0] == 169 && ip[1] == 254;
+  }
+
+  static void safeCopyName(char* dst, size_t dstSize, const char* src) {
+    if (!dst || dstSize == 0) return;
+    if (!src) src = "?";
+    strncpy(dst, src, dstSize - 1);
+    dst[dstSize - 1] = '\0';
+  }
+
+  // Comparaison "safe" en tenant compte de tailles
+  static bool sameName(const char* a, const char* b) {
+    if (!a || !b) return false;
+    // Comparer au plus sur la longueur stockée
+    return strncmp(a, b, 63) == 0; // 63 car name[64] ci-dessus
+  }
 }rtpDir;
-
-
 
 
 #include "HWManager.h"
@@ -1183,7 +1241,7 @@ void xTaskBackground(void *pvParameters){
         //ets_printf("\nthresold");
         screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
         app.menuTopText = emptyString; app.menuBottomLabel = emptyString;        
-        app.byeIcon = &app.powerIcon; app.byeIconColor = &GUI::white;         
+        app.byeIcon = &app.powerIcon; app.byeIconColor = &GUI::white; 
         // It's ok, if the program is stuck it won't black screen but at least it 
         // wait the switch to change state, the loop program continues normally
         //ets_printf("\n\t\ton/off pushed for %u ms",push);
@@ -1283,18 +1341,6 @@ void scanNetworksTaskWrapper(void * parameter){
   // Delete the task itself
   vTaskDelete(NULL);
 }
-
-void WiFiRTPDiscoveryTask(void* parameter){
-    int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
-    DEBUG_PRINT("\nTrouvé %d service(s) AppleMIDI\n", n);
-    for (int i = 0; i < n; i++) {
-      uint8_t ipBytes[4] = {MDNS.IP(i)[0], MDNS.IP(i)[1], MDNS.IP(i)[2], MDNS.IP(i)[3]};
-      rtpDir.upsertEndpoint(MDNS.hostname(i).c_str(),  ipBytes, MDNS.port(i));
-    }
-    app.epDirectoryUpdated();
-    vTaskDelete(NULL);
-}
-
 
 // Tâche de ping non bloquante
 /*void pingTask(void* parameter) {
@@ -1707,25 +1753,26 @@ void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpac
 }
 
 TarGzUnpacker* getTarGzUnpacker(){
-    processedSize = 0;
-    progressPercentInt = 0;
-    overallProgressPercent = 0.0;
-    updateProgressLabel = "";
+  processedSize = 0;
+  progressPercentInt = 0;
+  overallProgressPercent = 0.0;
+  updateProgressLabel = "";
 
-    TarGzUnpacker *TARGZUnpacker = new TarGzUnpacker();    
-    TARGZUnpacker->haltOnError( false ); // stop on fail (manual restart/reset required)
-    TARGZUnpacker->setTarVerify( true ); // true = enables health checks but slows down the overall process
-    TARGZUnpacker->setupFSCallbacks( targzTotalBytesFn, targzFreeBytesFn ); // prevent the partition from exploding, recommended
+  TarGzUnpacker *TARGZUnpacker = new TarGzUnpacker();    
+  TARGZUnpacker->haltOnError( false ); // stop on fail (manual restart/reset required)
+  TARGZUnpacker->setTarVerify( true ); // true = enables health checks but slows down the overall process
+  TARGZUnpacker->setupFSCallbacks( targzTotalBytesFn, targzFreeBytesFn ); // prevent the partition from exploding, recommended
 
-    //TARGZUnpacker->setGzProgressCallback( fileGZProgressCallback ); // no effect
-    TARGZUnpacker->setTarProgressCallback( fileProgressCallback ); // prints the untarring progress for each individual file
-    
-    TARGZUnpacker->setTarStatusProgressCallback( tarStatusProgressCallback ); // print the filenames as they're expanded
-    //TARGZUnpacker->setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );    // gz log verbosity
-    //TARGZUnpacker->setTarMessageCallback( BaseUnpacker::targzPrintLoggerCallback ); // tar log verbosity
-    
-    return TARGZUnpacker;
-  }
+  //TARGZUnpacker->setGzProgressCallback( fileGZProgressCallback ); // no effect
+  TARGZUnpacker->setTarProgressCallback( fileProgressCallback ); // prints the untarring progress for each individual file
+  
+  TARGZUnpacker->setTarStatusProgressCallback( tarStatusProgressCallback ); // print the filenames as they're expanded
+  //TARGZUnpacker->setLoggerCallback( BaseUnpacker::targzPrintLoggerCallback  );    // gz log verbosity
+  //TARGZUnpacker->setTarMessageCallback( BaseUnpacker::targzPrintLoggerCallback ); // tar log verbosity
+  
+  return TARGZUnpacker;
+}
+
 
 void notifyWebappFlashing(){
   app.broadCast("{\"freeze\":\"Firmware flash\"}",IMMEDIATE);  // inform web interface  IMMEDIATE because we don't queue the message to be send in next loop , we do it immediately.
@@ -1852,9 +1899,11 @@ void expandTGZstreamToFSTask(void* parameter){
   vTaskDelete(NULL);
 }                              
 
-//////////////////////////////////////////////////////////////
-////                EVENT HANDLER                ///////
-//////////////////////////////////////////////////////////////  
+////////////////////////////////////////////////////////////////////////
+///////////////////////                              ///////////////////
+///////////////////////  EVENTS HANDLERS             ///////////////////
+///////////////////////                              ///////////////////
+//////////////////////////////////////////////////////////////////////// 
 void OnWiFiEvent(WiFiEvent_t event){
   app.evt.type = EventDispatcher::EVENT_NETWORK;
   app.evt.data = &event;
@@ -1865,41 +1914,81 @@ void OnWiFiEvent(WiFiEvent_t event){
   }
 }
 
+////////////////////////////////////////////////////////////////////////
+///////////////////////                              ///////////////////
+///////////////////////  NETWORK DISCOVERY SERVICES  ///////////////////
+///////////////////////                              ///////////////////
+//////////////////////////////////////////////////////////////////////// 
+// ============================================================
+// Améliorations callback EthernetBonjour
+// - ignore les callbacks "fin de scan" (serviceName==NULL)
+// - filtre UDP + _apple-midi (tolère "_apple-midi.")
+// - ignore les IP 0.0.0.0
+// - laisse upsertEndpoint fusionner correctement
+// ============================================================
+static bool isZeroIP(const byte ip[4]) {
+  return ip && ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0;
+}
+
+static bool isAppleMidiServiceType(const char* serviceType) {
+  // Accepte "_apple-midi" ou "_apple-midi." (point final parfois présent)
+  if (!serviceType) return false;
+  return (strncmp(serviceType, "_apple-midi", 11) == 0);
+}
+
+void WiFiRTPDiscoveryTask(void* parameter){
+    int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
+    DEBUG_PRINT("\nWiFiRTPDiscoveryTask trouvé %d service(s) AppleMIDI\n", n);
+    for (int i = 0; i < n; i++) {
+      uint8_t ipBytes[4] = {MDNS.IP(i)[0], MDNS.IP(i)[1], MDNS.IP(i)[2], MDNS.IP(i)[3]};
+      rtpDir.upsertEndpoint(MDNS.hostname(i).c_str(),  ipBytes, MDNS.port(i));
+    }
+    //fallbackDiscoveryRtpMidiAsTask(nullptr);
+    app.epDirectoryUpdated();
+    vTaskDelete(NULL);
+}
+
 // ====== Callback EthernetBonjour quand un service est trouvé ======
 // Signature d'après la doc EthernetBonjour :
-// (serviceType, proto, serviceName, ip[4], port, txt) :contentReference[oaicite:1]{index=1}
+// (serviceType, proto, serviceName, ip[4], port, txt)
 void onEthernetBonjourServiceFoundCallback(const char* serviceType,
-                           MDNSServiceProtocol_t proto,
-                           const char* serviceName,
-                           const byte ipAddr[4],
-                           unsigned short port,
-                           const char* txt) {
-  // Quand le timeout est atteint, la lib rappelle une fois avec serviceName==NULL :contentReference[oaicite:2]{index=2}
+                                           MDNSServiceProtocol_t proto,
+                                           const char* serviceName,
+                                           const byte ipAddr[4],
+                                           unsigned short port,
+                                           const char* txt) {
+  (void)txt; // si tu ne l'utilises pas
+
+  // Fin de scan (timeout) : la lib rappelle une fois avec serviceName==NULL
   if (serviceName == nullptr || ipAddr == nullptr) {
+    // Optionnel: rtpDir.pruneOlderThanMs(15000); // ex: purge vieux de 15s    
     app.epDirectoryUpdated();
     return;
   }
 
-  // Sécurité : on ne garde que l'UDP + _apple-midi
+  // Sécurité : on ne garde que UDP + _apple-midi
   if (proto != MDNSServiceUDP) return;
-  if (strcmp(serviceType, "_apple-midi") != 0) return;
+  if (!isAppleMidiServiceType(serviceType)) return;
+
+  // Ignore IP invalide
+  if (isZeroIP(ipAddr)) return;
+
+  // Optionnel : si tu veux ignorer complètement 169.254.* dès l'entrée,
+  // tu peux le faire ici, mais je recommande de laisser upsert fusionner,
+  // car on veut parfois récupérer le bon port.
+  // if (ipAddr[0] == 169 && ipAddr[1] == 254) return;
 
   rtpDir.upsertEndpoint(serviceName, ipAddr, port);
-
-  /*DEBUG_PRINT("\n[RTP-MIDI] trouvé: %s  %u.%u.%u.%u:%u\n",
-                serviceName,
-                ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3],
-                port);
-
-  if (txt) {
-    DEBUG_PRINT("\n         TXT: %s",txt);
-  }*/
 }
 
 
-//////////////////////////////////////////////////////////////
-////                MENU ACTION ITEM CALLBACKS         ///////
-//////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////
+///////////////////////                                ///////////////////
+///////////////////////  MENU ACTION ITEMS CALLBACKS   ///////////////////
+///////////////////////                                ///////////////////
+////////////////////////////////////////////////////////////////////////// 
+
 
 void back_menu_item_selected(MenuComponent* p_menu_component) {
   //DEBUG_PRINT("\nback_menu_item_selected: ");
@@ -1908,6 +1997,7 @@ void back_menu_item_selected(MenuComponent* p_menu_component) {
 }
 
 void shutdown_menu_item_selected(MenuComponent* p_menu_component) {
+  app.shutdown();
   goDeepSleep();
 }
 
@@ -2022,7 +2112,6 @@ void menu_selected(MenuComponent* p_menu_component){
 void voidOverlay(uint8_t id){
 //  DEBUG_PRINT("\nvoidOverlay()");
 }
-
 
 void baseOverLayBuilder(uint8_t id){  
   /*GUI::tft->fillRect(0,app.overlayIconY,TFT_WIDTH,OVERLAY_ICON_SIZE,GUI::overlayIconBackgroundColor);

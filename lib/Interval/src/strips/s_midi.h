@@ -237,28 +237,15 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
 
     virtual bool actionCallback(uint8_t trigger){
       bool success = false;
-      if (note == midiMessages[MIDI_NOTEON]){
-        // polymorphism doesnt work
-        /*if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
-        else if (interface->interfaceName == USBMIDI_INTERFACE) success = ((USBMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
-        else if (interface->interfaceName == DINMIDI_INTERFACE) success = ((DINMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
-        else if (interface->interfaceName == APPLEMIDI_INTERFACE) success = ((AppleMIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID); 
-        else{
-          DEBUG_PRINT("\n%s invalid interface",type.c_str());
-        }*/
-       success = ((MIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID);
+
+      if (midiValue1 <= 127 &&
+        midiValue2 >= 1 && midiValue2 <= 127 &&
+        select2ID  >= 1 && select2ID  <= 16) {
+
+        if (note == midiMessages[MIDI_NOTEON]) success = ((MIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID);
+        else if (note == midiMessages[MIDI_NOTEOFF]) success = ((MIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
       }
-      else if (note == midiMessages[MIDI_NOTEOFF]){
-        // polymorphism doesnt work
-        /*if (interface->interfaceName == BLEMIDI_INTERFACE ) success = ((BLEMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
-        else if (interface->interfaceName == USBMIDI_INTERFACE) success = ((USBMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
-        else if (interface->interfaceName == DINMIDI_INTERFACE) success = ((DINMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
-        else if (interface->interfaceName == APPLEMIDI_INTERFACE) success = ((AppleMIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
-        else{
-          DEBUG_PRINT("\n%s invalid interface",type.c_str());
-        }*/
-       success = ((MIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
-      }
+
       return success;
     }    
 
