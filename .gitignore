@@ -6,3 +6,4 @@
 lib/Interval/.DS_Store
 include/MIDIUSB.h
 utils/MIDIUSB.h
+lib/Ethernet/src/EthernetIcmp.h
