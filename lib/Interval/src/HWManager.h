@@ -159,15 +159,24 @@ public:
         // if system was flag for restart (after a SW update for instance, we go directly to normal startup without having to press a button
         persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_OFF);  // we set the startup mode so that next time it will be requested to press the button
         startupState = NORMAL_STARTUP;
-      }else if (onOff.state == ON_OFF_TRIGGER){
+      }else if(startupState == RESTART_REQUEST_AS_SUB_CDC){
+        startupState = USB_CDC_AND_FWUPDATE_STARTUP;         
+        persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_OFF);  // we set the startup mode so that next time it will be requested to press the button
+      }
+      // SYSTEM_OFF 
+      else if (onOff.state == ON_OFF_TRIGGER){
         // else a button has to be pressed to startup
         delay(DEBOUCE_TIME);        
         while(onOff.state == ON_OFF_TRIGGER && startupState == SYSTEM_OFF) {          
           bool released = onOff.refresh();
           if (released){
             if (onOff.pushedTime>RESET_GRACE_PERIOD ){ 
-              startupState = USB_CDC_AND_FWUPDATE_STARTUP; //instead of WIZARD_STARTUP;
-              //if (debug) DEBUG_PRINT("\nlong press");
+              //startupState = USB_CDC_AND_FWUPDATE_STARTUP; 
+              persistants.putUChar(PERSISTANT_STARTUP,RESTART_REQUEST_AS_SUB_CDC);
+              delay(10);
+              tud_disconnect();
+              tud_connect();
+              ESP.restart();
             }else if (onOff.pushedTime>pressTime ){ 
               startupState = NORMAL_STARTUP;
               //if (debug) DEBUG_PRINT("\nnormal press");
