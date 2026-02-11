@@ -96,21 +96,9 @@ def minify():
 	print("Simple Python Utility to Minify HTML/CSS/JS!", '\n')
 	
 	OVERWRITE = True 
-	#PATH = os.getcwd()
-	#print("Type the folder path with all the files. Leave blank for current directory.")
-	#input_path = input("Path: ").strip()
-	#if input_path:
-	#	PATH = input_path
-	#print()
-	#print("Would you like to overwrite the files with the minified variants? Type 'yes' or 'no'")
-	#input_overwrite = input("Overwrite: ").strip()
-	#if input_overwrite in {'yes', 'yep', 'true', 'overwrite'}:
-	#	OVERWRITE = True
-	#print()
-
 	files_minified = 0
 
-	for r, d, f in os.walk(SRC):
+	for r, d, f in os.walk(SRC):		
 		for file_name in f:
 			file_path = os.path.join(r, file_name)
 			if ".min" in file_path:

@@ -8,6 +8,7 @@
 #include "mixerInterfaces.h"
 
 void setup(){
+    DEBUG_PRINT("go1");
     app.init();
 
     //new MixingStation(networkOSCinterface2);    
