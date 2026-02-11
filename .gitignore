@@ -8,3 +8,4 @@ include/MIDIUSB.h
 utils/MIDIUSB.h
 lib/Ethernet/src/EthernetIcmp.h
 lib/Ethernet/src/EthernetICMP.h
+__pycache__
