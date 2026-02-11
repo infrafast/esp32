@@ -173,9 +173,10 @@ public:
             if (onOff.pushedTime>RESET_GRACE_PERIOD ){ 
               //startupState = USB_CDC_AND_FWUPDATE_STARTUP; 
               persistants.putUChar(PERSISTANT_STARTUP,RESTART_REQUEST_AS_SUB_CDC);
-              delay(10);
-              tud_disconnect();
-              tud_connect();
+              delay(11);
+              // put the code here that would deactivate the USBMIDI and reset the USB interface to jtag
+              // Serial.begin(115200); doesnt work
+              // tud_disconnect() / reconnect // doesnt work
               ESP.restart();
             }else if (onOff.pushedTime>pressTime ){ 
               startupState = NORMAL_STARTUP;
