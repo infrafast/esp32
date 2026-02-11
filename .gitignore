@@ -4,3 +4,4 @@
 .vscode/launch.json
 .vscode/ipch
 lib/Interval/.DS_Store
+include/MIDIUSB.h
