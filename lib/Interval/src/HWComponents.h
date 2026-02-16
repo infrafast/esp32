@@ -1053,24 +1053,23 @@ class WiFiEth : public Network{
       // Restart socket
       if (!udpSlots[i].active){
         DEBUG_PRINT("\n[UDP-%d/%d] reactivated", i, udpSlots[i].port);
-        udpSlots[i].active = true;
-        udpSlots[i].udp->begin(udpSlots[i].port);
+        int beginResult = udpSlots[i].udp->begin(udpSlots[i].port);
+        udpSlots[i].active = (beginResult == 1);
+        if (!udpSlots[i].active){
+          DEBUG_PRINT("\n[UDP-%d/%d] begin(%d) failed", i, udpSlots[i].port, udpSlots[i].port);
+          return nullptr;
+        }
       }
       return &udpSlots[i];
     }
 
 
     virtual void stopAllUDP() {
-      UdpSlot* udpSlot;
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
-        udpSlot = getUDPslot(i);
-        if (udpSlot != nullptr) {
-          if (udpSlot->udp != nullptr){
-            udpSlots[i].udp->stop();
-            udpSlots[i].active = false;            
-            DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);           
-          }
-          //xSemaphoreGive(udpSlot->mutex);
+        if (udpSlots[i].udp != nullptr && udpSlots[i].active){
+          udpSlots[i].udp->stop();
+          udpSlots[i].active = false;
+          DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);
         }
       }
     }
