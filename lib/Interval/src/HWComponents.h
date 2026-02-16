@@ -937,7 +937,6 @@ class WiFiEth : public Network{
 
       // we start with Ethernet priority so reset WiFi counter timer so we let time to ethernet to startup
       lastWiFiAttempt = millis();      
-      _newWifiAttempt = false;        
 
     }    
 
@@ -1179,7 +1178,7 @@ class WiFiEth : public Network{
       //WiFi.disconnect(false,true);      
       WiFi.begin(ssid,pwd);
       lastWiFiAttempt = millis();      
-      _newWifiAttempt = false;      
+      //_newWifiAttempt = false;      
     }
 
     void stopEthernet(){
@@ -1273,7 +1272,11 @@ class WiFiEth : public Network{
         }else{
           if (WiFi.status() != WL_CONNECTED){
             if (WiFiEnabled){                   
-              if (_newWifiAttempt){
+              unsigned long delta = millis()-lastWiFiAttempt;
+              networkConnectAttemptProgress = scaleValue(delta,0,wiFiTimeout,0.0,1.0);
+
+              if (networkConnectAttemptProgress >= 1.0){
+
                 //WiFi.begin("infrafast","Mf9k8iie2");
                 
                    /* IF CONFIG = STATIC IP {
@@ -1288,13 +1291,7 @@ class WiFiEth : public Network{
 
                 String pass = *wiFiList->getString(SSID);    // getting the password for the given ssid
                 startWifi(SSID,pass);
-              }              
 
-              unsigned long delta = millis()-lastWiFiAttempt;
-              networkConnectAttemptProgress = scaleValue(delta,0,wiFiTimeout,0.0,1.0);
-
-              if (networkConnectAttemptProgress >= 1.0){
-                _newWifiAttempt = true;
                 //next  credential to attempt
                 wiFiIndex = (wiFiIndex + 1) % wiFiList->size();
                 if (wiFiIndex == 0) shiftConnectTimeout(); 
@@ -1515,7 +1512,7 @@ class WiFiEth : public Network{
 
     void restoreWiFiSSID(){
       // next WiFi attempt will start with the last one that was connected
-      _newWifiAttempt = true; // reset flag for immediate reconnection at the deco.
+      //_newWifiAttempt = true; // reset flag for immediate reconnection at the deco.
       SSID = lastConnectedSSID;          
       //DEBUG_PRINT("\n         + - + - + restoring SSID=%s",SSID.c_str());
     }
@@ -1600,7 +1597,7 @@ class WiFiEth : public Network{
 
   private:
     byte ethMac[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-    bool _newWifiAttempt = false;    // set to false to allow ether connection first to start
+    //bool _newWifiAttempt = false;    // set to false to allow ether connection first to start
     int mixerPort = 10023;
     IPAddress mixerIP={192,168,0,255};
     bool  webAppOn = false;
