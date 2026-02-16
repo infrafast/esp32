@@ -356,8 +356,9 @@ class NetWorkInterface{
     void monitorNetworkInterface(){         
     
       if (!deviceInterface) return;
+      bool networkStateChanged = hwm.network->refreshed;
     
-      if (hwm.network->refreshed){
+      if (networkStateChanged){
         bool success = false;
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.offline){
@@ -367,11 +368,13 @@ class NetWorkInterface{
             DEBUG_PRINT("\n%s->monitor connectDeviceToNetwork()",deviceInterface->interfaceName.c_str());
             success = connectDeviceToNetwork();
             if (!success) setDeviceStateDisconnected();            
+            return;
           }
         }else{
           setNetworkStateDown();    
           success = disconnectDeviceFromNetwork();
           DEBUG_PRINT("\n%s->disconnectDeviceFromNetwork()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");
+          return;
         }
       }
       // we only monitor networkdevices when network is on
