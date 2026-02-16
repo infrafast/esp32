@@ -44,8 +44,7 @@ void socketConnectionCallback(IWebSocket &ws);
 
 // C to C++ class function wrapper
 void commonFileServerWrapper(Request &req, Response &res);  
-void handleWebEthClientTask(void* parameter);
-
+void handleWebTaskWrapper(void * parameter);
 //void gzFileServer(Request &req, Response &res);
 void scanNetworksTaskWrapper(void * parameter);         // parrallel task
 void webServerTaskWrapper(void * parameter);            // parrallel task
@@ -66,8 +65,6 @@ bool installGZBinaryFromStream(StreamParams* params);
 void updaterProgressCallback( uint8_t progress );
 
 void checkAndInstallBinaryFromFile();
-// Prototypage de la fonction de gestion de la connexion
-//void handleWebConnection(void *parameter);
 
 bool checkAndDeleteFile(const char* filename) ;
 
@@ -1683,67 +1680,39 @@ void setup() {
     // MANAGE WEB APPLICATION
     //
     //------------------     
-    void handleWeb(void * parameter){
+    void handleWeb(){
 
       //unsigned long lastActivity = millis();
 
       Network* configMedia = hwm->configMedia;
-
-      /*vTaskDelay(1);    
-      if (xSemaphoreTake(configMedia->networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){     */
-        if (configMedia->refreshed){
-          if (configMedia->state == CONNECTED){            
-            setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
-          }else{
-            webAppConnected = false;            
-          }
-        }        
-        if (configMedia->state == CONNECTED){    
-          if(webServer != nullptr){                       
-            // then webserver
-            if (configMedia->media == CABLE_MEDIA){
-    
-              EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                                                              
-              if (newEthClient) {
-                //DEBUG_PRINT("\n\tEth ---> ");
-                webServer->process(&newEthClient);
-                newEthClient.stop();  
-                //DEBUG_PRINT(" STOP");
-              }
-
-              /*
-              // Dépiler la file si une place est libre
-              while (!clientQueue.empty() && activeClients < maxConcurrentClients) {
-                EthernetClient* nextClient = clientQueue.front();
-                clientQueue.pop();
-                handleEthClient(nextClient);
-              }
-
-              // Accepter de nouveaux clients
-              EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                                                              
-              if (newEthClient) {
-                handleEthClient(&newEthClient);
-              }*/
-                            
-            }else{
-              WiFiClient newWiFiClient = ((WiFiServer *)configMedia->server)->available();
-              if (newWiFiClient.connected()) {
-                //taskYIELD();
-                //ets_printf("\n\tWiFi ---> ");
-                webServer->process(&newWiFiClient);
-                newWiFiClient.stop();              
-                //ets_printf(" STOP");
-              }   
+   
+      if (configMedia->state == CONNECTED){    
+        if(webServer != nullptr){                       
+          // then webserver
+          if (configMedia->media == CABLE_MEDIA){
+  
+            EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                                                              
+            if (newEthClient) {
+              //DEBUG_PRINT("\n\tEth ---> ");
+              webServer->process(&newEthClient);
+              newEthClient.stop();  
+              //DEBUG_PRINT(" STOP");
             }
-
-            wss->listen();  //sockets    
-
+                          
+          }else{
+            WiFiClient newWiFiClient = ((WiFiServer *)configMedia->server)->available();
+            if (newWiFiClient.connected()) {
+              //taskYIELD();
+              //ets_printf("\n\tWiFi ---> ");
+              webServer->process(&newWiFiClient);
+              newWiFiClient.stop();              
+              //ets_printf(" STOP");
+            }   
           }
         }
-      /*  xSemaphoreGive(configMedia->networkBusy);  
-      }else{
-        DEBUG_PRINT("\nhandleWeb: networkbusy");
-      }*/
+        if (wss != nullptr) wss->listen();          
+      }
+        
     }
 
     void jumpToMenu(const char* menuTitle){
@@ -1816,7 +1785,7 @@ void setup() {
       // ********************************
       hwm->refresh();         
       processBroadcastQueue();
-      handleWeb(nullptr);
+      handleWeb();
       if (hwm->ap != nullptr){if (hwm->ap->refreshed) setAPandNetIcons();}      
       if (hwm->network->state == CONNECTED && hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();       // real time signal strength display
 
@@ -1825,11 +1794,13 @@ void setup() {
       // MANAGE NETWORK
       //
       //------------------
-
-      #if defined(USE_FTP) && defined(USE_NETWORK)
-        //if (hwm->network->state == CONNECTED)
-          ftp.handle();
-      #endif
+      if (hwm->configMedia->refreshed){
+        if (hwm->configMedia->state == CONNECTED){            
+          setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
+        }else{
+          webAppConnected = false;            
+        }
+      } 
 
       if (hwm->network->refreshed){ // network changed its statusset
         
@@ -1842,6 +1813,12 @@ void setup() {
         //userNetworkChangeStateCallback(hwm->network->state);
 
         if (hwm->network->state == CONNECTED){    
+
+          #if defined(USE_FTP) && defined(USE_NETWORK)
+            if (!httpServing) 
+              ftp.handle();
+          #endif
+
 
           // discover RTP services available on the network
           startDirectoryServiceDiscovery();
@@ -1905,7 +1882,6 @@ void setup() {
       //------------------
       bool interfaceChangedState = false;
       
-      if (!httpServing)
       for (const auto& interface : interfaceRepo.interfaces){       
 
         #ifdef PROD
@@ -1925,6 +1901,7 @@ void setup() {
           interface->state.broadcastConfig = false; // acknowledged
         }        
       }
+
 
       //------------------
       //
@@ -2227,6 +2204,15 @@ void setup() {
     #define WEB_STOP false
     #define WEB_START true
 
+    void shutdownWSS(){
+      if (wss != nullptr){
+        wss->shutdown();  // need the patch here: https://github.com/skaarj1989/mWebSockets/discussions/67#       
+        DEBUG_PRINT("\ndelete wss");
+        delete wss; 
+        wss = nullptr;
+      }      
+    }
+
     void setWSServer(){
 
       if (webServer == nullptr) return; // no need to define websocket server if webserver has not been instanciated
@@ -2240,11 +2226,7 @@ void setup() {
       // so we create thread that will take care of displaying a waiting message
       // Lance l’animation pendant que la tache principale travaille
 
-      if (wss != nullptr){
-        wss->shutdown();  // need the patch here: https://github.com/skaarj1989/mWebSockets/discussions/67#       
-        DEBUG_PRINT("\ndelete wss");
-        delete wss; 
-      }
+      shutdownWSS();
    
       if (hwm->configMedia->media == CABLE_MEDIA){
         DEBUG_PRINT("\nnew EthernetWebSocketServer{}");
@@ -2279,10 +2261,19 @@ void setup() {
             webServer->header("Content-Type", hdrContentType, sizeof(hdrContentType));
             webServer->header("Content-Length", hdrContentLength, sizeof(hdrContentLength)); // optionnel
 
-            webServer->use(commonFileServerWrapper);                      
+            webServer->use(commonFileServerWrapper);              
 
             setWSServer();   // ==> websocket server is created and then changed by application refresh() in case the network medium is changed
-            //webTaskhandle(WEB_START);                   
+
+            /*xTaskCreate(
+              handleWebTaskWrapper,  // Function to implement the task
+              "handleWebTaskWrapper",     // Name of the task
+              4096*2,              // Stack size in words
+              NULL,               // Task input parameter
+              1,                  // Priority of the task
+              NULL                // Task handle
+            );*/
+                       
           }
           hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"," (http://",hwm->configMedia->IP.toString(),")"); // hwm->configMedia->IP.toString();
           DEBUG_PRINT("\nWebserver serving on %s",hwm->configURL.c_str() );
@@ -2291,6 +2282,15 @@ void setup() {
         return false;
       }
       return false;
+    }
+
+    void stopWebApp(){
+      shutdownWSS();
+      if (webServer != nullptr){
+        delete webServer;
+        webServer = nullptr;
+      }
+      DEBUG_PRINT("\nWebAppservices down");        
     }
     
     #define MIME_TYPES_MAX 15

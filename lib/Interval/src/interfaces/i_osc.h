@@ -143,11 +143,11 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
             osc.empty();
 
             while (size--){
-                osc.fill(udp->read());
-                yield();
+                osc.fill(udp->read());                                
+                delay(0);               
             }
 
-            xSemaphoreGive(udpSlot->mutex);
+            //xSemaphoreGive(udpSlot->mutex);
 
             if (osc.hasError()) {
                 DEBUG_PRINT("\nreadOSC: %s\n", osc.getError());
@@ -161,18 +161,29 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
                 Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
                 ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
                 */
-                unsigned long latency = millis()-lastQueryTime;
+                unsigned long rawLatency = millis() - lastQueryTime;
 
                 // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
-                if (latency > 500) latency = destination->latency;
+                if (rawLatency < 500){
+                  // α entre 0.1 (très lisse) et 0.3 (réactif)
+                  #define LAT_ALPHA 0.2f                                 
 
-                // α entre 0.1 (très lisse) et 0.3 (réactif)
-                #define LAT_ALPHA 0.2f                
-                destination->latency =
-                    destination->latency * (1.0f - LAT_ALPHA) +
-                    latency * LAT_ALPHA;                
+                  if (rawLatency < 500) {
+                      destination->latency =
+                          destination->latency * (1.0f - LAT_ALPHA) +
+                          rawLatency * LAT_ALPHA;
 
-                DEBUG_PRINT("\t latency: %i",destination->latency);
+                      destination->latency = (uint16_t)destination->latency;
+
+                      float delta = abs((int)rawLatency - (int)destination->latency);
+
+                      destination->jitter =
+                          destination->jitter * 0.75f +
+                          delta * 0.25f;                      
+                      }                  
+
+                }
+                DEBUG_PRINT("\t latency: %i, jitter:%i",destination->latency,destination->jitter);
               }
             }              
             // ✔ message valide
@@ -181,7 +192,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
             return (argCount == 0 ? 1 : argCount);
         }
         
-        xSemaphoreGive(udpSlot->mutex);
+        //xSemaphoreGive(udpSlot->mutex);
         return 0;
     }
 
@@ -212,7 +223,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
         DEBUG_PRINT(" **** FAIL (udp null) ****",msg->getAddress());        
       }
 
-      xSemaphoreGive(udpSlot->mutex);
+      //xSemaphoreGive(udpSlot->mutex);
       // sempahore released section
       return success;          
   }
@@ -231,7 +242,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       setStateQueryingDevice();         // we are not yet connected to the OSC device
       lastQueryTime = 0; // force ping to be triggered
       //udpID = 1; // DIRECT UDP
-      udpID = hwm.network->requestUDPslotID(OSC_localPort);      // the network will create or reuse a udp slot and give its ID to us
+      udpID = hwm.network->requestUDPslotID(OSC_localPort);   // the network will create or reuse a udp slot and give its ID to us
 
       /*if (udp != nullptr) delete udp;   // DIRECT UDP
       udp = hwm.network->newUDP();

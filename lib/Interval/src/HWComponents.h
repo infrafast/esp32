@@ -711,7 +711,7 @@ struct UdpSlot {
   int port = -1;
   bool active = false;
   uint8_t media = CABLE_MEDIA;
-  SemaphoreHandle_t mutex = nullptr;   // 👈 un mutex par slot
+  //SemaphoreHandle_t mutex = nullptr;   // 👈 un mutex par slot
 };
 
 class Network : public HWComponent2State{
@@ -922,7 +922,7 @@ class WiFiEth : public Network{
           if (debug) DEBUG_PRINT("\n%s Using WiFi & Ethernet",id.c_str());
           DEBUG_PRINT("\nregistering onEthernetBonjourServiceFoundCallback");
           EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);         
-          //setLink(Ethernet.linkStatus());   // check immediately if ethernet is connected so it has priority on WiFI connection    => done in the thread
+          setLink(Ethernet.linkStatus());   // check immediately if ethernet is connected so it has priority on WiFI connection    => done in the thread
         }
       }else{
         //if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
@@ -972,39 +972,70 @@ class WiFiEth : public Network{
 
     virtual int requestUDPslotID(int port) {
 
-      // 1️⃣ Chercher si un slot existe déjà pour ce port
+      // 1) Si un slot existe déjà pour ce port, on le réutilise ou on le remplace selon media
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
-          if (udpSlots[i].port == port && udpSlots[i].udp != nullptr && udpSlots[i].media == media) {
-            // we found a slot which correspond to the port
-            if (udpSlots[i].media == media){
-              //DEBUG_PRINT("\n[UDP-%d/%d] ID reclaimed", i, port);
-              return i;
-            }
-          }
-      }
+        if (udpSlots[i].udp != nullptr && udpSlots[i].port == port) {
 
-      // 2️⃣ Chercher un slot libre pour creation
-      for (int i = 0; i < MAX_UDP_SLOT; i++) {
-
-        if (udpSlots[i].udp == nullptr) {
-
-            udpSlots[i].udp = newUDP();
-            udpSlots[i].media = media;                
-            udpSlots[i].udp->begin(port);
-            udpSlots[i].port = port;
-            udpSlots[i].active = true;
-            udpSlots[i].mutex = xSemaphoreCreateMutex();
-
-            //DEBUG_PRINT("\n[UDP-%d/%d] ID created", i, port);
-
+          // Même media -> on garde
+          if (udpSlots[i].media == media) {
+            DEBUG_PRINT("\n[UDP-%d/%d] ID reclaimed (same media)", i, port);
+            //udpSlots[i].active = true;
             return i;
+          }
+
+          // Media différent -> on remplace
+          DEBUG_PRINT("\n[UDP-%d/%d] Media changed %d -> %d : recreating",
+                      i, port, (int)udpSlots[i].media, (int)media);
+
+          delete udpSlots[i].udp;
+          udpSlots[i].udp = nullptr;
+
+          auto u = newUDP();
+          if (!u) {
+            DEBUG_PRINT("\n[UDP-%d/%d] newUDP() failed", i, port);
+            return -1;
+          }
+
+          // Si begin() renvoie un bool/int, teste-le ici
+          //u->begin(port);
+
+          udpSlots[i].udp    = u;
+          udpSlots[i].media  = media;
+          udpSlots[i].active = false;
+
+          DEBUG_PRINT("\n[UDP-%d/%d] Recreated", i, port);
+          return i;
         }
       }
 
-    // 3️⃣ Aucun slot libre
-    DEBUG_PRINT("\n[UDP] Reached max!");
-    return -1;
-  }
+      // 2) Sinon, créer dans un slot libre
+      for (int i = 0; i < MAX_UDP_SLOT; i++) {
+        if (udpSlots[i].udp == nullptr) {
+
+          auto u = newUDP();
+          if (!u) {
+            DEBUG_PRINT("\n[UDP] newUDP() failed");
+            return -1;
+          }
+
+          //u->begin(port);
+
+          udpSlots[i].udp    = u;
+          udpSlots[i].port   = port;
+          udpSlots[i].active = false;
+          udpSlots[i].media  = media;
+
+          DEBUG_PRINT("\n[UDP-%d/%d] ID created", i, port);
+          return i;
+        }
+      }
+
+      DEBUG_PRINT("\n[UDP] Reached max!");
+      return -1;
+    }
+
+
+
 
     virtual UdpSlot* getUDPslot(int i) {
 
@@ -1014,18 +1045,17 @@ class WiFiEth : public Network{
       }
 
       // Prendre le mutex du slot
-      if (xSemaphoreTake(udpSlots[i].mutex,  pdMS_TO_TICKS(50)) != pdTRUE) {
+      /*if (xSemaphoreTake(udpSlots[i].mutex,  pdMS_TO_TICKS(10)) != pdTRUE) {      // keep it low 10ms = allow the webserver to continue serving file
         DEBUG_PRINT("\nmutex udpSlots[%d] busy",i);
         return nullptr;
-      }
+      }*/
          
       // Restart socket
       if (!udpSlots[i].active){
         DEBUG_PRINT("\n[UDP-%d/%d] reactivated", i, udpSlots[i].port);
         udpSlots[i].active = true;
         udpSlots[i].udp->begin(udpSlots[i].port);
-      }      
-
+      }
       return &udpSlots[i];
     }
 
@@ -1037,10 +1067,10 @@ class WiFiEth : public Network{
         if (udpSlot != nullptr) {
           if (udpSlot->udp != nullptr){
             udpSlots[i].udp->stop();
-            udpSlots[i].active = false;
+            udpSlots[i].active = false;            
             DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);           
           }
-          xSemaphoreGive(udpSlot->mutex);
+          //xSemaphoreGive(udpSlot->mutex);
         }
       }
     }
@@ -1183,63 +1213,61 @@ class WiFiEth : public Network{
         if (cable == LinkON){       // ethernet is enabled  
           #define ETH_BEGIN_RETRY_DELAY 1000
           unsigned long delta = millis()-lastEthAttempt;                    
-          if (delta >= ETH_BEGIN_RETRY_DELAY){
-              media = CABLE_MEDIA;
-              lastEthAttempt = millis();
-              // toggle the progress indicator
-              if (networkConnectAttemptProgress == 1.0) networkConnectAttemptProgress = 0.0;
-              else networkConnectAttemptProgress = 1.0;
-             
-              bool success;
-              /* IF CONFIG = STATIC IP {
-              IP = config.getIP();
-                SSID = concatStrings("Static IP: ", IP);
-                success = Ethernet.begin(mac, IP, gateway, gateway, subnet);
-              }
-              else
-              */
-              SSID = "Connecting DHCP";
-              success = Ethernet.begin(ethMac,100,100);
+          if (delta >= ETH_BEGIN_RETRY_DELAY){            
+            lastEthAttempt = millis();
+            // toggle the progress indicator
+            if (networkConnectAttemptProgress == 1.0) networkConnectAttemptProgress = 0.0;
+            else networkConnectAttemptProgress = 1.0;
+            
+            bool success;
+            /* IF CONFIG = STATIC IP {
+            IP = config.getIP();
+              SSID = concatStrings("Static IP: ", IP);
+              success = Ethernet.begin(mac, IP, gateway, gateway, subnet);
+            }
+            else
+            */
+            SSID = "Connecting DHCP";
+            success = Ethernet.begin(ethMac,100,100);
 
-              if (success){  // as it take 100ms, we only do it every ETH_BEGIN_RETRY_DELAY otherwise it really slows down the loop
-                state = CONNECTED;
-                
-                if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
-                  // save power    
-                  disconnectWifi();
-                  // we just connected ETH so we do everything related to ETH specialized object instanciation
-                  IP = Ethernet.localIP();      
-                  subnet = Ethernet.subnetMask();   
-                  DEBUG_PRINT("\nEthernet.begin() => got IP:%s",IP.toString().c_str());  
-                  if (client == NULL) client = new EthernetClient();
-                  if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
-                  //if (udp == NULL) udp = new EthernetUDP;
-                  if (wsEthClient == nullptr){
-                    wsEthClient = new EthernetWebSocketClient{}; 
-                    wsEthClient->onOpen(socketClientOnOpenCallback);
-                    wsEthClient->onMessage(socketClientOnMessageCallback);
-                    wsEthClient->onError(socketClientOnErrorCallback);
-                    wsEthClient->onClose(socketClientOnClose);                        
-                  }
-                  if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);
-                  String midiName = concatStrings(appleMidiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
-                  String httpName = concatStrings(appleMidiClient->getName(), "._http");
-                  if (EthernetBonjour.begin(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str())){
-                    EthernetBonjour.addServiceRecord(midiName.c_str(), appleMidiClient->getPort(),MDNSServiceUDP);
-                    EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
-                  }else{
-                     DEBUG_PRINT("\nEthernetBonjour registration <%s> failed", systemCfg.getString(S_AP_NAME)->c_str());
-                  }   
-
-                  DEBUG_PRINT("\t...all Eth object instantiated\n");                  
-                  xSemaphoreGive(networkBusy);
-                }else{
-                  DEBUG_PRINT("\nETH CONNECT: networkBusy\n"); 
-                  state = DISCONNECTED; // as we failed to lock the semaphore to create network object, we disconnect to make a next attempt
+            if (success){  // as it take 100ms, we only do it every ETH_BEGIN_RETRY_DELAY otherwise it really slows down the loop
+              
+              if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
+                // save power    
+                disconnectWifi();
+                // we just connected ETH so we do everything related to ETH specialized object instanciation
+                IP = Ethernet.localIP();      
+                subnet = Ethernet.subnetMask();   
+                DEBUG_PRINT("\nEthernet.begin() => got IP:%s",IP.toString().c_str());  
+                if (client == NULL) client = new EthernetClient();
+                if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
+                //if (udp == NULL) udp = new EthernetUDP;
+                if (wsEthClient == nullptr){
+                  wsEthClient = new EthernetWebSocketClient{}; 
+                  wsEthClient->onOpen(socketClientOnOpenCallback);
+                  wsEthClient->onMessage(socketClientOnMessageCallback);
+                  wsEthClient->onError(socketClientOnErrorCallback);
+                  wsEthClient->onClose(socketClientOnClose);                        
                 }
+                if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);
+                String midiName = concatStrings(appleMidiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
+                String httpName = concatStrings(appleMidiClient->getName(), "._http");
+                if (EthernetBonjour.begin(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str())){
+                  EthernetBonjour.addServiceRecord(midiName.c_str(), appleMidiClient->getPort(),MDNSServiceUDP);
+                  EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
+                }else{
+                  DEBUG_PRINT("\nEthernetBonjour registration <%s> failed", systemCfg.getString(S_AP_NAME)->c_str());
+                }   
+                state = CONNECTED;
+                media = CABLE_MEDIA;                
+                DEBUG_PRINT("\t...all Eth object instantiated\n");                  
+                xSemaphoreGive(networkBusy);
               }else{
-                DEBUG_PRINT(".");
+                DEBUG_PRINT("\nETH CONNECT: networkBusy\n"); 
               }
+            }else{
+              DEBUG_PRINT(".");
+            }
           }
         }else{
           if (WiFi.status() != WL_CONNECTED){
@@ -1276,11 +1304,6 @@ class WiFiEth : public Network{
             //if (debug) DEBUG_PRINT("~"); // I put that in OnWiFiEvent => SYSTEM_EVENT_STA_DISCONNECTED to avoid flooding the serial out
           }else{
             // we just connected WIFI_MEDIA so we do everything related to WIFI_MEDIA specialized object instanciation
-            state = CONNECTED;
-            media = WIFI_MEDIA;
-            // save power and disconnect ethernet driver
-            // TBC            
-
             if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
               IP = WiFi.localIP();
               subnet = WiFi.subnetMask();
@@ -1306,10 +1329,12 @@ class WiFiEth : public Network{
               }else{
                 DEBUG_PRINT("\nMDNS registration <%s> failed",appleMidiClient->getName());
               }
+              state = CONNECTED;
+              media = WIFI_MEDIA;
+              DEBUG_PRINT("\t...all WiFi object instantiated\n");                                
               xSemaphoreGive(networkBusy);
             }else{
               DEBUG_PRINT("\nWIFI CONNECT: networkBusy"); 
-              state = DISCONNECTED; // as we failed to lock the semaphore to create network object, we disconnect to make a next attempt
             }
 
           }
@@ -1365,9 +1390,8 @@ class WiFiEth : public Network{
         if (state == CONNECTED){
           // reset the progress indicator
           networkConnectAttemptProgress = -1;
-          // initialiser of common object to both Wifi and Ethernet goes here
-          
-          //if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888 
+          // initialiser of common object to both Wifi and Ethernet goes here      
+
           if (appleMidiClient != nullptr) appleMidiClient->begin();
           // then specific to ETH or WIFI          
 
@@ -1387,7 +1411,7 @@ class WiFiEth : public Network{
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
             // common destruction
             internet.alive = false;
-            internet.latency = 255;
+            internet.latency = 0;
 
             //if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
             if (client != NULL){client->stop(); delete client; client = NULL;} 

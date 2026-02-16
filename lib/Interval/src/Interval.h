@@ -77,6 +77,7 @@ class PingEcho{
   public:
     bool alive = false;
     uint16_t latency = 30;      // normal latency on TCP/IP
+    uint16_t jitter = 0;
     String host;
     IPAddress ip;  
     PingEcho(String h):host(h){}
@@ -96,6 +97,11 @@ public:
   PingCallback callback;
 };
 
+
+enum{
+    STOP_UDP,
+    DELETE_UDP
+};
 
 typedef void (*VoidCallback)();
 typedef void (*VoidIntCallback)(int);
@@ -1229,7 +1235,6 @@ void xTaskBackground(void *pvParameters){
   
     vTaskDelay(2);  //added for S3 to avoid trigerring the watchdog
 
-
     // network monitoring
     /*static unsigned long checkEthCableTime = 0;
     if (millis()-checkEthCableTime > ETH_CABLE_CHECK_FREQUENCY && hwm.network->ethEnabled){   // only if we use the full network stack and not only AP mode
@@ -1337,6 +1342,14 @@ void stopGUIThread() {
     }
   }
 }
+
+void handleWebTaskWrapper(void * parameter){
+  while(1){
+    app.handleWeb();
+    vTaskDelay(1);
+  }
+}
+
 
 
 void scanNetworksTaskWrapper(void * parameter){
@@ -2490,9 +2503,8 @@ void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, con
 }
 
 void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *reason, uint16_t length) {
-  DEBUG_PRINT("\n\t!!! socketCloseCallbac =>code:%i length:%i\n",code,length);
-  app.webAppConnected = false;
-  hwm.configMedia->refreshed = true;    // this is to trigger app manager to refresh the screen showing how to connect.
+  DEBUG_PRINT("\n\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
+  app.webAppConnected = false;  
 }
 
 
