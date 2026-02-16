@@ -258,14 +258,16 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       setStateQueryingDevice();         // we are not yet connected to the OSC device
       lastQueryTime = 0; // force ping to be triggered
       //udpID = 1; // DIRECT UDP
-      udpID = hwm.network->requestUDPslotID(OSC_localPort);      // the network will create or reuse a udp slot and give its ID to us      
+      int requestedUdpID = hwm.network->requestUDPslotID(OSC_localPort);      // the network will create or reuse a udp slot and give its ID to us
 
       /*if (udp != nullptr) delete udp;   // DIRECT UDP
       udp = hwm.network->newUDP();
       udp->begin(OSC_localPort);
       */
 
-      if (udpID == -1) return false;
+      if (requestedUdpID == -1) return false;
+
+      udpID = requestedUdpID;
 
       return true;
     }
@@ -279,7 +281,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
   private:
     unsigned long lastQueryTime ;
     uint8_t connectAttemptCount = 0;
-    uint8_t udpID = 0;
+    int udpID = -1;
     
     //UDP* udp = nullptr; // DIRECT UDP
 
