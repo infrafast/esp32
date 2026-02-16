@@ -130,12 +130,12 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
     int readOSC(){
-
         UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);   // request UDP slot
-
         if (udpSlot == NULL) return 0;                
-
+        // from that point in time, semaphore is taken
         UDP* udp = udpSlot->udp;
+
+        if (udp == nullptr) return 0;
 
         int size = udp->parsePacket();
 
@@ -224,10 +224,10 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       if (udpSlot == nullptr){
           DEBUG_PRINT(" **** FAIL (UdpSlot null) ****",msg->getAddress());
           return false;
-      }             
+      }            
 
      
-      UDP* udp = udpSlot->udp;
+      UDP* udp = udpSlot->udp; 
 
       if (udp != nullptr){
         udp->beginPacket(destination->ip, OSC_clientPort);
@@ -257,9 +257,17 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       // network connection has just been established :-)
       setStateQueryingDevice();         // we are not yet connected to the OSC device
       lastQueryTime = 0; // force ping to be triggered
+      //udpID = 1; // DIRECT UDP
       udpID = hwm.network->requestUDPslotID(OSC_localPort);      // the network will create or reuse a udp slot and give its ID to us      
-      if (udpID != -1) return true;
-      return false;
+
+      /*if (udp != nullptr) delete udp;   // DIRECT UDP
+      udp = hwm.network->newUDP();
+      udp->begin(OSC_localPort);
+      */
+
+      if (udpID == -1) return false;
+
+      return true;
     }
 
    virtual bool disconnectDeviceFromNetwork(){
@@ -272,6 +280,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     unsigned long lastQueryTime ;
     uint8_t connectAttemptCount = 0;
     uint8_t udpID = 0;
+    
+    //UDP* udp = nullptr; // DIRECT UDP
 
 };
 

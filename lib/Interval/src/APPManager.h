@@ -1849,7 +1849,7 @@ void setup() {
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                   
 
-          checkRemoteVersion();   // should be only called from internetCallback, but since the ping is not working, we rely on the httpCall
+          checkRemoteVersion(); 
 
           // network has refreshed so we shift to appropriate configMedia
           if (hwm->network->media == WIFI_MEDIA){

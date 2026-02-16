@@ -5,14 +5,9 @@
 //#define TFT_BGCOLOR   TFT_DARKGREY
 
 #include "Interval.h"
-#include "mixerInterfaces.h"
 
 void setup(){
-    DEBUG_PRINT("go4");
     app.init();
-
-    //new MixingStation(networkOSCinterface2);    
-    //new BehringerXM();
 }
 
 void loop(){

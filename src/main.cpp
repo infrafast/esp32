@@ -39,4 +39,4 @@ Utility utility;
 #include "TestMIDIHelper.h"*/
 
 
-#include "TestApplication.h"
+#include "MixerApplication.h"

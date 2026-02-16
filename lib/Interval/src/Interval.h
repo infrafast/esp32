@@ -1374,34 +1374,35 @@ void ping(PingParameters* params) {
   // NB: host resolution doesnt work
   if (WiFi.hostByName(params->echo->host.c_str(), params->echo->ip) == 1){
 
-    DEBUG_PRINT("\npingTask running...");  
-    if (hwm.network->media == WIFI_MEDIA){    
-      if (Ping.ping(params->echo->host.c_str())) {
-        params->echo->alive = true;
-        params->echo->latency = Ping.averageTime();
-      } else {
-        params->echo->alive = false;
-      }    
+    //DEBUG_PRINT("\npingTask running...");  
+    if (xSemaphoreTake(hwm.network->networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
+      if (hwm.network->media == WIFI_MEDIA){    
+        if (Ping.ping(params->echo->host.c_str())) {
+          params->echo->alive = true;
+          params->echo->latency = Ping.averageTime();
+        } else {
+          params->echo->alive = false;
+        }    
 
-    }else{
-      // IMPLEMENT PING FOR ETHERNET
-      EthernetICMPPing ping(7, 1);
-      //EthernetICMPPing::setTimeout(3000); // ms
-      
-      uint32_t t0 = millis();
-      // Lance le ping avec 3 retries
-      EthernetICMPEchoReply reply = ping(params->echo->ip, 3);
-      uint32_t t1 = millis();
-      if (reply.status == SUCCESS) {
-        params->echo->alive = true;
-        params->echo->latency = t1 - t0;   // ✅ latence en ms
-      } else {
-        params->echo->alive = false;
-      }
+      }else{
+        // IMPLEMENT PING FOR ETHERNET
+        EthernetICMPPing ping(7, 1);
+        //EthernetICMPPing::setTimeout(3000); // ms
+        
+        uint32_t t0 = millis();
+        // Lance le ping avec 3 retries
+        EthernetICMPEchoReply reply = ping(params->echo->ip, 3);
+        uint32_t t1 = millis();
+        if (reply.status == SUCCESS) {
+          params->echo->alive = true;
+          params->echo->latency = t1 - t0;   // ✅ latence en ms
+        } else {
+          params->echo->alive = false;
+        }
+      }      
+      params->callback(params->echo);  // Appel du callback en cas de succès
+      xSemaphoreGive(hwm.network->networkBusy);      
     }
-
-    params->callback(params->echo);  // Appel du callback en cas de succès
-
   }else {
     DEBUG_PRINT("\nasyncPing(%s) hostname unresovable\n",params->echo->host.c_str());
   }

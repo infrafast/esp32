@@ -11,20 +11,24 @@
 class OSCMixerInterface : public NetworkOSC{
   public:
 
-    OSCMixerInterface(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String ping, bool _configurable=false): NetworkOSC(name, _OSC_localPort, _OSC_IPaddress,_OSC_clientPort, ping, _configurable){
+    OSCMixerInterface(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String ping, bool _configurable=true): NetworkOSC(name, _OSC_localPort, _OSC_IPaddress,_OSC_clientPort, ping, _configurable){
     }       
 };
 
 #define INTERFACE_MIXINGSTATION "MixingStation"
 class MixingStation: public OSCMixerInterface{
   public:
-    MixingStation():OSCMixerInterface(INTERFACE_MIXINGSTATION,8889,"0.0.0.0",3000,"/info",true){}     
+    MixingStation():OSCMixerInterface(INTERFACE_MIXINGSTATION,8889,"0.0.0.0",3000,"/info"){
+      destination->host = "192.168.99.99";
+    }     
 };
 
 #define INTERFACE_BEHRINGERXM "BehringerXM"
 class BehringerXM: public OSCMixerInterface{
   public:
-    BehringerXM():OSCMixerInterface(INTERFACE_BEHRINGERXM,8888,"0.0.0.0",3000,"/info",true){}     
+    BehringerXM():OSCMixerInterface(INTERFACE_BEHRINGERXM,8888,"0.0.0.0",10024,"/info"){
+      destination->host = "192.168.99.100";
+    }     
 };
 
 #endif

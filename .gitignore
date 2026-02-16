@@ -3,7 +3,7 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-lib/Interval/.DS_Store
+.DS_Store
 include/MIDIUSB.h
 utils/MIDIUSB.h
 lib/Ethernet/src/EthernetIcmp.h

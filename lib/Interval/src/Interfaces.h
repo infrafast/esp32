@@ -354,7 +354,9 @@ class NetWorkInterface{
     }    
     
     void monitorNetworkInterface(){         
+    
       if (!deviceInterface) return;
+    
       if (hwm.network->refreshed){
         bool success = false;
         if (hwm.network->state == CONNECTED){
@@ -530,6 +532,11 @@ DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){
   DEBUG_PRINT("\nError: requested interface <%s> is not existing, returning nullptr",requestedInterface.c_str());
   return nullptr;
 }
+
+// a NetworkOSCInterface is an interface that connect and IP 
+class NetworkOSCInterface: public NetWorkInterface{
+  public:
+};
 
 
 #endif

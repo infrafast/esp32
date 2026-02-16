@@ -754,6 +754,7 @@ class Network : public HWComponent2State{
 
     virtual UdpSlot* getUDPslot(int i) = 0;
     virtual int requestUDPslotID(int port) = 0;
+    virtual UDP* newUDP() = 0;
     virtual void stopAllUDP() = 0;
     virtual void setLink(EthernetLinkStatus linkStatus) = 0;    
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path)=0;
@@ -958,6 +959,15 @@ class WiFiEth : public Network{
     #define MAX_UDP_SLOT 4
     UdpSlot udpSlots[MAX_UDP_SLOT];   // max 4 objets
    
+
+    virtual UDP* newUDP(){
+      // Créer l'objet UDP du bon type
+      if (media == CABLE_MEDIA)
+         return new EthernetUDP;
+      else
+        return new WiFiUDP;      
+    }
+
     virtual int requestUDPslotID(int port) {
 
       // 1️⃣ Chercher si un slot existe déjà pour ce port
@@ -976,12 +986,7 @@ class WiFiEth : public Network{
 
         if (udpSlots[i].udp == nullptr) {
 
-            // Créer l'objet UDP du bon type
-            if (media == CABLE_MEDIA)
-                udpSlots[i].udp = new EthernetUDP;
-            else
-                udpSlots[i].udp = new WiFiUDP;
-
+            udpSlots[i].udp = newUDP();
             udpSlots[i].media = media;                
             udpSlots[i].udp->begin(port);
             udpSlots[i].port = port;
@@ -1592,6 +1597,7 @@ class  NoNetwork: public Network{
     virtual String getConnectedDeviceIP(){return "";}
     virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
+    virtual UDP* newUDP(){return nullptr;}
 
 };
 
@@ -1635,6 +1641,7 @@ class AccessPoint : public Network{
     virtual void clientSocketSend(const char *message){};
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){}
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
+    virtual UDP* newUDP(){return nullptr;}
 
     virtual void init(){
       #define VISIBLE 0

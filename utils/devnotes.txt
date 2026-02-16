@@ -1,5 +1,5 @@
 
-~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C 0x40381d3a:0x3fcb8570 0x42021c86:0x3fcb85b0 0x4202a9a7:0x3fcb85d0 0x4202adb9:0x3fcb8610 0x4202adf7:0x3fcb8660
+~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C 0x42033348:0x3fcebd70 0x4200c6a5:0x3fcebe10 0x4202ed63:0x3fcebe30 0x4202fab8:0x3fcebf80 0x42066d61:0x3fcebfa0
 
 
 packages are in C:\Users\progman\.platformio\packages
@@ -320,172 +320,593 @@ void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpac
 
 
 
-///////
+/////// WITH UDPSLOT
 
+#ifndef I_OSC_h
+#define I_OSC_h
 
+#include "Interfaces.h"
+#include "DataManagement.h"
+#include "OSCMessage.h"
 
+#define GROUP_INTERFACE_OSC "OSC"
+/*class OSCInterface{
+  public:
+};*/
 
+#define ADDRESS_OSCPORT "/oscport/%d"
 
+class OSCPing: public PingEcho{
+  public:
+    OSCPing(String host, String _command):PingEcho(host), pingCommand(_command){}
+    String pingCommand; //the command used to monitor the connection
+};
 
+class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should derive OSCInterface
 
+  public:
+    //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
+    FreeTextAddress* addressOSCport = new FreeTextAddress(ADDRESS_OSCPORT,"OSCport", REGEX_0to65535);
+    
+    int OSC_clientPort;
+    int OSC_localPort;
 
+    OSCMessage osc;
 
+    virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
+      icon = "g";     
+      attachDeviceInterface(this);
 
+      destination = new OSCPing(_OSC_IPaddress,pingCommand);
+      
 
-            /*/ message varies if we have an active or passive session
-      "details": "footswitch (192.168.0.56/5004) ready to be invited",
-      "details": "Invitation sent to 10.0.0.5/5004 pending reply",      
-      */
-      if (sessionType == APPLEMIDI_ACTIVE){
-        state.subState = destination->host;      
-        state.details = concatStrings(
-          *lang.getString("invitation sent to"),
-          " ",
-          destination->host,
-          "/",
-          rtpPort
-        );
-      }
-      }else{
-        // passive
-        if (hwm.network->appleMidiClient != nullptr){
-            midiSessionName = hwm.network->appleMidiClient->getName();
-            port = hwm.network->appleMidiClient->getPort();
+      if (!(OSCPing*)destination->ip.fromString(_OSC_IPaddress)) destination->ip = IPAddress(0,0,0,0);
+
+      registerDataSetAddress(addressOSCport);
+      registerDataSetAddress(&addressIP);           // global      
+      registerDataSetAddress(&addressPing);         // global      
+
+      jsonInputRepo.add(this);        
+      
+      data = &osc;
+
+    }
+
+    ~NetworkOSC(){
+      delete destination;
+    }
+
+    virtual void serializeProperties(JsonArray& properties) override{
+      char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_OSCPORT,OSC_clientPort);
+      properties.add(String(buf)); 
+      free(buf);
+
+      buf = (char*)malloc((strlen(ADDRESS_IP)+destination->ip.toString().length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,destination->ip.toString());
+      properties.add(String(buf)); 
+      free(buf);    
+      
+      buf = (char*)malloc((strlen(ADDRESS_PING)+((OSCPing*)destination)->pingCommand.length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,((OSCPing*)destination)->pingCommand);
+      properties.add(String(buf)); 
+      free(buf);        
+    }
+
+    virtual void handlePropertyChange(){
+      DEBUG_PRINT("\n%s::handlePropertyChange() : call disconnect",interfaceName.c_str());
+      disconnectDeviceFromNetwork();
+    }
+
+    virtual bool restoreProperty(const char* property) override{
+      bool changed = false;
+      uint16_t OSCport;
+      #define MAXLENGHTINPUT 32
+      char inputStr[MAXLENGHTINPUT];      
+      if (sscanf(property, ADDRESS_OSCPORT, &OSCport) == 1) {
+        if (OSCport != OSC_clientPort)   changed = true;
+        OSC_clientPort = OSCport;       
+      }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
+        IPAddress ip;
+        if (ip.fromString(inputStr)){
+          if (destination->ip != ip)  changed = true;
+          destination->ip = ip;      
+        }else{
+          DEBUG_PRINT("\ninvalid IP address:%s",inputStr);
         }
-        state.subState = midiSessionName;      
-        state.details = concatStrings(
-          midiSessionName,
-          " (",
-          hwm.network->IP.toString(),
-          "/",
-          port,
-          ") ",
-          *lang.getString("ready to be invited")
-        );
+      }else if (sscanf(property, ADDRESS_PING, &inputStr)) {
+        if (((OSCPing*)destination)->pingCommand != inputStr)  changed = true;
+        ((OSCPing*)destination)->pingCommand = inputStr;    
       }
-      state.led = "green slow";
-      state.progress = -1;
+      return changed;
+    }        
+
+    virtual void monitor(){           
+      monitorNetworkInterface();
+    }    
+
+    virtual void connectedNetworkMonitor(){
+      // Check if packet was received
+      dataAvailable = readOSC();
+
+      if (dataAvailable > 0){
+        // set the device to connected
+        if (state.code != IF_READY) setStateConnected();
+        lastQueryTime =  millis();             // and no need to trigger the verification
+        connectAttemptCount = 0;               // reset attempt counter                
+        return;
+      }
+             
+      #define OSC_PING_DELAY 3000
+      // delay expired
+      if (millis()-lastQueryTime > OSC_PING_DELAY){        
+        //should we give it a new chance or set state
+        if (connectAttemptCount++ == 1){
+          setStateQueryingDevice();
+          connectAttemptCount = 0;          
+        }else{
+          ping();       
+        }
+      }      
+
+    }
+
+    int readOSC(){
+        UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);   // request UDP slot
+        if (udpSlot == NULL) return 0;                
+        // from that point in time, semaphore is taken
+        UDP* udp = udpSlot->udp;
+
+        if (udp == nullptr) return 0;
+
+        int size = udp->parsePacket();
+
+        if (size > 0){
+            osc.empty();
+
+            while (size--){
+                osc.fill(udp->read());
+                yield();
+            }
+
+            xSemaphoreGive(udpSlot->mutex);
+
+            if (osc.hasError()) {
+                DEBUG_PRINT("\nreadOSC: %s\n", osc.getError());
+                return 0;   // message invalide
+            }else{
+              char addr[64];
+              osc.getAddress(addr, 0);
+              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_clientPort);
+              if ( ((OSCPing*)destination)->pingCommand == addr ){
+                /* we got a pingCommand echo, so we calculate the latency
+                Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
+                ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
+                */
+                unsigned long latency = millis()-lastQueryTime;
+
+                // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
+                if (latency > 500) latency = destination->latency;
+
+                // α entre 0.1 (très lisse) et 0.3 (réactif)
+                #define LAT_ALPHA 0.2f                
+                destination->latency =
+                    destination->latency * (1.0f - LAT_ALPHA) +
+                    latency * LAT_ALPHA;                
+
+                DEBUG_PRINT("\t latency: %i",destination->latency);
+              }
+            }              
+            // ✔ message valide
+            // retour : au moins 1, même si aucun argument
+            int argCount = osc.size();
+            return (argCount == 0 ? 1 : argCount);
+        }
+        
+        xSemaphoreGive(udpSlot->mutex);
+        return 0;
+    }
 
 
-       appleMidiClient->sendInvite(destination->ip, rtpPort); // port is 5004 by default 
+    void setStateConnected(){            
+      //DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
+      state.code = IF_READY;      
+      state.label = IF_STATE_CONNECTED;
+      state.subState = destination->ip.toString();      
+      state.details = *lang.getString("Connected");
+      state.led = "green";
+      state.progress = -1;      
+    }
+
+    void setStateQueryingDevice(){
+      //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
+      // network is connected but not the OSC device is not answering
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_PENDING;
+      state.subState = destination->ip.toString();      
+      state.details = *lang.getString("Trying to connect");
+      state.led = "red medium";
+      state.progress = -1;      
+    }
+
+    void ping(){
+      lastQueryTime = millis();       
+      OSCMessage msg(((OSCPing*)destination)->pingCommand.c_str());
+      sendOSCMessage(&msg);
+    }
+
+    bool sendOSCMessage(OSCMessage *msg){           
+      
+      bool success = false;
+
+      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_clientPort);
+
+      UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);
+      // sempahore protected section
+      if (udpSlot == nullptr){
+          DEBUG_PRINT(" **** FAIL (UdpSlot null) ****",msg->getAddress());
+          return false;
+      }            
+
+     
+      UDP* udp = udpSlot->udp; 
+
+      if (udp != nullptr){
+        udp->beginPacket(destination->ip, OSC_clientPort);
+        msg->send(*udp);
+        udp->endPacket();
+        success = true;
+      }else{
+        success = false;
+        DEBUG_PRINT(" **** FAIL (udp null) ****",msg->getAddress());        
+      }
+
+      xSemaphoreGive(udpSlot->mutex);
+      // sempahore released section
+      return success;          
+  }
 
 
-       Disconnected (read failed: [Errno 6] Device not configured)
-Reconnecting to /dev/cu.usbmodem11301 .  Connected!
-[  2429][E][esp32-hal-tinyusb.c:552] tinyusb_load_enabled_interfaces(): Descriptor Load Failed
+    virtual bool begin(){
+      return true;
+    }
 
-JsonListFile::load(/webapp/sysexlib.json.gz) ok
+    virtual bool end(){
+      return true;
+    }
 
-JsonListFile::load(/webapp/osclib.json.gz) ok
+    virtual bool connectDeviceToNetwork(){
+      // network connection has just been established :-)
+      setStateQueryingDevice();         // we are not yet connected to the OSC device
+      lastQueryTime = 0; // force ping to be triggered
+      //udpID = 1; // DIRECT UDP
+      udpID = hwm.network->requestUDPslotID(OSC_localPort);      // the network will create or reuse a udp slot and give its ID to us      
 
-BLEMidi disconnected
-[  2691][E][vfs_api.cpp:105] open(): /littlefs/system_if.cfg does not exist, no permits for creation
-        system::load : impossible d'ouvrir system_if.cfg
-system->init() failed or is not fully implemented
-USBMIDI->restore({"offline":true,"properties":[]})
-USBMIDI restore(JsonObject<...>)
-USBMIDI goOffline=>true
-::handlePropertyChange() : void USBMIDI::setHandleSystemExclusive(f*)
-BLEMIDI->restore({"offline":false,"properties":[]})
-BLEMIDI restore(JsonObject<...>)
-BLEMIDI goOffline=>false
-BLEMIDI begin()
-BLEMIDI begin() ignored (hasBegun)[  3001][E][vfs_api.cpp:105] open(): /littlefs/DINMIDI_if.cfg does not exist, no permits for creation
-        DINMIDI::load : impossible d'ouvrir DINMIDI_if.cfg
-DINMIDI->init() failed or is not fully implemented
-sysOSC->restore({"offline":true,"properties":["/oscport/5000","/ip/1.1.1.1","/ip//info"]})
-sysOSC restore(JsonObject<...>)
-sysOSC goOffline=>true
-invalid IP address:/info
-sysOSC::handlePropertyChange() : call disconnect
-Artnet::load() not applicable
-Artnet->init() failed or is not fully implemented
-3PinDMX::load() not applicable
-3PinDMX->init() failed or is not fully implemented
-AppleMIDI->restore({"offline":false,"properties":["/rtpPort/5004","/ip/192.168.2.1","/session/2"]})
-AppleMIDI restore(JsonObject<...>)
-AppleMIDI goOffline=>false
-AppleMIDI::connectDeviceToNetwork()
-appleMidiClient (nullptr)
-AppleMIDI::handlePropertyChange()
-AppleMIDIInterface::disconnectDeviceFromNetwork()       (nullptr)
-AppleMIDI::connectDeviceToNetwork()
-appleMidiClient (nullptr)       AppleMIDIInterface::begin()
-AppleMIDIInterface::disconnectDeviceFromNetwork()       (nullptr)
-AppleMIDI->init() failed or is not fully implemented
-JsonListFile::load(/settings.sys) ok
+      /*if (udp != nullptr) delete udp;   // DIRECT UDP
+      udp = hwm.network->newUDP();
+      udp->begin(OSC_localPort);
+      */
 
-JsonListFile::load(/FRANCAIS.lang) ok
-[  3213][E][vfs_api.cpp:105] open(): /littlefs/FRANCAIS.i18n does not exist, no permits for creation
+      if (udpID == -1) return false;
 
-JsonListFile::file /FRANCAIS.i18n doesnt exit, use default values
+      return true;
+    }
 
-JsonListFile::load(/default.user) ok
+   virtual bool disconnectDeviceFromNetwork(){
+      lastQueryTime = 0; // force immediate ping attempt
+      setStateQueryingDevice();
+      return true;
+    }
+
+  private:
+    unsigned long lastQueryTime ;
+    uint8_t connectAttemptCount = 0;
+    uint8_t udpID = 0;
+    
+    //UDP* udp = nullptr; // DIRECT UDP
+
+};
 
 
- systemCfg:     {"pushDelay":"852","dClicReactivity":"251","profile":"default","apName":"footswitch","lastSSID":"intervalmix1","lang":"francais","hostname":"infrafast.fr","startupUpdate":"false","faderSpeed":"157","ssid":{"intervalmix1":"intervalpop74","infrafast":"Mf9k8iie2","intervalmix":"intervalpop74","IpTch":" [...]
 
- userCfg:       null [...]
-
- langfile:      {"Connect Blutooth":"Connectez le blutooth","Trying to connect":"Trying to connect","PROFILE":"PROFIL","LANGUAGE":"LANGUE","QUIT":"QUITTER","File Error":"Erreur de fichier","Connect":"Connectez votre PC/mobile au WiFi ou branchez un cable ethernet à la pédale.","Open browser":"Ouvrez un navigateur [...]
-example of langfile token: Connect:<Connectez votre PC/mobile au WiFi ou branchez un cable ethernet à la pédale.>
-
- userLang:      null [...]      no token        no token        no token        no token        no token        no token        no token        no token        no token        no token        no token        no token        no token        no token[  3902][E][vfs_api.cpp:105] open(): /littlefs/firmware.bin.gz does not exist, no permits for creation
-ℹ️ Aucun fichier .bin.gz à la racine.
-WiFiEth~6 changed state => cable:1, media:1
-Artnet->monitor()...failed or is not implemented
-AppleMIDIInterface::disconnectDeviceFromNetwork()       (nullptr)
-AppleMIDI->monitor()...failed or is not implemented
-Ethernet.begin() => got IP:192.168.2.2  ...all Eth object instantiated
-
-WiFiEth~6 changed state => cable:1, media:1
-midiClient(footswitch)->begin()
-
-        checkInternet => 
-PingParameters created
-asyncPing(8.8.8.8) task created
-pingTask running...
+#endif
 
 
-                         * * * * onInternetPing OK latency:15 * * * *
-(v0.19) Listing: http://infrafast.fr/fwupdate/   host: infrafast.fr, port:80, path: /fwupdate/
-Nouvelle version: 0.20 @ http://infrafast.fr/fwupdate/0.20.tgz
-Startup update disabled in config
-Artnet->monitor connectDeviceToNetwork()...failed or is not implemented
-AppleMIDI::connectDeviceToNetwork()
-AppleMIDIInterface::setStateActiveSession() to 192.168.2.1:5004
-AppleMIDI->monitor connectDeviceToNetwork()...ok
-AppleMIDIInterface::setStateActiveSession() to 192.168.2.1:5004
-AppleMIDI Exception: UndefinedException (value:0)
 
-appleMidi session #1220440073 iMac de T connected
 
-AppleMIDIInterface::setStateConnected
-AppleMIDI Exception: UndefinedException (value:0)
+/////// DIRECT
 
-appleMidi session #1220440073 iMac de T connected
+#ifndef I_OSC_h
+#define I_OSC_h
 
-AppleMIDIInterface::setStateConnected
-AppleMIDI Exception: MaxAttempts (value:0)
+#include "Interfaces.h"
+#include "DataManagement.h"
+#include "OSCMessage.h"
 
-appleMidi session #1220440073 disconnected
+#define GROUP_INTERFACE_OSC "OSC"
+/*class OSCInterface{
+  public:
+};*/
 
-AppleMIDIInterface::setStateDisconnected
-AppleMIDIInterface::setStateActiveSession() to 192.168.2.1:5004
-AppleMIDI Exception: UndefinedException (value:0)
+#define ADDRESS_OSCPORT "/oscport/%d"
 
-appleMidi session #1220440073 iMac de T connected
+class OSCPing: public PingEcho{
+  public:
+    OSCPing(String host, String _command):PingEcho(host), pingCommand(_command){}
+    String pingCommand; //the command used to monitor the connection
+};
 
-AppleMIDIInterface::setStateConnected
-AppleMIDI Exception: MaxAttempts (value:0)
+class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should derive OSCInterface
 
-appleMidi session #1220440073 disconnected
+  public:
+    //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
+    FreeTextAddress* addressOSCport = new FreeTextAddress(ADDRESS_OSCPORT,"OSCport", REGEX_0to65535);
+    
+    int OSC_clientPort;
+    int OSC_localPort;
 
-AppleMIDIInterface::setStateDisconnected
-AppleMIDIInterface::setStateActiveSession() to 192.168.2.1:5004
-AppleMIDI Exception: UndefinedException (value:0)
+    OSCMessage osc;
 
-appleMidi session #1220440073 iMac de T connected
+    virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
-AppleMIDIInterface::setStateConnected
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
+      icon = "g";     
+      attachDeviceInterface(this);
+
+      destination = new OSCPing(_OSC_IPaddress,pingCommand);
+      
+
+      if (!(OSCPing*)destination->ip.fromString(_OSC_IPaddress)) destination->ip = IPAddress(0,0,0,0);
+
+      registerDataSetAddress(addressOSCport);
+      registerDataSetAddress(&addressIP);           // global      
+      registerDataSetAddress(&addressPing);         // global      
+
+      jsonInputRepo.add(this);        
+      
+      data = &osc;
+
+    }
+
+    ~NetworkOSC(){
+      delete destination;
+    }
+
+    virtual void serializeProperties(JsonArray& properties) override{
+      char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_OSCPORT,OSC_clientPort);
+      properties.add(String(buf)); 
+      free(buf);
+
+      buf = (char*)malloc((strlen(ADDRESS_IP)+destination->ip.toString().length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,destination->ip.toString());
+      properties.add(String(buf)); 
+      free(buf);    
+      
+      buf = (char*)malloc((strlen(ADDRESS_PING)+((OSCPing*)destination)->pingCommand.length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,((OSCPing*)destination)->pingCommand);
+      properties.add(String(buf)); 
+      free(buf);        
+    }
+
+    virtual void handlePropertyChange(){
+      DEBUG_PRINT("\n%s::handlePropertyChange() : call disconnect",interfaceName.c_str());
+      disconnectDeviceFromNetwork();
+    }
+
+    virtual bool restoreProperty(const char* property) override{
+      bool changed = false;
+      uint16_t OSCport;
+      #define MAXLENGHTINPUT 32
+      char inputStr[MAXLENGHTINPUT];      
+      if (sscanf(property, ADDRESS_OSCPORT, &OSCport) == 1) {
+        if (OSCport != OSC_clientPort)   changed = true;
+        OSC_clientPort = OSCport;       
+      }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
+        IPAddress ip;
+        if (ip.fromString(inputStr)){
+          if (destination->ip != ip)  changed = true;
+          destination->ip = ip;      
+        }else{
+          DEBUG_PRINT("\ninvalid IP address:%s",inputStr);
+        }
+      }else if (sscanf(property, ADDRESS_PING, &inputStr)) {
+        if (((OSCPing*)destination)->pingCommand != inputStr)  changed = true;
+        ((OSCPing*)destination)->pingCommand = inputStr;    
+      }
+      return changed;
+    }        
+
+    virtual void monitor(){           
+      monitorNetworkInterface();
+    }    
+
+    virtual void connectedNetworkMonitor(){
+      // Check if packet was received
+      dataAvailable = readOSC();
+
+      if (dataAvailable > 0){
+        // set the device to connected
+        if (state.code != IF_READY) setStateConnected();
+        lastQueryTime =  millis();             // and no need to trigger the verification
+        connectAttemptCount = 0;               // reset attempt counter                
+        return;
+      }
+             
+      #define OSC_PING_DELAY 3000
+      // delay expired
+      if (millis()-lastQueryTime > OSC_PING_DELAY){        
+        //should we give it a new chance or set state
+        if (connectAttemptCount++ == 1){
+          setStateQueryingDevice();
+          connectAttemptCount = 0;          
+        }else{
+          ping();       
+        }
+      }      
+
+    }
+
+    int readOSC(){
+    
+        /*UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);   // request UDP slot
+
+        if (udpSlot == NULL) return 0;                
+
+        // from that point in time, semaphore is taken
+
+        UDP* udp = udpSlot->udp;*/
+
+        if (udp == nullptr) return 0;
+
+        int size = udp->parsePacket();
+
+        if (size > 0){
+            osc.empty();
+
+            while (size--){
+                osc.fill(udp->read());
+                yield();
+            }
+
+            //xSemaphoreGive(udpSlot->mutex);
+
+            if (osc.hasError()) {
+                DEBUG_PRINT("\nreadOSC: %s\n", osc.getError());
+                return 0;   // message invalide
+            }else{
+              char addr[64];
+              osc.getAddress(addr, 0);
+              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_clientPort);
+              if ( ((OSCPing*)destination)->pingCommand == addr ){
+                /* we got a pingCommand echo, so we calculate the latency
+                Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
+                ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
+                */
+                unsigned long latency = millis()-lastQueryTime;
+
+                // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
+                if (latency > 500) latency = destination->latency;
+
+                // α entre 0.1 (très lisse) et 0.3 (réactif)
+                #define LAT_ALPHA 0.2f                
+                destination->latency =
+                    destination->latency * (1.0f - LAT_ALPHA) +
+                    latency * LAT_ALPHA;                
+
+                DEBUG_PRINT("\t latency: %i",destination->latency);
+              }
+            }              
+            // ✔ message valide
+            // retour : au moins 1, même si aucun argument
+            int argCount = osc.size();
+            return (argCount == 0 ? 1 : argCount);
+        }
+        
+        //xSemaphoreGive(udpSlot->mutex);
+        return 0;
+    }
+
+
+    void setStateConnected(){            
+      //DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
+      state.code = IF_READY;      
+      state.label = IF_STATE_CONNECTED;
+      state.subState = destination->ip.toString();      
+      state.details = *lang.getString("Connected");
+      state.led = "green";
+      state.progress = -1;      
+    }
+
+    void setStateQueryingDevice(){
+      //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
+      // network is connected but not the OSC device is not answering
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_PENDING;
+      state.subState = destination->ip.toString();      
+      state.details = *lang.getString("Trying to connect");
+      state.led = "red medium";
+      state.progress = -1;      
+    }
+
+    void ping(){
+      lastQueryTime = millis();       
+      OSCMessage msg(((OSCPing*)destination)->pingCommand.c_str());
+      sendOSCMessage(&msg);
+    }
+
+    bool sendOSCMessage(OSCMessage *msg){           
+      
+      bool success = false;
+
+      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_clientPort);
+
+      /*UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);
+      // sempahore protected section
+      if (udpSlot == nullptr){
+          DEBUG_PRINT(" **** FAIL (UdpSlot null) ****",msg->getAddress());
+          return false;
+      }            
+
+     
+      UDP* udp = udpSlot->udp;*/
+
+      if (udp != nullptr){
+        udp->beginPacket(destination->ip, OSC_clientPort);
+        msg->send(*udp);
+        udp->endPacket();
+        success = true;
+      }else{
+        success = false;
+        DEBUG_PRINT(" **** FAIL (udp null) ****",msg->getAddress());        
+      }
+
+      //xSemaphoreGive(udpSlot->mutex);
+      // sempahore released section
+      return success;          
+  }
+
+
+    virtual bool begin(){
+      return true;
+    }
+
+    virtual bool end(){
+      return true;
+    }
+
+    virtual bool connectDeviceToNetwork(){
+      // network connection has just been established :-)
+      setStateQueryingDevice();         // we are not yet connected to the OSC device
+      lastQueryTime = 0; // force ping to be triggered
+      udpID = 1; //hwm.network->requestUDPslotID(OSC_localPort);      // the network will create or reuse a udp slot and give its ID to us      
+
+      if (udp != nullptr) delete udp;
+      udp = hwm.network->newUDP();
+
+      if (udpID == -1) return false;
+      udp->begin(OSC_localPort);
+      DEBUG_PRINT("\nUDP socket created");
+      return true;
+    }
+
+   virtual bool disconnectDeviceFromNetwork(){
+      lastQueryTime = 0; // force immediate ping attempt
+      setStateQueryingDevice();
+      return true;
+    }
+
+  private:
+    unsigned long lastQueryTime ;
+    uint8_t connectAttemptCount = 0;
+    uint8_t udpID = 0;
+    
+    UDP* udp = nullptr;
+
+};
+
+
+
+#endif
