@@ -736,6 +736,7 @@ class Network : public HWComponent2State{
     MidiClient* appleMidiClient = nullptr;
 
     uint8_t media = NO_MEDIA;
+    uint8_t lastActiveMedia = NO_MEDIA;
     IPAddress IP, gateway,subnet;
     //HttpClient* http = NULL;    
     Client* client = NULL;   
@@ -1357,7 +1358,7 @@ class WiFiEth : public Network{
           if (media == CABLE_MEDIA){
             if (cable == LinkON){
               // do whatever is required when we are connected by cable
-              wsEthClient->listen();
+              if (wsEthClient != nullptr) wsEthClient->listen();
               EthernetBonjour.run();
             }else{
               state = DISCONNECTED; 
@@ -1368,7 +1369,7 @@ class WiFiEth : public Network{
               // do whatever is required when we are connected by WiFI
               // this code is executed in loop
               //ArduinoOTA.handle();     
-              wsWiFiClient->listen();              
+              if (wsWiFiClient != nullptr) wsWiFiClient->listen();
             }else{
               // this code is executed in loop
               state = DISCONNECTED; 
@@ -1405,6 +1406,7 @@ class WiFiEth : public Network{
             // ETHERNET        
             gateway = Ethernet.gatewayIP();                                      
            }
+          lastActiveMedia = media;
           checkInternet();
           //DEBUG_PRINT("\n...all network component begin() done");
         }else if (state == DISCONNECTED){
@@ -1421,13 +1423,14 @@ class WiFiEth : public Network{
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
             
             // specific destruction to WIFI or ETH
-            if (media == CABLE_MEDIA){              
+            if (lastActiveMedia == CABLE_MEDIA){
               // eth
               EthernetBonjour.stop();
-            }else{
+            }else if (lastActiveMedia == WIFI_MEDIA){
               // wifi
               MDNS.end();
             }
+            lastActiveMedia = NO_MEDIA;
             
             xSemaphoreGive(networkBusy);              
           }else{
