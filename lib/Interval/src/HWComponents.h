@@ -1006,7 +1006,7 @@ class WiFiEth : public Network{
 
     virtual UdpSlot* getUDPslot(int i) {
 
-      if (udpSlots[i].udp == nullptr || i>= MAX_UDP_SLOT){
+      if (i < 0 || i >= MAX_UDP_SLOT || udpSlots[i].udp == nullptr){
         DEBUG_PRINT("\ngetUDPslot(%d) failed",i);
         return nullptr;
       }
@@ -1032,7 +1032,7 @@ class WiFiEth : public Network{
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
         udpSlot = getUDPslot(i);
         if (udpSlot != nullptr) {
-          if (udpSlot[i].udp != nullptr){
+          if (udpSlot->udp != nullptr){
             udpSlots[i].udp->stop();
             udpSlots[i].active = false;
             DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);           
