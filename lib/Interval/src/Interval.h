@@ -55,7 +55,6 @@ bool useUSBMidi = false;
 
 #define FW_EXTENSION ".tgz"
 
-
 #ifdef DEBUG  //ets_printf(__VA_ARGS__) //
   #define debugMon Serial  //  
   SemaphoreHandle_t serialMutex = xSemaphoreCreateMutex();
@@ -66,6 +65,13 @@ bool useUSBMidi = false;
 #endif
 
 #define DEFAULT_STORAGE_TYPE_ESP32 STORAGE_LITTLEFS
+ 
+// le timeout des check Wifi doit etre superieur a celui du check ethernet cable de sorte de lui laisser la priorité en etant au minimum de 3000
+#define ETH_CABLE_CHECK_FREQUENCY 3000
+
+#define WIFI_CHECK_TIMEOUT_MIN  ((ETH_CABLE_CHECK_FREQUENCY >= 3000) ? (ETH_CABLE_CHECK_FREQUENCY*1.5) : 3000)
+#define WIFI_CHECK_TIMEOUT_MAX  9000
+
 
 class PingEcho{
   public:
@@ -1218,23 +1224,20 @@ void goDeepSleep(){
   esp_deep_sleep_start();      
 }
 
-
 void xTaskBackground(void *pvParameters){  
   while (true){
   
-    vTaskDelay(2);  //added for S3 to avoid trigerring the wathcdog
+    vTaskDelay(2);  //added for S3 to avoid trigerring the watchdog
 
 
     // network monitoring
     /*static unsigned long checkEthCableTime = 0;
-    if (millis()-checkEthCableTime > 1000 && hwm.network->ethEnabled){   // only if we use the full network stack and not only AP mode
+    if (millis()-checkEthCableTime > ETH_CABLE_CHECK_FREQUENCY && hwm.network->ethEnabled){   // only if we use the full network stack and not only AP mode
       hwm.network->setLink(Ethernet.linkStatus());
-      checkEthCableTime = millis();
     }*/
     
     // watch the switch off button only if it was pushed
-
-    if (onOffPushedStartTime !=0 && digitalRead(ONOFF_PIN)==ON_OFF_TRIGGER){
+    if (onOffPushedStartTime !=0 && digitalRead(ONOFF_PIN) == ON_OFF_TRIGGER){
       long push = millis()-onOffPushedStartTime;
       //ets_printf("\n\t\t%u",push);
       if (abs(push)>SHUTDOWN_PUSH_DELAY && hwm.startupState != RESET_STARTUP){ // we do not shutdown if there is a reset in progress

@@ -24,14 +24,14 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
     FreeTextAddress* addressOSCport = new FreeTextAddress(ADDRESS_OSCPORT,"OSCport", REGEX_0to65535);
     
-    int OSC_clientPort;
+    int OSC_remotePort;
     int OSC_localPort;
 
     OSCMessage osc;
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
-    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_remotePort(_OSC_remotePort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
       icon = "g";     
       attachDeviceInterface(this);
 
@@ -56,7 +56,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void serializeProperties(JsonArray& properties) override{
       char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_OSCPORT,OSC_clientPort);
+      sprintf(buf,ADDRESS_OSCPORT,OSC_remotePort);
       properties.add(String(buf)); 
       free(buf);
 
@@ -82,8 +82,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       #define MAXLENGHTINPUT 32
       char inputStr[MAXLENGHTINPUT];      
       if (sscanf(property, ADDRESS_OSCPORT, &OSCport) == 1) {
-        if (OSCport != OSC_clientPort)   changed = true;
-        OSC_clientPort = OSCport;       
+        if (OSCport != OSC_remotePort)   changed = true;
+        OSC_remotePort = OSCport;       
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
         IPAddress ip;
         if (ip.fromString(inputStr)){
@@ -155,7 +155,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
             }else{
               char addr[64];
               osc.getAddress(addr, 0);
-              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_clientPort);
+              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_remotePort);
               if ( ((OSCPing*)destination)->pingCommand == addr ){
                 /* we got a pingCommand echo, so we calculate the latency
                 Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
@@ -186,38 +186,11 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
 
-    void setStateConnected(){            
-      //DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
-      state.code = IF_READY;      
-      state.label = IF_STATE_CONNECTED;
-      state.subState = destination->ip.toString();      
-      state.details = *lang.getString("Connected");
-      state.led = "green";
-      state.progress = -1;      
-    }
-
-    void setStateQueryingDevice(){
-      //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
-      // network is connected but not the OSC device is not answering
-      state.code = IF_NOT_READY;      
-      state.label = IF_STATE_PENDING;
-      state.subState = destination->ip.toString();      
-      state.details = *lang.getString("Trying to connect");
-      state.led = "red medium";
-      state.progress = -1;      
-    }
-
-    void ping(){
-      lastQueryTime = millis();       
-      OSCMessage msg(((OSCPing*)destination)->pingCommand.c_str());
-      sendOSCMessage(&msg);
-    }
-
     bool sendOSCMessage(OSCMessage *msg){           
       
       bool success = false;
 
-      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_clientPort);
+      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_remotePort);
 
       UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);
       // sempahore protected section
@@ -230,7 +203,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       UDP* udp = udpSlot->udp; 
 
       if (udp != nullptr){
-        udp->beginPacket(destination->ip, OSC_clientPort);
+        udp->beginPacket(destination->ip, OSC_remotePort);
         msg->send(*udp);
         udp->endPacket();
         success = true;
@@ -258,16 +231,14 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       setStateQueryingDevice();         // we are not yet connected to the OSC device
       lastQueryTime = 0; // force ping to be triggered
       //udpID = 1; // DIRECT UDP
-      int requestedUdpID = hwm.network->requestUDPslotID(OSC_localPort);      // the network will create or reuse a udp slot and give its ID to us
+      udpID = hwm.network->requestUDPslotID(OSC_localPort);      // the network will create or reuse a udp slot and give its ID to us
 
       /*if (udp != nullptr) delete udp;   // DIRECT UDP
       udp = hwm.network->newUDP();
       udp->begin(OSC_localPort);
       */
 
-      if (requestedUdpID == -1) return false;
-
-      udpID = requestedUdpID;
+      if (udpID == -1) return false;
 
       return true;
     }
@@ -276,6 +247,33 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       lastQueryTime = 0; // force immediate ping attempt
       setStateQueryingDevice();
       return true;
+    }
+
+    void setStateConnected(){            
+      //DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
+      state.code = IF_READY;      
+      state.label = IF_STATE_CONNECTED;
+      state.subState = destination->ip.toString();      
+      state.details = *lang.getString("Connected");
+      state.led = "green";
+      state.progress = -1;      
+    }
+
+    void setStateQueryingDevice(){
+      //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
+      // network is connected but not the OSC device is not answering
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_PENDING;
+      state.subState = destination->ip.toString();      
+      state.details = *lang.getString("Trying to connect");
+      state.led = "red medium";
+      state.progress = -1;      
+    }
+
+    void ping(){
+      lastQueryTime = millis();       
+      OSCMessage msg(((OSCPing*)destination)->pingCommand.c_str());
+      sendOSCMessage(&msg);
     }
 
   private:

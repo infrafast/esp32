@@ -1904,6 +1904,8 @@ void setup() {
       //
       //------------------
       bool interfaceChangedState = false;
+      
+      if (!httpServing)
       for (const auto& interface : interfaceRepo.interfaces){       
 
         #ifdef PROD

@@ -1,5 +1,5 @@
 
-~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C 0x42033348:0x3fcebd70 0x4200c6a5:0x3fcebe10 0x4202ed63:0x3fcebe30 0x4202fab8:0x3fcebf80 0x42066d61:0x3fcebfa0
+~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C 0x4202ae43:0x3fcebd90 0x4200c60d:0x3fcebe10 0x4202b783:0x3fcebe30 0x4202c4e0:0x3fcebf80 0x42060bfd:0x3fcebfa0
 
 
 packages are in C:\Users\progman\.platformio\packages
@@ -348,14 +348,14 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
     FreeTextAddress* addressOSCport = new FreeTextAddress(ADDRESS_OSCPORT,"OSCport", REGEX_0to65535);
     
-    int OSC_clientPort;
+    int OSC_remotePort;
     int OSC_localPort;
 
     OSCMessage osc;
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
-    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_remotePort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
       icon = "g";     
       attachDeviceInterface(this);
 
@@ -380,7 +380,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void serializeProperties(JsonArray& properties) override{
       char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_OSCPORT,OSC_clientPort);
+      sprintf(buf,ADDRESS_OSCPORT,OSC_remotePort);
       properties.add(String(buf)); 
       free(buf);
 
@@ -406,8 +406,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       #define MAXLENGHTINPUT 32
       char inputStr[MAXLENGHTINPUT];      
       if (sscanf(property, ADDRESS_OSCPORT, &OSCport) == 1) {
-        if (OSCport != OSC_clientPort)   changed = true;
-        OSC_clientPort = OSCport;       
+        if (OSCport != OSC_remotePort)   changed = true;
+        OSC_remotePort = OSCport;       
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
         IPAddress ip;
         if (ip.fromString(inputStr)){
@@ -479,7 +479,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
             }else{
               char addr[64];
               osc.getAddress(addr, 0);
-              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_clientPort);
+              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_remotePort);
               if ( ((OSCPing*)destination)->pingCommand == addr ){
                 /* we got a pingCommand echo, so we calculate the latency
                 Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
@@ -541,7 +541,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       
       bool success = false;
 
-      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_clientPort);
+      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_remotePort);
 
       UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);
       // sempahore protected section
@@ -554,7 +554,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       UDP* udp = udpSlot->udp; 
 
       if (udp != nullptr){
-        udp->beginPacket(destination->ip, OSC_clientPort);
+        udp->beginPacket(destination->ip, OSC_remotePort);
         msg->send(*udp);
         udp->endPacket();
         success = true;
@@ -644,14 +644,14 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
     FreeTextAddress* addressOSCport = new FreeTextAddress(ADDRESS_OSCPORT,"OSCport", REGEX_0to65535);
     
-    int OSC_clientPort;
+    int OSC_remotePort;
     int OSC_localPort;
 
     OSCMessage osc;
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
-    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_clientPort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_clientPort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_remotePort(_OSC_clientPort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
       icon = "g";     
       attachDeviceInterface(this);
 
@@ -676,7 +676,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void serializeProperties(JsonArray& properties) override{
       char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_OSCPORT,OSC_clientPort);
+      sprintf(buf,ADDRESS_OSCPORT,OSC_remotePort);
       properties.add(String(buf)); 
       free(buf);
 
@@ -702,8 +702,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       #define MAXLENGHTINPUT 32
       char inputStr[MAXLENGHTINPUT];      
       if (sscanf(property, ADDRESS_OSCPORT, &OSCport) == 1) {
-        if (OSCport != OSC_clientPort)   changed = true;
-        OSC_clientPort = OSCport;       
+        if (OSCport != OSC_remotePort)   changed = true;
+        OSC_remotePort = OSCport;       
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
         IPAddress ip;
         if (ip.fromString(inputStr)){
@@ -779,7 +779,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
             }else{
               char addr[64];
               osc.getAddress(addr, 0);
-              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_clientPort);
+              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_remotePort);
               if ( ((OSCPing*)destination)->pingCommand == addr ){
                 /* we got a pingCommand echo, so we calculate the latency
                 Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
@@ -841,7 +841,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       
       bool success = false;
 
-      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_clientPort);
+      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_remotePort);
 
       /*UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);
       // sempahore protected section
@@ -854,7 +854,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       UDP* udp = udpSlot->udp;*/
 
       if (udp != nullptr){
-        udp->beginPacket(destination->ip, OSC_clientPort);
+        udp->beginPacket(destination->ip, OSC_remotePort);
         msg->send(*udp);
         udp->endPacket();
         success = true;

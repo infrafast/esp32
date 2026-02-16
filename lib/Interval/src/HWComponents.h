@@ -796,15 +796,12 @@ class Network : public HWComponent2State{
       //WiFi.setTxPower(WIFI_POWER); // maximum power => https://github.com/G6EJD/ESP32-8266-Adjust-WiFi-RF-Power-Output/ 
     }
 
-    #define minTimeout 3000
-    #define maxTimeout 9000
-
-    uint16_t wiFiTimeout = minTimeout;
+    uint16_t wiFiTimeout = WIFI_CHECK_TIMEOUT_MIN;
 
     void shiftConnectTimeout() {
         wiFiTimeout += 3000;
-        if (wiFiTimeout > maxTimeout) {
-            wiFiTimeout = minTimeout;
+        if (wiFiTimeout > WIFI_CHECK_TIMEOUT_MAX) {
+            wiFiTimeout = WIFI_CHECK_TIMEOUT_MIN;
         }
     }
 
@@ -924,18 +921,23 @@ class WiFiEth : public Network{
         }else{
           if (debug) DEBUG_PRINT("\n%s Using WiFi & Ethernet",id.c_str());
           DEBUG_PRINT("\nregistering onEthernetBonjourServiceFoundCallback");
-          EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);            
+          EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);         
+          //setLink(Ethernet.linkStatus());   // check immediately if ethernet is connected so it has priority on WiFI connection    => done in the thread
         }
       }else{
         //if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
       }
      
-
       if (!ethEnabled){
         // power off the ethernet
         stopEthernet();
       }
       wipeWifiConfig();
+
+      // we start with Ethernet priority so reset WiFi counter timer so we let time to ethernet to startup
+      lastWiFiAttempt = millis();      
+      _newWifiAttempt = false;        
+
     }    
 
     void wipeWifiConfig() {
@@ -1013,7 +1015,8 @@ class WiFiEth : public Network{
 
       // Prendre le mutex du slot
       if (xSemaphoreTake(udpSlots[i].mutex,  pdMS_TO_TICKS(50)) != pdTRUE) {
-          return nullptr;
+        DEBUG_PRINT("\nmutex udpSlots[%d] busy",i);
+        return nullptr;
       }
          
       // Restart socket
@@ -1124,6 +1127,7 @@ class WiFiEth : public Network{
 
     virtual void setLink(EthernetLinkStatus linkStatus){
       cable = linkStatus;
+      checkEthCableTime = millis();
     }
 
     virtual EthernetLinkStatus getLink(){
@@ -1167,9 +1171,8 @@ class WiFiEth : public Network{
 
     bool refresh(bool force=false) {
       
-      if (millis()-checkEthCableTime > 1000 && ethEnabled){   // only if we use the full network stack and not only AP mode
-        setLink(Ethernet.linkStatus());
-        checkEthCableTime = millis();
+      if (millis()-checkEthCableTime > ETH_CABLE_CHECK_FREQUENCY && ethEnabled){   // only if we use the full network stack and not only AP mode
+        setLink(Ethernet.linkStatus());        
       }
       // the loop ensure that we always have one connection at the same time, if wifi is connected, ethernet will not connect and vice versa
       // ethernet has the priority on WiFi
@@ -1211,7 +1214,13 @@ class WiFiEth : public Network{
                   if (client == NULL) client = new EthernetClient();
                   if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
                   //if (udp == NULL) udp = new EthernetUDP;
-                  if (wsEthClient == nullptr) wsEthClient = new EthernetWebSocketClient{}; 
+                  if (wsEthClient == nullptr){
+                    wsEthClient = new EthernetWebSocketClient{}; 
+                    wsEthClient->onOpen(socketClientOnOpenCallback);
+                    wsEthClient->onMessage(socketClientOnMessageCallback);
+                    wsEthClient->onError(socketClientOnErrorCallback);
+                    wsEthClient->onClose(socketClientOnClose);                        
+                  }
                   if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);
                   String midiName = concatStrings(appleMidiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
                   String httpName = concatStrings(appleMidiClient->getName(), "._http");
@@ -1226,6 +1235,7 @@ class WiFiEth : public Network{
                   xSemaphoreGive(networkBusy);
                 }else{
                   DEBUG_PRINT("\nETH CONNECT: networkBusy\n"); 
+                  state = DISCONNECTED; // as we failed to lock the semaphore to create network object, we disconnect to make a next attempt
                 }
               }else{
                 DEBUG_PRINT(".");
@@ -1277,10 +1287,19 @@ class WiFiEth : public Network{
               DEBUG_PRINT("\t => got IP:%s",IP.toString().c_str()); 
               //if (debug) DEBUG_PRINT("\nWifi.begin() => got IP: %s, %idb",IP.toString().c_str(),WiFi.RSSI());
               if (client == NULL) client = new WiFiClient();
-              if (server == NULL){ server = new WiFiServer(80,3);}
+              if (server == NULL){ 
+                server = new WiFiServer(80,3);
+                server->begin(); // <-- for some reason this begin cause the webserver not react with ethernet if it is called. But is required for WiFi                              
+              }
               //if (udp == NULL) udp = new WiFiUDP; 
-              if (wsWiFiClient == nullptr) wsWiFiClient = new WiFiWebSocketClient{};
-              if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(/*APPLE_MIDIWIFICLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);             
+              if (wsWiFiClient == nullptr){
+                wsWiFiClient = new WiFiWebSocketClient{};
+                wsWiFiClient->onOpen(socketClientOnOpenCallback);
+                wsWiFiClient->onMessage(socketClientOnMessageCallback);
+                wsWiFiClient->onError(socketClientOnErrorCallback);
+                wsWiFiClient->onClose(socketClientOnClose);
+              }
+              if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(/*APPLE_MIDIWIFICLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);                     
               if (MDNS.begin(systemCfg.getString(S_AP_NAME)->c_str())){
                 MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", appleMidiClient->getPort());
                 MDNS.addService("http", "tcp", 80);                                
@@ -1290,6 +1309,7 @@ class WiFiEth : public Network{
               xSemaphoreGive(networkBusy);
             }else{
               DEBUG_PRINT("\nWIFI CONNECT: networkBusy"); 
+              state = DISCONNECTED; // as we failed to lock the semaphore to create network object, we disconnect to make a next attempt
             }
 
           }
@@ -1348,31 +1368,18 @@ class WiFiEth : public Network{
           // initialiser of common object to both Wifi and Ethernet goes here
           
           //if (udp != NULL) udp->begin(8888);   //this is to receive packets on port 8888 
-          appleMidiClient->begin();
+          if (appleMidiClient != nullptr) appleMidiClient->begin();
           // then specific to ETH or WIFI          
 
           if (media == WIFI_MEDIA){
-            wsWiFiClient->onOpen(socketClientOnOpenCallback);
-            wsWiFiClient->onMessage(socketClientOnMessageCallback);
-            wsWiFiClient->onError(socketClientOnErrorCallback);
-            wsWiFiClient->onClose(socketClientOnClose);
-            server->begin(); // <-- for some reason this begin cause the webserver not react with ethernet if it is called. But is required for WiFi
             SSID = WiFi.SSID();
             gateway = WiFi.gatewayIP();
             lastConnectedSSID = SSID;
             //DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
-            unpauseWiFi();
-
-        
+            unpauseWiFi();       
           }else{
             // ETHERNET        
-            gateway = Ethernet.gatewayIP();
-            wsEthClient->onOpen(socketClientOnOpenCallback);
-            wsEthClient->onMessage(socketClientOnMessageCallback);
-            wsEthClient->onError(socketClientOnErrorCallback);
-            wsEthClient->onClose(socketClientOnClose);            
-                                
-
+            gateway = Ethernet.gatewayIP();                                      
            }
           checkInternet();
           //DEBUG_PRINT("\n...all network component begin() done");
@@ -1566,7 +1573,7 @@ class WiFiEth : public Network{
 
   private:
     byte ethMac[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-    bool _newWifiAttempt = true;    // 
+    bool _newWifiAttempt = false;    // set to false to allow ether connection first to start
     int mixerPort = 10023;
     IPAddress mixerIP={192,168,0,255};
     bool  webAppOn = false;

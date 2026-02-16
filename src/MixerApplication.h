@@ -15,7 +15,7 @@ void setup(){
     DEBUG_PRINT("go4");
     app.init();
 
-    msMixer = new MixingStation();    
+    //msMixer = new MixingStation();    
     xmMixer = new BehringerXM();
 }
 
