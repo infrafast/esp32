@@ -305,7 +305,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     // do not need to care about offline state as it is managed by update method
     virtual void monitor() = 0; 
 
-    virtual void handlePropertyChange(){DEBUG_PRINT("\n%s::handlePropertyChange() : void");} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
+    virtual void handlePropertyChange(){DEBUG_PRINT("\n%s::handlePropertyChange() : void",name.c_str());} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
     virtual bool end() = 0;     
 
     String getFilename(){

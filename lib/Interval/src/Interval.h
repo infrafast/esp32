@@ -2509,7 +2509,7 @@ void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *re
 
 
 void socketConnectionCallback(IWebSocket &ws) {
-  DEBUG_PRINT("\nwebAppConnected = true!");
+  DEBUG_PRINT("\nwebAppConnected !");
   app.webAppConnected = true;
 
   const auto protocol = ws.getProtocol();

@@ -342,7 +342,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     std::vector<String> broadcastQueue;
 
     Application* webServer = nullptr;
-    bool  httpServing = false;  //flag to indicate if http file are currently streamed
     ///////////////////// USER CALLBACKS ////////////////////////////////////////////////////
     ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;    
     ReturnStringCallback userJsonPongCallback = defaultStringReturn;
@@ -1680,7 +1679,133 @@ void setup() {
     // MANAGE WEB APPLICATION
     //
     //------------------     
-    void handleWeb(){
+
+// =====================================================
+// CONFIG
+// =====================================================
+#define HTTP_KEEPALIVE_MS 200
+#define HTTP_MAX_CLIENTS  2
+
+// Indicateur global demandé
+bool servingHttp = false;
+bool servingHttpOld = !servingHttp;
+
+// =====================================================
+// POOL CLIENTS (sans heap)
+// =====================================================
+WiFiClient     wifiClients[HTTP_MAX_CLIENTS];
+uint32_t       wifiLastAct[HTTP_MAX_CLIENTS] = {0, 0};
+
+EthernetClient ethClients[HTTP_MAX_CLIENTS];
+uint32_t       ethLastAct[HTTP_MAX_CLIENTS]  = {0, 0};
+
+// =====================================================
+// UTILITAIRES
+// =====================================================
+inline bool isAlive(Client& c) {
+  // "alive" = connecté ou encore des données à lire
+  return c.connected() || (c.available() > 0);
+}
+
+inline void closeSlot(Client& c, uint32_t& lastAct) {
+  if (c) c.stop();
+  lastAct = 0;
+}
+
+// Service un pool de 2 clients (template pour WiFi/Ethernet)
+template <typename TServer, typename TClient>
+void serviceHttpPool(TServer* srv, TClient clients[], uint32_t lastAct[]) {
+  if (srv == nullptr || webServer == nullptr) return;
+
+  const uint32_t now = millis();
+
+  // 1) Accepter de nouveaux clients (jusqu'à 2), SANS écraser un slot occupé
+  //    -> important pour éviter de couper une connexion Chrome en cours.
+  for (int i = 0; i < HTTP_MAX_CLIENTS; i++) {
+    // slot libre = objet "false" (pas de socket) ou socket mort sans data
+    if (!clients[i] || !isAlive(clients[i])) {
+      // Si l'objet existe mais est mort, on nettoie avant réassignation
+      if (clients[i]) closeSlot(clients[i], lastAct[i]);
+
+      TClient nc = srv->available();
+      if (nc) {
+        clients[i] = nc;
+        lastAct[i] = now;   // début de session / activité
+        servingHttp = true; // au moins 1 client actif
+      }
+    }
+  }
+
+  // 2) Servir les clients actifs (non bloquant)
+  bool anyActive = false;
+
+  for (int i = 0; i < HTTP_MAX_CLIENTS; i++) {
+    TClient& c = clients[i];
+    if (!c) continue;
+
+    // Si le client n'est plus vivant et rien à lire -> on ferme
+    if (!isAlive(c)) {
+      closeSlot(c, lastAct[i]);
+      continue;
+    }
+
+    anyActive = true;
+
+    // Si données dispo -> process()
+    if (c.available() > 0) {
+      DEBUG_PRINT("\n\t\t\t\t\tCLIENT:c[%i]",i);
+      webServer->process(&c);
+      lastAct[i] = now; // activité mise à jour à chaque requête/paquet reçu
+    }
+
+    // Timeout keep-alive
+    if (lastAct[i] != 0 && (now - lastAct[i]) > HTTP_KEEPALIVE_MS) {
+      // Fermeture douce : Chrome aime mieux quand on ferme après une fenêtre KA
+      closeSlot(c, lastAct[i]);
+    }
+  }
+
+  // 3) Mettre à jour servingHttp
+  servingHttp = anyActive;
+}
+
+// =====================================================
+// HANDLE WEB (à appeler depuis loop())
+// =====================================================
+void handleWeb() {
+  Network* configMedia = hwm->configMedia;
+  if (!configMedia || configMedia->state != CONNECTED) {
+    servingHttp = false;
+    return;
+  }
+
+  // HTTP (AWOT)
+  if (webServer != nullptr) {
+    if (configMedia->media == CABLE_MEDIA) {
+      EthernetServer* srv = (EthernetServer*)configMedia->server;
+      serviceHttpPool<EthernetServer, EthernetClient>(srv, ethClients, ethLastAct);
+    } else {
+      WiFiServer* srv = (WiFiServer*)configMedia->server;
+      serviceHttpPool<WiFiServer, WiFiClient>(srv, wifiClients, wifiLastAct);
+    }
+  } else {
+    servingHttp = false;
+  }
+
+  // WebSocket (si parallèle)
+  if (wss != nullptr) {
+    wss->listen();
+  }
+
+  // Important dans loop(): laisser respirer la stack réseau
+  yield();
+}
+
+
+
+
+
+    void handleWeb2(){
 
       //unsigned long lastActivity = millis();
 
@@ -1815,7 +1940,7 @@ void setup() {
         if (hwm->network->state == CONNECTED){    
 
           #if defined(USE_FTP) && defined(USE_NETWORK)
-            if (!httpServing) 
+            if (!servingHttp) 
               ftp.handle();
           #endif
 
@@ -1881,27 +2006,39 @@ void setup() {
       //
       //------------------
       bool interfaceChangedState = false;
-      
-      for (const auto& interface : interfaceRepo.interfaces){       
 
-        #ifdef PROD
-        if (interface->stripCount == 0){
-          //continue;                           // optimization  WARNING: to activate that you need to implement the feature of greying out the interface panel as they will not be updated...
-        }
-        #endif
+      if (!servingHttp){
 
-        interface->update();
-        if (interface->state.broadcastState){
-          broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
-          interface->state.broadcastState = false; // acknowledged
+        if (servingHttp != servingHttpOld){
+          DEBUG_PRINT("\n\n\n * * * INTERFACE REFRESH (NOT serving http files...) * * *\n\n\n");
+          servingHttpOld = servingHttp;
         }
-        if (interface->state.broadcastConfig){
-          //broadCast(concatStrings("{\"deviceCfg\":", interface->serializeConfig(), "}")); // inform web interface
-          broadcastIFconfig(interface);
-          interface->state.broadcastConfig = false; // acknowledged
+
+        for (const auto& interface : interfaceRepo.interfaces){       
+
+          #ifdef PROD
+          if (interface->stripCount == 0){
+            //continue;                           // optimization  WARNING: to activate that you need to implement the feature of greying out the interface panel as they will not be updated...
+          }
+          #endif
+
+          interface->update();
+          if (interface->state.broadcastState){
+            broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
+            interface->state.broadcastState = false; // acknowledged
+          }
+          if (interface->state.broadcastConfig){
+            //broadCast(concatStrings("{\"deviceCfg\":", interface->serializeConfig(), "}")); // inform web interface
+            broadcastIFconfig(interface);
+            interface->state.broadcastConfig = false; // acknowledged
+          }        
+        }
+      }else{
+        if (servingHttp != servingHttpOld){
+          DEBUG_PRINT("\n\n\n - - - NO INTERFACE REFRESH(serving http files...) - - -\n\n\n");
+          servingHttpOld = servingHttp;
         }        
       }
-
 
       //------------------
       //
@@ -2354,7 +2491,6 @@ void setup() {
 
 
     void commonFileServer(Request &req, Response &res) {
-      httpServing = true;
       hwm->network->stopAllUDP();
 
       String path = req.path();
@@ -2363,14 +2499,12 @@ void setup() {
       if (req.method() == Request::POST) {
         if (path == "/post/") {
           httpPost(req, res);
-          httpServing = false;
           return;
         }
         if (path == "/upload") {
           DEBUG_PRINT("\nupload has been CALLED");
           String message = "Abort";
           httpUpload(req, res);
-          httpServing = false;
           return;
         }
 
@@ -2378,7 +2512,6 @@ void setup() {
         res.set("Content-Type", "text/plain");
         res.print("POST not found");
         res.end();
-        httpServing = false;
         return;
       }
 
@@ -2407,14 +2540,12 @@ void setup() {
         res.set("Content-Type", "text/html");
         res.print(fullPath.c_str());
         res.end();
-        httpServing = false;
         return;
       }
 
       File file = LittleFS.open(fullPath);
       if (file.isDirectory()) {
         res.end();
-        httpServing = false;
         return;
       }
 
@@ -2426,10 +2557,10 @@ void setup() {
       res.set("Content-Type", mimeType.c_str());
       res.set("Access-Control-Allow-Origin","*");
 
+      DEBUG_PRINT("\n------------->serving %s",fullPath.c_str());
+
       sendFileInChunks(&file, &res);
       res.end();
-
-      httpServing = false;
     }
 
     bool httpUpload(Request &req, Response &res) {
@@ -2604,9 +2735,9 @@ void setup() {
       int bytesRead;
       // Lire et envoyer des paquets jusqu'à ce que tout le fichier soit envoyé
       while ((bytesRead = file->read(buffer, chunkedDataSize)) > 0) {
-        res->write(buffer, bytesRead);  // Écrire le tampon complet dans le client
-        //DEBUG_PRINT( "%db...,",bytesRead);  
-        //taskYIELD(); // ONLY IN A TASK
+        res->write(buffer, bytesRead);  // Écrire le tampon complet dans le client        
+        DEBUG_PRINT( ".");  
+        //taskYIELD(); // ONLY IN A TASK        
         //yield();     // ==> when this yield is on, it create CONNECTION_REFUSED on iMac chrome as it slows down the sending of the data
       }
 
@@ -3556,7 +3687,7 @@ void setup() {
         "\"" S_HOSTNAME "\":\"" INTERVAL_DEFAULT_HOSTNAME "\","
         "\"" S_SWUPDATE_PROMPT "\":\"true\","
         "\"" S_FADERSPEED "\":\"157\","
-        "\"" S_SSID "\":{\"intervalmix1\":\"intervalpop74\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},"
+        "\"" S_SSID "\":{\"IpTfr\":\"jt2p9ug1\",\"infrafast\":\"Mf9k8iie2\",\"intervalmix\":\"intervalpop74\",\"IpTch\":\"jt2p9ug1\"},"
         "\"" S_BUTTON_ASSIGN "\":{\"left\":[3,1,5,8],\"right\":[2,1,4,9],\"tap\":[6,7,8,10]},"
         "\"" S_SHORTCUTS "\":{\"shortcut1\":{\"type\":\"jump\",\"properties\":[]},"
                              "\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},"

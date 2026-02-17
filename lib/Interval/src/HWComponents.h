@@ -987,8 +987,8 @@ class WiFiEth : public Network{
           DEBUG_PRINT("\n[UDP-%d/%d] Media changed %d -> %d : recreating",
                       i, port, (int)udpSlots[i].media, (int)media);
 
+          udpSlots[i].udp->stop();
           delete udpSlots[i].udp;
-          udpSlots[i].udp = nullptr;
 
           auto u = newUDP();
           if (!u) {
@@ -1040,7 +1040,7 @@ class WiFiEth : public Network{
     virtual UdpSlot* getUDPslot(int i) {
 
       if (i < 0 || i >= MAX_UDP_SLOT || udpSlots[i].udp == nullptr){
-        DEBUG_PRINT("\ngetUDPslot(%d) failed",i);
+        DEBUG_PRINT("\ngetUDPslot(%d) out of range or null",i);
         return nullptr;
       }
 
@@ -1052,12 +1052,13 @@ class WiFiEth : public Network{
          
       // Restart socket
       if (!udpSlots[i].active){
-        DEBUG_PRINT("\n[UDP-%d/%d] reactivated", i, udpSlots[i].port);
-        int beginResult = udpSlots[i].udp->begin(udpSlots[i].port);
-        udpSlots[i].active = (beginResult == 1);
+        udpSlots[i].udp->stop();  // in case active boolean is unsync.
+        udpSlots[i].active = udpSlots[i].udp->begin(udpSlots[i].port);
         if (!udpSlots[i].active){
-          DEBUG_PRINT("\n[UDP-%d/%d] begin(%d) failed", i, udpSlots[i].port, udpSlots[i].port);
+          DEBUG_PRINT("\n[UDP-%d/%d] begin() failed", i, udpSlots[i].port);
           return nullptr;
+        }else{
+          DEBUG_PRINT("\n[UDP-%d/%d] begin()", i, udpSlots[i].port);                          
         }
       }
       return &udpSlots[i];
@@ -1066,7 +1067,7 @@ class WiFiEth : public Network{
 
     virtual void stopAllUDP() {
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
-        if (udpSlots[i].udp != nullptr && udpSlots[i].active){
+        if (udpSlots[i].udp != nullptr){
           udpSlots[i].udp->stop();
           udpSlots[i].active = false;
           DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);
