@@ -14,6 +14,7 @@
 #include <ESPmDNS.h>          // for WIFI registration
 #include <EthernetBonjour.h>  //for Eth registration
 
+#include "utility/w5100.h"    // for readSnSR
 
 #include <WebSocketClient.hpp>    // https://github.com/skaarj1989/mWebSockets#meta     // use a local repository with SOCKETBUFFER SIZE CHANGED one because of https://github.com/skaarj1989/mWebSockets/issues/72
 //#include <WebSocket.hpp>
@@ -717,7 +718,6 @@ struct UdpSlot {
 class Network : public HWComponent2State{
 
   public:
-    
     WebSocketClient<WiFiClient> *wsWiFiClient{ nullptr };
     WebSocketClient<EthernetClient> *wsEthClient{ nullptr };
 
@@ -766,6 +766,7 @@ class Network : public HWComponent2State{
     virtual String getConnectedDeviceIP() = 0;
     virtual void asyncPing(PingEcho* echo, PingCallback callBack)=0;
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
+    virtual String dumpW5500Sockets()=0;
     
     virtual void init(){
       //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
@@ -1034,6 +1035,76 @@ class WiFiEth : public Network{
       return -1;
     }
 
+#include <utility/w5100.h>
+/*
+Bonjour / mDNS	    1 UDP
+Serveur HTTP	      2 = 1 LISTEN + 1 ESTABLISHED par client
+WebSocket	          1 TCP
+Behringer OSC       1 UDP       
+OSC natif           1 UDP
+Mixing station OSC  1 UDP
+Mixing station sock 1 TCP
+AppleMIDI           1 UDP
+Artnet              1 UDP
+*/
+
+static const char* socketStatusToString(uint8_t st) {
+  switch (st) {
+    case 0x00: return "CLOSED";
+    case 0x13: return "INIT";
+    case 0x14: return "TCP_LISTEN";
+    case 0x15: return "TCP_SYNSENT";
+    case 0x16: return "TCP_SYNRECV";
+    case 0x17: return "TCP_EST";
+    case 0x18: return "TCP_FIN";
+    case 0x1A: return "TCP_CLOSING";
+    case 0x1B: return "TCP_TIMEWAIT";
+    case 0x1C: return "TCP_CLOSEWAIT";
+    case 0x1D: return "TCP_LASTACK";
+    case 0x22: return "UDP";
+    case 0x32: return "IPRAW";
+    case 0x42: return "MACRAW";
+    case 0x5F: return "PPPOE";
+    default:   return "UNK";
+  }
+}
+
+String dumpW5500Sockets() {
+
+  char buffer[512];
+  size_t offset = 0;
+
+  uint8_t freeCount = 0;
+  uint8_t tcpCount  = 0;
+  uint8_t udpCount  = 0;
+
+  for (int s = 0; s < MAX_SOCK_NUM; s++) {
+
+    uint8_t st = W5100.readSnSR(s);
+
+    if (st == 0x00) freeCount++;
+    if (st == 0x22) udpCount++;
+    if (st >= 0x13 && st <= 0x1D) tcpCount++;
+
+    offset += snprintf(buffer + offset,
+                       sizeof(buffer) - offset,
+                       "S%d=%s(%02X)\t",
+                       s,
+                       socketStatusToString(st),
+                       st);
+
+    if (offset >= sizeof(buffer)) break;
+  }
+
+  snprintf(buffer + offset,
+           sizeof(buffer) - offset,
+           "\t\t\t\t| FREE=%d TCP=%d UDP=%d",
+           freeCount,
+           tcpCount,
+           udpCount);
+
+  return String(buffer);
+}
 
 
 
@@ -1055,10 +1126,10 @@ class WiFiEth : public Network{
         udpSlots[i].udp->stop();  // in case active boolean is unsync.
         udpSlots[i].active = udpSlots[i].udp->begin(udpSlots[i].port);
         if (!udpSlots[i].active){
-          DEBUG_PRINT("\n[UDP-%d/%d] begin() failed", i, udpSlots[i].port);
+          //DEBUG_PRINT("\n[UDP-%d/%d] begin() failed", i, udpSlots[i].port);
           return nullptr;
         }else{
-          DEBUG_PRINT("\n[UDP-%d/%d] begin()", i, udpSlots[i].port);                          
+          DEBUG_PRINT("\n[UDP-%d/%d] begin()", i, udpSlots[i].port);                     
         }
       }
       return &udpSlots[i];
@@ -1629,6 +1700,7 @@ class  NoNetwork: public Network{
     virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
     virtual UDP* newUDP(){return nullptr;}
+    virtual String dumpW5500Sockets(){};
 
 };
 
@@ -1673,6 +1745,7 @@ class AccessPoint : public Network{
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){}
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
     virtual UDP* newUDP(){return nullptr;}
+    virtual String dumpW5500Sockets(){};
 
     virtual void init(){
       #define VISIBLE 0

@@ -1683,8 +1683,8 @@ void setup() {
 // =====================================================
 // CONFIG
 // =====================================================
-#define HTTP_KEEPALIVE_MS 200
-#define HTTP_MAX_CLIENTS  2
+#define HTTP_KEEPALIVE_MS 50 //200
+#define HTTP_MAX_CLIENTS  1
 
 // Indicateur global demandé
 bool servingHttp = false;
@@ -1694,10 +1694,10 @@ bool servingHttpOld = !servingHttp;
 // POOL CLIENTS (sans heap)
 // =====================================================
 WiFiClient     wifiClients[HTTP_MAX_CLIENTS];
-uint32_t       wifiLastAct[HTTP_MAX_CLIENTS] = {0, 0};
+uint32_t       wifiLastAct[HTTP_MAX_CLIENTS] = {0};//, 0};
 
 EthernetClient ethClients[HTTP_MAX_CLIENTS];
-uint32_t       ethLastAct[HTTP_MAX_CLIENTS]  = {0, 0};
+uint32_t       ethLastAct[HTTP_MAX_CLIENTS]  = {0};//, 0};
 
 // =====================================================
 // UTILITAIRES
@@ -1754,6 +1754,7 @@ void serviceHttpPool(TServer* srv, TClient clients[], uint32_t lastAct[]) {
     // Si données dispo -> process()
     if (c.available() > 0) {
       DEBUG_PRINT("\n\t\t\t\t\tCLIENT:c[%i]",i);
+      hwm->network->stopAllUDP();
       webServer->process(&c);
       lastAct[i] = now; // activité mise à jour à chaque requête/paquet reçu
     }
@@ -1897,12 +1898,12 @@ void handleWeb() {
         interface->end();
       }
       sendTerminateMessageToWebApp(); // tell the webapp to close      
-    }    
-
+    }  
+    
     bool refresh(bool force=false){
 
-      yield();
-      
+      yield();   
+
       refreshed = force;
 
       // ********************************
@@ -2410,7 +2411,7 @@ void handleWeb() {
               1,                  // Priority of the task
               NULL                // Task handle
             );*/
-                       
+                     
           }
           hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"," (http://",hwm->configMedia->IP.toString(),")"); // hwm->configMedia->IP.toString();
           DEBUG_PRINT("\nWebserver serving on %s",hwm->configURL.c_str() );
@@ -2491,7 +2492,7 @@ void handleWeb() {
 
 
     void commonFileServer(Request &req, Response &res) {
-      hwm->network->stopAllUDP();
+      //hwm->network->stopAllUDP();
 
       String path = req.path();
 

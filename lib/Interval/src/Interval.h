@@ -1240,7 +1240,7 @@ void xTaskBackground(void *pvParameters){
     if (millis()-checkEthCableTime > ETH_CABLE_CHECK_FREQUENCY && hwm.network->ethEnabled){   // only if we use the full network stack and not only AP mode
       hwm.network->setLink(Ethernet.linkStatus());
     }*/
-    
+  
     // watch the switch off button only if it was pushed
     if (onOffPushedStartTime !=0 && digitalRead(ONOFF_PIN) == ON_OFF_TRIGGER){
       long push = millis()-onOffPushedStartTime;
@@ -1358,31 +1358,6 @@ void scanNetworksTaskWrapper(void * parameter){
   vTaskDelete(NULL);
 }
 
-// Tâche de ping non bloquante
-/*void pingTask(void* parameter) {
-  // Récupérer les paramètres passés à la tâche
-  PingParameters* params = static_cast<PingParameters*>(parameter);
-  if (hwm.network->media == WIFI_MEDIA){
-   //DEBUG_PRINT("\nWiFipingTaskthread running=>%s",params->host.c_str());  
-    if (Ping.ping(params->host.c_str())) {
-      params->callback(true);  // Appel du callback en cas de succès
-    } else {
-      params->callback(false);  // Appel du callback en cas d'échec
-    }
-  }else{
-    // IMPLEMENT PING FOR ETHERNET
-    // ... 
-    // as a workaround we call ping failed
-    params->callback(false);  // Appel du callback en cas d'échec
-    DEBUG_PRINT("\n * * * Ethernet pingTask not implemented yet * * *");
-  }
-
-  // Libérer la mémoire allouée pour les paramètres
-  delete params;
-
-  // Suspendre la tâche après chaque ping (exécution ponctuelle)
-  vTaskDelete(NULL);
-}*/
 #include <EthernetICMP.h>  // fixed by  https://github.com/arduino-libraries/Ethernet/pull/107/files
 
 // Choix du socket ICMP (0–7 sur W5x00) + identifiant ICMP

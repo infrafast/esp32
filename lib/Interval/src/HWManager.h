@@ -13,14 +13,6 @@
 
 #include <OSCMessage.h>           //https://github.com/CNMAT/OSC  lib 1.3.5
 
-//#include "ping/ping_sock.h"
-//#include <ArduinoMDNS.h>
-
-//#define ICMPPING_ASYNCH_ENABLE 1
-
-//#include <EthernetICMP.h>
-//#include <ESP32Ping.h>
-
 #include <EthernetUdp.h>
 #include "HWComponents.h"
 
@@ -342,7 +334,6 @@ public:
           }
         }
       }, RISING);             
-    
     }
 
     void startAP(const String* apName){
