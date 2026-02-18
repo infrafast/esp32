@@ -992,14 +992,20 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         case IntervalButton::BUTTON_DOUBLE_CLIC:
 
           if (screen.id == SCREEN_BANK){
-            // toggle interface offline - online
+            // toggle interface on / off
             if (getSelectedStrip() != nullptr){
-              bool offline = !getSelectedStrip()->interface->state.offline;
+              bool enabled = !getSelectedStrip()->interface->state.enabled;
               String interfaceName = getSelectedStrip()->interface->interfaceName;                            
               //{"AppleMIDI":{"offline":true,"properties":[]}}
               // we transmit the command via the parseJsonInput so it also call for saveing interface, etc...
               parseJsonInput(
-                concatStrings("{\"command\":\"deviceConfig\",\"param\":{\"",interfaceName,"\":{\"offline\":",offline?"true":"false",",\"properties\":[]}}}")
+                concatStrings(
+                  "{\"command\":\"" INTERFACE_CONFIG "\",\"param\":{\"",
+                  interfaceName,
+                  "\":{\"" INTERFACE_ENABLED "\":",
+                  enabled ? "true" : "false",
+                  ",\"properties\":[]}}}"
+                )
               );             
             }
           }        
@@ -3128,7 +3134,7 @@ void handleWeb() {
       jsonAnswer.callback = RET_UNDPROCESSEDJSON;
       jsonAnswer.value = jsonInput.as<String>();
 
-      //DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
+      DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
       
       String command = jsonInput["command"];
 
@@ -3388,7 +3394,7 @@ void handleWeb() {
         screen.state = STATE_UTILS_DOWNLOAD_FROM_URL;
         jsonAnswer.callback = "save";
         jsonAnswer.value ="0";
-      }else if (command == "deviceConfig"){
+      }else if (command == INTERFACE_CONFIG){
         // {"command":"deviceConfig","param":{"MixingStation":{"offline":true,"oscIP":"999.999.999.999","oscPort":"99999"}}}
         // Accès à l'objet "param"
         JsonObject param = jsonInput["param"];
@@ -3491,7 +3497,7 @@ void handleWeb() {
       serializeJson(jsonOutput,jsonString);
       removeJsonQuote(&jsonString);
 
-      //DEBUG_PRINT("\nbuildJsonOuput: %s[...]",jsonString.substring(0,100).c_str());
+      DEBUG_PRINT("\nbuildJsonOuput: %s[...]",jsonString.substring(0,100).c_str());
       jsonOutput.shrinkToFit();
       return jsonString;
 

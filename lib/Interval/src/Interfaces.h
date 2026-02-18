@@ -12,14 +12,19 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
   #define INTERFACE_EXPOSED     "exposed"
-  #define INTERFACE_OFFLINE     "offline"
+  #define INTERFACE_ENABLED     "enabled"
   #define INTERFACE_GROUP       "group"
   #define INTERFACE_USENETWORK  "network"  
   #define INTERFACE_PROVIDER    "provider"
   #define INTERFACE_ICON        "icon"
   #define INTERFACE_DETAILS     "details"
   #define INTERFACE_LED         "led"
+
+  #define INTERFACE_CONFIG      "deviceConfig"
   
+  #define DEVICE_ON true
+  #define DEVICE_OFF false
+
   public:
 
     State state;
@@ -52,14 +57,14 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       doc[interfaceName][INTERFACE_STATE] = state.label;
       doc[interfaceName][INTERFACE_PROGRESS] = state.progress;
       doc[interfaceName][INTERFACE_DETAILS] = state.details;
-      doc[interfaceName][INTERFACE_OFFLINE] = state.offline;
+      doc[interfaceName][INTERFACE_ENABLED] = state.enabled;
       
-      if(state.offline == true){
+      if(state.enabled == true){
+        //we adopt the state gui
+        doc[interfaceName][INTERFACE_LED] = state.led;          
+      }else{
         //we force the GUI to be black
         doc[interfaceName][INTERFACE_LED] = "black";
-      }else{
-        //we adopt the state gui
-        doc[interfaceName][INTERFACE_LED] = state.led;  
       }
       
       doc.shrinkToFit();
@@ -82,7 +87,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
         config = doc.createNestedObject(interfaceName);
       else config = doc.to<JsonObject>();
 
-      config[INTERFACE_OFFLINE] = state.offline;      // common attribute
+      config[INTERFACE_ENABLED] = state.enabled;      // common attribute
 
       if (mainNode == true){
         // that's the attribute we do not serialize in case of partial serialization
@@ -131,11 +136,11 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
       //DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
       // this restore the base parameters common to all base class interface
-      if (config.containsKey(INTERFACE_OFFLINE)){
-        bool offline = config[INTERFACE_OFFLINE];
-        if (offline != state.offline) changed = true;   
-        state.offline = offline;
-        //goOffline(state.offline);                        // NO DUPLICATE WITH HANDLEPROPERTY CHANGE FOR DECO/RECO
+      if (config.containsKey(INTERFACE_ENABLED)){
+        bool enabled = config[INTERFACE_ENABLED];
+        if (enabled != state.enabled) changed = true;   
+        state.enabled = enabled;
+        //switchDevice(state.offline);                        // NO DUPLICATE WITH HANDLEPROPERTY CHANGE FOR DECO/RECO
       }
 
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -201,9 +206,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
         state.changed  = true;
         state.previousStateCode = state.code;
       }    
-      if (state.offline != state.previousOffline){
+      if (state.enabled != state.previousEnabled){
         state.changed   = true;
-        state.previousOffline = state.offline;
+        state.previousEnabled = state.enabled;
       }    
       if (state.progress != state.previousProgress){
         // a progress change is captured so applicatoin manager can broadcast it to the webclient but is not a state change
@@ -219,7 +224,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       if (state.changed) state.broadcastState = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
 
       //call the specific interface internal workflow
-      if (!state.offline){      
+      if (state.enabled){      
         monitor();
       }
   
@@ -229,9 +234,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return dataAvailable; 
     }
 
-    virtual void goOffline(bool _offline){
-      state.offline = _offline;
-      DEBUG_PRINT("\n%s goOffline=>%s",interfaceName.c_str(),state.offline?"true":"false");                    
+    virtual void switchDevice(bool _enabled){
+      state.enabled = _enabled;
+      DEBUG_PRINT("\n%s switchDevice=>%s",interfaceName.c_str(),state.enabled?"true":"false");                    
     }
 
     #define IF_CFG_FILE_PATH "/"
@@ -327,7 +332,16 @@ class NetWorkInterface{
     PingEcho* destination;
     virtual void connectedNetworkMonitor() = 0;
     virtual bool connectDeviceToNetwork() = 0;           // called when network is connected
-   virtual bool disconnectDeviceFromNetwork()= 0;        // called when network is disconnected
+    virtual bool disconnectDeviceFromNetwork()= 0;        // called when network is disconnected
+    
+    virtual void setStateDisconnected(){    // to be overrided by derived class
+      if (!deviceInterface) return;
+      deviceInterface->state.code = IF_NOT_READY;
+      deviceInterface->state.label = IF_STATE_DISCONNECTED;
+      deviceInterface->state.details = concatStrings(*lang.getString("disconnected"));
+      deviceInterface->state.led = "red";
+      deviceInterface->state.progress = -1;
+    }  
 
     void attachDeviceInterface(DeviceInterface* _devif){
       deviceInterface = _devif;
@@ -343,15 +357,6 @@ class NetWorkInterface{
       deviceInterface->state.led = "red medium";
       deviceInterface->state.details = *lang.getString("setNetworkStateDown");                // connect Eth cable or attempt to connect a previous SSID
     }
-
-    void setDeviceStateDisconnected(){
-      if (!deviceInterface) return;
-      deviceInterface->state.code = IF_NOT_READY;
-      deviceInterface->state.label = IF_STATE_DISCONNECTED;
-      deviceInterface->state.details = *lang.getString("setDeviceStateDisconnected");      
-      deviceInterface->state.led = "red";
-      deviceInterface->state.progress = -1;
-    }    
     
     void monitorNetworkInterface(){         
     
@@ -361,13 +366,13 @@ class NetWorkInterface{
       if (networkStateChanged){
         bool success = false;
         if (hwm.network->state == CONNECTED){
-          if (deviceInterface->state.offline){
-            DEBUG_PRINT("\n%s->monitor<OFFLINE>() ignored",deviceInterface->interfaceName.c_str());
-            return;
-          }else{
+          if (deviceInterface->state.enabled){
             DEBUG_PRINT("\n%s->monitor connectDeviceToNetwork()",deviceInterface->interfaceName.c_str());
             success = connectDeviceToNetwork();
-            if (!success) setDeviceStateDisconnected();            
+            if (!success) setStateDisconnected();            
+            return;
+          }else{
+            DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored",deviceInterface->interfaceName.c_str());
             return;
           }
         }else{
@@ -432,7 +437,8 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_STRING),this);  // create as many parameters as required
 
     SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_SYSTEM,_configurable),DataProvider(getProviderNameForData()){
-      state.code = CONNECTED;            
+      state.code = CONNECTED;     
+      state.enabled = true;       
     }
 
     virtual bool restore(const JsonObject& config){return false;}

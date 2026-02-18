@@ -162,7 +162,7 @@ class BLEMIDIInterface: public MIDIInterface{
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
 
-    virtual void goOffline(bool _offline){
+    virtual void switchDevice(bool _offline){
       // THE BLEMIDI GO OFFLINE MUST NOT TOUCH THE STATE; IT JUST CONTINUES NORMALLY OTHERWISE IT IS NOT POSSIBLE TO RE-ESTABLISH THE CONNEXION AFTER GOING BACK ONLINE
       // THIS HAS SOMETHING TO DEAL WITH HANDLING OF END()
       /*if (_offline){
@@ -170,7 +170,7 @@ class BLEMIDIInterface: public MIDIInterface{
       }else{
         bleMIDI.begin();
       }*/
-      DeviceInterface::goOffline(_offline);            
+      DeviceInterface::switchDevice(_offline);            
       if (!_offline) begin();
 
     }
@@ -186,12 +186,12 @@ class BLEMIDIInterface: public MIDIInterface{
 
       if (hasBegun){
         DEBUG_PRINT("\n%s begin() ignored (hasBegun)",interfaceName.c_str());   // this is a workaround becaue of offline may recall it 
-      }else if (!state.offline){
+      }else if (state.enabled){
         DEBUG_PRINT("\n%s begin()",interfaceName.c_str());
         bleMIDI.begin();
         hasBegun = true;
       }else{
-        DEBUG_PRINT("\n%s begin() ignored (offline))",interfaceName.c_str());
+        DEBUG_PRINT("\n%s begin() ignored (disabled))",interfaceName.c_str());
       }
 
       return true;
@@ -458,9 +458,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return true;      
     }
 
+
+
     virtual bool end(){
       DEBUG_PRINT("\nAppleMIDIInterface::end()");
-      goOffline(true);
+      switchDevice(DEVICE_OFF);
       return true;
     }    
 
@@ -770,8 +772,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       //handleDisconnected(); is then called by the library
     }    
 
-    virtual void goOffline(bool _offline){
-      MIDIInterface::goOffline(_offline);      
+    virtual void switchDevice(bool _offline){
+      MIDIInterface::switchDevice(_offline);      
       if (_offline) disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 
       else connectDeviceToNetwork();
       // maybe add a if (_offline) {} else {}

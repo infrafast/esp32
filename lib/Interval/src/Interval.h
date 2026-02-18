@@ -76,6 +76,7 @@ bool useUSBMidi = false;
 class PingEcho{
   public:
     bool alive = false;
+    unsigned long lastQueryTime ;    
     uint16_t latency = 30;      // normal latency on TCP/IP
     uint16_t jitter = 0;
     String host;
@@ -1107,13 +1108,13 @@ struct State{ // used by Strip and Interface
   String subState = "subState";
   String details = "Interface not implemented";
   String led = "black";
-  bool offline = false;
+  bool enabled = false;
   float progress = -1;
 
   String previousStateLabel = "";
   String previousLed = "";
   uint8_t previousStateCode = 0;
-  bool previousOffline = false;
+  bool previousEnabled = false;
   float previousProgress = -1;
 
   bool changed = false;

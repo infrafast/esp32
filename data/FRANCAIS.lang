@@ -17,7 +17,7 @@
 "searching":"recherche",
 "connect failed":"échec connexion",
 "trying":"tentative",
-"offline":"appui court on/off = hors connexion",
+"enabled":"appui court on/off = hors connexion",
 "Connect MIDI session":"Connectez la session midi",
 "Connect Blutooth":"Connectez le blutooth",
 "Please wait":"Un instant svp...",

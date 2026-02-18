@@ -753,10 +753,11 @@ class Network : public HWComponent2State{
       networkBusy = xSemaphoreCreateMutex();
     }
 
-    virtual UdpSlot* getUDPslot(int i) = 0;
+    virtual UdpSlot* useUDPslot(int i) = 0;
     virtual int requestUDPslotID(int port) = 0;
     virtual UDP* newUDP() = 0;
     virtual void stopAllUDP() = 0;
+    virtual void stopUDP(int i) = 0;
     virtual void setLink(EthernetLinkStatus linkStatus) = 0;    
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path)=0;
     virtual void clientSocketSend(const char *message)=0;
@@ -1108,10 +1109,10 @@ String dumpW5500Sockets() {
 
 
 
-    virtual UdpSlot* getUDPslot(int i) {
+    virtual UdpSlot* useUDPslot(int i) {
 
       if (i < 0 || i >= MAX_UDP_SLOT || udpSlots[i].udp == nullptr){
-        DEBUG_PRINT("\ngetUDPslot(%d) out of range or null",i);
+        //DEBUG_PRINT("\ngetUDPslot(%d) out of range or null",i);
         return nullptr;
       }
 
@@ -1135,13 +1136,26 @@ String dumpW5500Sockets() {
       return &udpSlots[i];
     }
 
+    virtual void stopUDP(int i){
+      
+      if (i<0 or i>MAX_UDP_SLOT){
+        DEBUG_PRINT("\nstopUDP(%i) out of range", i);
+        return;
+      }
+
+      if (udpSlots[i].udp != nullptr){
+        udpSlots[i].udp->stop();
+        udpSlots[i].active = false;
+        DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);
+      }else{
+        DEBUG_PRINT("\n[UDP-%d/%d] stopped failed", i, udpSlots[i].port);        
+      }
+    }
 
     virtual void stopAllUDP() {
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
         if (udpSlots[i].udp != nullptr){
-          udpSlots[i].udp->stop();
-          udpSlots[i].active = false;
-          DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);
+          stopUDP(i);
         }
       }
     }
@@ -1700,7 +1714,9 @@ class  NoNetwork: public Network{
     virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
     virtual UDP* newUDP(){return nullptr;}
-    virtual String dumpW5500Sockets(){};
+    virtual String dumpW5500Sockets(){return "";}
+    virtual void stopUDP(int i){}
+    virtual void stopAllUDP(int i){}
 
 };
 
@@ -1735,10 +1751,11 @@ class AccessPoint : public Network{
       }
     }
 
-    virtual UdpSlot* getUDPslot(int i){return nullptr;}
+    virtual UdpSlot* useUDPslot(int i){return nullptr;}
     virtual int requestUDPslotID(int port){return 0;}
     virtual void stopAllUDP(){}
-    virtual void asyncPing(PingEcho* echo, PingCallback callBack){};
+    virtual void stopUDP(int i){}
+    virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){ return false;}
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}
     virtual void clientSocketSend(const char *message){};

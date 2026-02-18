@@ -20,7 +20,7 @@ def resource_path(rel):
 OFFSETS = {
     "bootloader": ("0x0000", resource_path("bootloader.bin")),
     "application": ("0x10000", resource_path("firmware.bin")),
-    "data": ("0x410000", resource_path("littlefs.bin")),
+    "data": ("0x670000", resource_path("littlefs.bin")),
 }
 
 # ---------------- GUI ----------------

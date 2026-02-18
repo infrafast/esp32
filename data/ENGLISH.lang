@@ -11,7 +11,7 @@
 "searching":"recherche",
 "connect failed":"échec connexion",
 "trying":"tentative",
-"offline":"appui court on/off = hors connexion",
+"enabled":"appui court on/off = hors connexion",
 "Please wait":"Please wait a few seconds...",
 "PluginUSB":"Plugin your device USB MIDI cable",
 "restartUSB":"Restart to activate USB MIDI"

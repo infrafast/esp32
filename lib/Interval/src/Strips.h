@@ -385,8 +385,8 @@ class Strip {
       // strip size and position are correct, we therefore go ahead and render it
       drawWidgetsFrames(layout);      
 
-      // if connected, we call the virtual function that display the strip
-      if (interface->state.code == IF_READY || interface->state.offline == true){
+      // if connected, we call the virtual function that display the strip if we are aready but also if the interface is disabled so we can still work with it offline
+      if (interface->state.code == IF_READY || interface->state.enabled == false){
         composeWidgets(layout);
       }else{
         //DEBUG_PRINT("\nStrip %s is syncing",strip->type.c_str());          
@@ -561,8 +561,8 @@ class Strip {
 
     void drawWidgetsFrames(uint8_t layout){
       
-      if (interface->state.offline) frameColor = TFT_RED;
-      else frameColor = GUI::luminance(TFT_GOLD,127);     // dark frame
+      if (interface->state.enabled) frameColor = GUI::luminance(TFT_GOLD,127);     // dark frame
+      else frameColor = TFT_RED;    // indicate offline
 
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         // having a frame when we are 4x4 is useless unless we want to indicate interface is offline

@@ -15,7 +15,7 @@
 class OSCPing: public PingEcho{
   public:
     OSCPing(String host, String _command):PingEcho(host), pingCommand(_command){}
-    String pingCommand; //the command used to monitor the connection
+    String pingCommand; //the command used to monitor the connection    
 };
 
 class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should derive OSCInterface
@@ -72,7 +72,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
     virtual void handlePropertyChange(){
-      DEBUG_PRINT("\n%s::handlePropertyChange() : call disconnect",interfaceName.c_str());
+      DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
       disconnectDeviceFromNetwork();
     }
 
@@ -107,35 +107,41 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       // Check if packet was received
       dataAvailable = readOSC();
 
-      if (dataAvailable > 0){
-        // set the device to connected
-        if (state.code != IF_READY) setStateConnected();
-        lastQueryTime =  millis();             // and no need to trigger the verification
-        connectAttemptCount = 0;               // reset attempt counter                
+      if (dataAvailable > 0){                                     // data has come
+        if (state.code != IF_READY) setStateConnected();          // set the device to connected
+        destination->lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
+        connectAttemptCount = 0;                                  // reset attempt counter                
+        return;                                                   
+      }
+
+      if (dataAvailable == -1){                                   // lost UDP connectivity
+        if (state.code != IF_NOT_READY) setStateDisconnected();   // set the device to disconnected
+        destination->lastQueryTime =  millis();     
         return;
       }
-             
+
+      // dataAvailable == 0 : we have a valid UDP connection, so we ping the device to see if it's still alive after certain time 
       #define OSC_PING_DELAY 3000
       // delay expired
-      if (millis()-lastQueryTime > OSC_PING_DELAY){        
+      if (millis()-destination->lastQueryTime > OSC_PING_DELAY){        
         //should we give it a new chance or set state
         if (connectAttemptCount++ == 1){
           setStateQueryingDevice();
           connectAttemptCount = 0;          
         }else{
-          ping();       
+          if (!ping()) setStateDisconnected();                    // we lost our UDP socket
         }
       }      
 
     }
 
     int readOSC(){
-        UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);   // request UDP slot
-        if (udpSlot == NULL) return 0;                
+        UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);   // request UDP slot
+        if (udpSlot == NULL) return -1;                
+
         // from that point in time, semaphore is taken
         UDP* udp = udpSlot->udp;
-
-        if (udp == nullptr) return 0;
+        if (udp == nullptr) return -1;
 
         int size = udp->parsePacket();
 
@@ -161,7 +167,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
                 Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
                 ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
                 */
-                unsigned long rawLatency = millis() - lastQueryTime;
+                unsigned long rawLatency = millis() - destination->lastQueryTime;
 
                 // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
                 if (rawLatency < 500){
@@ -201,15 +207,14 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       
       bool success = false;
 
-      DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_remotePort);
+      DEBUG_PRINT("\n>>%s(%s,%i->%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_localPort, OSC_remotePort);
 
-      UdpSlot* udpSlot = hwm.network->getUDPslot(udpID);
-      // sempahore protected section
+      UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
+
       if (udpSlot == nullptr){
           DEBUG_PRINT(" **** FAIL (UdpSlot null) ****",msg->getAddress());
           return false;
       }            
-
      
       UDP* udp = udpSlot->udp; 
 
@@ -219,12 +224,9 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
         udp->endPacket();
         success = true;
       }else{
-        success = false;
         DEBUG_PRINT(" **** FAIL (udp null) ****",msg->getAddress());        
       }
 
-      //xSemaphoreGive(udpSlot->mutex);
-      // sempahore released section
       return success;          
   }
 
@@ -238,25 +240,17 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
     virtual bool connectDeviceToNetwork(){
-      // network connection has just been established :-)
-      setStateQueryingDevice();         // we are not yet connected to the OSC device
-      lastQueryTime = 0; // force ping to be triggered
-      //udpID = 1; // DIRECT UDP
+      // network connection is established so we now try to connect the device to its protocol
+      destination->lastQueryTime = 0;                         // force ping to be triggered    
       udpID = hwm.network->requestUDPslotID(OSC_localPort);   // the network will create or reuse a udp slot and give its ID to us
-
-      /*if (udp != nullptr) delete udp;   // DIRECT UDP
-      udp = hwm.network->newUDP();
-      udp->begin(OSC_localPort);
-      */
-
-      if (udpID == -1) return false;
-
+      if (udpID == -1) return false;                          // can't get any UDP connectivity
+      setStateQueryingDevice();                               // we are not yet connected to the OSC device, we try to
       return true;
     }
 
    virtual bool disconnectDeviceFromNetwork(){
-      lastQueryTime = 0; // force immediate ping attempt
-      setStateQueryingDevice();
+      destination->lastQueryTime = 0;               // force immediate ping attempt
+      hwm.network->stopUDP(udpID);                  // release UDP
       return true;
     }
 
@@ -281,14 +275,22 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       state.progress = -1;      
     }
 
-    void ping(){
-      lastQueryTime = millis();       
+    virtual void setStateDisconnected() override{
+      if (!deviceInterface) return;
+      deviceInterface->state.code = IF_NOT_READY;
+      deviceInterface->state.label = IF_STATE_DISCONNECTED;
+      deviceInterface->state.details = concatStrings(*lang.getString("UDP failed"));      
+      deviceInterface->state.led = "red";
+      deviceInterface->state.progress = -1;
+    }     
+
+    bool ping(){
+      destination->lastQueryTime = millis();       
       OSCMessage msg(((OSCPing*)destination)->pingCommand.c_str());
-      sendOSCMessage(&msg);
+      return sendOSCMessage(&msg);
     }
 
-  private:
-    unsigned long lastQueryTime ;
+  private:    
     uint8_t connectAttemptCount = 0;
     int udpID = -1;
     

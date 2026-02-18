@@ -13,10 +13,11 @@ BehringerXM* xmMixer;
 
 void setup(){
     DEBUG_PRINT("go4");
-    app.init();
-
+    
     msMixer = new MixingStation();    
     xmMixer = new BehringerXM();
+
+    app.init();
 }
 
 void loop(){
