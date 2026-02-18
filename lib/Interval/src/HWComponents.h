@@ -720,8 +720,7 @@ struct UdpSlot {
     active = false;
     media = NO_MEDIA;
     reservations = 0;
-  }
-  //SemaphoreHandle_t mutex = nullptr;   // 👈 un mutex par slot
+  }  
 };
 
 class Network : public HWComponent2State{
@@ -930,7 +929,6 @@ class WiFiEth : public Network{
         Ethernet.begin(ethMac,100,100);
         if (Ethernet.hardwareStatus() == EthernetNoHardware){
           if (debug) DEBUG_PRINT("\n%s !!! THERE IS NO ETHERNET HW !!!",id.c_str());
-          ethEnabled = false;
         }else{
           if (debug) DEBUG_PRINT("\n%s Using WiFi & Ethernet",id.c_str());
           DEBUG_PRINT("\nregistering onEthernetBonjourServiceFoundCallback");
@@ -1033,7 +1031,7 @@ class WiFiEth : public Network{
 
       snprintf(buffer + offset,
               sizeof(buffer) - offset,
-              "\t\t\t\t| FREE=%d TCP=%d UDP=%d",
+              "\t\t\t\t\t | FREE=%d TCP=%d UDP=%d",
               freeCount,
               tcpCount,
               udpCount);
@@ -1095,23 +1093,19 @@ class WiFiEth : public Network{
     virtual int requestUDPslotID(int port) {
 
       if (port <= 0 || port > 65535) {
-        DEBUG_PRINT("\n[UDP] invalid port %d", port);
+        DEBUG_PRINT("\n[requestUDPslotID] invalid port %d", port);
         return -1;
       }
-
-      if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(20)) != pdTRUE) return -1;
 
       // 1) Si un slot existe déjà pour ce port, on le réutilise ou on le remplace selon media
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
         if (udpSlots[i].port == port && udpSlots[i].reservations > 0) {
           if (!ensureUDPslotMedia(i)) {
-            xSemaphoreGive(networkBusy);
             DEBUG_PRINT("\n[UDP-%d/%d] ensureUDPslotMedia failed", i, port);
             return -1;
           }
           udpSlots[i].reservations++;
           DEBUG_PRINT("\n[UDP-%d/%d] ID reclaimed (refs=%d)", i, port, udpSlots[i].reservations);
-          xSemaphoreGive(networkBusy);
           return i;
         }
       }
@@ -1127,19 +1121,16 @@ class WiFiEth : public Network{
 
           if (!ensureUDPslotMedia(i)) {
             destroyUDPslot(i);
-            xSemaphoreGive(networkBusy);
             DEBUG_PRINT("\n[UDP] newUDP() failed");
             return -1;
           }
 
           DEBUG_PRINT("\n[UDP-%d/%d] ID created", i, port);
-          xSemaphoreGive(networkBusy);
           return i;
         }
       }
 
       DEBUG_PRINT("\n[UDP] Reached max!");
-      xSemaphoreGive(networkBusy);
       return -1;
     }
 
@@ -1150,42 +1141,26 @@ class WiFiEth : public Network{
         return nullptr;
       }
 
-      if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(20)) != pdTRUE) return nullptr;
-
       if (!ensureUDPslotMedia(i)) {
-        xSemaphoreGive(networkBusy);
         return nullptr;
       }
-
-      // Prendre le mutex du slot
-      /*if (xSemaphoreTake(udpSlots[i].mutex,  pdMS_TO_TICKS(10)) != pdTRUE) {      // keep it low 10ms = allow the webserver to continue serving file
-        DEBUG_PRINT("\nmutex udpSlots[%d] busy",i);
-        return nullptr;
-      }*/
-         
+       
       // Restart socket
       if (!udpSlots[i].active){
         udpSlots[i].active = udpSlots[i].udp->begin(udpSlots[i].port);
         if (!udpSlots[i].active){
           //DEBUG_PRINT("\n[UDP-%d/%d] begin() failed", i, udpSlots[i].port);
-          xSemaphoreGive(networkBusy);
           return nullptr;
         }else{
           DEBUG_PRINT("\n[UDP-%d/%d] begin()", i, udpSlots[i].port);                     
         }
       }
-      xSemaphoreGive(networkBusy);
       return &udpSlots[i];
     }
 
     virtual void releaseUDPSlot(int* i){
       if (i == nullptr) return;
       if (!isValidUDPslotIndex(*i)) {
-        *i = -1;
-        return;
-      }
-
-      if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(20)) != pdTRUE) {
         *i = -1;
         return;
       }
@@ -1200,7 +1175,6 @@ class WiFiEth : public Network{
         DEBUG_PRINT("\n[UDP-%d/%d] released (refs=%d)", *i, slot.port, slot.reservations);
       }
 
-      xSemaphoreGive(networkBusy);
       *i = -1;   // invalidate slot ID
     }
 
@@ -1225,13 +1199,11 @@ class WiFiEth : public Network{
     }
 
     virtual void stopAllUDP() {
-      if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(20)) != pdTRUE) return;
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
         if (udpSlots[i].udp != nullptr && udpSlots[i].reservations > 0){
           stopUDPslot(i);
         }
       }
-      xSemaphoreGive(networkBusy);
     }
 
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){

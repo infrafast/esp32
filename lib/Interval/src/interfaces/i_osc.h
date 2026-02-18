@@ -116,6 +116,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
       if (dataAvailable == -1){                                          // lost UDP connectivity
         if (state.code != IF_NOT_READY) disconnectDeviceFromNetwork();   // set the device to disconnected so he try next
+        return;
       }
 
       // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
@@ -137,7 +138,6 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
         UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);   // request UDP slot
         if (udpSlot == NULL) return -1;                
 
-        // from that point in time, semaphore is taken
         UDP* udp = udpSlot->udp;
         if (udp == nullptr) return -1;
 
@@ -195,8 +195,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
             int argCount = osc.size();
             return (argCount == 0 ? 1 : argCount);
         }
-        
-        //xSemaphoreGive(udpSlot->mutex);
+    
         return 0;
     }
 
