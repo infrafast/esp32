@@ -73,7 +73,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void handlePropertyChange(){
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      disconnectDeviceFromNetwork();
+      disconnectDeviceFromNetwork();  // force to reconnect
     }
 
     virtual bool restoreProperty(const char* property) override{
@@ -90,7 +90,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
           if (destination->ip != ip)  changed = true;
           destination->ip = ip;      
         }else{
-          DEBUG_PRINT("\ninvalid IP address:%s",inputStr);
+          DEBUG_PRINT("\ninvalid IP address: %s",inputStr);
         }
       }else if (sscanf(property, ADDRESS_PING, &inputStr)) {
         if (((OSCPing*)destination)->pingCommand != inputStr)  changed = true;
@@ -251,6 +251,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
    virtual bool disconnectDeviceFromNetwork(){
       destination->lastQueryTime = 0;               // force immediate ping attempt
       hwm.network->stopUDP(udpID);                  // release UDP
+      setStateDisconnected();
       return true;
     }
 
@@ -279,7 +280,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       if (!deviceInterface) return;
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
-      deviceInterface->state.details = concatStrings(*lang.getString("UDP failed"));      
+      deviceInterface->state.details = concatStrings(*lang.getString("no UDP connection"));      
       deviceInterface->state.led = "red";
       deviceInterface->state.progress = -1;
     }     

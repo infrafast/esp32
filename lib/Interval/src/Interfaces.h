@@ -361,15 +361,12 @@ class NetWorkInterface{
     void monitorNetworkInterface(){         
     
       if (!deviceInterface) return;
-      bool networkStateChanged = hwm.network->refreshed;
     
-      if (networkStateChanged){
-        bool success = false;
+      if (hwm.network->refreshed){
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.enabled){
             DEBUG_PRINT("\n%s->monitor connectDeviceToNetwork()",deviceInterface->interfaceName.c_str());
-            success = connectDeviceToNetwork();
-            if (!success) setStateDisconnected();            
+            if (!connectDeviceToNetwork()) setStateDisconnected();            
             return;
           }else{
             DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored",deviceInterface->interfaceName.c_str());
@@ -377,8 +374,8 @@ class NetWorkInterface{
           }
         }else{
           setNetworkStateDown();    
-          success = disconnectDeviceFromNetwork();
-          DEBUG_PRINT("\n%s->disconnectDeviceFromNetwork()...%s",deviceInterface->interfaceName.c_str(),success?"ok":"failed or is not implemented");
+          DEBUG_PRINT("\n%s->disconnectDeviceFromNetwork() %s",deviceInterface->interfaceName.c_str());
+          disconnectDeviceFromNetwork();
           return;
         }
       }
