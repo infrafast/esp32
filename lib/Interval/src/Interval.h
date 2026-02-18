@@ -7,6 +7,7 @@
 0.18 - full file update implementation with web app sync and error handling
 0.19 - ping class refactor + progress during fw update + interface state broadcast management + revamp of datasets + iMidi hardening
 0.20 - compatibility with code server
+0.21 - udp connectivity hardening
 */
 
 
