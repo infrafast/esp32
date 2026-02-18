@@ -3395,7 +3395,7 @@ void handleWeb() {
         jsonAnswer.callback = "save";
         jsonAnswer.value ="0";
       }else if (command == INTERFACE_CONFIG){
-        // {"command":"deviceConfig","param":{"MixingStation":{"offline":true,"oscIP":"999.999.999.999","oscPort":"99999"}}}
+        // {"command":"deviceConfig","param":{"MixingStation":{"oscIP":"999.999.999.999","oscPort":"99999"}}}
         // Accès à l'objet "param"
         JsonObject param = jsonInput["param"];
         // Récupération du premier élément de "param"
@@ -3408,7 +3408,6 @@ void handleWeb() {
           // we found the right interface 
           // Valeur = parameters
           JsonObject values = first.value().as<JsonObject>();
-
           if (interface->restore(values)){
             if (interface->save()){
               jsonAnswer.callback = RET_SAVEBUTTON;
@@ -3417,7 +3416,6 @@ void handleWeb() {
               jsonAnswer.callback=RET_COMMANDERROR;
               jsonAnswer.value = "interface save error";                
             }
-
           }else{
             DEBUG_PRINT("\nInterface no change");
             interface->userRequestedRefreshInterface(); // to call for specific things like refreshing the exposed params list            
@@ -3428,7 +3426,27 @@ void handleWeb() {
           jsonAnswer.callback=RET_COMMANDERROR;
           jsonAnswer.value = concatStrings(*lang.getString("Wrong Interface"), ":", interfaceName);
         }
-
+      /*
+      if (config.containsKey(INTERFACE_ENABLED)){
+        bool enabled = config[INTERFACE_ENABLED];
+        switchDevice(state.enabled);                        
+      }*/
+      }else if (command == "deviceEnable"){
+        // {"command":"deviceEnable","param":{"MixingStation":true}}
+        // Accès à l'objet "param"
+        JsonObject param = jsonInput["param"];
+        // Récupération du premier élément de "param"
+        JsonPair first = *param.begin();
+        // Nom de la clé
+        const char* interfaceName = first.key().c_str();    
+        DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);        
+        if (interface && interface->interfaceName == interfaceName){
+          bool enabled = first.value();
+          interface->switchDevice(enabled);
+          interface->state.broadcastState = true;
+          jsonAnswer.callback=RET_SAVEBUTTON;
+          jsonAnswer.value ="0";           
+        }
       }else if (command == "saveLibrary"){
         // {"command":"saveLibrary","param":{"file":"sysexlib.json","entries":{"abc":"aa bb","key2":"01bb","key3":"1ef0","ghijk":"12 34 56"}}}}
         String fileName = jsonInput["param"]["file"];

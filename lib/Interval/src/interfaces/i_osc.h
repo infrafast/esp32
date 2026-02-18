@@ -74,6 +74,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     virtual void handlePropertyChange(){
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
       disconnectDeviceFromNetwork();  // force to reconnect
+      connectDeviceToNetwork();
     }
 
     virtual bool restoreProperty(const char* property) override{
@@ -115,8 +116,10 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       }
 
       if (dataAvailable == -1){                                          // lost UDP connectivity
-        if (state.code != IF_NOT_READY) disconnectDeviceFromNetwork();   // set the device to disconnected so he try next
-        return;
+        if (state.code != IF_NOT_READY){
+          disconnectDeviceFromNetwork();   // set the device to disconnected so he try next
+          return;
+        }
       }
 
       // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
@@ -128,9 +131,9 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
           setStateQueryingDevice();
           connectAttemptCount = 0;          
         }else{
-          if (!ping()) connectDeviceToNetwork();                          // if ping failed it is because we have no valid
-        }                                                                 // UDP socket which has been detected by the readOSC above and disconnectDeviceFromNetwork
-      }                                                                   // hence we have to retry a connectDeviceToNetwork to get a new UDP slot
+          ping();
+        }                                                                 
+      }                                                                   
 
     }
 
@@ -238,10 +241,12 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void switchDevice(bool _enabled){
       DeviceInterface::switchDevice(_enabled);
-      if (!_enabled) disconnectDeviceFromNetwork();     // this free the used udp so someone else can take it
+      if (_enabled) connectDeviceToNetwork();
+      else disconnectDeviceFromNetwork();     
     }
 
     virtual bool connectDeviceToNetwork(){
+      DEBUG_PRINT("\nNetworkOSC::connectDeviceToNetwork()");
       // network connection is established so we now try to connect the device to its protocol
       if (udpID == -1) {
         udpID = hwm.network->requestUDPslotID(OSC_localPort);   // the network will create or reuse a udp slot and give its ID to us

@@ -138,9 +138,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_ENABLED)){
         bool enabled = config[INTERFACE_ENABLED];
-        if (enabled != state.enabled) changed = true;   
-        state.enabled = enabled;
-        //switchDevice(state.offline);                        // NO DUPLICATE WITH HANDLEPROPERTY CHANGE FOR DECO/RECO
       }
 
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -361,7 +358,7 @@ class NetWorkInterface{
     void monitorNetworkInterface(){         
     
       if (!deviceInterface) return;
-    
+     
       if (hwm.network->refreshed){
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.enabled){
