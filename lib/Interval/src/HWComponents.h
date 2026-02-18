@@ -757,7 +757,8 @@ class Network : public HWComponent2State{
     virtual int requestUDPslotID(int port) = 0;
     virtual UDP* newUDP() = 0;
     virtual void stopAllUDP() = 0;
-    virtual void stopUDP(int i) = 0;
+    virtual UdpSlot* stopUDPslot(int i) = 0;
+    virtual void releaseUDPSlot(int* i)=0;
     virtual void setLink(EthernetLinkStatus linkStatus) = 0;    
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path)=0;
     virtual void clientSocketSend(const char *message)=0;
@@ -960,9 +961,80 @@ class WiFiEth : public Network{
       delay(200);  // Attendez au moins 200 ms pour que le W5500 termine son initialisation interne
     }
 
+    #include <utility/w5100.h>
+    /*
+    Bonjour / mDNS	    1 UDP
+    Serveur HTTP	      2 = 1 LISTEN + 1 ESTABLISHED par client
+    WebSocket	          1 TCP
+    Behringer OSC       1 UDP       
+    OSC natif           1 UDP
+    Mixing station OSC  1 UDP
+    Mixing station sock 1 TCP
+    AppleMIDI           1 UDP
+    Artnet              1 UDP
+    */
+
+    static const char* socketStatusToString(uint8_t st) {
+      switch (st) {
+        case 0x00: return "CLOSED";
+        case 0x13: return "INIT";
+        case 0x14: return "TCP_LISTEN";
+        case 0x15: return "TCP_SYNSENT";
+        case 0x16: return "TCP_SYNRECV";
+        case 0x17: return "TCP_EST";
+        case 0x18: return "TCP_FIN";
+        case 0x1A: return "TCP_CLOSING";
+        case 0x1B: return "TCP_TIMEWAIT";
+        case 0x1C: return "TCP_CLOSEWAIT";
+        case 0x1D: return "TCP_LASTACK";
+        case 0x22: return "UDP";
+        case 0x32: return "IPRAW";
+        case 0x42: return "MACRAW";
+        case 0x5F: return "PPPOE";
+        default:   return "UNK";
+      }
+    }
+
+    String dumpW5500Sockets() {
+
+      char buffer[512];
+      size_t offset = 0;
+
+      uint8_t freeCount = 0;
+      uint8_t tcpCount  = 0;
+      uint8_t udpCount  = 0;
+
+      for (int s = 0; s < MAX_SOCK_NUM; s++) {
+
+        uint8_t st = W5100.readSnSR(s);
+
+        if (st == 0x00) freeCount++;
+        if (st == 0x22) udpCount++;
+        if (st >= 0x13 && st <= 0x1D) tcpCount++;
+
+        offset += snprintf(buffer + offset,
+                          sizeof(buffer) - offset,
+                          "S%d=%s(%02X)\t",
+                          s,
+                          socketStatusToString(st),
+                          st);
+
+        if (offset >= sizeof(buffer)) break;
+      }
+
+      snprintf(buffer + offset,
+              sizeof(buffer) - offset,
+              "\t\t\t\t| FREE=%d TCP=%d UDP=%d",
+              freeCount,
+              tcpCount,
+              udpCount);
+
+      return String(buffer);
+    }
+
     #define MAX_UDP_SLOT 4
     UdpSlot udpSlots[MAX_UDP_SLOT];   // max 4 objets
-   
+    
 
     virtual UDP* newUDP(){
       // Créer l'objet UDP du bon type
@@ -1036,79 +1108,6 @@ class WiFiEth : public Network{
       return -1;
     }
 
-#include <utility/w5100.h>
-/*
-Bonjour / mDNS	    1 UDP
-Serveur HTTP	      2 = 1 LISTEN + 1 ESTABLISHED par client
-WebSocket	          1 TCP
-Behringer OSC       1 UDP       
-OSC natif           1 UDP
-Mixing station OSC  1 UDP
-Mixing station sock 1 TCP
-AppleMIDI           1 UDP
-Artnet              1 UDP
-*/
-
-static const char* socketStatusToString(uint8_t st) {
-  switch (st) {
-    case 0x00: return "CLOSED";
-    case 0x13: return "INIT";
-    case 0x14: return "TCP_LISTEN";
-    case 0x15: return "TCP_SYNSENT";
-    case 0x16: return "TCP_SYNRECV";
-    case 0x17: return "TCP_EST";
-    case 0x18: return "TCP_FIN";
-    case 0x1A: return "TCP_CLOSING";
-    case 0x1B: return "TCP_TIMEWAIT";
-    case 0x1C: return "TCP_CLOSEWAIT";
-    case 0x1D: return "TCP_LASTACK";
-    case 0x22: return "UDP";
-    case 0x32: return "IPRAW";
-    case 0x42: return "MACRAW";
-    case 0x5F: return "PPPOE";
-    default:   return "UNK";
-  }
-}
-
-String dumpW5500Sockets() {
-
-  char buffer[512];
-  size_t offset = 0;
-
-  uint8_t freeCount = 0;
-  uint8_t tcpCount  = 0;
-  uint8_t udpCount  = 0;
-
-  for (int s = 0; s < MAX_SOCK_NUM; s++) {
-
-    uint8_t st = W5100.readSnSR(s);
-
-    if (st == 0x00) freeCount++;
-    if (st == 0x22) udpCount++;
-    if (st >= 0x13 && st <= 0x1D) tcpCount++;
-
-    offset += snprintf(buffer + offset,
-                       sizeof(buffer) - offset,
-                       "S%d=%s(%02X)\t",
-                       s,
-                       socketStatusToString(st),
-                       st);
-
-    if (offset >= sizeof(buffer)) break;
-  }
-
-  snprintf(buffer + offset,
-           sizeof(buffer) - offset,
-           "\t\t\t\t| FREE=%d TCP=%d UDP=%d",
-           freeCount,
-           tcpCount,
-           udpCount);
-
-  return String(buffer);
-}
-
-
-
     virtual UdpSlot* useUDPslot(int i) {
 
       if (i < 0 || i >= MAX_UDP_SLOT || udpSlots[i].udp == nullptr){
@@ -1124,7 +1123,6 @@ String dumpW5500Sockets() {
          
       // Restart socket
       if (!udpSlots[i].active){
-        udpSlots[i].udp->stop();  // in case active boolean is unsync.
         udpSlots[i].active = udpSlots[i].udp->begin(udpSlots[i].port);
         if (!udpSlots[i].active){
           //DEBUG_PRINT("\n[UDP-%d/%d] begin() failed", i, udpSlots[i].port);
@@ -1136,26 +1134,39 @@ String dumpW5500Sockets() {
       return &udpSlots[i];
     }
 
-    virtual void stopUDP(int i){
+    virtual void releaseUDPSlot(int* i){
+      UdpSlot* udpSlot = stopUDPslot(*i);
+      if (udpSlot != nullptr){
+        delete udpSlot->udp;
+        udpSlot->media = NO_MEDIA;
+        *i = -1;   // invalidate slot ID
+      }
+    }
+
+    virtual UdpSlot* stopUDPslot(int i){
       
       if (i<0 or i>MAX_UDP_SLOT){
         DEBUG_PRINT("\nstopUDP(%i) out of range", i);
-        return;
+        return nullptr;
       }
 
       if (udpSlots[i].udp != nullptr){
         udpSlots[i].udp->stop();
         udpSlots[i].active = false;
         DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);
+        return &udpSlots[i];
       }else{
         DEBUG_PRINT("\n[UDP-%d/%d] stopped failed", i, udpSlots[i].port);        
       }
+
+      return nullptr;
+
     }
 
     virtual void stopAllUDP() {
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
         if (udpSlots[i].udp != nullptr){
-          stopUDP(i);
+          stopUDPslot(i);
         }
       }
     }
@@ -1715,8 +1726,9 @@ class  NoNetwork: public Network{
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
     virtual UDP* newUDP(){return nullptr;}
     virtual String dumpW5500Sockets(){return "";}
-    virtual void stopUDP(int i){}
+    virtual UdpSlot* stopUDPslot(int i){return nullptr;}
     virtual void stopAllUDP(int i){}
+    virtual void releaseUDPSlot(int* i){}
 
 };
 
@@ -1754,7 +1766,8 @@ class AccessPoint : public Network{
     virtual UdpSlot* useUDPslot(int i){return nullptr;}
     virtual int requestUDPslotID(int port){return 0;}
     virtual void stopAllUDP(){}
-    virtual void stopUDP(int i){}
+    virtual UdpSlot* stopUDPslot(int i){return nullptr;}
+    virtual void releaseUDPSlot(int* i){}
     virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){ return false;}
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}

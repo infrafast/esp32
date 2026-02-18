@@ -776,7 +776,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       MIDIInterface::switchDevice(_offline);      
       if (_offline) disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 
       else connectDeviceToNetwork();
-      // maybe add a if (_offline) {} else {}
     }
 
 
