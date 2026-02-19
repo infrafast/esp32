@@ -109,6 +109,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       dataAvailable = readOSC();
 
       if (dataAvailable > 0){                                     // data has come
+        udpConnectionLost = false;
         if (state.code != IF_READY) setStateConnected();          // set the device to connected
         destination->lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
         connectAttemptCount = 0;                                  // reset attempt counter                
@@ -116,22 +117,33 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       }
 
       if (dataAvailable == -1){                                          // lost UDP connectivity
-        if (state.code != IF_NOT_READY){
-          disconnectDeviceFromNetwork();   // set the device to disconnected so he try next
-          return;
-        }
+        udpConnectionLost = true;
+        disconnectDeviceFromNetwork();   // keep explicit disconnected state until next ping retry
+        return;
       }
 
       // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
       #define OSC_PING_DELAY 3000
       // delay expired
       if (millis()-destination->lastQueryTime > OSC_PING_DELAY){        
+        if (udpConnectionLost){
+          if (!connectDeviceToNetwork()){
+            setStateDisconnected();
+            return;
+          }
+          udpConnectionLost = false;
+        }
+
         //should we give it a new chance or set state
         if (connectAttemptCount++ == 1){
           setStateQueryingDevice();
           connectAttemptCount = 0;          
         }else{
-          ping();
+          if (!ping()){
+            udpConnectionLost = true;
+            disconnectDeviceFromNetwork();
+            return;
+          }
         }                                                                 
       }                                                                   
 
@@ -303,6 +315,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
   private:    
     uint8_t connectAttemptCount = 0;
+    bool udpConnectionLost = false;
     int udpID = -1;
     
     //UDP* udp = nullptr; // DIRECT UDP
