@@ -1471,9 +1471,8 @@ class WiFiEth : public Network{
       }else if (state == CONNECTED) {
         //ethernet has priority over wifi, hence if we are connected by WiFi but the cable is plugged, we disconnect WiFi
         if (media == WIFI_MEDIA && cable == LinkON){
-          evt.type = EVENT_NOTIFY_WEBAPP_TERMINATE; // inform immediately the webapp to terminate
+          evt.type = EVENT_NETWORK_CHANGED_MEDIA; // inform immediately the webapp to terminate
           fireEvent(&evt);        
-          delay(100);               // let time for the brodcast to flow
           disconnectWifi();
           state = DISCONNECTED; // cable will try reconnect at next refresh
           lastEthAttempt = 0; // with no delay

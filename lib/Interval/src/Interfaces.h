@@ -47,7 +47,18 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     DeviceInterface(const String&, const String&, bool);
     ~DeviceInterface();
 
-        /////////////////////////////////////
+    virtual bool begin(){     // called by init()
+      DEBUG_PRINT("\n%s::begin() void",interfaceName.c_str());
+      return true;
+    };        
+    virtual bool end(){         // called to shutdown completely
+      DEBUG_PRINT("\n%s::end() void",interfaceName.c_str());
+      return true;
+    };          
+    virtual bool stop(){          // called to stop (ex. disconnect the network for network interface) require a begin() to start again
+      DEBUG_PRINT("\n%s::stop() void",interfaceName.c_str());
+      return true;
+    };          
 
     virtual const String& getProviderNameForData(){ return group;}
 
@@ -292,8 +303,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
     }
 
-    virtual bool begin() = 0;
-
     //by default no properties are serialized
     virtual void serializeProperties(JsonArray& properties){}
 
@@ -307,7 +316,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     virtual void monitor() = 0; 
 
     virtual void handlePropertyChange(){DEBUG_PRINT("\n%s::handlePropertyChange() : void",name.c_str());} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
-    virtual bool end() = 0;     
 
     String getFilename(){
       return  concatStrings(interfaceName,"_if.cfg");
@@ -326,9 +334,14 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 class NetWorkInterface{
   public:
     PingEcho* destination;
-    virtual void connectedNetworkMonitor() = 0;
-    virtual bool connectDeviceToNetwork() = 0;           // called when network is connected
-    virtual bool disconnectDeviceFromNetwork()= 0;        // called when network is disconnected
+
+    virtual void* read(){
+      return nullptr;
+    }
+    virtual void connectedNetworkMonitor(){}
+    virtual bool connectDeviceToNetwork(){return false;}
+    virtual bool disconnectDeviceFromNetwork(){return false;}
+
     static uint8_t enabledInstanceCount;
     
     virtual void setStateDisconnected(){    // to be overrided by derived class

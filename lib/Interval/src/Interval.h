@@ -297,7 +297,7 @@ class EventDispatcher {
         EVENT_INTERNET_PING,
         EVENT_APPLICATION,
         EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE,
-        EVENT_NOTIFY_WEBAPP_TERMINATE
+        EVENT_NETWORK_CHANGED_MEDIA
       };
 
 
@@ -1339,11 +1339,12 @@ void stopGUIThread() {
     // Optionnel: attendre qu’elle se termine vraiment
     // (petit spin-wait simple; vous pouvez raffiner avec un EventGroup)
     const uint32_t t0 = millis();
-    app.triggerRedraw();            // we call for screen redraw
+    app.triggerRedraw();            // we call for screen redraw, it will recall the previous registered screen
     while (guiRefreshTaskHandle && (millis() - t0 < 500)) {
       vTaskDelay(pdMS_TO_TICKS(10));
     }
   }
+  DEBUG_PRINT("\nstopGUIThread()");  
 }
 
 void handleWebTaskWrapper(void * parameter){
@@ -1994,7 +1995,7 @@ void back_menu_item_selected(MenuComponent* p_menu_component) {
 }
 
 void shutdown_menu_item_selected(MenuComponent* p_menu_component) {
-  app.shutdown();
+  app.shutdownInterfaces();
   goDeepSleep();
 }
 

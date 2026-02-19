@@ -959,14 +959,16 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
       }        
       checkAndDeleteFile(FIRMWARE_BIN_FILENAME);  // in case there is a .bin.gz file leftover from previous firmware update
-      restoreScreen();       // restore the screen that persists
+      restoreScreen();       // restore the screen that persists => called by 
     }
 
     // EVENTS HANDLING
     void networkEventHandler(Event* event){
       switch(event->type){
-        case EVENT_NOTIFY_WEBAPP_TERMINATE:
-          sendTerminateMessageToWebApp("Network connection changed. Close this page");
+        case EVENT_NETWORK_CHANGED_MEDIA:          
+          sendTerminateMessageToWebApp("Network connection changed. Close this page");         // the browser becomes unavialble, so terminate the application
+          shutdownWSS();      //
+          stopInterfaces();
         break;
       }
       // propagate the event
@@ -1683,137 +1685,127 @@ void setup() {
     // MANAGE WEB APPLICATION
     //
     //------------------     
+    #define HTTP_KEEPALIVE_MS 50   // mets 200..500 si Chrome reset encore
+    // Indicateur global demandé
+    bool servingHttp = false;
 
-// =====================================================
-// CONFIG
-// =====================================================
-#define HTTP_KEEPALIVE_MS 50   // mets 200..500 si Chrome reset encore
+    // =====================================================
+    // SINGLE CLIENT (sans heap)
+    // =====================================================
+    WiFiClient     wifiClient;
+    uint32_t       wifiLastAct = 0;
 
-// Indicateur global demandé
-bool servingHttp = false;
+    EthernetClient ethClient;
+    uint32_t       ethLastAct  = 0;
 
-// =====================================================
-// SINGLE CLIENT (sans heap)
-// =====================================================
-WiFiClient     wifiClient;
-uint32_t       wifiLastAct = 0;
-
-EthernetClient ethClient;
-uint32_t       ethLastAct  = 0;
-
-// =====================================================
-// UTILITAIRES
-// =====================================================
-inline bool isAlive(Client& c) {
-  return c.connected() || (c.available() > 0);
-}
-
-inline void closeClient(Client& c, uint32_t& lastAct) {
-  if (c) c.stop();
-  lastAct = 0;
-}
-
-// =====================================================
-// SERVICE SINGLE CLIENT (template WiFi/Ethernet)
-// =====================================================
-template <typename TServer, typename TClient>
-void serviceSingleHttp(TServer* srv, TClient& c, uint32_t& lastAct) {
-  if (srv == nullptr || webServer == nullptr) {
-    servingHttp = false;
-    return;
-  }
-
-  const uint32_t now = millis();
-
-  // 1) Acceptation
-  if (!c || !isAlive(c)) {
-    if (c) closeClient(c, lastAct);
-
-    TClient nc = srv->available();
-    if (nc) {
-      c = nc;
-      lastAct = now;
+    // =====================================================
+    // UTILITAIRES
+    // =====================================================
+    inline bool isAlive(Client& c) {
+      return c.connected() || (c.available() > 0);
     }
-  } else {
-    // déjà occupé -> on rejette les nouveaux (proprement)
-    TClient extra = srv->available();
-    if (extra) extra.stop();
-  }
 
-  // 2) Service
-  if (!c) {
-    servingHttp = false;
-    return;
-  }
-
-  if (!isAlive(c)) {
-    closeClient(c, lastAct);
-    servingHttp = false;
-    return;
-  }
-
-  servingHttp = true;
-
-  // Si data dispo -> process
-  if (c.available() > 0) {
-    if (hwm->network->media == CABLE_MEDIA) hwm->network->stopAllUDP();   // because of limited IP sockets in ethernet
-    webServer->process(&c);
-    lastAct = millis();  // IMPORTANT: timestamp réel après process()
-  }
-
-  // 3) Keep-alive timeout (anti-reset: ne pas fermer si data en attente)
-  if (lastAct != 0 && (now - lastAct) > HTTP_KEEPALIVE_MS) {
-    if (c.available() == 0) {
-      closeClient(c, lastAct);
-      servingHttp = false;
-    } else {
-      // des données arrivent tard -> on repousse un peu
-      lastAct = now;
+    inline void closeClient(Client& c, uint32_t& lastAct) {
+      if (c) c.stop();
+      lastAct = 0;
     }
-  }
-}
 
-// =====================================================
-// HANDLE WEB (à appeler depuis loop())
-// =====================================================
-void handleWeb() {
-  Network* configMedia = hwm->configMedia;
-  if (!configMedia || configMedia->state != CONNECTED) {
-    servingHttp = false;
-    return;
-  }
+    // =====================================================
+    // SERVICE SINGLE CLIENT (template WiFi/Ethernet)
+    // =====================================================
+    template <typename TServer, typename TClient>
+    void serviceSingleHttp(TServer* srv, TClient& c, uint32_t& lastAct) {
+      if (srv == nullptr || webServer == nullptr) {
+        servingHttp = false;
+        return;
+      }
 
-  if (webServer != nullptr) {
-    if (configMedia->media == CABLE_MEDIA) {
-      EthernetServer* srv = (EthernetServer*)configMedia->server;
-      serviceSingleHttp<EthernetServer, EthernetClient>(srv, ethClient, ethLastAct);
+      const uint32_t now = millis();
 
-      // Optionnel si tu peux basculer de média:
-      // closeClient(wifiClient, wifiLastAct);
+      // 1) Acceptation
+      if (!c || !isAlive(c)) {
+        if (c) closeClient(c, lastAct);
 
-    } else {
-      WiFiServer* srv = (WiFiServer*)configMedia->server;
-      serviceSingleHttp<WiFiServer, WiFiClient>(srv, wifiClient, wifiLastAct);
+        TClient nc = srv->available();
+        if (nc) {
+          c = nc;
+          lastAct = now;
+        }
+      } else {
+        // déjà occupé -> on rejette les nouveaux (proprement)
+        TClient extra = srv->available();
+        if (extra) extra.stop();
+      }
 
-      // Optionnel si tu peux basculer de média:
-      // closeClient(ethClient, ethLastAct);
+      // 2) Service
+      if (!c) {
+        servingHttp = false;
+        return;
+      }
+
+      if (!isAlive(c)) {
+        closeClient(c, lastAct);
+        servingHttp = false;
+        return;
+      }
+
+      servingHttp = true;
+
+      // Si data dispo -> process
+      if (c.available() > 0) {        
+        webServer->process(&c);
+        lastAct = millis();  // IMPORTANT: timestamp réel après process()
+      }
+
+      // 3) Keep-alive timeout (anti-reset: ne pas fermer si data en attente)
+      if (lastAct != 0 && (now - lastAct) > HTTP_KEEPALIVE_MS) {
+        if (c.available() == 0) {
+          closeClient(c, lastAct);
+          servingHttp = false;
+        } else {
+          // des données arrivent tard -> on repousse un peu
+          lastAct = now;
+        }
+      }
     }
-  } else {
-    servingHttp = false;
-  }
 
-  if (wss != nullptr) {
-    wss->listen();
-  }
+    // =====================================================
+    // HANDLE WEB (à appeler depuis loop())
+    // =====================================================
+    void handleWeb2() {
+      Network* configMedia = hwm->configMedia;
+      if (!configMedia || configMedia->state != CONNECTED) {
+        servingHttp = false;
+        return;
+      }
 
-  yield();
-}
+      if (webServer != nullptr) {
+        if (configMedia->media == CABLE_MEDIA) {
+          EthernetServer* srv = (EthernetServer*)configMedia->server;
+          serviceSingleHttp<EthernetServer, EthernetClient>(srv, ethClient, ethLastAct);
 
+          // Optionnel si tu peux basculer de média:
+          // closeClient(wifiClient, wifiLastAct);
 
+        } else {
+          WiFiServer* srv = (WiFiServer*)configMedia->server;
+          serviceSingleHttp<WiFiServer, WiFiClient>(srv, wifiClient, wifiLastAct);
 
+          // Optionnel si tu peux basculer de média:
+          // closeClient(ethClient, ethLastAct);
+        }
+      } else {
+        servingHttp = false;
+      }
+      DEBUG_PRINT("\nA\n");
+      if (wss != nullptr) {
+        wss->listen(); //<==== plante lorsque l'on connecte le cable ethernet lorsque le WiFi est on et web app on
+      }
+      DEBUG_PRINT("\nB\n");
+      yield();
+    }
 
-
-    void handleWeb2(){
+    void handleWeb(){
 
       //unsigned long lastActivity = millis();
 
@@ -1846,7 +1838,7 @@ void handleWeb() {
         if (wss != nullptr) wss->listen();          
       }
         
-    }
+    }    
 
     void jumpToMenu(const char* menuTitle){
       // we branch to the lang menu
@@ -1898,7 +1890,8 @@ void handleWeb() {
     }
 
     bool shutdownDone = false;
-    void shutdown(){
+    void shutdownInterfaces(){
+      // called when system stops
       DEBUG_PRINT("\nshuting down interfaces");     
       shutdownDone = true;           
       for (const auto& interface : interfaceRepo.interfaces){       
@@ -1906,6 +1899,16 @@ void handleWeb() {
       }
       sendTerminateMessageToWebApp(); // tell the webapp to close      
     }  
+
+    void stopInterfaces(){
+      // called when network change its media and we need to correcly close all connection
+      DEBUG_PRINT("\nshuting down interfaces");     
+      shutdownDone = true;           
+      for (const auto& interface : interfaceRepo.interfaces){       
+        interface->stop();    
+      }
+      sendTerminateMessageToWebApp(); // tell the webapp to close      
+    }     
     
     bool refresh(bool force=false){
 
@@ -1917,9 +1920,7 @@ void handleWeb() {
       // PERFORM ALL REFRESH AND UPDATES
       // ********************************
       hwm->refresh();         
-           
-      handleWeb();
-      
+                    
       if (hwm->ap != nullptr){if (hwm->ap->refreshed) setAPandNetIcons();}      
       if (hwm->network->state == CONNECTED && hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();       // real time signal strength display
 
@@ -1929,14 +1930,23 @@ void handleWeb() {
       //
       //------------------
       if (hwm->configMedia->refreshed){
+        utilsBlinkIcon = networkIcon;
+        utilsBlinkLabel = *lang.getString("Connecting network");        
+        startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);              
         if (hwm->configMedia->state == CONNECTED){            
           setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
         }else{
           webAppConnected = false;            
         }
+        stopGUIThread();        
       } 
 
+      handleWeb();
+
       if (hwm->network->refreshed){ // network changed its statusset
+        utilsBlinkIcon = networkIcon;
+        utilsBlinkLabel = *lang.getString("Connecting network");        
+        startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);                              
         
         setNetworkIcon();
 
@@ -1989,6 +1999,7 @@ void handleWeb() {
 
 
         }
+        stopGUIThread();
       }  
         
 
@@ -2144,7 +2155,7 @@ void handleWeb() {
             case STATE_UTILS_RESTART_DEVICE  :
               checkAndDeleteFile(FIRMWARE_BIN_FILENAME);
               hwm->persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
-              shutdown();
+              shutdownInterfaces();
               ESP.restart();
             break;
             case STATE_UTILS_DOWNLOAD_FROM_URL:{
@@ -2244,7 +2255,7 @@ void handleWeb() {
             break;
             case STATE_BYE_MODAL_MESSAGE: 
               // perform some action like update or ftp and shutting down properly (like interfaces...)
-              if (!shutdownDone) shutdown();
+              if (!shutdownDone) shutdownInterfaces();
             break;
           }
         break;
@@ -2356,11 +2367,7 @@ void handleWeb() {
     void setWSServer(){
 
       if (webServer == nullptr) return; // no need to define websocket server if webserver has not been instanciated
-
-      utilsBlinkIcon = ICON_WAIT;
-      utilsBlinkLabel = *lang.getString("Please wait");
-      startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);        
-      
+    
       // when you are connected to Eth, if you unplug the cable, the wifi connection goes back 
       // but sometime the program freeze betweeen the delete wss below and the new WifiWebSocketServer creation
       // so we create thread that will take care of displaying a waiting message
@@ -2371,15 +2378,16 @@ void handleWeb() {
       if (hwm->configMedia->media == CABLE_MEDIA){
         DEBUG_PRINT("\nnew EthernetWebSocketServer{}");
         wss = new EthernetWebSocketServer{};
-      }else{
+      }else if (hwm->configMedia->media == WIFI_MEDIA){ 
         DEBUG_PRINT("\nnew WiFiWebSocketServer{}");
         wss = new WiFiWebSocketServer{};                
+      }else{
+        DEBUG_PRINT("\nNo MEDIA to create WebSocketServer");
+        return;
       }
       
       wss->onConnection(socketConnectionCallback);    
       wss->begin();
-
-      stopGUIThread();
 
     }
 
@@ -2494,8 +2502,7 @@ void handleWeb() {
 
 
     void commonFileServer(Request &req, Response &res) {
-      //hwm->network->stopAllUDP();
-
+      if (hwm->network->media == CABLE_MEDIA) hwm->network->stopAllUDP();   // because of limited IP sockets in ethernet
       String path = req.path();
 
       // --- POST: endpoints spéciaux ---
@@ -3680,7 +3687,6 @@ void handleWeb() {
             NULL                // Task handle
           );          
         }
-
       }
     }
 

@@ -197,7 +197,7 @@ class BLEMIDIInterface: public MIDIInterface{
       return true;
     }
 
-    virtual bool end(){
+    virtual bool end() override{
         DEBUG_PRINT("\nbleMIDI disconnected");
         auto transport = bleMIDI.getTransport();  // ✅ On récupère le transport BLE
         if (transport) {
@@ -276,7 +276,7 @@ class USBMIDIInterface: public MIDIInterface{
       icon = ICON_USBMIDI;      
     }
 
-    virtual void monitor(){
+    virtual void monitor() override{
       if (useUSBMidi){  // only if USB is active
         /*if (hwm.battery.refreshed){
           // a better way would be to use callback function from USB.onEvent(...)
@@ -314,7 +314,7 @@ class USBMIDIInterface: public MIDIInterface{
       }
     }
 
-    virtual bool begin(){
+    virtual bool begin() override{
       MIDIInterface::init();
       usbMIDI.setHandleSystemExclusive(handleSysexStatic);
       // if the fooswtich has started in FW update or debug mode, USB MIDI is not active, hence we set the status once for all
@@ -328,10 +328,6 @@ class USBMIDIInterface: public MIDIInterface{
       }
       return true;
     }
-
-    virtual bool end(){
-      return true;
-    }     
 
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){      
       usbMIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);
@@ -360,14 +356,12 @@ class DINMIDIInterface: public MIDIInterface{
       icon = ICON_DINMIDI;
     }
 
-    virtual void monitor(){}
+    virtual void monitor() override{}
 
-    virtual bool begin(){
+    virtual bool begin() override{
       MIDIInterface::init();
       return true;
     }
-
-    virtual bool end(){return false;}     
 
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};    
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};
@@ -451,18 +445,20 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       delete destination;
     }    
 
-    virtual bool begin(){      
+    virtual bool begin() override{      
       DEBUG_PRINT("\nAppleMIDIInterface::begin()");
       MIDIInterface::init();
       appleInstancePtr = this;   // do not forget otherwise callback function will crash
       return true;      
     }
 
+    virtual bool stop() override{          // disconnect the network for network interface
+      return disconnectDeviceFromNetwork();
+    };   
 
-
-    virtual bool end(){
+    virtual bool end() override{
       DEBUG_PRINT("\nAppleMIDIInterface::end()");
-      switchDevice(DEVICE_OFF);
+      switchDevice(DEVICE_OFF);     // disable the device completely
       return true;
     }    
 
@@ -649,7 +645,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return changed;
     }      
 
-    virtual void monitor(){     
+    virtual void monitor() override{     
       monitorNetworkInterface();      
     }
 
@@ -873,7 +869,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       savedState = state;     // save current state as it may be recall after the refreshState
     }
 
-    virtual bool connectDeviceToNetwork(){
+    virtual bool connectDeviceToNetwork() override{
       DEBUG_PRINT("\n%s::connectDeviceToNetwork()",name.c_str());
       // we connect the midi client to its callback
       // this should not go to the begin
@@ -898,9 +894,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return true;
     }
 
-    virtual bool disconnectDeviceFromNetwork() {      
+    virtual bool disconnectDeviceFromNetwork() override{      
+      DEBUG_PRINT("\nAppleMIDI::disconnectDeviceFromNetwork()");
       setStateDisconnected();
-
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
       if (appleMidiClient != nullptr) appleMidiClient->endSession();
       return true;

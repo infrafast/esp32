@@ -224,16 +224,11 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       }
 
       return success;          
-  }
-
-
-    virtual bool begin(){
-      return true;
     }
 
-    virtual bool end(){
-      return true;
-    }
+    virtual bool stop() override{          // disconnect the network for network interface
+      return disconnectDeviceFromNetwork();
+    };  
 
     virtual void switchDevice(bool _enabled){
       DeviceInterface::switchDevice(_enabled);

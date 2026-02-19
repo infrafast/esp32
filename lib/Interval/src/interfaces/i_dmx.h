@@ -34,28 +34,6 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkInterface {
     virtual void monitor(){     
       monitorNetworkInterface();
     }
-
-  
-    virtual void* read(){return nullptr;}
-
-    virtual bool begin(){
-      return false;
-    }
-    
-    virtual bool end(){
-      return false;      
-    }
-
-    virtual void connectedNetworkMonitor(){}
-
-    virtual bool connectDeviceToNetwork(){
-      return false;
-    }
-
-   virtual bool disconnectDeviceFromNetwork(){
-      return false;
-    }
-
     
 };
 
@@ -72,16 +50,6 @@ class ThreePinDMXInterface: public DMXInterface{
     virtual void monitor(){
 
     } 
-
-    virtual void* read(){return nullptr;}
-
-    virtual bool begin(){
-      return false;
-    }
-
-    virtual bool end(){
-      return false;
-    }
 
     
 };
