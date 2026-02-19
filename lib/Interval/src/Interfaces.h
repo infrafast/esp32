@@ -137,7 +137,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       //DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_ENABLED)){
-        bool enabled = config[INTERFACE_ENABLED];
+        state.enabled = config[INTERFACE_ENABLED];
       }
 
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -148,7 +148,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       // like interface who would need to reconnect because the IP address has changed 
       if (changed && triggerPropertyChange){
         handlePropertyChange();
-        state.broadcastState = true;   // we signal that the interface state has changed because of a property change
       }
       return changed;
     }      
@@ -330,6 +329,7 @@ class NetWorkInterface{
     virtual void connectedNetworkMonitor() = 0;
     virtual bool connectDeviceToNetwork() = 0;           // called when network is connected
     virtual bool disconnectDeviceFromNetwork()= 0;        // called when network is disconnected
+    static uint8_t enabledInstanceCount;
     
     virtual void setStateDisconnected(){    // to be overrided by derived class
       if (!deviceInterface) return;
@@ -371,7 +371,7 @@ class NetWorkInterface{
           }
         }else{
           setNetworkStateDown();    
-          DEBUG_PRINT("\n%s->disconnectDeviceFromNetwork() %s",deviceInterface->interfaceName.c_str());
+          DEBUG_PRINT("\n%s->disconnectDeviceFromNetwork()",deviceInterface->interfaceName.c_str());
           disconnectDeviceFromNetwork();
           return;
         }
@@ -390,6 +390,7 @@ class NetWorkInterface{
       else return &GUI::iconMixEthWiFi;
     } */   
 };
+uint8_t NetWorkInterface::enabledInstanceCount = 0;
 
 class InterfaceRepository{
 

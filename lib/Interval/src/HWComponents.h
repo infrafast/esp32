@@ -1471,6 +1471,9 @@ class WiFiEth : public Network{
       }else if (state == CONNECTED) {
         //ethernet has priority over wifi, hence if we are connected by WiFi but the cable is plugged, we disconnect WiFi
         if (media == WIFI_MEDIA && cable == LinkON){
+          evt.type = EVENT_NOTIFY_WEBAPP_TERMINATE; // inform immediately the webapp to terminate
+          fireEvent(&evt);        
+          delay(100);               // let time for the brodcast to flow
           disconnectWifi();
           state = DISCONNECTED; // cable will try reconnect at next refresh
           lastEthAttempt = 0; // with no delay
@@ -1520,10 +1523,6 @@ class WiFiEth : public Network{
           // reset the progress indicator
           networkConnectAttemptProgress = -1;
           // initialiser of common object to both Wifi and Ethernet goes here      
-
-          if (appleMidiClient != nullptr) appleMidiClient->begin();
-          // then specific to ETH or WIFI          
-
           if (media == WIFI_MEDIA){
             SSID = WiFi.SSID();
             gateway = WiFi.gatewayIP();
@@ -1536,9 +1535,10 @@ class WiFiEth : public Network{
            }
           lastActiveMedia = media;
           checkInternet();
-          //DEBUG_PRINT("\n...all network component begin() done");
+          DEBUG_PRINT("\n...NETWORK CONNECTED");
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
+            DEBUG_PRINT("\n...NETWORK DISCONNECTED");
             // common destruction
             internet.alive = false;
             internet.latency = 0;
@@ -1546,7 +1546,7 @@ class WiFiEth : public Network{
             //if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
             if (client != NULL){client->stop(); delete client; client = NULL;} 
             if (server != NULL){delete server; server  = NULL;} 
-            if (wsWiFiClient != nullptr){ delete wsWiFiClient; wsWiFiClient = nullptr;}
+            if (wsWiFiClient != nullptr){delete wsWiFiClient; wsWiFiClient = nullptr;}
             if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr;}
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
             
@@ -1559,7 +1559,7 @@ class WiFiEth : public Network{
               MDNS.end();
             }
             lastActiveMedia = NO_MEDIA;
-            
+            DEBUG_PRINT("\n...ALL NETWORK OBJECTED CLEANED");
             xSemaphoreGive(networkBusy);              
           }else{
             DEBUG_PRINT("\nnetwork DISCONNECTED: networkBusy"); 

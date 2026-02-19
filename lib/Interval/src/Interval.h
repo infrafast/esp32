@@ -296,7 +296,8 @@ class EventDispatcher {
         EVENT_NETWORK,
         EVENT_INTERNET_PING,
         EVENT_APPLICATION,
-        EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE
+        EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE,
+        EVENT_NOTIFY_WEBAPP_TERMINATE
       };
 
 
@@ -1118,7 +1119,7 @@ struct State{ // used by Strip and Interface
   bool previousEnabled = false;
   float previousProgress = -1;
 
-  bool changed = false;
+  bool changed = false;               // this is used by the strip to determine if they have to refresh
   bool broadcastState = false;
   bool broadcastConfig = false;
 
@@ -1323,7 +1324,7 @@ void startGUIThread(uint8_t screen, uint8_t state) {
       "guiRefreshTask",
       4096,        // stack
       nullptr,
-      3,           // priorité légère
+      2,           // priorité moyenne
       &guiRefreshTaskHandle,
       0            // core 0
     );
@@ -1395,6 +1396,8 @@ void ping(PingParameters* params) {
       }      
       params->callback(params->echo);  // Appel du callback en cas de succès
       xSemaphoreGive(hwm.network->networkBusy);      
+    }else {
+      DEBUG_PRINT("\nasyncPing(%s) NETWORK BUSY",params->echo->host.c_str());
     }
   }else {
     DEBUG_PRINT("\nasyncPing(%s) hostname unresovable\n",params->echo->host.c_str());

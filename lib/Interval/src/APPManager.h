@@ -964,16 +964,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     // EVENTS HANDLING
     void networkEventHandler(Event* event){
-      /*switch(event->type){
-        case XXXXX:
-          
+      switch(event->type){
+        case EVENT_NOTIFY_WEBAPP_TERMINATE:
+          sendTerminateMessageToWebApp("Network connection changed. Close this page");
         break;
-      }*/
+      }
       // propagate the event
       fireEvent(event);      
     }
-
-
 
     void interfaceEventHandler(Event* event){
       switch(event->type){
@@ -1689,91 +1687,90 @@ void setup() {
 // =====================================================
 // CONFIG
 // =====================================================
-#define HTTP_KEEPALIVE_MS 50 //200
-#define HTTP_MAX_CLIENTS  1
+#define HTTP_KEEPALIVE_MS 50   // mets 200..500 si Chrome reset encore
 
 // Indicateur global demandé
 bool servingHttp = false;
-bool servingHttpOld = !servingHttp;
 
 // =====================================================
-// POOL CLIENTS (sans heap)
+// SINGLE CLIENT (sans heap)
 // =====================================================
-WiFiClient     wifiClients[HTTP_MAX_CLIENTS];
-uint32_t       wifiLastAct[HTTP_MAX_CLIENTS] = {0};//, 0};
+WiFiClient     wifiClient;
+uint32_t       wifiLastAct = 0;
 
-EthernetClient ethClients[HTTP_MAX_CLIENTS];
-uint32_t       ethLastAct[HTTP_MAX_CLIENTS]  = {0};//, 0};
+EthernetClient ethClient;
+uint32_t       ethLastAct  = 0;
 
 // =====================================================
 // UTILITAIRES
 // =====================================================
 inline bool isAlive(Client& c) {
-  // "alive" = connecté ou encore des données à lire
   return c.connected() || (c.available() > 0);
 }
 
-inline void closeSlot(Client& c, uint32_t& lastAct) {
+inline void closeClient(Client& c, uint32_t& lastAct) {
   if (c) c.stop();
   lastAct = 0;
 }
 
-// Service un pool de 2 clients (template pour WiFi/Ethernet)
+// =====================================================
+// SERVICE SINGLE CLIENT (template WiFi/Ethernet)
+// =====================================================
 template <typename TServer, typename TClient>
-void serviceHttpPool(TServer* srv, TClient clients[], uint32_t lastAct[]) {
-  if (srv == nullptr || webServer == nullptr) return;
+void serviceSingleHttp(TServer* srv, TClient& c, uint32_t& lastAct) {
+  if (srv == nullptr || webServer == nullptr) {
+    servingHttp = false;
+    return;
+  }
 
   const uint32_t now = millis();
 
-  // 1) Accepter de nouveaux clients (jusqu'à 2), SANS écraser un slot occupé
-  //    -> important pour éviter de couper une connexion Chrome en cours.
-  for (int i = 0; i < HTTP_MAX_CLIENTS; i++) {
-    // slot libre = objet "false" (pas de socket) ou socket mort sans data
-    if (!clients[i] || !isAlive(clients[i])) {
-      // Si l'objet existe mais est mort, on nettoie avant réassignation
-      if (clients[i]) closeSlot(clients[i], lastAct[i]);
+  // 1) Acceptation
+  if (!c || !isAlive(c)) {
+    if (c) closeClient(c, lastAct);
 
-      TClient nc = srv->available();
-      if (nc) {
-        clients[i] = nc;
-        lastAct[i] = now;   // début de session / activité
-        servingHttp = true; // au moins 1 client actif
-      }
+    TClient nc = srv->available();
+    if (nc) {
+      c = nc;
+      lastAct = now;
     }
+  } else {
+    // déjà occupé -> on rejette les nouveaux (proprement)
+    TClient extra = srv->available();
+    if (extra) extra.stop();
   }
 
-  // 2) Servir les clients actifs (non bloquant)
-  bool anyActive = false;
-
-  for (int i = 0; i < HTTP_MAX_CLIENTS; i++) {
-    TClient& c = clients[i];
-    if (!c) continue;
-
-    // Si le client n'est plus vivant et rien à lire -> on ferme
-    if (!isAlive(c)) {
-      closeSlot(c, lastAct[i]);
-      continue;
-    }
-
-    anyActive = true;
-
-    // Si données dispo -> process()
-    if (c.available() > 0) {
-      DEBUG_PRINT("\n\t\t\t\t\tCLIENT:c[%i]",i);
-      hwm->network->stopAllUDP();
-      webServer->process(&c);
-      lastAct[i] = now; // activité mise à jour à chaque requête/paquet reçu
-    }
-
-    // Timeout keep-alive
-    if (lastAct[i] != 0 && (now - lastAct[i]) > HTTP_KEEPALIVE_MS) {
-      // Fermeture douce : Chrome aime mieux quand on ferme après une fenêtre KA
-      closeSlot(c, lastAct[i]);
-    }
+  // 2) Service
+  if (!c) {
+    servingHttp = false;
+    return;
   }
 
-  // 3) Mettre à jour servingHttp
-  servingHttp = anyActive;
+  if (!isAlive(c)) {
+    closeClient(c, lastAct);
+    servingHttp = false;
+    return;
+  }
+
+  servingHttp = true;
+
+  // Si data dispo -> process
+  if (c.available() > 0) {
+    if (hwm->network->media == CABLE_MEDIA) hwm->network->stopAllUDP();   // because of limited IP sockets in ethernet
+    webServer->process(&c);
+    lastAct = millis();  // IMPORTANT: timestamp réel après process()
+  }
+
+  // 3) Keep-alive timeout (anti-reset: ne pas fermer si data en attente)
+  if (lastAct != 0 && (now - lastAct) > HTTP_KEEPALIVE_MS) {
+    if (c.available() == 0) {
+      closeClient(c, lastAct);
+      servingHttp = false;
+    } else {
+      // des données arrivent tard -> on repousse un peu
+      lastAct = now;
+    }
+  }
 }
 
 // =====================================================
@@ -1786,25 +1783,29 @@ void handleWeb() {
     return;
   }
 
-  // HTTP (AWOT)
   if (webServer != nullptr) {
     if (configMedia->media == CABLE_MEDIA) {
       EthernetServer* srv = (EthernetServer*)configMedia->server;
-      serviceHttpPool<EthernetServer, EthernetClient>(srv, ethClients, ethLastAct);
+      serviceSingleHttp<EthernetServer, EthernetClient>(srv, ethClient, ethLastAct);
+
+      // Optionnel si tu peux basculer de média:
+      // closeClient(wifiClient, wifiLastAct);
+
     } else {
       WiFiServer* srv = (WiFiServer*)configMedia->server;
-      serviceHttpPool<WiFiServer, WiFiClient>(srv, wifiClients, wifiLastAct);
+      serviceSingleHttp<WiFiServer, WiFiClient>(srv, wifiClient, wifiLastAct);
+
+      // Optionnel si tu peux basculer de média:
+      // closeClient(ethClient, ethLastAct);
     }
   } else {
     servingHttp = false;
   }
 
-  // WebSocket (si parallèle)
   if (wss != nullptr) {
     wss->listen();
   }
 
-  // Important dans loop(): laisser respirer la stack réseau
   yield();
 }
 
@@ -1916,8 +1917,9 @@ void handleWeb() {
       // PERFORM ALL REFRESH AND UPDATES
       // ********************************
       hwm->refresh();         
-      processBroadcastQueue();
+           
       handleWeb();
+      
       if (hwm->ap != nullptr){if (hwm->ap->refreshed) setAPandNetIcons();}      
       if (hwm->network->state == CONNECTED && hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();       // real time signal strength display
 
@@ -2014,12 +2016,7 @@ void handleWeb() {
       //------------------
       bool interfaceChangedState = false;
 
-      if (!servingHttp){
-
-        if (servingHttp != servingHttpOld){
-          DEBUG_PRINT("\n\n\n * * * INTERFACE REFRESH (NOT serving http files...) * * *\n\n\n");
-          servingHttpOld = servingHttp;
-        }
+      if (!servingHttp){    // we hold on interface update during http transfer to avoid overloading the network
 
         for (const auto& interface : interfaceRepo.interfaces){       
 
@@ -2029,23 +2026,21 @@ void handleWeb() {
           }
           #endif
 
+          //DEBUG_PRINT("\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t%s...",interface->interfaceName.c_str());      
+
           interface->update();
           if (interface->state.broadcastState){
             broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
             interface->state.broadcastState = false; // acknowledged
           }
-          if (interface->state.broadcastConfig){
-            //broadCast(concatStrings("{\"deviceCfg\":", interface->serializeConfig(), "}")); // inform web interface
+          if (interface->state.broadcastConfig){            
             broadcastIFconfig(interface);
             interface->state.broadcastConfig = false; // acknowledged
           }        
         }
-      }else{
-        if (servingHttp != servingHttpOld){
-          DEBUG_PRINT("\n\n\n - - - NO INTERFACE REFRESH(serving http files...) - - -\n\n\n");
-          servingHttpOld = servingHttp;
-        }        
       }
+
+      processBroadcastQueue();
 
       //------------------
       //
@@ -2148,9 +2143,8 @@ void handleWeb() {
             break;
             case STATE_UTILS_RESTART_DEVICE  :
               checkAndDeleteFile(FIRMWARE_BIN_FILENAME);
-              sendTerminateMessageToWebApp();
               hwm->persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
-              delay(500);
+              shutdown();
               ESP.restart();
             break;
             case STATE_UTILS_DOWNLOAD_FROM_URL:{
@@ -2341,8 +2335,10 @@ void handleWeb() {
       return true;
     }
 
-    void sendTerminateMessageToWebApp(){
-      broadCast("{\"freeze\":\"Finished\"}",IMMEDIATE);  // inform web interface immediatley without queuing the mesage for next loop      
+    void sendTerminateMessageToWebApp(String message = "Finished") {
+      // inform web interface immediately without queuing the message for next loop      
+      broadCast("{\"terminate\":\"" + message + "\"}", IMMEDIATE);  
+      delay(100);      // let time for the message to flow
     }
 
     #define WEB_STOP false
@@ -3134,7 +3130,7 @@ void handleWeb() {
       jsonAnswer.callback = RET_UNDPROCESSEDJSON;
       jsonAnswer.value = jsonInput.as<String>();
 
-      DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
+      //DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
       
       String command = jsonInput["command"];
 
@@ -3444,8 +3440,13 @@ void handleWeb() {
           bool enabled = first.value();
           interface->switchDevice(enabled);
           interface->state.broadcastState = true;
-          jsonAnswer.callback=RET_SAVEBUTTON;
-          jsonAnswer.value ="0";           
+          if (interface->save()){
+            jsonAnswer.callback = RET_SAVEBUTTON;
+            jsonAnswer.value ="0";
+          }else{
+            jsonAnswer.callback=RET_COMMANDERROR;
+            jsonAnswer.value = "interface save error";                
+          }
         }
       }else if (command == "saveLibrary"){
         // {"command":"saveLibrary","param":{"file":"sysexlib.json","entries":{"abc":"aa bb","key2":"01bb","key3":"1ef0","ghijk":"12 34 56"}}}}
@@ -3515,7 +3516,7 @@ void handleWeb() {
       serializeJson(jsonOutput,jsonString);
       removeJsonQuote(&jsonString);
 
-      DEBUG_PRINT("\nbuildJsonOuput: %s[...]",jsonString.substring(0,100).c_str());
+      //DEBUG_PRINT("\nbuildJsonOuput: %s[...]",jsonString.substring(0,100).c_str());
       jsonOutput.shrinkToFit();
       return jsonString;
 
@@ -3690,7 +3691,7 @@ void handleWeb() {
         DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
       }
       // midi interface has to update its config and regenerate its state      
-      appleMIDIInterface->interfaceRefreshedDone();     
+      appleMIDIInterface->refreshInternalStateAndConfig();     
     }
 
   private:
@@ -3735,6 +3736,7 @@ void handleWeb() {
     ///////////////////////////////////////////////////////////////////////
 
     void broadcastIFconfig(DeviceInterface* interface){
+      //broadCast(concatStrings("{\"deviceCfg\":", interface->serializeConfig(), "}")); // inform web interface
       // when broadcasting the config you also have to broadcast the interface data sets as it is likely to have been updated
       JsonDocument doc;
 

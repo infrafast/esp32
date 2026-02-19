@@ -104,49 +104,33 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       monitorNetworkInterface();
     }    
 
-    virtual void connectedNetworkMonitor(){
+     virtual void connectedNetworkMonitor(){
       // Check if packet was received
       dataAvailable = readOSC();
 
       if (dataAvailable > 0){                                     // data has come
-        udpConnectionLost = false;
         if (state.code != IF_READY) setStateConnected();          // set the device to connected
         destination->lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
         connectAttemptCount = 0;                                  // reset attempt counter                
         return;                                                   
       }
 
-      if (dataAvailable == -1){                                          // lost UDP connectivity
-        udpConnectionLost = true;
-        disconnectDeviceFromNetwork();   // keep explicit disconnected state until next ping retry
-        return;
+      if (dataAvailable == -1){                                     // UDP not replying
+        if (deviceInterface->state.label != IF_STATE_DISCONNECTED) setStateDisconnected();
       }
 
       // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
       #define OSC_PING_DELAY 3000
       // delay expired
       if (millis()-destination->lastQueryTime > OSC_PING_DELAY){        
-        if (udpConnectionLost){
-          if (!connectDeviceToNetwork()){
-            setStateDisconnected();
-            return;
-          }
-          udpConnectionLost = false;
-        }
-
-        //should we give it a new chance or set state
-        if (connectAttemptCount++ == 1){
+        destination->lastQueryTime = millis();
+        if (connectAttemptCount++ == 2){            //should we give it a new chance or set state (2x try)
           setStateQueryingDevice();
           connectAttemptCount = 0;          
         }else{
-          if (!ping()){
-            udpConnectionLost = true;
-            disconnectDeviceFromNetwork();
-            return;
-          }
+          if (!ping()) connectDeviceToNetwork();
         }                                                                 
       }                                                                   
-
     }
 
     int readOSC(){
@@ -265,12 +249,14 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       }
       if (udpID == -1) return false;                            // can't get any UDP connectivity => try again until next queryTime expired
       
+      DEBUG_PRINT("\nudp(%i) got UDP slot #%i",OSC_localPort,udpID);      
       setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
       destination->lastQueryTime = 0;                           // with the valid UDP we just got so we force ping to be triggered immediately
       return true;
     }
 
    virtual bool disconnectDeviceFromNetwork(){
+      DEBUG_PRINT("\nNetworkOSC::disconnectDeviceFromNetwork()");
       destination->lastQueryTime = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
       setStateDisconnected();
@@ -303,7 +289,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
       deviceInterface->state.details = concatStrings(*lang.getString("no UDP connection"));      
-      deviceInterface->state.led = "red";
+      deviceInterface->state.led = "red fast";
       deviceInterface->state.progress = -1;
     }     
 

@@ -473,7 +473,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       setStateRefreshing();
     }
 
-    void interfaceRefreshedDone(){
+    void refreshInternalStateAndConfig(){
       state = savedState;              // recall the state we had before refresh request
       state.broadcastState = true; // communicate the new state
       populateSessionOptions();  // regenerate the config data set
@@ -638,7 +638,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
           destination->host = String(ipAddress);
           destination->ip.fromString(ipAddress);            
 
-          // the session description is added to the list of end point so it appears on the drop down even if it was not detected (recall from saved interface parameter)
+          // the session description is added to the list of end point so it appears on the drop down even if it was not detected (as a recall from saved interface parameter)
           uint8_t ipBytes[4] = {destination->ip[0], destination->ip[1], destination->ip[2], destination->ip[3]};          
           rtpDirectory->upsertEndpoint(sessionName, ipBytes, port);          
         }
@@ -650,7 +650,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }      
 
     virtual void monitor(){     
-      monitorNetworkInterface();
+      monitorNetworkInterface();      
     }
 
     #define MIDI_INVITE_PERIOD 15000   // should be bigger than the timeout of invite()
@@ -660,6 +660,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       if (appleMidiClient != nullptr){
         // the read trigger callback like connection, hence it has to be called independantly from being connected to a session or not
         //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time        
+        
         hwm.network->appleMidiClient->read();                       
 
         if (state.code != IF_READY) {
@@ -780,7 +781,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
 
     void setStatePassiveSession(){
-            DEBUG_PRINT("\nAppleMIDIInterface::setStatePassiveSession");      
+      DEBUG_PRINT("\nAppleMIDIInterface::setStatePassiveSession");      
       //"details": "footswitch (192.168.0.56/5004) ready to be invited",
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
@@ -889,6 +890,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       appleMidiClient->setHandleException(OnAppleMidiExceptionStatic);
       appleMidiClient->setHandleSystemExclusive(handleSysexStatic);
       appleMidiClient->setHandleControlChange(handleChangeControlStatic);
+
+      appleMidiClient->begin();      
 
       startSession();
       

@@ -1,5 +1,5 @@
 
-~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C 0x6bba1231:0x3fcebd80 0x42151e52:0x3fcebda0 0x42029011:0x3fcebdc0 0x420291bc:0x3fcebe10 0x4202f8c5:0x3fcebe30 0x420306b0:0x3fcebf80 0x420681cd:0x3fcebfa0
+~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C 0x42008bd4:0x3fcebcf0 0x4202dece:0x3fcebd10 0x4202def6:0x3fcebd30 0x4202e065:0x3fcebd50 0x4202e079:0x3fcebda0 0x42152e03:0x3fcebdc0 0x42022b5a:0x3fcebdf0 0x4200c841:0x3fcebe10 0x4202fac9:0x3fcebe30 0x420308c4:0x3fcebf80 0x420683bd:0x3fcebfa0
 
 
 packages are in C:\Users\progman\.platformio\packages
@@ -353,6 +353,51 @@ void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpac
           connectAttemptCount = 0;          
         }else{
           ping();
+        }                                                                 
+      }                                                                   
+
+    }
+
+virtual void connectedNetworkMonitor(){
+      // Check if packet was received
+      dataAvailable = readOSC();
+
+      if (dataAvailable > 0){                                     // data has come
+        udpConnectionLost = false;
+        if (state.code != IF_READY) setStateConnected();          // set the device to connected
+        destination->lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
+        connectAttemptCount = 0;                                  // reset attempt counter                
+        return;                                                   
+      }
+
+      if (dataAvailable == -1){                                          // lost UDP connectivity
+        udpConnectionLost = true;
+        disconnectDeviceFromNetwork();   // keep explicit disconnected state until next ping retry
+        return;
+      }
+
+      // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
+      #define OSC_PING_DELAY 3000
+      // delay expired
+      if (millis()-destination->lastQueryTime > OSC_PING_DELAY){        
+        if (udpConnectionLost){
+          if (!connectDeviceToNetwork()){
+            setStateDisconnected();
+            return;
+          }
+          udpConnectionLost = false;
+        }
+
+        //should we give it a new chance or set state
+        if (connectAttemptCount++ == 1){
+          setStateQueryingDevice();
+          connectAttemptCount = 0;          
+        }else{
+          if (!ping()){
+            udpConnectionLost = true;
+            disconnectDeviceFromNetwork();
+            return;
+          }
         }                                                                 
       }                                                                   
 
