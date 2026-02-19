@@ -320,3 +320,40 @@ void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpac
 
 
 
+
+
+
+
+
+ virtual void connectedNetworkMonitor(){
+      // Check if packet was received
+      dataAvailable = readOSC();
+
+      if (dataAvailable > 0){                                     // data has come
+        if (state.code != IF_READY) setStateConnected();          // set the device to connected
+        destination->lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
+        connectAttemptCount = 0;                                  // reset attempt counter                
+        return;                                                   
+      }
+
+      if (dataAvailable == -1){                                          // lost UDP connectivity
+        if (state.code != IF_NOT_READY){
+          disconnectDeviceFromNetwork();   // set the device to disconnected so he try next
+          return;
+        }
+      }
+
+      // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
+      #define OSC_PING_DELAY 3000
+      // delay expired
+      if (millis()-destination->lastQueryTime > OSC_PING_DELAY){        
+        //should we give it a new chance or set state
+        if (connectAttemptCount++ == 1){
+          setStateQueryingDevice();
+          connectAttemptCount = 0;          
+        }else{
+          ping();
+        }                                                                 
+      }                                                                   
+
+    }
