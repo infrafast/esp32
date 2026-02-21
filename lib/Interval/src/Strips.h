@@ -118,6 +118,48 @@ StripSkeleton::StripSkeleton(String id, String g, StripBuilderCallback c, unsign
   stripFactory.add(this);
 }
 
+/* HELPERS BUTTON */
+// ----- Helpers -----
+float clamp01(float v) { return (v < 0.0f) ? 0.0f : (v > 1.0f) ? 1.0f : v; }
+
+float bez1D(float t, float a1, float a2) {
+  float omt = 1.0f - t;
+  return (3.0f * omt * omt * t * a1) + (3.0f * omt * t * t * a2) + (t * t * t);
+}
+
+float bez1D_d(float t, float a1, float a2) {
+  float omt = 1.0f - t;
+  return 3.0f * omt * omt * a1
+       + 6.0f * omt * t * (a2 - a1)
+       + 3.0f * t * t * (1.0f - a2);
+}
+
+// Solve for y given x on cubic-bezier(x1,y1,x2,y2) (CSS-like)
+float bezYforX(float x, float x1, float y1, float x2, float y2) {
+  x = clamp01(x);
+
+  float t = x; // seed
+  for (int i = 0; i < 6; i++) {
+    float bx = bez1D(t, x1, x2);
+    float dx = bez1D_d(t, x1, x2);
+    float err = bx - x;
+    if (fabsf(err) < 1e-5f) break;
+    if (fabsf(dx) < 1e-6f) break;
+    t -= err / dx;
+    t = clamp01(t);
+  }
+
+  // quick bisection fallback/cleanup
+  float lo = 0.0f, hi = 1.0f;
+  for (int i = 0; i < 10; i++) {
+    float bx = bez1D(t, x1, x2);
+    if (bx < x) lo = t; else hi = t;
+    t = 0.5f * (lo + hi);
+  }
+
+  return clamp01(bez1D(t, y1, y2));
+}
+
 
 ///////////////////// STRIP MANAGEMENT ////////////////////////
 
@@ -170,15 +212,221 @@ class Strip {
     float brightness = BRIGHTNESS_NOFOCUS;
 
     Strip(StripSkeleton* s){
+      
       skeleton = s;
       value = (valueMax-valueMin)/2;
-      //id = skeleton->stripID;
+      //id = skeleton->stripID;      
+      
+      cfg.clickStepRatio = 0.03f;     // (en % de l’amplitude totale), seulement utile en simple clic
+      
+      cfg.durationMs = 3000;          // temps pour aller de value → valueMin ou valueMax en HOLD
+      cfg.steps = 0;                  // pas de quantification, permet de faire un effet cranté ou bien limiter la quantité de ddonnée envoyée.
+
+      
+      //cfg.type = EasingType::LINEAR;  // Progression constante. Idéal pour valeurs techniques (fréquence, gain fin, ratio).      
+      //cfg.type = EasingType::EASE;    // Accélère légèrement puis ralentit doucement.Très bon compromis pour paramètres généraux.      
+      //cfg.type = EasingType::EASE_IN; //Démarre doucement, accélère progressivement. Bien pour réglages “sensibles” au début (ex: volume bas).     
+      cfg.type = EasingType::EASE_IN_OUT; // Démarre doucement → accélère → ralentit vers la fin. Le plus “premium” visuellement.
+      
+      //cfg.type = EasingType::CUBIC; //Permet des comportements plus dynamiques. 🔥 Version “Punchy rapide”. Accélération forte puis ralentissement marqué.    
+      //cfg.x1 = 0.15f; cfg.y1 = 0.90f;
+      //cfg.x2 = 0.20f; cfg.y2 = 1.00f;
+            
+      //cfg.type = EasingType::CUBIC;  // + STEPS Simule un comportement proche d’un encodeur cranté.
+      //cfg.x1 = 0.25f; cfg.y1 = 0.10f;
+      //cfg.x2 = 0.25f; cfg.y2 = 1.00f;
+      //cfg.steps = 20;   // 20 paliers sur toute la course
+      
+
     }    
 
     virtual ~Strip(){
       interface->stripCount -= 1;
+    }    
+
+    //////////// BUTTON MANAGEMENT
+enum class EasingType : uint8_t {
+  LINEAR,
+  EASE,
+  EASE_IN,
+  EASE_IN_OUT,
+  CUBIC
+};
+
+struct EasingConfig {
+  EasingType type = EasingType::EASE_IN_OUT;
+
+  // Time to reach target (min/max) while holding
+  uint16_t durationMs = 1500;
+
+  // For CUBIC only
+  float x1 = 0.25f, y1 = 0.10f, x2 = 0.25f, y2 = 1.00f;
+
+  // Optional quantization (0 = off)
+  uint8_t steps = 0;
+
+  // Step for SIMPLE_CLIC etc (ratio of amplitude)
+  float clickStepRatio = 0.05f;
+
+  // Throttle period for HOLD updates (ms)
+  // 16ms ~ 60Hz, 20ms ~ 50Hz, 33ms ~ 30Hz
+  uint16_t throttleMs = 50;
+
+  // Optional: do not emit updates smaller than this (absolute value units)
+  float minDeltaToApply = 0.0f; // e.g. 0.001f
+};
+
+EasingConfig cfg;
+
+// HOLD state (remplace holdStart + time logic)
+  // état HOLD
+  bool holdArmed = false;
+  int8_t holdDir = 0;
+  float holdStartValue = 0.0f;
+  unsigned long holdStartMillis = 0;
+
+  unsigned long lastHoldUpdate = 0; // for throttle
+
+
+float applyEasing(float p, const EasingConfig& c) {
+  p = clamp01(p);
+
+  if (c.steps > 0) {
+    float s = (float)c.steps;
+    p = clamp01(floorf(p * s) / s);
+  }
+
+  switch (c.type) {
+    case EasingType::LINEAR:      return p;
+    case EasingType::EASE:        return bezYforX(p, 0.25f, 0.10f, 0.25f, 1.00f);
+    case EasingType::EASE_IN:     return bezYforX(p, 0.42f, 0.00f, 1.00f, 1.00f);
+    case EasingType::EASE_IN_OUT: return bezYforX(p, 0.42f, 0.00f, 0.58f, 1.00f);
+    case EasingType::CUBIC:
+    default:                      return bezYforX(p, c.x1, c.y1, c.x2, c.y2);
+  }
+}
+
+float computeHoldValue(unsigned long timeMs, float start, float target, const EasingConfig& c) {
+  if (c.durationMs == 0) return target;
+  float p = (float)timeMs / (float)c.durationMs;
+  float e = applyEasing(p, c);
+  return start + (target - start) * e;
+}
+
+   bool throttleHold(){
+    if (cfg.throttleMs == 0) return true;
+    unsigned long now = millis();
+    if (lastHoldUpdate == 0 || (now - lastHoldUpdate) >= cfg.throttleMs){
+      lastHoldUpdate = now;
+      return true;
     }
+    return false;
+  }
+
+  float applyProgressive(int8_t dir, uint8_t trigger){
+    if (dir != 1 && dir != -1) return 0.0f;
+
+    // CLIC (ou autre) => pas fixe
+    if (trigger != IntervalButton::BUTTON_HOLD){
+      float amp = (valueMax - valueMin);
+      if (amp <= 0.0f) return 0.0f;
+
+      float step = amp * cfg.clickStepRatio;
+      if (step <= 0.0f) return 0.0f;
+
+      float newValue = value + (float)dir * step;
+      if (newValue > valueMax) newValue = valueMax;
+      if (newValue < valueMin) newValue = valueMin;
+
+      float delta = newValue - value;
+      if (delta == 0.0f) return 0.0f;
+
+      value = newValue;
+      return fabsf(delta); // delta positif comme ton code
+    }
+
+    // HOLD : on arme au début (ou si changement de sens)
+    unsigned long now = millis();
+    if (!holdArmed || holdDir != dir){
+      holdArmed = true;
+      holdDir = dir;
+      holdStartValue = value;
+      holdStartMillis = now;
+      lastHoldUpdate = 0; // update immédiat
+    }
+
+    // anti “rebonds” : si tu veux ignorer les tout premiers ms
+    if ((now - holdStartMillis) < DEBOUCE_TIME) {
+      return 0.0f;
+    }
+
+    if (!throttleHold()) return 0.0f;
+
+    // elapsed = temps réel écoulé depuis début du HOLD
+    unsigned long elapsed = now - holdStartMillis;
+
+    float target = (dir > 0) ? valueMax : valueMin;
+
+    float p = (cfg.durationMs == 0) ? 1.0f : ((float)elapsed / (float)cfg.durationMs);
+    float e = applyEasing(p, cfg);
+    float newValue = holdStartValue + (target - holdStartValue) * e;
+
+    if (newValue > valueMax) newValue = valueMax;
+    if (newValue < valueMin) newValue = valueMin;
+
+    float delta = newValue - value;
+    if (delta == 0.0f) return 0.0f;
+
+    if (cfg.minDeltaToApply > 0.0f && fabsf(delta) < cfg.minDeltaToApply) {
+      return 0.0f;
+    }
+
+    value = newValue;
+    return fabsf(delta);
+  }
+
+void onButtonReleased(){
+    holdArmed = false;
+    holdDir = 0;
+    lastHoldUpdate = 0;
+}
+
+  virtual float increaseCallback(unsigned long /*time*/, uint8_t trigger){
+    return applyProgressive(+1, trigger);
+  }
+
+  virtual float decreaseCallback(unsigned long /*time*/, uint8_t trigger){
+    return applyProgressive(-1, trigger);
+  }
+
+
+virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
   
+  uint16_t TIME_MAX_PROGRESSIVITY = 3000;
+  if (valueMax-valueMin<=20) TIME_MAX_PROGRESSIVITY = 5000;
+  else if (valueMax-valueMin>500) TIME_MAX_PROGRESSIVITY = 1000;
+
+  //we start counting the time between two calls when we have called the first time, means during debounce duration
+  if (time<DEBOUCE_TIME){
+    lastCall = 0;      
+    // first call we start timer
+
+  }
+  if (time>=TIME_MAX_PROGRESSIVITY) time = TIME_MAX_PROGRESSIVITY;
+
+  unsigned long waitBetween2update; 
+  
+  if (trigger == IntervalButton::BUTTON_HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
+  else waitBetween2update = 50 ; // 50ms 
+
+  unsigned long delaySoFar = millis() - lastCall;
+
+  if (delaySoFar < waitBetween2update) return false;  
+  lastCall = millis();
+
+  return true;    
+}
+
     virtual uint8_t getNumberOfProperties(){
       return skeleton->parameterAddresses.size();      
     }
@@ -275,7 +523,7 @@ class Strip {
 
       return data;
     }
-
+/*
     virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
       
       uint16_t TIME_MAX_PROGRESSIVITY = 3000;
@@ -303,9 +551,6 @@ class Strip {
       return true;    
     }
 
-    /*virtual float increaseCallback(unsigned long time) = 0;
-    virtual float decreaseCallback(unsigned long time) = 0;
-    virtual float getIncrement(unsigned long time)=0;*/
 
     virtual float getIncrement(unsigned long time,uint8_t trigger){
       float increment;
@@ -353,13 +598,8 @@ class Strip {
 
       return delta;      
     }
-    
-    // à appeler au relâchement
-    virtual void onButtonReleased(){
-      DEBUG_PRINT("\nreleased button");
-      /*holdArmed = false;
-      holdDir = 0;*/
-    } 
+  */  
+
 
     virtual void pushToGUI(uint8_t layout){
       
