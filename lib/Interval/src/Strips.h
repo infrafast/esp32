@@ -354,6 +354,13 @@ class Strip {
       return delta;      
     }
     
+    // à appeler au relâchement
+    virtual void onButtonReleased(){
+      DEBUG_PRINT("\nreleased button");
+      /*holdArmed = false;
+      holdDir = 0;*/
+    } 
+
     virtual void pushToGUI(uint8_t layout){
       
       visible = true;

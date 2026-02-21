@@ -1305,6 +1305,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
         case SCREEN_BANK:
           if (buttonID == hwm->buttons[MIDDLEB]->getID()) switchBankLayout();
+          else moduleReleaseClic(buttonID, time);
         break;
       }  
     }
@@ -1420,6 +1421,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // perform the behaviour defined in the config file
     // at the moment, this is hard coded
     stripChangeValue(buttonID, time, IntervalButton::BUTTON_HOLD);
+  }
+
+  void moduleReleaseClic(uint8_t buttonID, unsigned long time){    
+    stripReleaseHold(buttonID, time, IntervalButton::BUTTON_HOLD);
   }
 
   void moduleLongClic(uint8_t buttonID){
@@ -3067,6 +3072,16 @@ void setup() {
 
 
     }
+
+    void stripReleaseHold(uint8_t direction, unsigned long time, uint8_t trigger){
+      IntervalBank* bank = banks[screen.state];
+      if (bank != nullptr){
+        Strip* strip = bank->getStrip(bank->selector);
+        if (strip != nullptr) return strip->onButtonReleased();      
+      }      
+    }
+
+   
 
     bool updatePositions(IntervalBank* bank, JsonArray positions){
       bool success = false;
