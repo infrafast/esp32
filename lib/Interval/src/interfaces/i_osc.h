@@ -294,6 +294,19 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return sendOSCMessage(&msg);
     }
 
+    InterfaceQuality quality() override{
+        // Sécurité bornes
+        if (destination->latency > 500) destination->latency = 500;
+        if (destination->latency <= 15 && destination->jitter <= 5)
+            return EXCELLENT;
+        if (destination->latency <= 30 && destination->jitter <= 5)
+            return GOOD;
+        if (destination->latency <= 50 && destination->jitter <= 20)
+            return POOR;
+        // Au-delà : problème réseau
+        return UNSTABLE;
+    }      
+
   private:    
     uint8_t connectAttemptCount = 0;
     bool udpConnectionLost = false;

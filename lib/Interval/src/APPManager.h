@@ -1931,7 +1931,7 @@ void setup() {
       //------------------
       if (hwm->configMedia->refreshed){
         utilsBlinkIcon = networkIcon;
-        utilsBlinkLabel = *lang.getString("Connecting network");        
+        utilsBlinkLabel = *lang.getString("Bringing network up");        
         startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);              
         if (hwm->configMedia->state == CONNECTED){            
           setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
@@ -1945,7 +1945,7 @@ void setup() {
 
       if (hwm->network->refreshed){ // network changed its statusset
         utilsBlinkIcon = networkIcon;
-        utilsBlinkLabel = *lang.getString("Connecting network");        
+        utilsBlinkLabel = *lang.getString("Bringing network up");        
         startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);                              
         
         setNetworkIcon();

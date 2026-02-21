@@ -73,16 +73,24 @@ bool useUSBMidi = false;
 #define WIFI_CHECK_TIMEOUT_MIN  ((ETH_CABLE_CHECK_FREQUENCY >= 3000) ? (ETH_CABLE_CHECK_FREQUENCY*1.5) : 3000)
 #define WIFI_CHECK_TIMEOUT_MAX  9000
 
+enum InterfaceQuality {
+    EXCELLENT = 0,
+    GOOD,
+    POOR,
+    UNSTABLE
+    
+};
+
 
 class PingEcho{
   public:
     bool alive = false;
     unsigned long lastQueryTime ;    
-    uint16_t latency = 30;      // normal latency on TCP/IP
+    uint16_t latency = 0;      // normal latency on TCP/IP lan
     uint16_t jitter = 0;
     String host;
     IPAddress ip;  
-    PingEcho(String h):host(h){}
+    PingEcho(String h):host(h){} 
 };
 
 typedef std::function<void(PingEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité

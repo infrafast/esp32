@@ -60,6 +60,10 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return true;
     };          
 
+    virtual InterfaceQuality quality(){
+      return GOOD; 
+    }      
+
     virtual const String& getProviderNameForData(){ return group;}
 
     String serializeState(){
