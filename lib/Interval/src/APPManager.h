@@ -3724,8 +3724,9 @@ void setup() {
 
     JsonList wiFiList;    
 
+    
     String defaultSysConf =
-        "{\"" S_PUSHDELAY "\":\"250\","
+       "{\"" S_PUSHDELAY "\":\"" +String(DEFAULT_PUSH_DELAY)+ "\","
         "\"" S_DCLICREACTIVITY "\":\"250\","
         "\"" S_PROFILE "\":\"" DEFAULT_PROFILE "\","
         "\"" S_AP_NAME "\":\"" INTERVAL_PRODUCT_NAME "\","

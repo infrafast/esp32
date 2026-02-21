@@ -324,8 +324,10 @@ struct ButtonEvent {
     unsigned long time; // en ms
 };
 
+#define MIN_PUSH_DELAY    350   // must correspond to webapp Reactivity range
+#define MAX_PUSH_DELAY    900   //
 
-#define DEFAULT_PUSH_DELAY 800
+#define DEFAULT_PUSH_DELAY 500
 #define DEFAULT_DCLIC_DELAY 250
 
 namespace Interval {
