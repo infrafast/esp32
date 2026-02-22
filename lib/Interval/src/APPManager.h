@@ -3122,8 +3122,7 @@ void setup() {
     #define RET_SAVEBUTTON          "setSaveButton"
     #define RET_COMMANDERROR        "commandError"
     #define RET_POPUP               "commandPopup"
-    #define RET_MODAL               "modalMessage"
-
+    
     void log(const char* originator, const char* message) {
         const char* logLinePattern = "{\"logWebConsole\":{\"originator\":\"%s\",\"message\":\"%s\"}}";
 
@@ -3460,14 +3459,23 @@ void setup() {
         DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);        
         if (interface && interface->interfaceName == interfaceName){
           bool enabled = first.value();
-          interface->switchDevice(enabled);
-          interface->state.broadcastState = true;
-          if (interface->save()){
-            jsonAnswer.callback = RET_SAVEBUTTON;
-            jsonAnswer.value ="0";
+          uint8_t switchConfirmation = interface->switchDevice(enabled);
+          if (switchConfirmation == SWITCH_DEVICE_OK){
+            interface->state.broadcastState = true;
+            if (interface->save()){
+              jsonAnswer.callback = RET_SAVEBUTTON;
+              jsonAnswer.value ="0";
+            }else{
+              jsonAnswer.callback=RET_COMMANDERROR;
+              jsonAnswer.value = "interface save error";                
+            }
           }else{
-            jsonAnswer.callback=RET_COMMANDERROR;
-            jsonAnswer.value = "interface save error";                
+            jsonAnswer.callback=RET_POPUP;  
+            if (switchConfirmation == SWITCH_DEVICE_NETWORK_FULL){
+              jsonAnswer.value = "SWITCH_DEVICE_NETWORK_FULL";                 
+            }else{
+              jsonAnswer.value = "can't switch device";                 
+            }            
           }
         }
       }else if (command == "saveLibrary"){

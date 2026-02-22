@@ -162,7 +162,7 @@ class BLEMIDIInterface: public MIDIInterface{
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
 
-    virtual void switchDevice(bool _enable){
+    virtual uint8_t switchDevice(bool _enable){
       // THE BLEMIDI GO OFFLINE MUST NOT TOUCH THE STATE; IT JUST CONTINUES NORMALLY OTHERWISE IT IS NOT POSSIBLE TO RE-ESTABLISH THE CONNEXION AFTER GOING BACK ONLINE
       // THIS HAS SOMETHING TO DEAL WITH HANDLING OF END()
       /*if (_enable){
@@ -769,7 +769,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       //handleDisconnected(); is then called by the library
     }    
 
-    virtual void switchDevice(bool _enable){
+    virtual uint8_t switchDevice(bool _enable){
       MIDIInterface::switchDevice(_enable);      
       if (_enable) connectDeviceToNetwork();
       else disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 

@@ -230,10 +230,31 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return disconnectDeviceFromNetwork();
     };  
 
-    virtual void switchDevice(bool _enabled){
-      DeviceInterface::switchDevice(_enabled);
-      if (_enabled) connectDeviceToNetwork();
-      else disconnectDeviceFromNetwork();     
+    virtual bool authorizeEnabling(){
+
+      if (hwm.network->media == WIFI_MEDIA) return true;  // no wifi restriction
+
+      if (enabledInstanceCount<2) return true;
+      else return false;
+    }
+
+
+    virtual uint8_t switchDevice(bool _enabled){
+      if (_enabled){
+        if (authorizeEnabling()){
+          connectDeviceToNetwork();
+          enabledInstanceCount++;
+          state.enabled = true;
+        }else{
+          state.enabled = false;
+          return SWITCH_DEVICE_NETWORK_FULL;
+        }
+      }else{
+        enabledInstanceCount--;
+        disconnectDeviceFromNetwork();  
+      }     
+      state.enabled = _enabled;
+      return SWITCH_DEVICE_OK;
     }
 
     virtual bool connectDeviceToNetwork(){

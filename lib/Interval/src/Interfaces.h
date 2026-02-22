@@ -8,6 +8,12 @@
 
 #define ADDRESS_CHANGETOPARAMETERNAME "/config/%s"
 
+enum{
+  SWITCH_DEVICE_OK,
+  SWITCH_DEVICE_NETWORK_FULL = -1,
+  SWITCH_DEVICE_OTHER = -2
+};
+
 class DeviceInterface  : public SerializableParameters, public EventDispatcher{
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
@@ -134,6 +140,10 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       DEBUG_PRINT("\n%s->userRequestedRefreshInterface() : void",interfaceName.c_str());           
     }
 
+    virtual bool authorizeEnabling(){
+      return true;    // by default any interface is allowed to be enabled
+    }
+
     bool restore(const char* config){    
       DEBUG_PRINT("\n%s->restore(%s)",interfaceName.c_str(),config);           
       JsonDocument doc;
@@ -152,8 +162,16 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       //DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_ENABLED)){
-        state.enabled = config[INTERFACE_ENABLED];
+        bool enabled = config[INTERFACE_ENABLED];
+        if (enabled){
+          // Now check if it is allowed to enable this interface
+          // for instance the interface belongs to  a pool of resources, it may check if there is enough (ex. memory, network, ....) and return a no go
+          // the most obvious case is network interface in Ethernet that can not instanciante more than 8 sockes, hence we are limited to 3 possible interface
+          if (!authorizeEnabling()) state.enabled = false;
+          else state.enabled = true;
+        }else state.enabled = false;
       }
+
 
       // and then we call the restoreProperty of the interface which will check if the properties is for her
       JsonArray properties = config[KEY_PROPERTIES];
@@ -245,9 +263,10 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return dataAvailable; 
     }
 
-    virtual void switchDevice(bool _enabled){
+    virtual uint8_t switchDevice(bool _enabled){
       state.enabled = _enabled;
-      DEBUG_PRINT("\n%s switchDevice=>%s",interfaceName.c_str(),state.enabled?"true":"false");                    
+      DEBUG_PRINT("\n%s switchDevice=>%s",interfaceName.c_str(),state.enabled?"true":"false");      
+      return SWITCH_DEVICE_OK;              
     }
 
     #define IF_CFG_FILE_PATH "/"
@@ -339,6 +358,8 @@ class NetWorkInterface{
   public:
     PingEcho* destination;
 
+    static uint8_t enabledInstanceCount;
+
     virtual void* read(){
       return nullptr;
     }
@@ -346,8 +367,7 @@ class NetWorkInterface{
     virtual bool connectDeviceToNetwork(){return false;}
     virtual bool disconnectDeviceFromNetwork(){return false;}
 
-    static uint8_t enabledInstanceCount;
-    
+   
     virtual void setStateDisconnected(){    // to be overrided by derived class
       if (!deviceInterface) return;
       deviceInterface->state.code = IF_NOT_READY;
