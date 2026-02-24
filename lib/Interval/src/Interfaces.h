@@ -51,6 +51,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       DEBUG_PRINT("\n%s::begin() void",interfaceName.c_str());
       return true;
     };        
+
     virtual bool end(){         // called to shutdown completely
       DEBUG_PRINT("\n%s::end() void",interfaceName.c_str());
       return true;
@@ -74,15 +75,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       doc[interfaceName][INTERFACE_DETAILS] = state.details;
       doc[interfaceName][INTERFACE_ENABLED] = state.enabled;
       doc[interfaceName][INTERFACE_ACTIVABLE] = state.activable;
-      
-      if(state.enabled == true){
-        //we adopt the state gui
-        doc[interfaceName][INTERFACE_LED] = state.led;          
-      }else{
-        //we force the GUI to be black
-        doc[interfaceName][INTERFACE_LED] = "black";
-      }
-      
+      doc[interfaceName][INTERFACE_LED] = state.led;          
+     
       doc.shrinkToFit();
       String output;
       serializeJson(doc, output);    
@@ -125,10 +119,12 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     }  
 
     bool init(EventCallback cb){
-      DEBUG_PRINT("\n%s->init(...)",interfaceName.c_str());
+      DEBUG_PRINT("\n\n----------------------------------  %s->init(...)  ---------------------------------- ",interfaceName.c_str());      
       registerCallback(cb);
       load();
-      return begin();
+      bool success = begin();
+      DEBUG_PRINT("\n-----------------------------------------------------------------------------------------------------\n");      
+      return success;
     }
 
     virtual void userRequestedRefreshInterface(){
@@ -159,9 +155,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
           // the most obvious case is network interface in Ethernet that can not instanciante more than 8 sockes, hence we are limited to 3 possible interface
           enable(enabled);
         }else enable(false);
+        if (state.enabled == false) setStateDisabled();
       }
-
-
+      
       // and then we call the restoreProperty of the interface which will check if the properties is for her
       JsonArray properties = config[KEY_PROPERTIES];
       for (uint8_t i = 0; i< properties.size(); i++) changed |= restoreProperty(properties[i]);
@@ -173,6 +169,42 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       }
       return changed;
     }      
+
+    void setStateDisabled(){
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_DISABLED;
+      state.subState =  IF_STATE_DISABLED;
+      state.details = *lang.getString("Interface is disabled");         
+      state.led = "black";
+      state.progress = -1;          
+    }
+
+    void setStateNotImplemented(){
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_UNAVAILABLE;
+      state.subState =  IF_STATE_DISABLED;
+      state.details = *lang.getString("Interface not yet implemented");          
+      state.led = "black";
+      state.progress = -1;          
+    }
+
+    virtual void setStateConnected(){            
+      DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
+      state.code = IF_READY;      
+      state.label = IF_STATE_CONNECTED;
+      state.details = "";
+      state.led = "green";
+      state.progress = -1;      
+    }
+
+    virtual void setStateDisconnected(){
+      DEBUG_PRINT("\n%s: setStateDisconnected()",interfaceName.c_str());      
+      state.code = IF_NOT_READY;
+      state.label = IF_STATE_DISCONNECTED;
+      state.details = "";
+      state.led = "red fast";
+      state.progress = -1;
+    }     
 
     virtual void serialize(JsonDocument& interfaceDoc){
       //start with the config
@@ -232,6 +264,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       if (state.enabled != state.previousEnabled){
         state.changed   = true;
         state.previousEnabled = state.enabled;
+        if (state.enabled == false) setStateDisabled();
       }    
       if (state.progress != state.previousProgress){
         // a progress change is captured so applicatoin manager can broadcast it to the webclient but is not a state change
@@ -255,10 +288,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
         monitor();
       }
 
-      if (state.activable == false){
-        isActivable();      // check if interface can be activated or not        
-      }
-  
+      isActivable();      // check if interface can be activated or not , independantly from its state, an interface can be activated or disativated because change state of others      
+   
     }
 
     virtual bool isActivable(){
@@ -271,32 +302,35 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     }
 
     virtual void enable(bool _enable){
-      state.enabled = _enable;
+      state.enabled = _enable;      
     }
 
     #define IF_CFG_FILE_PATH "/"
 
-    virtual void load() { // some interfaces may override this to be empty as they do not load or save parameters
+    void load() { // some interfaces may override this to be empty as they do not load or save parameters
       String fname = concatStrings(IF_CFG_FILE_PATH,getFilename());
       DEBUG_PRINT("\nload(%s)",fname.c_str());
       // Ouvrir le fichier
       File file = LittleFS.open(fname, "r");
+      String content="";
+      char* defaultConfig = "{\"enabled\":false}";
       if (file) {
         // Lire tout le contenu dans une String
-        String content = file.readString();
+        content = file.readString();
         file.close();
-        if (content.length() != 0) {
+        if (content.length() == 0) {
           // Appeler la fonction de restauration
-          restore(content.c_str());
-        }else{
-          DEBUG_PRINT("\t::empty file");        
+          DEBUG_PRINT("\t::empty file, use default"); 
+          content = defaultConfig;
         }        
       }else{
-        DEBUG_PRINT("\t::impossible à ouvrir");
+        DEBUG_PRINT("\t::file open failed, use default");
+        content = defaultConfig;
       }
+      restore(content.c_str());      
     }
 
-    virtual bool save(){  // some interfaces may override this to be empty as they do not load or save parameters
+    bool save(){  // some interfaces may override this to be empty as they do not load or save parameters
       File file = LittleFS.open(IF_CFG_FILE_PATH+getFilename(), "w");
       if (!file) {
         DEBUG_PRINT("\t%s::save : impossible d'ouvrir %s en écriture\t", interfaceName.c_str(),getFilename().c_str());

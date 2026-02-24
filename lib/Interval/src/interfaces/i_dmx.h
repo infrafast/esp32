@@ -10,15 +10,13 @@ class DMXInterface : public DeviceInterface{
     DMXInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
       state.activable = false;
     }
+    
+    virtual bool begin(){     // called by init()
+      DEBUG_PRINT("\n%s::begin() setStateNotImplemented",interfaceName.c_str());
+      setStateNotImplemented();
+      return true;
+    };        
 
-    virtual void load(){
-      DEBUG_PRINT("\n%s:: not applicable",interfaceName.c_str());
-    }
-
-    virtual bool save(){
-      DEBUG_PRINT("\n%s::save() not applicable",interfaceName.c_str());
-      return true;      
-    }    
 };
 
 #define ARTNETDMX_INTERFACE "Artnet"
@@ -51,7 +49,6 @@ class ThreePinDMXInterface: public DMXInterface{
     }
 
     virtual void monitor(){
-
     } 
 
     

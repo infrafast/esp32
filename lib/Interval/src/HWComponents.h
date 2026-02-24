@@ -1484,7 +1484,7 @@ class WiFiEth : public Network{
           // *********************************************************************************          
                           
           // then read incoming midi packets
-          //if (appleMidiClient != nullptr) appleMidiClient->read();   // we prefer to put it into the AppleMIDIInterface monitor() as we will save some time in case interface is offline
+          //if (appleMidiClient != nullptr) appleMidiClient->read();   // we prefer to put it into the AppleMIDIInterface monitor(bool enabled) as we will save some time in case interface is offline
           
           // finally do whatever is required to refresh specialized network object here
           if (media == CABLE_MEDIA){

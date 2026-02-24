@@ -1116,7 +1116,7 @@ struct State{ // used by Strip and Interface
   uint8_t code = IF_NOT_READY;
   String label = IF_STATE_UNAVAILABLE;
   String subState = "subState";
-  String details = "Interface not yet implemented";
+  String details = "details";
   String led = "black";
   bool enabled = false;
   bool activable = true;

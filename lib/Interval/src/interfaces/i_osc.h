@@ -37,6 +37,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
       destination = new OSCPing(_OSC_IPaddress,pingCommand);
       
+
       if (!(OSCPing*)destination->ip.fromString(_OSC_IPaddress)) destination->ip = IPAddress(0,0,0,0);
 
       registerDataSetAddress(addressOSCport);
@@ -65,7 +66,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       free(buf);    
       
       buf = (char*)malloc((strlen(ADDRESS_PING)+((OSCPing*)destination)->pingCommand.length())*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_IP,((OSCPing*)destination)->pingCommand);
+      sprintf(buf,ADDRESS_PING,((OSCPing*)destination)->pingCommand);
       properties.add(String(buf)); 
       free(buf);        
     }
@@ -238,7 +239,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       }
     }
 
-    virtual bool isActivable(){
+    virtual bool activable(){
       if (hwm.network->media == WIFI_MEDIA){
         state.activable = true;
       }else{
@@ -285,15 +286,15 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return true;
     }
 
-    void setStateConnected(){            
-      //DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
-      state.code = IF_READY;      
-      state.label = IF_STATE_CONNECTED;
-      state.subState = destination->ip.toString();      
-      state.details = *lang.getString("Connected");
-      state.led = "green";
-      state.progress = -1;      
+    virtual void setStateConnected() override{            
+      DeviceInterface::setStateConnected();
+      state.subState = destination->ip.toString();          
     }
+
+    virtual void setStateDisconnected() override{
+      DeviceInterface::setStateDisconnected();
+      deviceInterface->state.details = concatStrings(*lang.getString("no UDP connection"));      
+    }       
 
     void setStateQueryingDevice(){
       //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
@@ -305,15 +306,6 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       state.led = "red medium";
       state.progress = -1;      
     }
-
-    virtual void setStateDisconnected() override{
-      if (!deviceInterface) return;
-      deviceInterface->state.code = IF_NOT_READY;
-      deviceInterface->state.label = IF_STATE_DISCONNECTED;
-      deviceInterface->state.details = concatStrings(*lang.getString("no UDP connection"));      
-      deviceInterface->state.led = "red fast";
-      deviceInterface->state.progress = -1;
-    }     
 
     bool ping(){
       destination->lastQueryTime = millis();       

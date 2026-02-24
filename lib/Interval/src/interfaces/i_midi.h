@@ -65,7 +65,7 @@ class MIDIInterface: public DeviceInterface{
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
       data = &midiData;     
     }
-
+   
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
@@ -157,7 +157,7 @@ class BLEMIDIInterface: public MIDIInterface{
       return &emptyString;
     }
 
-    virtual void monitor(){
+    virtual void monitor(){     
       if (state.label == IF_STATE_CONNECTED) 
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
@@ -165,14 +165,9 @@ class BLEMIDIInterface: public MIDIInterface{
     virtual void switchDevice(bool _enable){
       // THE BLEMIDI GO OFFLINE MUST NOT TOUCH THE STATE; IT JUST CONTINUES NORMALLY OTHERWISE IT IS NOT POSSIBLE TO RE-ESTABLISH THE CONNEXION AFTER GOING BACK ONLINE
       // THIS HAS SOMETHING TO DEAL WITH HANDLING OF END()
-      /*if (_enable){
-        end();
-      }else{
-        bleMIDI.begin();
-      }*/
+      setStateDisconnected();
       DeviceInterface::switchDevice(_enable);            
       if (_enable) begin();
-
     }
 
     virtual bool begin(){    
@@ -209,23 +204,17 @@ class BLEMIDIInterface: public MIDIInterface{
     }     
 
     void handleConnected() {
-      DEBUG_PRINT("\nBLEMidi paired\n");
-      state.code = IF_READY;
-      state.label = IF_STATE_CONNECTED;
-      state.subState = IF_STATE_CONNECTED;
-      state.details = ""; //String(name);// + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");
-      state.led = "blue";
-      state.progress = -1;
+      setStateConnected();
+      state.label = *lang.getString("paired");
+      //state.details = "" // get whatever you can get from the BLE connection device
+      state.led = "blue";      
     }    
 
     void handleDisconnected() {
-      DEBUG_PRINT("\nBLEMidi disconnected\n");
-      state.code = IF_NOT_READY;      
-      state.label = IF_STATE_PAIRING;
-      state.subState = IF_STATE_PAIRING;
+      setStateDisconnected();
+      state.subState = IF_STATE_PENDING;
       state.details = concatStrings(*lang.getString("Connect Blutooth"), " ", BLE_CONNECTION_NAME);
       state.led = "blue medium";
-      state.progress = -1;      
     }
 
     static void handleConnectedStatic() {
@@ -279,22 +268,11 @@ class USBMIDIInterface: public MIDIInterface{
     virtual void monitor() override{
       if (useUSBMidi){  // only if USB is active
 
-        if (tud_mounted() && state.code == IF_NOT_READY) {
-          state.code = IF_READY;
-          state.label = IF_STATE_CONNECTED;
-          state.subState = IF_STATE_CONNECTED;
-          state.details = "";
-          state.led = "green";
-          state.progress = -1;          
-        }
+        if (tud_mounted() && state.code == IF_NOT_READY) setStateConnected();
 
         if (!tud_mounted() && state.code == IF_READY) {
-          state.code = IF_NOT_READY;
-          state.label = IF_STATE_DISCONNECTED;
-          state.subState = IF_STATE_DISCONNECTED;
+          setStateDisconnected();
           state.details = "Plugin USB-MIDI";
-          state.led = "red";
-          state.progress = -1;
         }
         usbMIDI.read();
       }
@@ -346,21 +324,18 @@ class DINMIDIInterface: public MIDIInterface{
       state.activable = false;
     }
 
+    virtual bool begin(){     // called by init()
+      DEBUG_PRINT("\n%s::begin() setStateNotImplemented",interfaceName.c_str());
+      setStateNotImplemented();
+      return true;
+    };        
+
+
     virtual void monitor() override{}
 
-    virtual bool begin() override{
-      MIDIInterface::init();
-      return true;
-    }
-
-    virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};    
-    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){return false;};
-
-    virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
-      DEBUG_PRINT("\nDINMIDI::sendSysex(%i) ",inLength);
-      return false;
-    }
- 
+    virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override {return false;}
+    virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) override {return false;}
+    virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) override {return false;}    
 
 };
 
@@ -821,21 +796,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       );
     }
 
-    void setStateConnected(){
-      DEBUG_PRINT("\nAppleMIDIInterface::setStateConnected");      
-      state.code = IF_READY;
-      state.label = IF_STATE_CONNECTED;
-      state.subState = IF_STATE_CONNECTED;
-      state.details = String(midiSessionName);// + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");
-      state.progress = -1;
-      state.led = "green";     
-    }
+    virtual void setStateConnected() override{
+      DeviceInterface::setStateDisconnected();
+      state.details = String(midiSessionName);// + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");     
+    }     
 
-    void setStateDisconnected(){
-      DEBUG_PRINT("\nAppleMIDIInterface::setStateDisconnected");      
-      state.code = IF_NOT_READY;
-      state.progress = -1;
-      state.led = "red fast";     
+    void setStateDisconnected() override{
+      DeviceInterface::setStateDisconnected();       
       state.subState = destination->host;      
       if (exception == UNDEF_EXCEPTION){
         // no exception were raised, hence it is a normal disconnect
@@ -846,7 +813,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
         state.label = IF_STATE_ERROR;        
         state.details = *lang.getString(exception);
         exception = UNDEF_EXCEPTION; //acknowledged
-
       }
     }    
 
@@ -885,7 +851,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     virtual bool disconnectDeviceFromNetwork() override{      
-      DEBUG_PRINT("\nAppleMIDI::disconnectDeviceFromNetwork()");
       setStateDisconnected();
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
       if (appleMidiClient != nullptr) appleMidiClient->endSession();
