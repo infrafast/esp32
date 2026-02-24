@@ -13,392 +13,135 @@ Terminal:
 CTRL+T (call menu) then CTRL+D (start debug/console/reset)
   
 
-
-  /*void print_wakeup_reason()
-{
-  esp_sleep_wakeup_cause_t wakeup_reason;
-
-  // Get the wakeup reason
-  wakeup_reason = esp_sleep_get_wakeup_cause();
-
-  // Print the wakeup reason
-  switch (wakeup_reason)
-  {
-  case ESP_SLEEP_WAKEUP_EXT0:
-    DEBUG_PRINT("\nWakeup caused by an external signal using RTC_IO");
-    break;
-  case ESP_SLEEP_WAKEUP_EXT1:
-    DEBUG_PRINT("\nWakeup caused by an external signal using RTC_CNTL");
-    break;
-  case ESP_SLEEP_WAKEUP_TIMER:
-    DEBUG_PRINT("\nWakeup caused by a timer");
-    break;
-  case ESP_SLEEP_WAKEUP_TOUCHPAD:
-    DEBUG_PRINT("\nWakeup caused by a touchpad");
-    break;
-  case ESP_SLEEP_WAKEUP_ULP:
-    DEBUG_PRINT("\nWakeup caused by a ULP program");
-    break;
-  default:
-    DEBUG_PRINT("\nWakeup was not caused by deep sleep: %d\n", wakeup_reason);
-    break;
-  }
-}
-
-#include <ESP32-targz.h>          //https://github.com/tobozo/ESP32-targz  lib 0.3.2 tobozo
-void tarStatusProgressCallback( const char* name, size_t size, size_t total_unpacked ){
-  DEBUG_PRINT("\nuntar: %s",name);
-}
-
-void unpackProgressCallback( uint8_t progress ) {
-  //DEBUG_PRINT("\nProgress: %d",progress);
-  DEBUG_PRINT(".",progress);
-}
-
-
-
-  TarGzUnpacker TARGZUnpacker;
-  TARGZUnpacker.setLoggerCallback(BaseUnpacker::targzPrintLoggerCallback);
-  TARGZUnpacker.setTarStatusProgressCallback(tarStatusProgressCallback ); 
-  TARGZUnpacker.setTarProgressCallback( unpackProgressCallback ); 
-  DEBUG_PRINT("\nTARGZUnpacker");
-  //TARGZUnpacker.tarExpander(LittleFS, "/gzvalid.fsar", LittleFS, "/");
-
-
-
-
-
-
-
-
-    DEBUG_PRINT("\n\n\n\t\t\t\tPINGING...");
-//  ping("192.168.0.1");
-  //DEBUG_PRINT("\nresult: %i",ret);*/
-/*  EthernetICMPPing::setTimeout(PING_REQUEST_TIMEOUT_MS);
-
-
-////////////////////////////////PING START
-  
-  lastPingSucceeded = false;
-  EthernetICMPEchoReply echoResult;  // we'll get the status here
-  DEBUG_PRINT("\nStarting async ping.");
-
-  // asynchStart will return false if we couldn't
-  // even send a ping, though you could also check the
-  // echoResult.status with should ==
-  if (! ethping.asyncStart(pingAddr, 3, echoResult))
-  {
-    Serial.print("Couldn't even send our ping request?? Status: ");
-    Serial.println((int)echoResult.status);
-    delay(500);
-    return;
-
-  }
-
-  // ok the ping started out well...
-  DEBUG_PRINT("\nPing sent ");
-  while (! ethping.asyncComplete(echoResult))
-  {
-    // we have critical stuff we wish to handle
-    // while we wait for ping to come back
-    someCriticalStuffThatCantWait();
-  }
-
-  // async is done!  let's see how it worked out...
-  if (echoResult.status != SUCCESS)
-  {
-    // failure... but whyyyy?
-    sprintf(buffer, "Echo request failed; %d", echoResult.status);
-  } else {
-    // huzzah
-    lastPingSucceeded = true;
-    Serial.print(echoResult.data.time);
-    sprintf(buffer,
-            "Reply[%d] from: %d.%d.%d.%d: bytes=%d time=%ldms TTL=%d",
-            echoResult.data.seq,
-            echoResult.addr[0],
-            echoResult.addr[1],
-            echoResult.addr[2],
-            echoResult.addr[3],
-            REQ_DATASIZE,
-            millis() - echoResult.data.time,
-            echoResult.ttl);
-  }
-
-  Serial.println(buffer);
-*/
-
-
-
-
-
-static void test_on_ping_success(esp_ping_handle_t hdl, void *args){
-    // optionally, get callback arguments
-    // const char* str = (const char*) args;
-    // printf("%s\r\n", str); // "foo"
-    uint8_t ttl;
-    uint16_t seqno;
-    uint32_t elapsed_time, recv_len;
-    ip_addr_t target_addr;
-    esp_ping_get_profile(hdl, ESP_PING_PROF_SEQNO, &seqno, sizeof(seqno));
-    esp_ping_get_profile(hdl, ESP_PING_PROF_TTL, &ttl, sizeof(ttl));
-    esp_ping_get_profile(hdl, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
-    esp_ping_get_profile(hdl, ESP_PING_PROF_SIZE, &recv_len, sizeof(recv_len));
-    esp_ping_get_profile(hdl, ESP_PING_PROF_TIMEGAP, &elapsed_time, sizeof(elapsed_time));
-    DEBUG_PRINT("\n%d bytes from %s icmp_seq=%d ttl=%d time=%d ms\n",
-           recv_len, inet_ntoa(target_addr.u_addr.ip4), seqno, ttl, elapsed_time);
-    esp_ping_stop(hdl);
-    esp_ping_delete_session(hdl);
-}
-
-static void test_on_ping_timeout(esp_ping_handle_t hdl, void *args){
-    uint16_t seqno;
-    ip_addr_t target_addr;
-    esp_ping_get_profile(hdl, ESP_PING_PROF_SEQNO, &seqno, sizeof(seqno));
-    esp_ping_get_profile(hdl, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
-    DEBUG_PRINT("\nFrom %s icmp_seq=%d timeout\n", inet_ntoa(target_addr.u_addr.ip4), seqno);
-    esp_ping_stop(hdl);
-    esp_ping_delete_session(hdl);
-}
-
-static void test_on_ping_end(esp_ping_handle_t hdl, void *args){
-    uint32_t transmitted;
-    uint32_t received;
-    uint32_t total_time_ms;
-
-    esp_ping_get_profile(hdl, ESP_PING_PROF_REQUEST, &transmitted, sizeof(transmitted));
-    esp_ping_get_profile(hdl, ESP_PING_PROF_REPLY, &received, sizeof(received));
-    esp_ping_get_profile(hdl, ESP_PING_PROF_DURATION, &total_time_ms, sizeof(total_time_ms));
-    DEBUG_PRINT("\n%d packets transmitted, %d received, time %dms\n", transmitted, received, total_time_ms);
-    esp_ping_stop(hdl);
-    esp_ping_delete_session(hdl);
-}
-
-void wifiping(const char * host){   // see also https://github.com/espressif/esp-idf/issues/4648
-    ip_addr_t target_addr;
-    target_addr.type = IPADDR_TYPE_V4;
-
-    err_t ret = netconn_gethostbyname(host, &target_addr);
-
-//    int ret = inet_aton( host, &target_addr.u_addr.ip4 );
-
-    if( ret != 0 ) DEBUG_PRINT( "cp could not be converted to addr\n"); 
-
-    if(ret == 0){ // == 0 for gethostbyname
-        esp_ping_config_t ping_config = {
-            .count = 5,
-            .interval_ms = 1000,
-            .timeout_ms = 1000,
-            .data_size = 64,
-            .tos = 0,
-            .target_addr = target_addr,
-            .task_stack_size = 2048,
-            .task_prio = 2
-        };
-
-        /* set callback functions */
-        esp_ping_callbacks_t cbs = {
-            .cb_args = NULL,
-            .on_ping_success = test_on_ping_success,
-            .on_ping_timeout = test_on_ping_timeout,
-            .on_ping_end = test_on_ping_end
-        };
-
-        esp_ping_handle_t ping;
-        esp_ping_new_session(&ping_config, &cbs, &ping);
-        esp_ping_start(ping);
-    }
-}
-
-
-
-
-
-      screenBuffer.fillSprite(GUI::defaultBcolor);
-
-      for(int i = 0; i < screenGUIs.size(); i++){
-        
-        Widget* widget = screenGUIs.get(i);
-        //bool redraw = widget->refresh(force);
-        bool redraw = widget->refresh(true);
-        refreshed |= redraw;
-        
-        if (redraw){         
-          TFT_eSprite* sprite = widget->sprite;
-          //sprite->pushSprite(widget->getX(),widget->getY(),TFT_TRANSPARENT);
-          sprite->pushToSprite(&screenBuffer,widget->getX(),widget->getY(),TFT_TRANSPARENT);                 
-          delete sprite;
-        }
-      }  
-      screenBuffer.pushSprite(0,0);
-
-
-
-
-
-
-
-
-
-      The double buffering is in the file GraphDraw.c. There is a variable DataBuffer, the graphics routines in this file draw on the DataBuffer, see the routine DrawGraphPlotInline(). After the drawing has been done, it is sent to the LCD as one single BMP via DMA for fast rendering using LcdBmp().
-
-
-
-
-
-
-
-
-
-
-
-
-//////////////////////////////////////
-
-void fileProgressCallback( uint8_t progress ) {
-  /*static int8_t lastProgress = -1;
-  size_t totalBytes = LittleFS.totalBytes();
-  size_t usedBytes  = LittleFS.usedBytes();
-  size_t freeBytes  = totalBytes - usedBytes;
-  if( lastProgress != progress ) {
-    if( lastProgress == -1 ) {
-      DEBUG_PRINT("Progress: 0% *");
-    }
-    lastProgress = progress;
-    switch( progress ) {
-      //case   0: DEBUG_PRINT("0% ▓");  break;
-      case  25: DEBUG_PRINT(" 25% ");break;
-      case  50: DEBUG_PRINT(" 50% ");break;
-      case  75: DEBUG_PRINT(" 75% ");break;
-      case 100: DEBUG_PRINT("* 100% [%u=%u-%u]",freeBytes,totalBytes,usedBytes); lastProgress = -1; break;
-      default: if( progress > 0 && progress < 100) DEBUG_PRINT( "*" ); break;
-    }
-  }*/
-  subProgressPercent = progress;
-  
-}
-
-uint8_t progressPercentInt = 0;   // 0..100
-uint8_t delayedPercent  = 0;       // valeur différée pour l'affichage
-
-size_t delayedDelta = 0;
-
-void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpacked){
-  processedSize += size;
-
-  uint8_t newPercent = (totalGzSize > 0)
-    ? (uint8_t)((processedSize * 100) / totalGzSize)
-    : 0;
-
-  if (newPercent > 100) newPercent = 100;
-
-  // appliquer la valeur différée UNIQUEMENT si elle change
-  if (delayedPercent != progressPercentInt) {
-    delayedDelta = total_unpacked - size;
-    progressPercentInt = delayedPercent;
-    overallProgressPercent = (float)progressPercentInt;  // conversion uniquement ici
-  }
-
-  // préparer la valeur pour le prochain appel
-  delayedPercent = newPercent;
-
-  updateProgressLabel = name;
-
-  if (updateProgressLabel.indexOf("html") >= 0 ) updateProgressLabel = *lang.getString("Web");
-  else if (updateProgressLabel.indexOf("lang") >= 0 || updateProgressLabel.indexOf("i18n") >= 0) updateProgressLabel = *lang.getString("Translations");
-  else if (updateProgressLabel.indexOf("bank") >= 0 || updateProgressLabel.indexOf("user") >= 0) updateProgressLabel = *lang.getString("Configuration");  
-  else if (updateProgressLabel.indexOf("firmware") >= 0) updateProgressLabel = *lang.getString("Firmware");
-  else if (updateProgressLabel.indexOf("jpg") >= 0 || updateProgressLabel.indexOf("ttf") >= 0) updateProgressLabel = *lang.getString("Graphics");
-  else updateProgressLabel = *lang.getString("Data");
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- virtual void connectedNetworkMonitor(){
-      // Check if packet was received
-      dataAvailable = readOSC();
-
-      if (dataAvailable > 0){                                     // data has come
-        if (state.code != IF_READY) setStateConnected();          // set the device to connected
-        destination->lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
-        connectAttemptCount = 0;                                  // reset attempt counter                
-        return;                                                   
-      }
-
-      if (dataAvailable == -1){                                          // lost UDP connectivity
-        if (state.code != IF_NOT_READY){
-          disconnectDeviceFromNetwork();   // set the device to disconnected so he try next
-          return;
-        }
-      }
-
-      // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
-      #define OSC_PING_DELAY 3000
-      // delay expired
-      if (millis()-destination->lastQueryTime > OSC_PING_DELAY){        
-        //should we give it a new chance or set state
-        if (connectAttemptCount++ == 1){
-          setStateQueryingDevice();
-          connectAttemptCount = 0;          
-        }else{
-          ping();
-        }                                                                 
-      }                                                                   
-
+    #define HTTP_KEEPALIVE_MS 50   // mets 200..500 si Chrome reset encore
+    // Indicateur global demandé
+    bool servingHttp = false;
+
+    // =====================================================
+    // SINGLE CLIENT (sans heap)
+    // =====================================================
+    WiFiClient     wifiClient;
+    uint32_t       wifiLastAct = 0;
+
+    EthernetClient ethClient;
+    uint32_t       ethLastAct  = 0;
+
+    // =====================================================
+    // UTILITAIRES
+    // =====================================================
+    inline bool isAlive(Client& c) {
+      return c.connected() || (c.available() > 0);
     }
 
-virtual void connectedNetworkMonitor(){
-      // Check if packet was received
-      dataAvailable = readOSC();
+    inline void closeClient(Client& c, uint32_t& lastAct) {
+      if (c) c.stop();
+      lastAct = 0;
+    }
 
-      if (dataAvailable > 0){                                     // data has come
-        udpConnectionLost = false;
-        if (state.code != IF_READY) setStateConnected();          // set the device to connected
-        destination->lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
-        connectAttemptCount = 0;                                  // reset attempt counter                
-        return;                                                   
-      }
-
-      if (dataAvailable == -1){                                          // lost UDP connectivity
-        udpConnectionLost = true;
-        disconnectDeviceFromNetwork();   // keep explicit disconnected state until next ping retry
+    // =====================================================
+    // SERVICE SINGLE CLIENT (template WiFi/Ethernet)
+    // =====================================================
+    template <typename TServer, typename TClient>
+    void serviceSingleHttp(TServer* srv, TClient& c, uint32_t& lastAct) {
+      if (srv == nullptr || webServer == nullptr) {
+        servingHttp = false;
         return;
       }
 
-      // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
-      #define OSC_PING_DELAY 3000
-      // delay expired
-      if (millis()-destination->lastQueryTime > OSC_PING_DELAY){        
-        if (udpConnectionLost){
-          if (!connectDeviceToNetwork()){
-            setStateDisconnected();
-            return;
-          }
-          udpConnectionLost = false;
+      const uint32_t now = millis();
+
+      // 1) Acceptation
+      if (!c || !isAlive(c)) {
+        if (c) closeClient(c, lastAct);
+
+        TClient nc = srv->available();
+        if (nc) {
+          c = nc;
+          lastAct = now;
         }
+      } else {
+        // déjà occupé -> on rejette les nouveaux (proprement)
+        TClient extra = srv->available();
+        if (extra) extra.stop();
+      }
 
-        //should we give it a new chance or set state
-        if (connectAttemptCount++ == 1){
-          setStateQueryingDevice();
-          connectAttemptCount = 0;          
-        }else{
-          if (!ping()){
-            udpConnectionLost = true;
-            disconnectDeviceFromNetwork();
-            return;
-          }
-        }                                                                 
-      }                                                                   
+      // 2) Service
+      if (!c) {
+        servingHttp = false;
+        return;
+      }
 
+      if (!isAlive(c)) {
+        closeClient(c, lastAct);
+        servingHttp = false;
+        return;
+      }
+
+      servingHttp = true;
+
+      // Si data dispo -> process
+      if (c.available() > 0) {        
+        webServer->process(&c);
+        lastAct = millis();  // IMPORTANT: timestamp réel après process()
+      }
+
+      // 3) Keep-alive timeout (anti-reset: ne pas fermer si data en attente)
+      if (lastAct != 0 && (now - lastAct) > HTTP_KEEPALIVE_MS) {
+        if (c.available() == 0) {
+          closeClient(c, lastAct);
+          servingHttp = false;
+        } else {
+          // des données arrivent tard -> on repousse un peu
+          lastAct = now;
+        }
+      }
     }
+
+    // =====================================================
+    // HANDLE WEB (à appeler depuis loop())
+    // =====================================================
+    void handleWeb2() {
+      Network* configMedia = hwm->configMedia;
+      if (!configMedia || configMedia->state != CONNECTED) {
+        servingHttp = false;
+        return;
+      }
+
+      if (webServer != nullptr) {
+        if (configMedia->media == CABLE_MEDIA) {
+          EthernetServer* srv = (EthernetServer*)configMedia->server;
+          serviceSingleHttp<EthernetServer, EthernetClient>(srv, ethClient, ethLastAct);
+
+          // Optionnel si tu peux basculer de média:
+          // closeClient(wifiClient, wifiLastAct);
+
+        } else {
+          WiFiServer* srv = (WiFiServer*)configMedia->server;
+          serviceSingleHttp<WiFiServer, WiFiClient>(srv, wifiClient, wifiLastAct);
+
+          // Optionnel si tu peux basculer de média:
+          // closeClient(ethClient, ethLastAct);
+        }
+      } else {
+        servingHttp = false;
+      }
+      DEBUG_PRINT("\nA\n");
+      if (wss != nullptr) {
+        wss->listen(); //<==== plante lorsque l'on connecte le cable ethernet lorsque le WiFi est on et web app on
+      }
+      DEBUG_PRINT("\nB\n");
+      yield();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+

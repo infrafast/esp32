@@ -8,24 +8,18 @@
 
 #define ADDRESS_CHANGETOPARAMETERNAME "/config/%s"
 
-enum{
-  SWITCH_DEVICE_OK,
-  SWITCH_DEVICE_NETWORK_FULL = -1,
-  SWITCH_DEVICE_OTHER = -2
-};
-
 class DeviceInterface  : public SerializableParameters, public EventDispatcher{
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
   #define INTERFACE_EXPOSED     "exposed"
   #define INTERFACE_ENABLED     "enabled"
+  #define INTERFACE_ACTIVABLE   "activable"
   #define INTERFACE_GROUP       "group"
   #define INTERFACE_USENETWORK  "network"  
   #define INTERFACE_PROVIDER    "provider"
   #define INTERFACE_ICON        "icon"
   #define INTERFACE_DETAILS     "details"
   #define INTERFACE_LED         "led"
-
   #define INTERFACE_CONFIG      "deviceConfig"
   
   #define DEVICE_ON true
@@ -79,6 +73,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       doc[interfaceName][INTERFACE_PROGRESS] = state.progress;
       doc[interfaceName][INTERFACE_DETAILS] = state.details;
       doc[interfaceName][INTERFACE_ENABLED] = state.enabled;
+      doc[interfaceName][INTERFACE_ACTIVABLE] = state.activable;
       
       if(state.enabled == true){
         //we adopt the state gui
@@ -121,7 +116,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       JsonArray propertiesDoc = config[DATASET_PROPERTIES].to<JsonArray>();
       serializeProperties(propertiesDoc);
 
-
       doc.shrinkToFit();
       String output;
       serializeJson(doc, output);    
@@ -131,17 +125,14 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     }  
 
     bool init(EventCallback cb){
+      DEBUG_PRINT("\n%s->init(...)",interfaceName.c_str());
       registerCallback(cb);
-      bool success = load();
-      return success && begin();
+      load();
+      return begin();
     }
 
     virtual void userRequestedRefreshInterface(){
       DEBUG_PRINT("\n%s->userRequestedRefreshInterface() : void",interfaceName.c_str());           
-    }
-
-    virtual bool authorizeEnabling(){
-      return true;    // by default any interface is allowed to be enabled
     }
 
     bool restore(const char* config){    
@@ -158,18 +149,16 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
     virtual bool restore(const JsonObject& config, bool triggerPropertyChange = true){   // == trigger or not the handlePropertyChange at the end of the restore
       bool changed = false;
-
       //DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_ENABLED)){
         bool enabled = config[INTERFACE_ENABLED];
-        if (enabled){
-          // Now check if it is allowed to enable this interface
+        if (isActivable()){
+          // check if it is allowed to enable this interface
           // for instance the interface belongs to  a pool of resources, it may check if there is enough (ex. memory, network, ....) and return a no go
           // the most obvious case is network interface in Ethernet that can not instanciante more than 8 sockes, hence we are limited to 3 possible interface
-          if (!authorizeEnabling()) state.enabled = false;
-          else state.enabled = true;
-        }else state.enabled = false;
+          enable(enabled);
+        }else enable(false);
       }
 
 
@@ -219,6 +208,11 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
     }
 
+    int available(){ // called by strip 
+      return dataAvailable; 
+    }
+
+
     virtual void update(){      // return a boolean indicatin if the interface has changed its state
       // reset change state
       state.changed = false;
@@ -249,6 +243,10 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
         state.changed  = true;
         state.previousLed = state.led;
       }
+      if (state.activable != state.previousActivable){
+        state.changed  = true;
+        state.previousActivable = state.activable;
+      }      
 
       if (state.changed) state.broadcastState = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
 
@@ -256,43 +254,46 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       if (state.enabled){      
         monitor();
       }
+
+      if (state.activable == false){
+        isActivable();      // check if interface can be activated or not        
+      }
   
     }
 
-    int available(){ // called by strip 
-      return dataAvailable; 
+    virtual bool isActivable(){
+      return state.activable;
     }
 
-    virtual uint8_t switchDevice(bool _enabled){
-      state.enabled = _enabled;
+    virtual void switchDevice(bool _enabled){
+      enable(_enabled);
       DEBUG_PRINT("\n%s switchDevice=>%s",interfaceName.c_str(),state.enabled?"true":"false");      
-      return SWITCH_DEVICE_OK;              
+    }
+
+    virtual void enable(bool _enable){
+      state.enabled = _enable;
     }
 
     #define IF_CFG_FILE_PATH "/"
 
-    virtual bool load() { // some interfaces may override this to be empty as they do not load or save parameters
-
+    virtual void load() { // some interfaces may override this to be empty as they do not load or save parameters
+      String fname = concatStrings(IF_CFG_FILE_PATH,getFilename());
+      DEBUG_PRINT("\nload(%s)",fname.c_str());
       // Ouvrir le fichier
-      File file = LittleFS.open(IF_CFG_FILE_PATH+getFilename(), "r");
-      if (!file) {
-        DEBUG_PRINT("\t%s::load : impossible d'ouvrir %s\t",interfaceName.c_str(), getFilename().c_str());
-        return false;
+      File file = LittleFS.open(fname, "r");
+      if (file) {
+        // Lire tout le contenu dans une String
+        String content = file.readString();
+        file.close();
+        if (content.length() != 0) {
+          // Appeler la fonction de restauration
+          restore(content.c_str());
+        }else{
+          DEBUG_PRINT("\t::empty file");        
+        }        
+      }else{
+        DEBUG_PRINT("\t::impossible à ouvrir");
       }
-
-      // Lire tout le contenu dans une String
-      String content = file.readString();
-      file.close();
-
-      if (content.length() == 0) {
-        DEBUG_PRINT("\t%s::load %s vide\t",interfaceName.c_str(), getFilename().c_str());
-        return false;
-      }
-
-      // Appeler la fonction de restauration
-      restore(content.c_str());
-
-      return true;
     }
 
     virtual bool save(){  // some interfaces may override this to be empty as they do not load or save parameters
@@ -357,9 +358,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 class NetWorkInterface{
   public:
     PingEcho* destination;
-
-    static uint8_t enabledInstanceCount;
-
+    
     virtual void* read(){
       return nullptr;
     }
@@ -427,7 +426,6 @@ class NetWorkInterface{
       else return &GUI::iconMixEthWiFi;
     } */   
 };
-uint8_t NetWorkInterface::enabledInstanceCount = 0;
 
 class InterfaceRepository{
 

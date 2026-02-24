@@ -1690,126 +1690,6 @@ void setup() {
     // MANAGE WEB APPLICATION
     //
     //------------------     
-    #define HTTP_KEEPALIVE_MS 50   // mets 200..500 si Chrome reset encore
-    // Indicateur global demandé
-    bool servingHttp = false;
-
-    // =====================================================
-    // SINGLE CLIENT (sans heap)
-    // =====================================================
-    WiFiClient     wifiClient;
-    uint32_t       wifiLastAct = 0;
-
-    EthernetClient ethClient;
-    uint32_t       ethLastAct  = 0;
-
-    // =====================================================
-    // UTILITAIRES
-    // =====================================================
-    inline bool isAlive(Client& c) {
-      return c.connected() || (c.available() > 0);
-    }
-
-    inline void closeClient(Client& c, uint32_t& lastAct) {
-      if (c) c.stop();
-      lastAct = 0;
-    }
-
-    // =====================================================
-    // SERVICE SINGLE CLIENT (template WiFi/Ethernet)
-    // =====================================================
-    template <typename TServer, typename TClient>
-    void serviceSingleHttp(TServer* srv, TClient& c, uint32_t& lastAct) {
-      if (srv == nullptr || webServer == nullptr) {
-        servingHttp = false;
-        return;
-      }
-
-      const uint32_t now = millis();
-
-      // 1) Acceptation
-      if (!c || !isAlive(c)) {
-        if (c) closeClient(c, lastAct);
-
-        TClient nc = srv->available();
-        if (nc) {
-          c = nc;
-          lastAct = now;
-        }
-      } else {
-        // déjà occupé -> on rejette les nouveaux (proprement)
-        TClient extra = srv->available();
-        if (extra) extra.stop();
-      }
-
-      // 2) Service
-      if (!c) {
-        servingHttp = false;
-        return;
-      }
-
-      if (!isAlive(c)) {
-        closeClient(c, lastAct);
-        servingHttp = false;
-        return;
-      }
-
-      servingHttp = true;
-
-      // Si data dispo -> process
-      if (c.available() > 0) {        
-        webServer->process(&c);
-        lastAct = millis();  // IMPORTANT: timestamp réel après process()
-      }
-
-      // 3) Keep-alive timeout (anti-reset: ne pas fermer si data en attente)
-      if (lastAct != 0 && (now - lastAct) > HTTP_KEEPALIVE_MS) {
-        if (c.available() == 0) {
-          closeClient(c, lastAct);
-          servingHttp = false;
-        } else {
-          // des données arrivent tard -> on repousse un peu
-          lastAct = now;
-        }
-      }
-    }
-
-    // =====================================================
-    // HANDLE WEB (à appeler depuis loop())
-    // =====================================================
-    void handleWeb2() {
-      Network* configMedia = hwm->configMedia;
-      if (!configMedia || configMedia->state != CONNECTED) {
-        servingHttp = false;
-        return;
-      }
-
-      if (webServer != nullptr) {
-        if (configMedia->media == CABLE_MEDIA) {
-          EthernetServer* srv = (EthernetServer*)configMedia->server;
-          serviceSingleHttp<EthernetServer, EthernetClient>(srv, ethClient, ethLastAct);
-
-          // Optionnel si tu peux basculer de média:
-          // closeClient(wifiClient, wifiLastAct);
-
-        } else {
-          WiFiServer* srv = (WiFiServer*)configMedia->server;
-          serviceSingleHttp<WiFiServer, WiFiClient>(srv, wifiClient, wifiLastAct);
-
-          // Optionnel si tu peux basculer de média:
-          // closeClient(ethClient, ethLastAct);
-        }
-      } else {
-        servingHttp = false;
-      }
-      DEBUG_PRINT("\nA\n");
-      if (wss != nullptr) {
-        wss->listen(); //<==== plante lorsque l'on connecte le cable ethernet lorsque le WiFi est on et web app on
-      }
-      DEBUG_PRINT("\nB\n");
-      yield();
-    }
-
     void handleWeb(){
 
       //unsigned long lastActivity = millis();
@@ -1964,8 +1844,7 @@ void setup() {
         if (hwm->network->state == CONNECTED){    
 
           #if defined(USE_FTP) && defined(USE_NETWORK)
-            if (!servingHttp) 
-              ftp.handle();
+            ftp.handle();
           #endif
 
 
@@ -2032,29 +1911,29 @@ void setup() {
       //------------------
       bool interfaceChangedState = false;
 
-      if (!servingHttp){    // we hold on interface update during http transfer to avoid overloading the network
+      for (const auto& interface : interfaceRepo.interfaces){       
 
-        for (const auto& interface : interfaceRepo.interfaces){       
-
-          #ifdef PROD
-          if (interface->stripCount == 0){
-            //continue;                           // optimization  WARNING: to activate that you need to implement the feature of greying out the interface panel as they will not be updated...
-          }
-          #endif
-
-          //DEBUG_PRINT("\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t%s...",interface->interfaceName.c_str());      
-
-          interface->update();
-          if (interface->state.broadcastState){
-            broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
-            interface->state.broadcastState = false; // acknowledged
-          }
-          if (interface->state.broadcastConfig){            
-            broadcastIFconfig(interface);
-            interface->state.broadcastConfig = false; // acknowledged
-          }        
+        #ifdef PROD
+        if (interface->stripCount == 0){
+          //continue;                           
+          // // optimization  WARNING: to activate that you need to implement the feature of greying out the interface panel as they will not
+          // be updated unless a strip is dropped in a bank
         }
+        #endif
+
+        //DEBUG_PRINT("\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t%s...",interface->interfaceName.c_str());      
+
+        interface->update();
+        if (interface->state.broadcastState){
+          broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
+          interface->state.broadcastState = false; // acknowledged
+        }
+        if (interface->state.broadcastConfig){            
+          broadcastIFconfig(interface);
+          interface->state.broadcastConfig = false; // acknowledged
+        }        
       }
+      
 
       processBroadcastQueue();
 
@@ -3459,23 +3338,14 @@ void setup() {
         DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);        
         if (interface && interface->interfaceName == interfaceName){
           bool enabled = first.value();
-          uint8_t switchConfirmation = interface->switchDevice(enabled);
-          if (switchConfirmation == SWITCH_DEVICE_OK){
-            interface->state.broadcastState = true;
-            if (interface->save()){
-              jsonAnswer.callback = RET_SAVEBUTTON;
-              jsonAnswer.value ="0";
-            }else{
-              jsonAnswer.callback=RET_COMMANDERROR;
-              jsonAnswer.value = "interface save error";                
-            }
+          interface->switchDevice(enabled);
+          interface->state.broadcastState = true;
+          if (interface->save()){
+            jsonAnswer.callback = RET_SAVEBUTTON;
+            jsonAnswer.value ="0";
           }else{
-            jsonAnswer.callback=RET_POPUP;  
-            if (switchConfirmation == SWITCH_DEVICE_NETWORK_FULL){
-              jsonAnswer.value = "SWITCH_DEVICE_NETWORK_FULL";                 
-            }else{
-              jsonAnswer.value = "can't switch device";                 
-            }            
+            jsonAnswer.callback=RET_COMMANDERROR;
+            jsonAnswer.value = "interface save error";                
           }
         }
       }else if (command == "saveLibrary"){

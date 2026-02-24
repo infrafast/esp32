@@ -37,7 +37,6 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
       destination = new OSCPing(_OSC_IPaddress,pingCommand);
       
-
       if (!(OSCPing*)destination->ip.fromString(_OSC_IPaddress)) destination->ip = IPAddress(0,0,0,0);
 
       registerDataSetAddress(addressOSCport);
@@ -101,7 +100,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }        
 
     virtual void monitor(){           
-      monitorNetworkInterface();
+      monitorNetworkInterface();      
     }    
 
      virtual void connectedNetworkMonitor(){
@@ -230,31 +229,38 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return disconnectDeviceFromNetwork();
     };  
 
-    virtual bool authorizeEnabling(){
-
-      if (hwm.network->media == WIFI_MEDIA) return true;  // no wifi restriction
-
-      if (enabledInstanceCount<2) return true;
-      else return false;
+    virtual void enable(bool _enable) override{
+      DeviceInterface::enable(_enable);      
+      if (_enable){
+        enabledInstanceCount++;
+      }else{
+        if (enabledInstanceCount>0) enabledInstanceCount--;
+      }
     }
 
-
-    virtual uint8_t switchDevice(bool _enabled){
-      if (_enabled){
-        if (authorizeEnabling()){
-          connectDeviceToNetwork();
-          enabledInstanceCount++;
-          state.enabled = true;
-        }else{
-          state.enabled = false;
-          return SWITCH_DEVICE_NETWORK_FULL;
-        }
+    virtual bool isActivable(){
+      if (hwm.network->media == WIFI_MEDIA){
+        state.activable = true;
       }else{
-        enabledInstanceCount--;
+        if (enabledInstanceCount>=2){
+          if (state.activable != false){
+            state.activable = false;
+            state.details = "Reached max. network interface";
+          }
+        }
+        else state.activable = true;
+      }
+      return state.activable;
+    }    
+
+    virtual void switchDevice(bool _enabled) override{
+      if (_enabled){
+        connectDeviceToNetwork();
+        enable(true);
+      }else{
         disconnectDeviceFromNetwork();  
+        enable(false);
       }     
-      state.enabled = _enabled;
-      return SWITCH_DEVICE_OK;
     }
 
     virtual bool connectDeviceToNetwork(){
@@ -328,6 +334,9 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
         return UNSTABLE;
     }      
 
+  protected:
+    static uint8_t enabledInstanceCount;
+
   private:    
     uint8_t connectAttemptCount = 0;
     bool udpConnectionLost = false;
@@ -336,7 +345,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     //UDP* udp = nullptr; // DIRECT UDP
 
 };
-
+uint8_t NetworkOSC::enabledInstanceCount = 0;
 
 
 #endif

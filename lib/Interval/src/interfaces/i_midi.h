@@ -63,7 +63,7 @@ class MIDIInterface: public DeviceInterface{
     MidiData midiData;
 
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
-      data = &midiData;      
+      data = &midiData;     
     }
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
@@ -162,7 +162,7 @@ class BLEMIDIInterface: public MIDIInterface{
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
 
-    virtual uint8_t switchDevice(bool _enable){
+    virtual void switchDevice(bool _enable){
       // THE BLEMIDI GO OFFLINE MUST NOT TOUCH THE STATE; IT JUST CONTINUES NORMALLY OTHERWISE IT IS NOT POSSIBLE TO RE-ESTABLISH THE CONNEXION AFTER GOING BACK ONLINE
       // THIS HAS SOMETHING TO DEAL WITH HANDLING OF END()
       /*if (_enable){
@@ -273,23 +273,11 @@ class USBMIDIInterface: public MIDIInterface{
   public:
 
     USBMIDIInterface(bool _configurable):MIDIInterface(USBMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
-      icon = ICON_USBMIDI;      
+      icon = ICON_USBMIDI;  
     }
 
     virtual void monitor() override{
       if (useUSBMidi){  // only if USB is active
-        /*if (hwm.battery.refreshed){
-          // a better way would be to use callback function from USB.onEvent(...)
-          if (hwm.battery.batteryState != BAT_USB_PLUGGED){
-            state.code = IF_NOT_READY;
-            state.label = IF_STATE_DISCONNECTED;
-            state.details = "Plugin USB-MIDI";
-          }else{
-            state.code = IF_READY;
-            state.label = IF_STATE_CONNECTED;
-            state.details = "";
-          }
-        }*/
 
         if (tud_mounted() && state.code == IF_NOT_READY) {
           state.code = IF_READY;
@@ -308,8 +296,6 @@ class USBMIDIInterface: public MIDIInterface{
           state.led = "red";
           state.progress = -1;
         }
-
-
         usbMIDI.read();
       }
     }
@@ -325,6 +311,9 @@ class USBMIDIInterface: public MIDIInterface{
         state.details = "restartUSB";
         state.led = "black";
         state.progress = -1;
+        state.activable = false; 
+      }else{
+        state.activable = true; 
       }
       return true;
     }
@@ -354,6 +343,7 @@ class DINMIDIInterface: public MIDIInterface{
   public:
     DINMIDIInterface(bool _configurable):MIDIInterface(DINMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_DINMIDI;
+      state.activable = false;
     }
 
     virtual void monitor() override{}
@@ -769,7 +759,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       //handleDisconnected(); is then called by the library
     }    
 
-    virtual uint8_t switchDevice(bool _enable){
+    virtual void switchDevice(bool _enable){
       MIDIInterface::switchDevice(_enable);      
       if (_enable) connectDeviceToNetwork();
       else disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 

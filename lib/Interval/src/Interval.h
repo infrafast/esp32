@@ -1116,15 +1116,17 @@ struct State{ // used by Strip and Interface
   uint8_t code = IF_NOT_READY;
   String label = IF_STATE_UNAVAILABLE;
   String subState = "subState";
-  String details = "Interface not implemented";
+  String details = "Interface not yet implemented";
   String led = "black";
   bool enabled = false;
+  bool activable = true;
   float progress = -1;
 
   String previousStateLabel = "";
   String previousLed = "";
   uint8_t previousStateCode = 0;
   bool previousEnabled = false;
+  bool previousActivable = activable;
   float previousProgress = -1;
 
   bool changed = false;               // this is used by the strip to determine if they have to refresh
@@ -1416,7 +1418,7 @@ void ping(PingParameters* params) {
 void pingTask(void* params){
   ping(static_cast<PingParameters*>(params));
   // Libérer la mémoire allouée pour les paramètres
-  delete params;
+  delete (PingParameters*)params;
   // Suspendre la tâche après chaque ping (exécution ponctuelle)
   vTaskDelete(NULL);  
 }
