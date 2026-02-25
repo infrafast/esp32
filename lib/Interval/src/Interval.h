@@ -8,6 +8,7 @@
 0.19 - ping class refactor + progress during fw update + interface state broadcast management + revamp of datasets + iMidi hardening
 0.20 - compatibility with code server
 0.21 - udp connectivity hardening
+0.22 - interfaces refactor + better state management
 */
 
 
