@@ -186,6 +186,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
                       }                  
 
                 }
+                determineQoS();
                 DEBUG_PRINT("\t latency: %i, jitter:%i",destination->latency,destination->jitter);
               }
             }              
@@ -230,30 +231,10 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return disconnectDeviceFromNetwork();
     };  
 
-    virtual bool activable(){
-      if (hwm.network->media == WIFI_MEDIA){
-        state.activable = true;
-      }else{
-        if (enabledInstanceCount>=2){
-          if (state.activable != false){
-            state.activable = false;
-            state.details = "Reached max. network interface";
-          }
-        }
-        else state.activable = true;
-      }
-      return state.activable;
+    virtual bool isActivable(){
+      return true;
     }    
 
-    /*virtual void switchDevice(bool _enabled) override{
-      if (_enabled){
-        connectDeviceToNetwork();
-        enable(true);
-      }else{
-        disconnectDeviceFromNetwork();  
-        enable(false);
-      }     
-    }*/
     virtual void enable(bool _enabled) override{
       if (_enabled){
         connectDeviceToNetwork();
@@ -311,17 +292,19 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return sendOSCMessage(&msg);
     }
 
-    InterfaceQuality quality() override{
-        // Sécurité bornes
-        if (destination->latency > 500) destination->latency = 500;
-        if (destination->latency <= 15 && destination->jitter <= 5)
-            return EXCELLENT;
-        if (destination->latency <= 30 && destination->jitter <= 5)
-            return GOOD;
-        if (destination->latency <= 50 && destination->jitter <= 20)
-            return POOR;
-        // Au-delà : problème réseau
-        return UNSTABLE;
+    void determineQoS(){
+      // Sécurité bornes
+      if (destination->latency > 500) destination->latency = 500;
+      
+      if (destination->latency <= 15 && destination->jitter <= 5)
+        state.qualityColor = GUI::green;    
+      else if (destination->latency <= 30 && destination->jitter <= 5)
+        state.qualityColor = GUI::blue;    
+      else if (destination->latency <= 50 && destination->jitter <= 20)
+        state.qualityColor = GUI::yellow;    
+      // Au-delà : problème réseau
+      else
+        state.qualityColor = GUI::red;    
     }      
 
   protected:

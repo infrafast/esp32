@@ -2,6 +2,9 @@
 #define HWComponents_h
 
 #include "Interval.h"
+
+#include "iconMap.h"
+
 #include <Ethernet.h>       // apply following fix: https://github.com/arduino-libraries/Ethernet/pull/107/files
 #include <EthernetUdp.h>
 #include <WiFiGeneric.cpp>  // for tipipinit
@@ -733,6 +736,8 @@ class Network : public HWComponent2State{
 
     float networkConnectAttemptProgress = 0.0;
 
+    String iFconnectivityIcon = ICON_MIXETHWIFI;
+
     SemaphoreHandle_t networkBusy;
 
     StdFunctionCallbackVoidPingEcho internetCallback = nullptr;    
@@ -939,6 +944,7 @@ class WiFiEth : public Network{
         }
       }else{
         //if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
+        iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
       }
      
       if (!ethEnabled){
@@ -1394,6 +1400,7 @@ class WiFiEth : public Network{
                 state = CONNECTED;
                 media = CABLE_MEDIA;                
                 DEBUG_PRINT("\t...all Eth object instantiated\n");                  
+                iFconnectivityIcon = ICON_ETH;
                 xSemaphoreGive(networkBusy);
               }else{
                 DEBUG_PRINT("\nETH CONNECT: networkBusy\n"); 
@@ -1495,17 +1502,27 @@ class WiFiEth : public Network{
             }else{
               state = DISCONNECTED; 
               media = NO_MEDIA;
+              if (!ethEnabled) iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
+              else iFconnectivityIcon = ICON_MIXETHWIFI;
             }
           }else{
             if (WiFi.status() == WL_CONNECTED){
               // do whatever is required when we are connected by WiFI
               // this code is executed in loop
+
+              int8_t signalStrength = abs(WiFi.RSSI());
+              if (signalStrength >=90) iFconnectivityIcon = ICON_WIFI_STRENGTH_0;
+              else if (signalStrength >=75) iFconnectivityIcon = ICON_WIFI_STRENGTH_1;
+              else if (signalStrength >=45) iFconnectivityIcon = ICON_WIFI_STRENGTH_2;
+              else iFconnectivityIcon = ICON_WIFI_STRENGTH_3;                
               //ArduinoOTA.handle();     
               if (wsWiFiClient != nullptr) wsWiFiClient->listen();
             }else{
               // this code is executed in loop
               state = DISCONNECTED; 
               media = NO_MEDIA;     
+              if (!ethEnabled) iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
+              else iFconnectivityIcon = ICON_MIXETHWIFI;
             }
           }
         }
@@ -1560,6 +1577,8 @@ class WiFiEth : public Network{
               MDNS.end();
             }
             lastActiveMedia = NO_MEDIA;
+            if (!ethEnabled) iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
+            else iFconnectivityIcon = ICON_MIXETHWIFI;            
             DEBUG_PRINT("\n...ALL NETWORK OBJECTED CLEANED");
             xSemaphoreGive(networkBusy);              
           }else{

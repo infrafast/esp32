@@ -353,8 +353,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     std::vector<IntervalBank*> banks; // Vecteur de strips
                    
     ///////////////////// OVERLAY ICONS ////////////////////////
-    String networkIcon, apIcon;
-    uint16_t networkIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor, blinkColorBlue = TFT_BLUE;   
+    String apIcon;
+    uint16_t iFconnectivityIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor, blinkColorBlue = TFT_BLUE;   
 
     String batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3};
     String batIcon = ICON_WAIT; // by default we display a timeelapser while battery level is undetermined
@@ -368,7 +368,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     String utilsBlinkLabel = "", utilsBlinkIcon = ""; 
 
-    AlteredColor networkIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
+    AlteredColor iFconnectivityIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor apIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor configIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor blinkColor = AlteredColor{.baseColor = GUI::blue, .value =  &GUI::unUsedColor};
@@ -611,11 +611,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       vBatLabel = concatStrings(*lang.getString("Battery"), ": ", hwm->battery.vBat, "v");
     }
 
-    void setAPandNetIcons(){
-      setAPIcon();
-      setNetworkIcon();
-    }
-
     void setAPIcon(){
       if (hwm->ap == nullptr){
         apIcon = emptyString;
@@ -640,28 +635,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    void setNetworkIcon(){
-
-      #ifdef USE_NETWORK
-              
-        if (hwm->network->state == CONNECTED){
-          if (hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();
-          else networkIcon = ICON_ETH;
-          networkIconGlowingRedColor.value = &GUI::unUsedColor;
-          networkIconColorIdle = GUI::green;
-        }else{
-          networkIconGlowingRedColor.value = &networkIconColorIdle;
-
-          if (hwm->network->ethEnabled && hwm->network->WiFiEnabled && hwm->network->getLink() == LinkOFF) networkIcon = GUI::iconMixEthWiFi; // both WiFi and ETh are up but there is no cable on, we don't know who will connect first
-          else if ((hwm->network->ethEnabled && !hwm->network->WiFiEnabled) || (hwm->network->getLink() == LinkON)) networkIcon = GUI::iconEth;  //case when we bootSprite for a DHCP lease or have no WiFi enabled
-          else if (!hwm->network->ethEnabled && hwm->network->WiFiEnabled) networkIcon = ICON_WIFI_STRENGTH_3; 
-          else networkIcon = emptyString;  // when it is only wifi and ap is launched.
-        }
-
-      #else
-        networkIcon = emptyString;
-      #endif
-
+    void setiFconnectivityColor(){            
+      if (hwm->network->state == CONNECTED){
+        iFconnectivityIconGlowingRedColor.value = &GUI::unUsedColor;
+        iFconnectivityIconColorIdle = GUI::green;
+      }else{
+        iFconnectivityIconGlowingRedColor.value = &iFconnectivityIconColorIdle;
+      }
     }
 
     void goToResetScreenAndSleep(String message){
@@ -902,7 +882,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             
       blinkColor.value = &blinkColorBlue;      
       gui->alphaColors.add(&blinkColor);      
-      gui->alphaColors.add(&networkIconGlowingRedColor);
+      gui->alphaColors.add(&iFconnectivityIconGlowingRedColor);
       gui->alphaColors.add(&apIconGlowingRedColor);
       gui->alphaColors.add(&configIconGlowingRedColor);
 
@@ -911,7 +891,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       minHeapSize = maxHeapSize = ESP.getFreeHeap();
 
-      setAPandNetIcons();
+      setAPIcon();
       setBatIcon();     
 
       // BY DEFAULT, WE DO NOT STARTUP, ONLY DISPLAY BATTERY LEVEL AND SWITCH OFF                 
@@ -1434,15 +1414,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
   }
 
-  void refreshWiFiSignalIcon(){
-    int8_t signalStrength = abs(WiFi.RSSI());
-    if (signalStrength >=90) networkIcon = ICON_WIFI_STRENGTH_0;
-    else if (signalStrength >=75) networkIcon = ICON_WIFI_STRENGTH_1;
-    else if (signalStrength >=45) networkIcon = ICON_WIFI_STRENGTH_2;
-    else networkIcon = ICON_WIFI_STRENGTH_3;      
-    //DEBUG_PRINT("\nrssi: %d",signalStrength);
-  }
-
   bool saveBanks(const String& bankFileName){
     bool success = false;
     // Ouvrir le fichier en écriture
@@ -1801,16 +1772,15 @@ void setup() {
       // ********************************
       hwm->refresh();         
                     
-      if (hwm->ap != nullptr){if (hwm->ap->refreshed) setAPandNetIcons();}      
-      if (hwm->network->state == CONNECTED && hwm->network->media == WIFI_MEDIA) refreshWiFiSignalIcon();       // real time signal strength display
-
+      if (hwm->ap != nullptr){if (hwm->ap->refreshed) setAPIcon();}      
+      
       //------------------
       //
       // MANAGE NETWORK
       //
       //------------------
       if (hwm->configMedia->refreshed){
-        utilsBlinkIcon = networkIcon;
+        utilsBlinkIcon = hwm->configMedia->iFconnectivityIcon;
         utilsBlinkLabel = *lang.getString("Bringing network up");        
         startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);              
         if (hwm->configMedia->state == CONNECTED){            
@@ -1824,11 +1794,8 @@ void setup() {
       handleWeb();
 
       if (hwm->network->refreshed){ // network changed its statusset
-        utilsBlinkIcon = networkIcon;
-        utilsBlinkLabel = *lang.getString("Bringing network up");        
-        startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);                              
-        
-        setNetworkIcon();
+       
+        setiFconnectivityColor();
 
         // ============>>> CALLBACK APPLICATION
         evt.type = EVENT_NETWORK_CHANGED_STATE;
@@ -1878,7 +1845,7 @@ void setup() {
 
 
         }
-        stopGUIThread();
+
       }  
         
 

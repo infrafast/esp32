@@ -74,14 +74,6 @@ bool useUSBMidi = false;
 #define WIFI_CHECK_TIMEOUT_MIN  ((ETH_CABLE_CHECK_FREQUENCY >= 3000) ? (ETH_CABLE_CHECK_FREQUENCY*1.5) : 3000)
 #define WIFI_CHECK_TIMEOUT_MAX  9000
 
-enum InterfaceQuality {
-    EXCELLENT = 0,
-    GOOD,
-    POOR,
-    UNSTABLE
-    
-};
-
 
 class PingEcho{
   public:
@@ -1134,6 +1126,8 @@ struct State{ // used by Strip and Interface
   bool broadcastState = false;
   bool broadcastConfig = false;
 
+  uint16_t qualityColor = TFT_GREEN;
+
 };
 
 #include "GUIManager.h"
@@ -1308,7 +1302,7 @@ static TaskHandle_t    guiRefreshTaskHandle = nullptr;
 #define STEP_MS 2
 // ---------- Tâche d’animation ----------
 void guiRefreshTask(void *param_type) {
-  DEBUG_PRINT("\nguiRefreshTask()");
+  DEBUG_PRINT("\nstartGUIThread()"); 
    
   for (int i=0;;) {
     // Vérifie si on nous demande d’arrêter (notification)
@@ -2060,7 +2054,7 @@ void handleConfigConnection(){
       screen.id = SCREEN_UTILS;
       screen.state = STATE_UTILS_CONNECTCONFIGMEDIA;
       hwm.startAP(systemCfg.getString(S_AP_NAME));
-      app.setAPandNetIcons();
+      app.setAPIcon();
       //https://deepbluembedded.com/esp32-wifi-library-examples-tutorial-arduino/#esp32-wifi-modes
     }  
   }
@@ -2125,7 +2119,7 @@ void voidOverlay(uint8_t id){
 void baseOverLayBuilder(uint8_t id){  
   /*GUI::tft->fillRect(0,app.overlayIconY,TFT_WIDTH,OVERLAY_ICON_SIZE,GUI::overlayIconBackgroundColor);
   GUI::tft->drawFastHLine(0,app.overlayIconY-1,TFT_WIDTH,TFT_SILVER);*/
-  gui.add(new Icon(&app.networkIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.networkIconColorIdle,&GUI::defaultBcolor));             
+  gui.add(new Icon(&hwm.network->iFconnectivityIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.iFconnectivityIconColorIdle,&GUI::defaultBcolor));             
   //gui.add(new AnimatedIcon(app.iconRolling,TWOFRAMEICON,Align::Center,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,ANIMATE_REPEAT,250,&GUI::blue,&GUI::defaultBcolor));              
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor));                  
   gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor));          

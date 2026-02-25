@@ -59,11 +59,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     virtual bool stop(){          // called to stop (ex. disconnect the network for network interface) require a begin() to start again
       DEBUG_PRINT("\n%s::stop() void",interfaceName.c_str());
       return true;
-    };          
-
-    virtual InterfaceQuality quality(){
-      return GOOD; 
-    }      
+    };           
 
     virtual const String& getProviderNameForData(){ return group;}
 
@@ -152,14 +148,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_ENABLED)){
         bool enabled = config[INTERFACE_ENABLED];
-        if (isActivable()){
-          // check if it is allowed to enable this interface
-          // for instance the interface belongs to  a pool of resources, it may check if there is enough (ex. memory, network, ....) and return a no go
-          // the most obvious case is network interface in Ethernet that can not instanciante more than 8 sockes, hence we are limited to 3 possible interface
-          enable(enabled);
-        }else{
-          enable(false);
-        }
+        enable(enabled);
       }
       
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -251,13 +240,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
       if (state.changed) state.broadcastState = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
 
-      //call the specific interface internal workflow
       if (state.enabled){      
         monitor();
-      }
-
-      isActivable();      // check if interface can be activated or not , independantly from its state, an interface can be activated or disativated because change state of others      
-   
+      }      
     }
 
     virtual bool isActivable(){
@@ -274,6 +259,15 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       DEBUG_PRINT("\n%s::enable(%s)",interfaceName.c_str(),state.enabled?"true":"false");      
       if (_enable) setStateDisconnected();
       else setStateDisabled();
+    }
+
+    void setStateDeactivated(){
+      DEBUG_PRINT("\n%s::setStateDeactivated()",interfaceName.c_str());
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_DEACTIVATED;
+      state.subState =  "";
+      state.led = "black";
+      state.progress = -1;
     }
 
     void setStateDisabled(){

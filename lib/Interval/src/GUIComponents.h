@@ -5,55 +5,7 @@
 #include <vector>
 #include "Interval.h"
 
-#define ICON_LAPTOP           "/"
-#define ICON_EARTH            "L"
-#define ICON_LANG             "L"
-#define ICON_ETH              "*"
-#define ICON_ROLLING1         "\""        
-#define ICON_ROLLING2         "#"
-#define ICON_LINK             "F"
-#define ICON_FOOTSWITCH       "&"
-#define ICON_INTERVAL         "V"
-#define ICON_AP               "!"
-#define ICON_MIXETHWIFI       "'"
-#define ICON_TFT_ROTATE       "R"
-#define ICON_WIFI_STRENGTH_0  "1"
-#define ICON_WIFI_STRENGTH_1  "2"
-#define ICON_WIFI_STRENGTH_2  "3"
-#define ICON_WIFI_STRENGTH_3  "4"
-#define ICON_BAT_LEVEL_0      "6"
-#define ICON_BAT_LEVEL_1      "7"
-#define ICON_BAT_LEVEL_2      "8"
-#define ICON_BAT_LEVEL_3      "9"
-#define ICON_BAT_USB_PLUGGED  "5"
-#define ICON_PLUG             "0"
-#define ICON_NOTOK            "N"
-#define ICON_WAIT             "E"
-#define ICON_FORBID           "O"
-#define ICON_POWER            "T"
-#define ICON_BRIGHTNESS       "W"
-#define ICON_FWUPDATE         "X"
-#define ICON_RESET            "I"
-#define ICON_TEXT_STRIP       "$"
-#define ICON_CHECKED          ","
-#define ICON_EMPTY            " "
-#define ICON_QUIT             "P"
-#define ICON_INFO             "M"
-#define ICON_CONFIG           "S"
-#define ICON_PROFILES         "D"
-#define ICON_SAVE             "K"
-#define ICON_CLOUD_UPLOAD     "K"
-#define ICON_CLOUD_DOWNLOAD   "J"
-#define ICON_NODOT            ";"
-#define ICON_LEFTDOT          "<"
-#define ICON_RIGHTDOT         "="
-#define ICON_FULLDOT          "A"
-#define ICON_TIMER            "B"
-#define ICON_WIFI             ":"
-#define ICON_USBMIDI          "f"
-#define ICON_DINMIDI          "c"
-#define ICON_APPLEMIDI        "d"
-#define ICON_BLEMIDI          "e"
+#include "iconMap.h"
 
 #ifndef TFT_BGCOLOR
   #define TFT_BGCOLOR TFT_BLACK
@@ -1873,10 +1825,5 @@ const int16_t GUI::vquarter3xPos = TFT_VQUARTER*3-TFT_VQUARTER/2;
 const int16_t GUI::vquarter4xPos = TFT_VQUARTER*4-TFT_VQUARTER/2;
 const int16_t GUI::menuIconYpos = TFT_HEIGHT/2-MENU_ICON_SIZE/2.2;
 const int16_t GUI::menuTitleY = TFT_HEIGHT-MENU_TITLE_SIZE*1.1; 
-
-// ICONS DEFINITIONS
-const String GUI::iconMixEthWiFi = ICON_MIXETHWIFI;
-const String GUI::iconEth = ICON_ETH;
-const String GUI::iconWiFi = ICON_WIFI;
 
 #endif
