@@ -474,9 +474,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     void refreshInternalStateAndConfig(){
+      populateSessionOptions();  // regenerate the config data set
       state = savedState;              // recall the state we had before refresh request
       state.broadcastState = true; // communicate the new state
-      populateSessionOptions();  // regenerate the config data set
       state.broadcastConfig = true; // communicate the new parameters
     }
 
@@ -682,7 +682,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     void handleDisconnected(const ssrc_t& ssrc) {
       DEBUG_PRINT("\n\nappleMidi session #%i disconnected\n", ssrc);
-      setStateDisconnected();
+      if (state.enabled == false) setStateDisabled();
+      else setStateDisconnected();
+      lastInvite = 0;    // we reset the timer that controls the periodicity of the invites because in case of disconnection, we want to trigger a new session (invite or passive immediately to reconnect as soon as possible)
     }
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override{                  
@@ -779,9 +781,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       else disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 
     }*/
     virtual void enable(bool _enable) override{
+      DeviceInterface::enable(_enable);
       if (_enable) connectDeviceToNetwork();
       else disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 
-      
+      savedState = state;     // save current state as it may be recall after the refreshState
     }   
 
 
@@ -895,7 +898,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     virtual bool disconnectDeviceFromNetwork() override{      
-      setStateDisconnected();
+      DEBUG_PRINT("\n%s::disconnectDeviceFromNetwork()",name.c_str());
+      if (state.enabled == false) setStateDisabled();
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
       if (appleMidiClient != nullptr) appleMidiClient->endSession();
       return true;

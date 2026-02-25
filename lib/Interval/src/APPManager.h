@@ -994,19 +994,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           if (screen.id == SCREEN_BANK){
             // toggle interface on / off
             if (getSelectedStrip() != nullptr){
-              bool enabled = !getSelectedStrip()->interface->state.enabled;
-              String interfaceName = getSelectedStrip()->interface->interfaceName;                            
-              //{"AppleMIDI":{"offline":true,"properties":[]}}
-              // we transmit the command via the parseJsonInput so it also call for saveing interface, etc...
-              parseJsonInput(
-                concatStrings(
-                  "{\"command\":\"" INTERFACE_CONFIG "\",\"param\":{\"",
-                  interfaceName,
-                  "\":{\"" INTERFACE_ENABLED "\":",
-                  enabled ? "true" : "false",
-                  ",\"properties\":[]}}}"
-                )
-              );             
+              DeviceInterface* interface = getSelectedStrip()->interface;
+              bool enabled = !interface->state.enabled;
+              // if interface allows it, we switch its state
+              if (interface->isActivable()){
+                getSelectedStrip()->interface->enable(enabled);
+              }else{
+                DEBUG_PRINT("\nInterface %s is not switchable",interface->interfaceName.c_str());
+              }
             }
           }        
 
