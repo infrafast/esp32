@@ -124,7 +124,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       // delay expired
       if (millis()-destination->lastQueryTime > OSC_PING_DELAY){        
         destination->lastQueryTime = millis();
-        if (connectAttemptCount++ == 2){            //should we give it a new chance or set state (2x try)
+        if (connectAttemptCount++ == 1){            //put 2 if you give it a new chance or set state (2x try)
           setStateQueryingDevice();
           connectAttemptCount = 0;          
         }else{
@@ -230,15 +230,6 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return disconnectDeviceFromNetwork();
     };  
 
-    virtual void enable(bool _enable) override{
-      DeviceInterface::enable(_enable);      
-      if (_enable){
-        enabledInstanceCount++;
-      }else{
-        if (enabledInstanceCount>0) enabledInstanceCount--;
-      }
-    }
-
     virtual bool activable(){
       if (hwm.network->media == WIFI_MEDIA){
         state.activable = true;
@@ -254,7 +245,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return state.activable;
     }    
 
-    virtual void switchDevice(bool _enabled) override{
+    /*virtual void switchDevice(bool _enabled) override{
       if (_enabled){
         connectDeviceToNetwork();
         enable(true);
@@ -262,7 +253,17 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
         disconnectDeviceFromNetwork();  
         enable(false);
       }     
-    }
+    }*/
+    virtual void enable(bool _enabled) override{
+      if (_enabled){
+        connectDeviceToNetwork();
+        enabledInstanceCount++;
+      }else{
+        if (enabledInstanceCount>0) enabledInstanceCount--;
+        disconnectDeviceFromNetwork();  
+      }
+      DeviceInterface::enable(_enabled);      
+    }   
 
     virtual bool connectDeviceToNetwork(){
       DEBUG_PRINT("\nNetworkOSC::connectDeviceToNetwork()");
@@ -286,7 +287,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return true;
     }
 
-    virtual void setStateConnected() override{            
+    virtual void setStateConnected(){            
       DeviceInterface::setStateConnected();
       state.subState = destination->ip.toString();          
     }
@@ -299,11 +300,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     void setStateQueryingDevice(){
       //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
       // network is connected but not the OSC device is not answering
-      state.code = IF_NOT_READY;      
-      state.label = IF_STATE_PENDING;
+      DeviceInterface::setStatePending();
       state.subState = destination->ip.toString();      
-      state.details = *lang.getString("Trying to connect");
-      state.led = "red medium";
       state.progress = -1;      
     }
 

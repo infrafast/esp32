@@ -132,7 +132,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     }
 
     bool restore(const char* config){    
-      DEBUG_PRINT("\n%s->restore(%s)",interfaceName.c_str(),config);           
       JsonDocument doc;
       DeserializationError error = deserializeJson(doc, config);
       if (error) {
@@ -144,6 +143,10 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     }
 
     virtual bool restore(const JsonObject& config, bool triggerPropertyChange = true){   // == trigger or not the handlePropertyChange at the end of the restore
+      String cfgString;
+      serializeJson(config, cfgString);     
+      DEBUG_PRINT("\n%s->restore(%s,%s)",interfaceName.c_str(),cfgString.c_str(),triggerPropertyChange?"triggerPropertyChange yes":"triggerPropertyChange no");           
+      
       bool changed = false;
       //DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
       // this restore the base parameters common to all base class interface
@@ -154,8 +157,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
           // for instance the interface belongs to  a pool of resources, it may check if there is enough (ex. memory, network, ....) and return a no go
           // the most obvious case is network interface in Ethernet that can not instanciante more than 8 sockes, hence we are limited to 3 possible interface
           enable(enabled);
-        }else enable(false);
-        if (state.enabled == false) setStateDisabled();
+        }else{
+          enable(false);
+        }
       }
       
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -170,41 +174,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return changed;
     }      
 
-    void setStateDisabled(){
-      state.code = IF_NOT_READY;      
-      state.label = IF_STATE_DISABLED;
-      state.subState =  IF_STATE_DISABLED;
-      state.details = *lang.getString("Interface is disabled");         
-      state.led = "black";
-      state.progress = -1;          
-    }
-
-    void setStateNotImplemented(){
-      state.code = IF_NOT_READY;      
-      state.label = IF_STATE_UNAVAILABLE;
-      state.subState =  IF_STATE_DISABLED;
-      state.details = *lang.getString("Interface not yet implemented");          
-      state.led = "black";
-      state.progress = -1;          
-    }
-
-    virtual void setStateConnected(){            
-      DEBUG_PRINT("\n%s: setStateConnected()",interfaceName.c_str());
-      state.code = IF_READY;      
-      state.label = IF_STATE_CONNECTED;
-      state.details = "";
-      state.led = "green";
-      state.progress = -1;      
-    }
-
-    virtual void setStateDisconnected(){
-      DEBUG_PRINT("\n%s: setStateDisconnected()",interfaceName.c_str());      
-      state.code = IF_NOT_READY;
-      state.label = IF_STATE_DISCONNECTED;
-      state.details = "";
-      state.led = "red fast";
-      state.progress = -1;
-    }     
 
     virtual void serialize(JsonDocument& interfaceDoc){
       //start with the config
@@ -264,7 +233,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       if (state.enabled != state.previousEnabled){
         state.changed   = true;
         state.previousEnabled = state.enabled;
-        if (state.enabled == false) setStateDisabled();
       }    
       if (state.progress != state.previousProgress){
         // a progress change is captured so applicatoin manager can broadcast it to the webclient but is not a state change
@@ -296,14 +264,67 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return state.activable;
     }
 
-    virtual void switchDevice(bool _enabled){
+    /*virtual void switchDevice(bool _enabled){
       enable(_enabled);
       DEBUG_PRINT("\n%s switchDevice=>%s",interfaceName.c_str(),state.enabled?"true":"false");      
-    }
+    }*/
 
     virtual void enable(bool _enable){
       state.enabled = _enable;      
+      DEBUG_PRINT("\n%s::enable(%s)",interfaceName.c_str(),state.enabled?"true":"false");      
+      if (_enable) setStateDisconnected();
+      else setStateDisabled();
     }
+
+    void setStateDisabled(){
+      DEBUG_PRINT("\n%s::setStateDisabled()",interfaceName.c_str());
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_DISABLED;
+      state.subState =  IF_STATE_DISABLED;
+      state.details = *lang.getString("Interface is disabled");         
+      state.led = "black";
+      state.progress = -1;          
+    }
+
+    void setStateNotImplemented(){
+      DEBUG_PRINT("\n%s:setStateNotImplemented",interfaceName.c_str());
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_NOTIMPLEMENTED;
+      state.subState =  IF_STATE_DISABLED;
+      state.details = *lang.getString("Interface not yet implemented");          
+      state.led = "black";
+      state.progress = -1;          
+    }
+
+    virtual void setStateConnected(String led = "green", String label = *lang.getString(IF_STATE_CONNECTED)){            
+      DEBUG_PRINT("\n%s::setStateConnected()",interfaceName.c_str());
+      state.code = IF_READY;      
+      state.label = label;
+      state.subState = "";      
+      state.details = "";
+      state.led = led;
+      state.progress = -1;      
+    }
+
+    virtual void setStatePending(String led = "green medium", String details = *lang.getString("Trying to connect")){
+      DEBUG_PRINT("\n%s::setStatePending()",interfaceName.c_str());      
+      state.code = IF_NOT_READY;      
+      state.label = IF_STATE_PENDING;
+      state.details = details;
+      state.subState = "";      
+      state.led = led;
+      state.progress = -1;
+    }
+
+    virtual void setStateDisconnected(){
+      DEBUG_PRINT("\n%s::setStateDisconnected()",interfaceName.c_str());      
+      state.code = IF_NOT_READY;
+      state.label = IF_STATE_DISCONNECTED;
+      state.subState = "";
+      state.details = "";
+      state.led = "red fast";
+      state.progress = -1;
+    }        
 
     #define IF_CFG_FILE_PATH "/"
 
@@ -385,7 +406,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
   protected:
     String icon = ICON_LINK;
-    bool hasBegun = false;
 
 };
 
@@ -523,6 +543,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     }
     
     virtual bool end(){
+      DEBUG_PRINT("\n%s::end() void",interfaceName.c_str());
       return true;
     }     
 

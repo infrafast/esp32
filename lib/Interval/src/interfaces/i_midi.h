@@ -15,6 +15,8 @@
 
 #include "tusb.h"     //tinyUSB for tud_mounted detection
 
+#include <BLEDevice.h>
+
 enum{
   MIDI_CC,
   MIDI_SYSEX,
@@ -146,7 +148,6 @@ class BLEMIDIInterface: public MIDIInterface{
 
     BLEMIDIInterface(bool _configurable):MIDIInterface(BLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_BLEMIDI;
-      handleDisconnected();
     }
 
     virtual uint16_t getSize(String addrr){
@@ -162,15 +163,16 @@ class BLEMIDIInterface: public MIDIInterface{
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
 
-    virtual void switchDevice(bool _enable){
-      // THE BLEMIDI GO OFFLINE MUST NOT TOUCH THE STATE; IT JUST CONTINUES NORMALLY OTHERWISE IT IS NOT POSSIBLE TO RE-ESTABLISH THE CONNEXION AFTER GOING BACK ONLINE
-      // THIS HAS SOMETHING TO DEAL WITH HANDLING OF END()
-      setStateDisconnected();
-      DeviceInterface::switchDevice(_enable);            
-      if (_enable) begin();
-    }
 
-    virtual bool begin(){    
+    /* 
+    virtual void enable(bool _enable) override{  // uncomment this when stop() is correctly implemented
+      DeviceInterface::enable(_enable);
+      if (_enable) begin();  
+      else stop();
+    }*/
+
+    virtual bool begin(){
+      DEBUG_PRINT("\n%s::begin()",interfaceName.c_str());          
       MIDIInterface::init();  
       bleInstancePtr = this;   // do not forget otherwise callback function will crash
 
@@ -179,43 +181,65 @@ class BLEMIDIInterface: public MIDIInterface{
       
       bleMIDI.setHandleSystemExclusive(handleSysexStatic);
 
-      if (hasBegun){
-        DEBUG_PRINT("\n%s begin() ignored (hasBegun)",interfaceName.c_str());   // this is a workaround becaue of offline may recall it 
-      }else if (state.enabled){
-        DEBUG_PRINT("\n%s begin()",interfaceName.c_str());
-        bleMIDI.begin();
-        hasBegun = true;
+      // workaround: remove the 2 lines below once stop is implemeted correctly. This workaround force to set the interface to enable
+      state.activable = false;  // we cant desactivate the interface  until the stop() is properly implemented
+      state.enabled = true;  
+      /////////////////////////
+
+      if (!hasBegun){
+        if (state.enabled){
+          setStatePending();            
+          DEBUG_PRINT("\n\tbleMIDI.begin()");          
+          bleMIDI.begin();                
+          hasBegun = true;
+        }else{
+          DEBUG_PRINT("\n\tbleMIDI.begin() ignored (disabled)");          
+        }
       }else{
-        DEBUG_PRINT("\n%s begin() ignored (disabled))",interfaceName.c_str());
-      }
+        DEBUG_PRINT("\n\tbleMIDI.begin() ignored (hasBegun)");          
+      }             
 
       return true;
     }
 
-    virtual bool end() override{
-        DEBUG_PRINT("\nbleMIDI disconnected");
-        auto transport = bleMIDI.getTransport();  // ✅ On récupère le transport BLE
-        if (transport) {
-            transport->end();
-            // bleMIDI.end() doesnt exists
-            return true;
-        }
+    virtual bool stop() override{
+      DEBUG_PRINT("\n%s::stop()",interfaceName.c_str());          
+      auto transport = bleMIDI.getTransport();  // ✅ On récupère le transport BLE
+      hasBegun = false;
+      if (transport) {
+          if (hasBegun){
+            //transport->end();     // stops the connexion but does not trigger the disconnect callback, hence we set the state to disconnected before to avoid having a wrong state until the next connection attempt
+            //BLEbleMIDI.end();    // does nothing     
+            DEBUG_PRINT("\n\ttransport->end()");          
+            //BLEDevice::getAdvertising()->stop();            
+          }else{
+            DEBUG_PRINT("\n\ttransport->end() ignored (!hasBegun)");    
+          }
+          // bleMIDI.end() doesnt exists
+          return true;
+      }
       return false;    
     }     
 
     void handleConnected() {
+      DEBUG_PRINT("\n%s::handleConnected()",interfaceName.c_str());          
       setStateConnected();
-      state.label = *lang.getString("paired");
-      //state.details = "" // get whatever you can get from the BLE connection device
-      state.led = "blue";      
     }    
 
     void handleDisconnected() {
-      setStateDisconnected();
-      state.subState = IF_STATE_PENDING;
-      state.details = concatStrings(*lang.getString("Connect Blutooth"), " ", BLE_CONNECTION_NAME);
-      state.led = "blue medium";
+      DEBUG_PRINT("\n%s::handleDisconnected()",interfaceName.c_str());          
+      if (state.enabled) setStatePending();
+      //else setStateDisabled();                // uncomment this when stop() is correctly implemented
     }
+
+
+    void setStateConnected(){            
+      DeviceInterface::setStateConnected("blue",*lang.getString("paired"));
+    }
+
+    void setStatePending(){
+      DeviceInterface::setStatePending("blue medium",concatStrings(*lang.getString("Connect Blutooth"), " ", BLE_CONNECTION_NAME));
+    } 
 
     static void handleConnectedStatic() {
         if (bleInstancePtr) {
@@ -252,14 +276,14 @@ class BLEMIDIInterface: public MIDIInterface{
 
   private:
     static inline BLEMIDIInterface* bleInstancePtr = nullptr;    
-
+    bool hasBegun = false;
 };
 
 #define USBMIDI_INTERFACE "USBMIDI"
 
 class USBMIDIInterface: public MIDIInterface{
 
-  public:
+  public:  
 
     USBMIDIInterface(bool _configurable):MIDIInterface(USBMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_USBMIDI;  
@@ -267,30 +291,42 @@ class USBMIDIInterface: public MIDIInterface{
 
     virtual void monitor() override{
       if (useUSBMidi){  // only if USB is active
+        #define USB_POLL_DELAY  1000
+        if (millis()-lastPoll > USB_POLL_DELAY){  
+          // check usb connection periodically but not permenently as it is quite expensive and may cause audio dropouts
 
-        if (tud_mounted() && state.code == IF_NOT_READY) setStateConnected();
+          lastPoll = millis();
 
-        if (!tud_mounted() && state.code == IF_READY) {
-          setStateDisconnected();
-          state.details = "Plugin USB-MIDI";
+          if (tud_mounted() && state.code == IF_NOT_READY) setStateConnected();
+
+          if (!tud_mounted() && state.code == IF_READY) {
+            setStateDisconnected();
+            state.details = "Plugin USB-MIDI";
+          }
         }
         usbMIDI.read();
       }
     }
 
+    void setStateRestart(){
+      DEBUG_PRINT("\n%s::setStateRestart()",interfaceName.c_str());
+      state.code = IF_NOT_READY;
+      state.label = IF_STATE_DISABLED;
+      state.subState = IF_STATE_DISABLED;
+      state.details = "restartUSB";
+      state.led = "black";
+      state.progress = -1;
+    }
+
     virtual bool begin() override{
+      DEBUG_PRINT("\n%s::begin()",interfaceName.c_str());
       MIDIInterface::init();
-      usbMIDI.setHandleSystemExclusive(handleSysexStatic);
       // if the fooswtich has started in FW update or debug mode, USB MIDI is not active, hence we set the status once for all
       if (!useUSBMidi){
-        state.code = IF_NOT_READY;
-        state.label = IF_STATE_DISABLED;
-        state.subState = IF_STATE_DISABLED;
-        state.details = "restartUSB";
-        state.led = "black";
-        state.progress = -1;
+        setStateRestart();
         state.activable = false; 
       }else{
+        usbMIDI.setHandleSystemExclusive(handleSysexStatic);        
         state.activable = true; 
       }
       return true;
@@ -312,6 +348,9 @@ class USBMIDIInterface: public MIDIInterface{
       return true;
     }    
 
+  private:
+    unsigned long lastPoll = 0;
+
 };
 
 
@@ -325,7 +364,6 @@ class DINMIDIInterface: public MIDIInterface{
     }
 
     virtual bool begin(){     // called by init()
-      DEBUG_PRINT("\n%s::begin() setStateNotImplemented",interfaceName.c_str());
       setStateNotImplemented();
       return true;
     };        
@@ -423,7 +461,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     virtual bool end() override{
       DEBUG_PRINT("\nAppleMIDIInterface::end()");
-      switchDevice(DEVICE_OFF);     // disable the device completely
+      //switchDevice(DEVICE_OFF);     // disable the device completely
+      enable(DEVICE_OFF);     // disable the device completely
       return true;
     }    
 
@@ -734,11 +773,16 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       //handleDisconnected(); is then called by the library
     }    
 
-    virtual void switchDevice(bool _enable){
+    /*virtual void switchDevice(bool _enable){
       MIDIInterface::switchDevice(_enable);      
       if (_enable) connectDeviceToNetwork();
       else disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 
-    }
+    }*/
+    virtual void enable(bool _enable) override{
+      if (_enable) connectDeviceToNetwork();
+      else disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 
+      
+    }   
 
 
     void setStatePassiveSession(){
@@ -796,8 +840,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       );
     }
 
-    virtual void setStateConnected() override{
-      DeviceInterface::setStateDisconnected();
+    virtual void setStateConnected(){
+      DeviceInterface::setStateConnected();
       state.details = String(midiSessionName);// + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");     
     }     
 

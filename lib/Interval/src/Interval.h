@@ -1114,7 +1114,7 @@ enum{
 
 struct State{ // used by Strip and Interface
   uint8_t code = IF_NOT_READY;
-  String label = IF_STATE_UNAVAILABLE;
+  String label = IF_STATE_NOTIMPLEMENTED;
   String subState = "subState";
   String details = "details";
   String led = "black";

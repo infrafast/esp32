@@ -3338,7 +3338,8 @@ void setup() {
         DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);        
         if (interface && interface->interfaceName == interfaceName){
           bool enabled = first.value();
-          interface->switchDevice(enabled);
+          //interface->switchDevice(enabled);
+          interface->enable(enabled);
           interface->state.broadcastState = true;
           if (interface->save()){
             jsonAnswer.callback = RET_SAVEBUTTON;
