@@ -885,6 +885,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface, public 
 
     virtual bool handleNetworkConnected() override{
       DEBUG_PRINT("\n%s::handleNetworkConnected()",name.c_str());
+      if (!canConnectToNetwork()) return false;
       // we connect the midi client to its callback
       // this should not go to the begin
       
@@ -892,6 +893,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface, public 
       
       if (appleMidiClient == nullptr){
         DEBUG_PRINT("\nappleMidiClient (nullptr)");
+        notifyNetworkDisconnected();
         return false;
       }
 
@@ -910,6 +912,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface, public 
 
     virtual bool handleNetworkDisconnected() override{      
       DEBUG_PRINT("\n%s::handleNetworkDisconnected()",name.c_str());
+      notifyNetworkDisconnected();
       if (state.enabled == false) setStateDisabled();
       else if (isLocked()) setStateLocked();
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       

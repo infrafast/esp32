@@ -248,6 +248,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface, public AutoLo
 
     virtual bool handleNetworkConnected(){
       DEBUG_PRINT("\nNetworkOSC::handleNetworkConnected()");
+      if (!canConnectToNetwork()) return false;
       // network connection is established so we now try to connect the device to its protocol
       if (udpID == -1) {
         udpID = hwm.network->requestUDPslotID(OSC_localPort);   // the network will create or reuse a udp slot and give its ID to us

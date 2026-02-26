@@ -634,6 +634,122 @@ class NetWorkInterface{
     } */   
 };
 
+class AutoLock{
+  public:
+    static constexpr uint8_t MAX_SIMULTANEOUS_CONNECTED = 3;
+
+    AutoLock(DeviceInterface* _deviceInterface): deviceInterface(_deviceInterface){
+      auto& allInstances = instances();
+      allInstances.push_back(this);
+    }
+
+    virtual ~AutoLock(){
+      unregisterInstance(this);
+    }
+
+    bool canConnectToNetwork(){
+      if (connectedToNetwork) return true;
+
+      if (connectedCount() >= MAX_SIMULTANEOUS_CONNECTED){
+        lockDisconnectedInterfaces();
+        return false;
+      }
+
+      connectedToNetwork = true;
+
+      // when the new connection reaches the quota, lock all non connected interfaces
+      if (connectedCount() >= MAX_SIMULTANEOUS_CONNECTED){
+        lockDisconnectedInterfaces();
+      }
+      updateSwitchableState();
+      return true;
+    }
+
+    void notifyNetworkDisconnected(){
+      if (connectedToNetwork) connectedToNetwork = false;
+      unlockLastLockedInterface();
+      updateSwitchableState();
+    }
+
+    bool isLocked() const {return locked;}
+
+  protected:
+    DeviceInterface* deviceInterface = nullptr;
+
+    virtual void onAutoUnlocked(){}
+
+  private:
+    bool connectedToNetwork = false;
+    bool locked = false;
+
+    static std::vector<AutoLock*>& instances(){
+      static std::vector<AutoLock*> _instances;
+      return _instances;
+    }
+
+    static std::vector<AutoLock*>& lockQueue(){
+      static std::vector<AutoLock*> _lockQueue;
+      return _lockQueue;
+    }
+
+    static void unregisterInstance(AutoLock* instance){
+      auto& allInstances = instances();
+      allInstances.erase(std::remove(allInstances.begin(), allInstances.end(), instance), allInstances.end());
+
+      auto& queue = lockQueue();
+      queue.erase(std::remove(queue.begin(), queue.end(), instance), queue.end());
+    }
+
+    static uint8_t connectedCount(){
+      uint8_t count = 0;
+      for (AutoLock* instance : instances()) {
+        if (instance->connectedToNetwork) count++;
+      }
+      return count;
+    }
+
+    static void lockDisconnectedInterfaces(){
+      for (AutoLock* instance : instances()) {
+        if (instance->connectedToNetwork || instance->locked == true) continue;
+        instance->locked = true;
+        if (instance->deviceInterface){
+          instance->deviceInterface->state.switchable = false;
+          instance->deviceInterface->setStateLocked();
+        }
+        lockQueue().push_back(instance);
+      }
+    }
+
+    static void unlockLastLockedInterface(){
+      auto& queue = lockQueue();
+      while (!queue.empty()){
+        AutoLock* candidate = queue.back();
+        queue.pop_back();
+        if (candidate == nullptr || candidate->locked == false) continue;
+
+        candidate->locked = false;
+        if (candidate->deviceInterface) candidate->deviceInterface->state.switchable = true;
+        candidate->onAutoUnlocked();
+        return;
+      }
+    }
+
+    static void updateSwitchableState(){
+      const bool atCapacity = (connectedCount() >= MAX_SIMULTANEOUS_CONNECTED);
+      for (AutoLock* instance : instances()) {
+        if (!instance->deviceInterface) continue;
+        if (instance->locked){
+          instance->deviceInterface->state.switchable = false;
+          continue;
+        }
+        // connected interfaces keep their current usability while disconnected
+        // interfaces are made non-switchable only when the auto lock is active.
+        if (instance->connectedToNetwork) instance->deviceInterface->state.switchable = true;
+        else instance->deviceInterface->state.switchable = !atCapacity;
+      }
+    }
+};
+
 class InterfaceRepository{
 
   public:
