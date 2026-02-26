@@ -8,7 +8,7 @@
 #define IF_STATE_CONNECTED          "connected"
 #define IF_STATE_DISABLED           "disabled"
 #define IF_STATE_NOTIMPLEMENTED     "unavailable"
-#define IF_STATE_DEACTIVATED        "deactivated"
+#define IF_STATE_LOCKED             "locked"
 
 
 #endif
