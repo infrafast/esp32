@@ -246,6 +246,11 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       DeviceInterface::enable(_enabled);      
     }   
 
+    virtual uint8_t getAutoLockWeight() const override{
+      if (interfaceName == "MixingStation") return 2;
+      return 1;
+    }
+
     virtual bool handleNetworkConnected(){
       DEBUG_PRINT("\nNetworkOSC::handleNetworkConnected()");
       // network connection is established so we now try to connect the device to its protocol

@@ -2,6 +2,8 @@
 #define DEVICEINTERFACES_h
 
 #include <vector>
+#include <deque>
+#include <algorithm>
 #include "Interval.h"
 
 #include "interfaces/i_states.h"
@@ -406,6 +408,18 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 class NetWorkInterface{
   public:
     PingEcho* destination;
+
+    NetWorkInterface(){
+      instances().push_back(this);
+    }
+
+    virtual ~NetWorkInterface(){
+      auto& all = instances();
+      all.erase(std::remove(all.begin(), all.end(), this), all.end());
+
+      auto& queue = lockedQueue();
+      queue.erase(std::remove(queue.begin(), queue.end(), this), queue.end());
+    }
     
     virtual void* read(){
       return nullptr;
@@ -413,6 +427,7 @@ class NetWorkInterface{
     virtual void connectedNetworkMonitor(){}
     virtual bool handleNetworkConnected(){return false;}
     virtual bool handleNetworkDisconnected(){return false;}
+    virtual uint8_t getAutoLockWeight() const { return 1; }
 
    
     virtual void setStateDisconnected(){    // to be overrided by derived class
@@ -424,12 +439,107 @@ class NetWorkInterface{
       deviceInterface->state.progress = -1;
     }  
 
+    virtual void setStateLocked(){
+      if (!deviceInterface) return;
+      deviceInterface->state.code = IF_NOT_READY;
+      deviceInterface->state.label = IF_STATE_LOCKED;
+      deviceInterface->state.subState = "";
+      deviceInterface->state.details = "Auto lock active";
+      deviceInterface->state.led = "orange";
+      deviceInterface->state.progress = -1;
+    }
+
     void attachDeviceInterface(DeviceInterface* _devif){
       deviceInterface = _devif;
     }
 
   protected:
     DeviceInterface* deviceInterface = nullptr;
+
+    static constexpr uint8_t AUTO_LOCK_MAX_WEIGHT = 3;
+
+    static std::vector<NetWorkInterface*>& instances(){
+      static std::vector<NetWorkInterface*> _instances;
+      return _instances;
+    }
+
+    static std::deque<NetWorkInterface*>& lockedQueue(){
+      static std::deque<NetWorkInterface*> _queue;
+      return _queue;
+    }
+
+    bool shouldManageAutoLock() const {
+      return hwm.network->media == CABLE_MEDIA;
+    }
+
+    bool isLocked() const {
+      return deviceInterface && deviceInterface->state.label == IF_STATE_LOCKED;
+    }
+
+    bool isEngagedToNetwork() const {
+      if (!deviceInterface) return false;
+      if (!deviceInterface->state.enabled) return false;
+      if (deviceInterface->state.label == IF_STATE_LOCKED) return false;
+      return deviceInterface->state.label != IF_STATE_DISCONNECTED &&
+             deviceInterface->state.label != IF_STATE_DISABLED &&
+             deviceInterface->state.label != IF_STATE_DEACTIVATED &&
+             deviceInterface->state.label != IF_STATE_NOTIMPLEMENTED;
+    }
+
+    static uint8_t connectedWeight(){
+      uint8_t sum = 0;
+      for (NetWorkInterface* itf : instances()){
+        if (itf && itf->isEngagedToNetwork()) sum += itf->getAutoLockWeight();
+      }
+      return sum;
+    }
+
+    static void queueLocked(NetWorkInterface* itf){
+      if (!itf) return;
+      auto& queue = lockedQueue();
+      if (std::find(queue.begin(), queue.end(), itf) == queue.end()) queue.push_back(itf);
+    }
+
+    static void lockPendingInterfacesIfNeeded(NetWorkInterface* trigger){
+      if (!trigger || !trigger->shouldManageAutoLock()) return;
+      if (connectedWeight() < AUTO_LOCK_MAX_WEIGHT) return;
+
+      for (NetWorkInterface* itf : instances()){
+        if (!itf || !itf->deviceInterface || !itf->deviceInterface->state.enabled) continue;
+        if (itf->isEngagedToNetwork()) continue;
+        itf->setStateLocked();
+        queueLocked(itf);
+      }
+    }
+
+    bool authorizeNetworkConnect(){
+      if (!shouldManageAutoLock()) return true;
+
+      if (connectedWeight() + getAutoLockWeight() > AUTO_LOCK_MAX_WEIGHT){
+        setStateLocked();
+        queueLocked(this);
+        return false;
+      }
+
+      auto& queue = lockedQueue();
+      queue.erase(std::remove(queue.begin(), queue.end(), this), queue.end());
+      return true;
+    }
+
+    static void processAutoUnlock(){
+      auto& queue = lockedQueue();
+      while (!queue.empty()){
+        NetWorkInterface* lastLocked = queue.back();
+        queue.pop_back();
+        if (!lastLocked || !lastLocked->deviceInterface) continue;
+        if (!lastLocked->shouldManageAutoLock()) continue;
+        if (!lastLocked->deviceInterface->state.enabled) continue;
+        if (!lastLocked->isLocked()) continue;
+
+        lastLocked->setStateDisconnected();
+        break;
+      }
+    }
 
     void setNetworkStateDown(){
       if (!deviceInterface) return;
@@ -442,21 +552,36 @@ class NetWorkInterface{
     void monitorNetworkInterface(){         
     
       if (!deviceInterface) return;
+
      
       if (hwm.network->refreshed){
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.enabled){
             DEBUG_PRINT("\n%s->monitor handleNetworkConnected()",deviceInterface->interfaceName.c_str());
+            if (isLocked()){
+              DEBUG_PRINT("\n%s->monitor<LOCKED>() ignored",deviceInterface->interfaceName.c_str());
+              return;
+            }
+            if (!authorizeNetworkConnect()){
+              DEBUG_PRINT("\n%s->monitor<AUTO_LOCK>() blocked",deviceInterface->interfaceName.c_str());
+              return;
+            }
             if (!handleNetworkConnected()) setStateDisconnected();            
+            else lockPendingInterfacesIfNeeded(this);
             return;
           }else{
             DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored",deviceInterface->interfaceName.c_str());
             return;
           }
         }else{
-          setNetworkStateDown();    
+          if (isLocked()){
+            DEBUG_PRINT("\n%s->handleNetworkDisconnected()<LOCKED>() ignored",deviceInterface->interfaceName.c_str());
+            return;
+          }
+          setNetworkStateDown();
           DEBUG_PRINT("\n%s->handleNetworkDisconnected()",deviceInterface->interfaceName.c_str());
           handleNetworkDisconnected();
+          if (shouldManageAutoLock()) processAutoUnlock();
           return;
         }
       }

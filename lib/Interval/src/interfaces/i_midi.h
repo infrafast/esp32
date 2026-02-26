@@ -872,6 +872,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       savedState = state;     // save current state as it may be recall after the refreshState
     }
 
+    virtual uint8_t getAutoLockWeight() const override{
+      return 1;
+    }
+
     virtual bool handleNetworkConnected() override{
       DEBUG_PRINT("\n%s::handleNetworkConnected()",name.c_str());
       // we connect the midi client to its callback
