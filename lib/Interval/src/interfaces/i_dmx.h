@@ -32,7 +32,7 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkInterface {
     }
 
     virtual void monitor(){     
-      monitorNetworkInterface();
+      monitorNetwork();
     }
     
 };

@@ -456,7 +456,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
-      return handleNetworkDisconnected();
+      return handleDisconnectService();
     };   
 
     virtual bool end() override{
@@ -475,7 +475,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     void refreshInternalStateAndConfig(){
       populateSessionOptions();  // regenerate the config data set
-      state = savedState;              // recall the state we had before refresh request
+      //state = savedState;              // recall the state we had before refresh request
       state.broadcastState = true; // communicate the new state
       state.broadcastConfig = true; // communicate the new parameters
     }
@@ -602,8 +602,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     virtual void handlePropertyChange() override{
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      handleNetworkDisconnected();
-      handleNetworkConnected();  // is called by handleDisconnect()
+      handleDisconnectService();
+      handleConnectService();  // is called by handleDisconnect()
     }
 
     virtual bool restoreProperty(const char* property) override{
@@ -650,11 +650,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }      
 
     virtual void monitor() override{     
-      monitorNetworkInterface();      
+      monitorNetwork();      
     }
 
     #define MIDI_INVITE_PERIOD 15000   // should be bigger than the timeout of invite()
-    virtual void connectedNetworkMonitor(){
+    virtual void monitorService(){
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;  
       
       if (appleMidiClient != nullptr){
@@ -777,13 +777,12 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     /*virtual void switchDevice(bool _enable){
       MIDIInterface::switchDevice(_enable);      
-      if (_enable) handleNetworkConnected();
-      else handleNetworkDisconnected();     // force disconnect in all case: either you will reconnect 
+      if (_enable) handleConnectService();
+      else handleDisconnectService();     // force disconnect in all case: either you will reconnect 
     }*/
-    virtual void enable(bool _enable) override{
-      DeviceInterface::enable(_enable);
-      if (_enable) handleNetworkConnected();
-      else handleNetworkDisconnected();     // force disconnect in all case: either you will reconnect 
+    virtual void enable(bool _enabled) override{
+      DeviceInterface::enable(_enabled);
+      NetWorkInterface::enable(_enabled);
       savedState = state;     // save current state as it may be recall after the refreshState
     }   
 
@@ -872,18 +871,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       savedState = state;     // save current state as it may be recall after the refreshState
     }
 
-    virtual bool handleNetworkConnected() override{
-      DEBUG_PRINT("\n%s::handleNetworkConnected()",name.c_str());
+    virtual bool handleConnectService() override{
+      DEBUG_PRINT("\n%s::handleConnectService()",name.c_str());
       // we connect the midi client to its callback
       // this should not go to the begin
       
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;      
       
-      if (appleMidiClient == nullptr){
-        DEBUG_PRINT("\nappleMidiClient (nullptr)");
-        return false;
-      }
-
       appleMidiClient->setHandleDisconnected(handleDisconnectedStatic);
       appleMidiClient->setHandleConnected(handleConnectedStatic);
       appleMidiClient->setHandleException(OnAppleMidiExceptionStatic);
@@ -897,8 +891,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return true;
     }
 
-    virtual bool handleNetworkDisconnected() override{      
-      DEBUG_PRINT("\n%s::handleNetworkDisconnected()",name.c_str());
+    virtual bool handleDisconnectService() override{      
+      DEBUG_PRINT("\n%s::handleDisconnectService()",name.c_str());
       if (state.enabled == false) setStateDisabled();
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
       if (appleMidiClient != nullptr) appleMidiClient->endSession();

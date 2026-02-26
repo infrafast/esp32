@@ -407,14 +407,34 @@ class NetWorkInterface{
   public:
     PingEcho* destination;
     
+    static std::vector<DeviceInterface*> inventory;  // list of device interface 
+
     virtual void* read(){
       return nullptr;
     }
-    virtual void connectedNetworkMonitor(){}
-    virtual bool handleNetworkConnected(){return false;}
-    virtual bool handleNetworkDisconnected(){return false;}
+    virtual void monitorService(){}
+    virtual bool handleConnectService(){return false;}
+    virtual bool handleDisconnectService(){return false;}
 
-   
+    static void addToInventory(DeviceInterface* iface) {
+        if (iface == nullptr) return;
+        inventory.push_back(iface);
+    }
+
+    static bool canConnectService() {
+      #define MAX_NETWORK_SERVICES_WEIGHT  2    
+      if (hwm.network->media != CABLE_MEDIA) return true;
+
+      uint8_t servicesWeight = 0;
+      for (auto* iface : inventory) {
+          if (iface != nullptr && iface->state.enabled) {   // a partir du moment ou une interface est enable elle consomme les resources reseau
+              servicesWeight += ((NetWorkInterface*)iface)->getServiceWeight();
+          }
+      }
+      if (servicesWeight > MAX_NETWORK_SERVICES_WEIGHT) return false;     
+      return true;      
+    }    
+    
     virtual void setStateDisconnected(){    // to be overrided by derived class
       if (!deviceInterface) return;
       deviceInterface->state.code = IF_NOT_READY;
@@ -426,6 +446,7 @@ class NetWorkInterface{
 
     void attachDeviceInterface(DeviceInterface* _devif){
       deviceInterface = _devif;
+      addToInventory(_devif);
     }
 
   protected:
@@ -439,15 +460,35 @@ class NetWorkInterface{
       deviceInterface->state.details = *lang.getString("setNetworkStateDown");                // connect Eth cable or attempt to connect a previous SSID
     }
     
-    void monitorNetworkInterface(){         
+    virtual uint8_t getServiceWeight(){
+      return 1; // default
+    }
+
+    bool unlocked = true;
+
+    void enable(bool _enable){
+      unlocked = canConnectService();
+      if (!unlocked) setStateLocked();
+    }
+
+    void monitorNetwork(){         
     
       if (!deviceInterface) return;
      
       if (hwm.network->refreshed){
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.enabled){
-            DEBUG_PRINT("\n%s->monitor handleNetworkConnected()",deviceInterface->interfaceName.c_str());
-            if (!handleNetworkConnected()) setStateDisconnected();            
+            // check if we are allowed to engage network
+            unlocked = canConnectService();
+            if (unlocked){
+              DEBUG_PRINT("\n%s->canConnectService() => yes",deviceInterface->interfaceName.c_str());    
+              if (!handleConnectService()){
+                setStateDisconnected();            
+              }
+            }else{
+              DEBUG_PRINT("\n%s->canConnectService() => no",deviceInterface->interfaceName.c_str());    
+              setStateLocked();
+            }
             return;
           }else{
             DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored",deviceInterface->interfaceName.c_str());
@@ -455,13 +496,12 @@ class NetWorkInterface{
           }
         }else{
           setNetworkStateDown();    
-          DEBUG_PRINT("\n%s->handleNetworkDisconnected()",deviceInterface->interfaceName.c_str());
-          handleNetworkDisconnected();
+          handleDisconnectService();
           return;
         }
       }
       // we only monitor networkdevices when network is on
-      if (hwm.network->state == CONNECTED) connectedNetworkMonitor();
+      if (unlocked) monitorService();
       else{
         // otherwise we report on progress and the network we try to connect         
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
@@ -469,11 +509,19 @@ class NetWorkInterface{
       }
     }
 
-    /*virtual const String* getIcon(){
-      if (hwm.network->state == CONNECTED) return &icon;
-      else return &GUI::iconMixEthWiFi;
-    } */   
+    virtual void setStateLocked(String led = "black", String details = *lang.getString("Network busy")){            
+      DEBUG_PRINT("\n%s::setStateLocked()",deviceInterface->interfaceName.c_str());
+      deviceInterface->state.code = IF_NOT_READY;      
+      deviceInterface->state.label = IF_STATE_LOCKED;
+      deviceInterface->state.subState = "";      
+      deviceInterface->state.details = details;
+      deviceInterface->state.led = led;
+      deviceInterface->state.progress = -1;      
+    }
+
 };
+
+std::vector<DeviceInterface*> NetWorkInterface::inventory;
 
 class InterfaceRepository{
 

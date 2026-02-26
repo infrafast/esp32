@@ -73,8 +73,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void handlePropertyChange(){
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      handleNetworkDisconnected();  // force to reconnect
-      handleNetworkConnected();
+      handleDisconnectService();  // force to reconnect
+      handleConnectService();
     }
 
     virtual bool restoreProperty(const char* property) override{
@@ -101,10 +101,10 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }        
 
     virtual void monitor(){           
-      monitorNetworkInterface();      
+      monitorNetwork();      
     }    
 
-     virtual void connectedNetworkMonitor(){
+     virtual void monitorService(){
       // Check if packet was received
       dataAvailable = readOSC();
 
@@ -128,7 +128,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
           setStateQueryingDevice();
           connectAttemptCount = 0;          
         }else{
-          if (!ping()) handleNetworkConnected();
+          if (!ping()) handleConnectService();
         }                                                                 
       }                                                                   
     }
@@ -228,7 +228,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
-      return handleNetworkDisconnected();
+      return handleDisconnectService();
     };  
 
     virtual bool isActivable(){
@@ -236,18 +236,12 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }    
 
     virtual void enable(bool _enabled) override{
-      if (_enabled){
-        handleNetworkConnected();
-        enabledInstanceCount++;
-      }else{
-        if (enabledInstanceCount>0) enabledInstanceCount--;
-        handleNetworkDisconnected();  
-      }
-      DeviceInterface::enable(_enabled);      
+      DeviceInterface::enable(_enabled);
+      NetWorkInterface::enable(_enabled);
     }   
 
-    virtual bool handleNetworkConnected(){
-      DEBUG_PRINT("\nNetworkOSC::handleNetworkConnected()");
+    virtual bool handleConnectService(){
+      DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
       // network connection is established so we now try to connect the device to its protocol
       if (udpID == -1) {
         udpID = hwm.network->requestUDPslotID(OSC_localPort);   // the network will create or reuse a udp slot and give its ID to us
@@ -260,11 +254,11 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return true;
     }
 
-   virtual bool handleNetworkDisconnected(){
-      DEBUG_PRINT("\nNetworkOSC::handleNetworkDisconnected()");
+   virtual bool handleDisconnectService(){
+      DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
       destination->lastQueryTime = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
-      setStateDisconnected();
+      //setStateDisconnected();
       return true;
     }
 
@@ -307,9 +301,6 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
         state.qualityColor = GUI::red;    
     }      
 
-  protected:
-    static uint8_t enabledInstanceCount;
-
   private:    
     uint8_t connectAttemptCount = 0;
     bool udpConnectionLost = false;
@@ -318,7 +309,5 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     //UDP* udp = nullptr; // DIRECT UDP
 
 };
-uint8_t NetworkOSC::enabledInstanceCount = 0;
-
 
 #endif
