@@ -410,7 +410,7 @@ class AppleMidiSessionType : public DataSet{
 };
 
 
-class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
+class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface, public AutoLock {
   #define CONFIG_APPLE "voidAppleMidiParam"
   #define SESSION_DESC_LENGHT 128
 
@@ -430,7 +430,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     #define UNDEF_EXCEPTION "UndefinedException"
     String exception = UNDEF_EXCEPTION;
 
-    AppleMIDIInterface(bool _configurable, RtpDirectory* _rtpDirectory): rtpDirectory(_rtpDirectory),MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
+    AppleMIDIInterface(bool _configurable, RtpDirectory* _rtpDirectory): rtpDirectory(_rtpDirectory),MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable), AutoLock(this){
       icon = ICON_APPLEMIDI;
       attachDeviceInterface(this);
 
@@ -872,8 +872,20 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       savedState = state;     // save current state as it may be recall after the refreshState
     }
 
+
+    virtual void onAutoUnlocked() override{
+      if (state.enabled && hwm.network->state == CONNECTED) handleNetworkConnected();
+    }
+
+    virtual void setStateLocked() override{
+      DeviceInterface::setStateLocked();
+      state.subState = midiSessionName;
+      state.details = *lang.getString("Connection locked");
+    }
+
     virtual bool handleNetworkConnected() override{
       DEBUG_PRINT("\n%s::handleNetworkConnected()",name.c_str());
+      if (!canConnectToNetwork()) return false;
       // we connect the midi client to its callback
       // this should not go to the begin
       
@@ -881,6 +893,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       
       if (appleMidiClient == nullptr){
         DEBUG_PRINT("\nappleMidiClient (nullptr)");
+        notifyNetworkDisconnected();
         return false;
       }
 
@@ -899,7 +912,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     virtual bool handleNetworkDisconnected() override{      
       DEBUG_PRINT("\n%s::handleNetworkDisconnected()",name.c_str());
+      notifyNetworkDisconnected();
       if (state.enabled == false) setStateDisabled();
+      else if (isLocked()) setStateLocked();
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
       if (appleMidiClient != nullptr) appleMidiClient->endSession();
       return true;
