@@ -91,10 +91,10 @@ typedef std::function<void(PingEcho*)> PingCallback; // Utilisation de std::func
 class PingParameters {
 public:
   PingParameters(){
-    DEBUG_PRINT("\nPingParameters created");
+    //DEBUG_PRINT("\nPingParameters created");
   }
   ~PingParameters(){
-    DEBUG_PRINT("\nPingParameters deleted");
+    //DEBUG_PRINT("\nPingParameters deleted");
   }
   PingEcho* echo;
   PingCallback callback;
@@ -337,7 +337,7 @@ bool checkAndDeleteFile(const char* filename) {
         }
     }
 
-    DEBUG_PRINT("ℹ️ Aucun fichier .bin.gz à la racine");
+    //DEBUG_PRINT("ℹ️ Aucun fichier .bin.gz à la racine");
     return false;
 }
 
@@ -869,7 +869,7 @@ class JsonListFile : public JsonList{
           if (success){
               doc.shrinkToFit();   
               jsonToKeyValues(&doc);
-              DEBUG_PRINT("\nJsonListFile::load(%s) ok\n",filename.c_str());
+              //DEBUG_PRINT("\nJsonListFile::load(%s) ok\n",filename.c_str());
           }else{
             DEBUG_PRINT("\nJsonListFile::load(%s) failed\n",filename.c_str());
           }
@@ -1302,7 +1302,7 @@ static TaskHandle_t    guiRefreshTaskHandle = nullptr;
 #define STEP_MS 2
 // ---------- Tâche d’animation ----------
 void guiRefreshTask(void *param_type) {
-  DEBUG_PRINT("\nstartGUIThread()"); 
+  //DEBUG_PRINT("\nstartGUIThread()"); 
    
   for (int i=0;;) {
     // Vérifie si on nous demande d’arrêter (notification)
@@ -1349,7 +1349,7 @@ void stopGUIThread() {
       vTaskDelay(pdMS_TO_TICKS(10));
     }
   }
-  DEBUG_PRINT("\nstopGUIThread()");  
+  //DEBUG_PRINT("\nstopGUIThread()");  
 }
 
 void handleWebTaskWrapper(void * parameter){
@@ -1613,13 +1613,13 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                String& outRemoteVersion,
                                String& outFileUrl)
 {
-  DEBUG_PRINT("\n(v%s) Listing: %s", _V, baseUrl.c_str());
+  //DEBUG_PRINT("\n(v%s) Listing: %s", _V, baseUrl.c_str());
 
   // 1) GET du listing
   UrlParts u = parseUrl(baseUrl);
   if (!u.ok) return -1;
 
-  DEBUG_PRINT("\t host: %s, port:%d, path: %s", u.host.c_str(), u.port, u.path.c_str());  
+  //DEBUG_PRINT("\t host: %s, port:%d, path: %s", u.host.c_str(), u.port, u.path.c_str());  
 
   outHttp.stop();
   int err = outHttp.startRequest(u.host.c_str(), u.port, u.path.c_str(), "GET", "ESP32HttpClient/1.0");
@@ -1684,7 +1684,7 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
 
   outFileUrl = bestUrl;
   outRemoteVersion = bestVerStr;
-  DEBUG_PRINT("\nNouvelle version: %s @ %s", outRemoteVersion.c_str(), outFileUrl.c_str());
+  //DEBUG_PRINT("\nNouvelle version: %s @ %s", outRemoteVersion.c_str(), outFileUrl.c_str());
   // le flux est maintenant lisible via outHttp.read()/available()
 
   return 1;
@@ -1940,8 +1940,9 @@ static bool isAppleMidiServiceType(const char* serviceType) {
 }
 
 void WiFiRTPDiscoveryTask(void* parameter){
+    DEBUG_PRINT("\n\n[WiFiRTPDiscoveryTask] Scan RTP-MIDI lancé...\n");    
     int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
-    DEBUG_PRINT("\nWiFiRTPDiscoveryTask trouvé %d service(s) AppleMIDI\n", n);
+    DEBUG_PRINT("\ntrouvé %d service(s) AppleMIDI\n", n);
     for (int i = 0; i < n; i++) {
       uint8_t ipBytes[4] = {MDNS.IP(i)[0], MDNS.IP(i)[1], MDNS.IP(i)[2], MDNS.IP(i)[3]};
       rtpDir.upsertEndpoint(MDNS.hostname(i).c_str(),  ipBytes, MDNS.port(i));

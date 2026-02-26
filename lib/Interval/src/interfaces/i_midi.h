@@ -164,13 +164,6 @@ class BLEMIDIInterface: public MIDIInterface{
     }
 
 
-    /* 
-    virtual void enable(bool _enable) override{  // uncomment this when stop() is correctly implemented
-      DeviceInterface::enable(_enable);
-      if (_enable) begin();  
-      else stop();
-    }*/
-
     virtual bool begin(){
       DEBUG_PRINT("\n%s::begin()",interfaceName.c_str());          
       MIDIInterface::init();  
@@ -456,13 +449,14 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
+      DEBUG_PRINT("\n%s::stop()",interfaceName.c_str());
       return handleDisconnectService();
     };   
 
     virtual bool end() override{
       DEBUG_PRINT("\nAppleMIDIInterface::end()");
       //switchDevice(DEVICE_OFF);     // disable the device completely
-      enable(DEVICE_OFF);     // disable the device completely
+      switchDevice(DEVICE_OFF);     // disable the device completely
       return true;
     }    
 
@@ -775,14 +769,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       //handleDisconnected(); is then called by the library
     }    
 
-    /*virtual void switchDevice(bool _enable){
-      MIDIInterface::switchDevice(_enable);      
-      if (_enable) handleConnectService();
-      else handleDisconnectService();     // force disconnect in all case: either you will reconnect 
-    }*/
-    virtual void enable(bool _enabled) override{
-      DeviceInterface::enable(_enabled);
-      NetWorkInterface::enable(_enabled);
+    virtual void switchDevice(bool _enabled) override{
+      DeviceInterface::switchDevice(_enabled);
+      NetWorkInterface::switchDevice(_enabled);
       savedState = state;     // save current state as it may be recall after the refreshState
     }   
 
@@ -877,7 +866,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       // this should not go to the begin
       
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;      
-      
+      if (appleMidiClient == nullptr) {
+        DEBUG_PRINT("\nError: AppleMIDI client is null");
+        return false;
+      }
+
       appleMidiClient->setHandleDisconnected(handleDisconnectedStatic);
       appleMidiClient->setHandleConnected(handleConnectedStatic);
       appleMidiClient->setHandleException(OnAppleMidiExceptionStatic);

@@ -562,15 +562,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             broadCast(concatStrings("{\""FW_UPDATE_URL"\":\"",fwUpdateURL,"\"}"));
           }else{
             if (screen.id == SCREEN_MENU) triggerRedraw();  // this s to update firmware menu item to be actif or disabled uppon internet check                      
-            DEBUG_PRINT("\nStartup update disabled in config");                
+            //DEBUG_PRINT("\nStartup update disabled in config");                
           }
         }else if(retCode  == 0) {
-          DEBUG_PRINT("\n*** No firmware update ***");          
+          //DEBUG_PRINT("\n*** No firmware update ***");          
         }else{
-          DEBUG_PRINT("\n*** Firmware update check error :%i ***",retCode);
+          //DEBUG_PRINT("\n*** Firmware update check error :%i ***",retCode);
         }      
       }else{
-        DEBUG_PRINT("\n SW update check already done at startup");
+        //DEBUG_PRINT("\n SW update check already done at startup");
       }
 
     }
@@ -808,7 +808,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       userCfg.load(concatStrings(concatStrings("/", *systemCfg.getString(S_PROFILE, DEFAULT_PROFILE)), ".user"),defaultUserConf);            
 
-      #ifdef DEBUG
+      #ifdef DEBUG_Z
         String s;
         systemCfg.serialize(&s);
         DEBUG_PRINT("\n\n systemCfg:\t%s [...]",s.substring(0,300).c_str());
@@ -944,6 +944,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     // EVENTS HANDLING
     void networkEventHandler(Event* event){
+      DEBUG_PRINT("\n+---------------------+");
+      DEBUG_PRINT("\n| Network event: %d   |",event->type);
+      DEBUG_PRINT("\n+---------------------+");
       switch(event->type){
         case EVENT_NETWORK_CHANGED_MEDIA:          
           sendTerminateMessageToWebApp("Network connection changed. Close this page");         // the browser becomes unavialble, so terminate the application
@@ -978,7 +981,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
               bool enabled = !interface->state.enabled;
               // if interface allows it, we switch its state
               if (interface->isActivable()){
-                getSelectedStrip()->interface->enable(enabled);
+                getSelectedStrip()->interface->switchDevice(enabled);
               }else{
                 DEBUG_PRINT("\nInterface %s is not switchable",interface->interfaceName.c_str());
               }
@@ -1782,13 +1785,13 @@ void setup() {
       if (hwm->configMedia->refreshed){
         utilsBlinkIcon = hwm->configMedia->iFconnectivityIcon;
         utilsBlinkLabel = *lang.getString("Bringing network up");        
-        startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);              
+        //startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);              
         if (hwm->configMedia->state == CONNECTED){            
           setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
         }else{
           webAppConnected = false;            
         }
-        stopGUIThread();        
+        //stopGUIThread();        
       } 
 
       handleWeb();
@@ -2746,50 +2749,6 @@ void setup() {
       //else banks are empty, we do nothing
     }
 
-    /*void testHttpRequest(){
-
-      String srv = "82.65.4.93"; String path="/footswitch.php?check=1.2";
-      DEBUG_PRINT("\nhttp.get(%s,%s)",srv.c_str(),path.c_str());
-      int err = hwm->network->http->get(srv.c_str(), path.c_str());
-      if (err == 0){
-        DEBUG_PRINT("\nstartedRequest ok");
-        err = hwm->network->http->responseStatusCode();
-        if (err >= 0) {
-          DEBUG_PRINT("\nGot status code: %i",err);
-          // Usually you'd check that the response code is 200 or a similar "success" code (200-299) before carrying on, but we'll print out whatever response we get
-          err = hwm->network->http->skipResponseHeaders();
-          if (err >= 0){
-            int bodyLen = hwm->network->http->contentLength();
-            DEBUG_PRINT("\nLength: %i", bodyLen);
-            DEBUG_PRINT("\nBody:\n");
-            // Now we've got to the body, so we can print it out
-            unsigned long timeoutStart = millis();
-            char c;
-            // Whilst we haven't timed out & haven't reached the end of the body
-            while ( (hwm->network->http->connected() || hwm->network->http->available()) && ((millis() - timeoutStart) < 30*1000) ){
-                if (hwm->network->http->available()){
-                    c = hwm->network->http->read();
-                    DEBUG_PRINT("%c",c);
-                    bodyLen--;
-                    // We read something, reset the timeout counter
-                    timeoutStart = millis();
-                }else{
-                    // We haven't got any data, so let's pause to allow some to arrive
-                    delay(1000);
-                }
-            }
-          }else{
-            DEBUG_PRINT("\nFailed to skip response headers: %i",err);
-          }
-        }else{    
-          DEBUG_PRINT("\nGetting response failed: %i",err);
-        }
-      }else{
-        DEBUG_PRINT("Connect failed: %i",err);
-      }
-      hwm->network->http->stop();  
-    }*/
-
     ///////////////////////////////////////////////////////////////////////
 
     //  APPLICATION & WORKFLOW MANAGEMENT METHODS
@@ -3301,7 +3260,7 @@ void setup() {
         if (interface && interface->interfaceName == interfaceName){
           bool enabled = first.value();
           //interface->switchDevice(enabled);
-          interface->enable(enabled);
+          interface->switchDevice(enabled);
           interface->state.broadcastState = true;
           if (interface->save()){
             jsonAnswer.callback = RET_SAVEBUTTON;
@@ -3531,7 +3490,7 @@ void setup() {
         if (hwm->network->media == CABLE_MEDIA){
           // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
           EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
-          DEBUG_PRINT("\n[Bonjour] Scan RTP-MIDI lancé...");  
+          DEBUG_PRINT("\n\n[Bonjour] Scan RTP-MIDI lancé...\n");  
         }else{
           // Wifi = bloquant
           xTaskCreate(
@@ -3547,8 +3506,8 @@ void setup() {
     }
 
     void epDirectoryUpdated(){
-      DEBUG_PRINT("\n[RTP] Scan terminé (timeout).");
-      DEBUG_PRINT("\n[RTP] %d endpoint(s) mémorisé(s)\n", rtpDir.epCount);      
+      DEBUG_PRINT("\n\n[RTP] Scan terminé (timeout).");
+      DEBUG_PRINT("\n[RTP] %d endpoint(s) mémorisé(s:\n", rtpDir.epCount);      
       for (int i = 0; i < rtpDir.epCount; i++) {
         DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
       }

@@ -228,6 +228,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
+      DEBUG_PRINT("\n%s::stop()",interfaceName.c_str());
       return handleDisconnectService();
     };  
 
@@ -235,9 +236,9 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return true;
     }    
 
-    virtual void enable(bool _enabled) override{
-      DeviceInterface::enable(_enabled);
-      NetWorkInterface::enable(_enabled);
+    virtual void switchDevice(bool _enabled) override{
+      DeviceInterface::switchDevice(_enabled);
+      NetWorkInterface::switchDevice(_enabled);
     }   
 
     virtual bool handleConnectService(){

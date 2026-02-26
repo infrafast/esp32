@@ -148,7 +148,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_ENABLED)){
         bool enabled = config[INTERFACE_ENABLED];
-        enable(enabled);
+        switchDevice(enabled);
       }
       
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -254,9 +254,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       DEBUG_PRINT("\n%s switchDevice=>%s",interfaceName.c_str(),state.enabled?"true":"false");      
     }*/
 
-    virtual void enable(bool _enable){
+    virtual void switchDevice(bool _enable){
       state.enabled = _enable;      
-      DEBUG_PRINT("\n%s::enable(%s)",interfaceName.c_str(),state.enabled?"true":"false");      
+      DEBUG_PRINT("\n%s::switchDevice(%s)",interfaceName.c_str(),state.enabled?"true":"false");      
       if (_enable) setStateDisconnected();
       else setStateDisabled();
     }
@@ -421,7 +421,7 @@ class NetWorkInterface{
         inventory.push_back(iface);
     }
 
-    static bool canConnectService() {
+    static bool canConnectService(){
       #define MAX_NETWORK_SERVICES_WEIGHT  2    
       if (hwm.network->media != CABLE_MEDIA) return true;
 
@@ -431,12 +431,15 @@ class NetWorkInterface{
               servicesWeight += ((NetWorkInterface*)iface)->getServiceWeight();
           }
       }
-      if (servicesWeight > MAX_NETWORK_SERVICES_WEIGHT) return false;     
-      return true;      
+      if (servicesWeight > MAX_NETWORK_SERVICES_WEIGHT) return false;
+
+      return true;
+      
     }    
     
     virtual void setStateDisconnected(){    // to be overrided by derived class
       if (!deviceInterface) return;
+      DEBUG_PRINT("\n%s::setStateDisconnected()",deviceInterface->interfaceName.c_str());   
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
       deviceInterface->state.details = concatStrings(*lang.getString("disconnected"));
@@ -452,8 +455,9 @@ class NetWorkInterface{
   protected:
     DeviceInterface* deviceInterface = nullptr;
 
-    void setNetworkStateDown(){
+    void setNetworkStateDown(){      
       if (!deviceInterface) return;
+      DEBUG_PRINT("\n%s::setNetworkStateDown()",deviceInterface->interfaceName.c_str());      
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;           
       deviceInterface->state.led = "red medium";
@@ -464,49 +468,62 @@ class NetWorkInterface{
       return 1; // default
     }
 
-    bool unlocked = true;
+    bool unlocked = false;
 
-    void enable(bool _enable){
-      unlocked = canConnectService();
-      if (!unlocked) setStateLocked();
+    void switchDevice(bool _enable){
+      DEBUG_PRINT("\nNetworkInterface::switchDevice(%s)",_enable?"true":"false");  
+      if(_enable) enable();
+      else disable();      
     }
 
+    void enable(){
+      DEBUG_PRINT("\n%s->enable()",deviceInterface->interfaceName.c_str());    
+      unlocked = canConnectService();
+      if (unlocked){
+        DEBUG_PRINT("->unlocked");
+        if (!handleConnectService()){
+          setStateDisconnected();            
+        }
+      }else{
+        DEBUG_PRINT("->locked");    
+        setStateLocked();
+      }
+    }
+
+    void disable(){
+      DEBUG_PRINT("\n%s->disable()",deviceInterface->interfaceName.c_str());
+      //unlocked = false;
+      setStateDisconnected();            
+      handleDisconnectService();
+    }
+
+
     void monitorNetwork(){         
-    
+      static uint8_t c = 0;
+
       if (!deviceInterface) return;
      
       if (hwm.network->refreshed){
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.enabled){
             // check if we are allowed to engage network
-            unlocked = canConnectService();
-            if (unlocked){
-              DEBUG_PRINT("\n%s->canConnectService() => yes",deviceInterface->interfaceName.c_str());    
-              if (!handleConnectService()){
-                setStateDisconnected();            
-              }
-            }else{
-              DEBUG_PRINT("\n%s->canConnectService() => no",deviceInterface->interfaceName.c_str());    
-              setStateLocked();
-            }
+            enable();
             return;
           }else{
             DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored",deviceInterface->interfaceName.c_str());
             return;
           }
         }else{
-          setNetworkStateDown();    
-          handleDisconnectService();
+          disable();
           return;
         }
       }
-      // we only monitor networkdevices when network is on
-      if (unlocked) monitorService();
-      else{
+      if (hwm.network->state == DISCONNECTED){
         // otherwise we report on progress and the network we try to connect         
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
         deviceInterface->state.subState = hwm.network->SSID;
-      }
+      }else if (unlocked) monitorService();
+      
     }
 
     virtual void setStateLocked(String led = "black", String details = *lang.getString("Network busy")){            
