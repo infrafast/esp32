@@ -9,6 +9,7 @@
 #define IF_STATE_DISABLED           "disabled"
 #define IF_STATE_NOTIMPLEMENTED     "unavailable"
 #define IF_STATE_LOCKED             "locked"
+#define IF_STATE_DEACTIVATED        "deactivated"
 
 
 #endif

@@ -264,7 +264,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     void setStateDeactivated(){
       DEBUG_PRINT("\n%s::setStateDeactivated()",interfaceName.c_str());
       state.code = IF_NOT_READY;      
-      state.label = IF_STATE_LOCKED;
+      state.label = IF_STATE_DEACTIVATED;
       state.subState =  "";
       state.led = "black";
       state.progress = -1;
