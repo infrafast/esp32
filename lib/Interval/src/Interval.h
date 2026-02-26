@@ -1112,14 +1112,14 @@ struct State{ // used by Strip and Interface
   String details = "details";
   String led = "black";
   bool enabled = false;
-  bool activable = true;
+  bool switchable = true;
   float progress = -1;
 
   String previousStateLabel = "";
   String previousLed = "";
   uint8_t previousStateCode = 0;
   bool previousEnabled = false;
-  bool previousActivable = activable;
+  bool previousSwitchable = switchable;
   float previousProgress = -1;
 
   bool changed = false;               // this is used by the strip to determine if they have to refresh

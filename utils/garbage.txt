@@ -21,7 +21,7 @@ system::setStateDisabled()
 ----------------------------------  MixingStation->init(...)  ---------------------------------- 
 load(/MixingStation_if.cfg)
 MixingStation->restore({"enabled":true,"properties":["/oscport/10023","/ip/192.168.0.1","/ping//info"]},triggerPropertyChange no)
-NetworkOSC::connectDeviceToNetwork()
+NetworkOSC::handleNetworkConnected()
 [UDP-0/8889] ID created
 udp(8889) got UDP slot #0
 MixingStation::setStatePending()
@@ -34,7 +34,7 @@ MixingStation::begin() void
 ----------------------------------  BehringerXM->init(...)  ---------------------------------- 
 load(/BehringerXM_if.cfg)
 BehringerXM->restore({"enabled":false,"properties":["/oscport/10023","/ip/192.168.0.1","/ping//xinfo"]},triggerPropertyChange no)
-NetworkOSC::disconnectDeviceFromNetwork()
+NetworkOSC::handleNetworkDisconnected()
 BehringerXM::setStateDisconnected()
 BehringerXM::enable(false)
 BehringerXM::setStateDisabled()
@@ -76,7 +76,7 @@ DINMIDI:setStateNotImplemented
 ----------------------------------  sysOSC->init(...)  ---------------------------------- 
 load(/sysOSC_if.cfg)
 sysOSC->restore({"enabled":false,"properties":["/oscport/10023","/ip/192.168.0.1","/ping//info"]},triggerPropertyChange no)
-NetworkOSC::disconnectDeviceFromNetwork()
+NetworkOSC::handleNetworkDisconnected()
 sysOSC::setStateDisconnected()
 sysOSC::enable(false)
 sysOSC::setStateDisabled()
@@ -111,7 +111,7 @@ load(/AppleMIDI_if.cfg)
 AppleMIDI->restore({"enabled":true,"properties":["/session/iMac-de-T (192.168.0.151:5004)"]},triggerPropertyChange no)
 AppleMIDI::enable(true)
 AppleMIDI::setStateDisconnected()
-AppleMIDI::connectDeviceToNetwork()
+AppleMIDI::handleNetworkConnected()
 appleMidiClient (nullptr)
 Parsed sessionOptions: iMac-de-T (192.168.0.151:5004)
 sessionName: iMac-de-T
@@ -153,12 +153,12 @@ stopGUIThread()
 (v0.19-63-g9eedffe) Listing: http://infrafast.fr/fwupdate/       host: infrafast.fr, port:80, path: /fwupdate/
 Nouvelle version: 0.21 @ http://infrafast.fr/fwupdate/0.21.tgz
 Startup update disabled in config
-MixingStation->monitor connectDeviceToNetwork()
-NetworkOSC::connectDeviceToNetwork()
+MixingStation->monitor handleNetworkConnected()
+NetworkOSC::handleNetworkConnected()
 udp(8889) got UDP slot #0
 MixingStation::setStatePending()
-AppleMIDI->monitor connectDeviceToNetwork()
-AppleMIDI::connectDeviceToNetwork()
+AppleMIDI->monitor handleNetworkConnected()
+AppleMIDI::handleNetworkConnected()
 midiClient(footswitch)->begin()
 AppleMIDIInterface::setStateActiveSession() to 192.168.0.151:5004
 [UDP-0/8889] begin()

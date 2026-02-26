@@ -73,8 +73,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void handlePropertyChange(){
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      disconnectDeviceFromNetwork();  // force to reconnect
-      connectDeviceToNetwork();
+      handleNetworkDisconnected();  // force to reconnect
+      handleNetworkConnected();
     }
 
     virtual bool restoreProperty(const char* property) override{
@@ -128,7 +128,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
           setStateQueryingDevice();
           connectAttemptCount = 0;          
         }else{
-          if (!ping()) connectDeviceToNetwork();
+          if (!ping()) handleNetworkConnected();
         }                                                                 
       }                                                                   
     }
@@ -228,7 +228,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
-      return disconnectDeviceFromNetwork();
+      return handleNetworkDisconnected();
     };  
 
     virtual bool isActivable(){
@@ -237,17 +237,17 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void enable(bool _enabled) override{
       if (_enabled){
-        connectDeviceToNetwork();
+        handleNetworkConnected();
         enabledInstanceCount++;
       }else{
         if (enabledInstanceCount>0) enabledInstanceCount--;
-        disconnectDeviceFromNetwork();  
+        handleNetworkDisconnected();  
       }
       DeviceInterface::enable(_enabled);      
     }   
 
-    virtual bool connectDeviceToNetwork(){
-      DEBUG_PRINT("\nNetworkOSC::connectDeviceToNetwork()");
+    virtual bool handleNetworkConnected(){
+      DEBUG_PRINT("\nNetworkOSC::handleNetworkConnected()");
       // network connection is established so we now try to connect the device to its protocol
       if (udpID == -1) {
         udpID = hwm.network->requestUDPslotID(OSC_localPort);   // the network will create or reuse a udp slot and give its ID to us
@@ -260,8 +260,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return true;
     }
 
-   virtual bool disconnectDeviceFromNetwork(){
-      DEBUG_PRINT("\nNetworkOSC::disconnectDeviceFromNetwork()");
+   virtual bool handleNetworkDisconnected(){
+      DEBUG_PRINT("\nNetworkOSC::handleNetworkDisconnected()");
       destination->lastQueryTime = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
       setStateDisconnected();

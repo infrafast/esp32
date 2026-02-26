@@ -182,7 +182,7 @@ class BLEMIDIInterface: public MIDIInterface{
       bleMIDI.setHandleSystemExclusive(handleSysexStatic);
 
       // workaround: remove the 2 lines below once stop is implemeted correctly. This workaround force to set the interface to enable
-      state.activable = false;  // we cant desactivate the interface  until the stop() is properly implemented
+      state.switchable = false;  // we cant desactivate the interface  until the stop() is properly implemented
       state.enabled = true;  
       /////////////////////////
 
@@ -324,10 +324,10 @@ class USBMIDIInterface: public MIDIInterface{
       // if the fooswtich has started in FW update or debug mode, USB MIDI is not active, hence we set the status once for all
       if (!useUSBMidi){
         setStateRestart();
-        state.activable = false; 
+        state.switchable = false; 
       }else{
         usbMIDI.setHandleSystemExclusive(handleSysexStatic);        
-        state.activable = true; 
+        state.switchable = true; 
       }
       return true;
     }
@@ -360,7 +360,7 @@ class DINMIDIInterface: public MIDIInterface{
   public:
     DINMIDIInterface(bool _configurable):MIDIInterface(DINMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_DINMIDI;
-      state.activable = false;
+      state.switchable = false;
     }
 
     virtual bool begin(){     // called by init()
@@ -456,7 +456,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
-      return disconnectDeviceFromNetwork();
+      return handleNetworkDisconnected();
     };   
 
     virtual bool end() override{
@@ -602,8 +602,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     virtual void handlePropertyChange() override{
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      disconnectDeviceFromNetwork();
-      connectDeviceToNetwork();  // is called by handleDisconnect()
+      handleNetworkDisconnected();
+      handleNetworkConnected();  // is called by handleDisconnect()
     }
 
     virtual bool restoreProperty(const char* property) override{
@@ -777,13 +777,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     /*virtual void switchDevice(bool _enable){
       MIDIInterface::switchDevice(_enable);      
-      if (_enable) connectDeviceToNetwork();
-      else disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 
+      if (_enable) handleNetworkConnected();
+      else handleNetworkDisconnected();     // force disconnect in all case: either you will reconnect 
     }*/
     virtual void enable(bool _enable) override{
       DeviceInterface::enable(_enable);
-      if (_enable) connectDeviceToNetwork();
-      else disconnectDeviceFromNetwork();     // force disconnect in all case: either you will reconnect 
+      if (_enable) handleNetworkConnected();
+      else handleNetworkDisconnected();     // force disconnect in all case: either you will reconnect 
       savedState = state;     // save current state as it may be recall after the refreshState
     }   
 
@@ -872,8 +872,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       savedState = state;     // save current state as it may be recall after the refreshState
     }
 
-    virtual bool connectDeviceToNetwork() override{
-      DEBUG_PRINT("\n%s::connectDeviceToNetwork()",name.c_str());
+    virtual bool handleNetworkConnected() override{
+      DEBUG_PRINT("\n%s::handleNetworkConnected()",name.c_str());
       // we connect the midi client to its callback
       // this should not go to the begin
       
@@ -897,8 +897,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       return true;
     }
 
-    virtual bool disconnectDeviceFromNetwork() override{      
-      DEBUG_PRINT("\n%s::disconnectDeviceFromNetwork()",name.c_str());
+    virtual bool handleNetworkDisconnected() override{      
+      DEBUG_PRINT("\n%s::handleNetworkDisconnected()",name.c_str());
       if (state.enabled == false) setStateDisabled();
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
       if (appleMidiClient != nullptr) appleMidiClient->endSession();

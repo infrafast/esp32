@@ -70,7 +70,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       doc[interfaceName][INTERFACE_PROGRESS] = state.progress;
       doc[interfaceName][INTERFACE_DETAILS] = state.details;
       doc[interfaceName][INTERFACE_ENABLED] = state.enabled;
-      doc[interfaceName][INTERFACE_ACTIVABLE] = state.activable;
+      doc[interfaceName][INTERFACE_ACTIVABLE] = state.switchable;
       doc[interfaceName][INTERFACE_LED] = state.led;          
      
       doc.shrinkToFit();
@@ -233,9 +233,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
         state.changed  = true;
         state.previousLed = state.led;
       }
-      if (state.activable != state.previousActivable){
+      if (state.switchable != state.previousSwitchable){
         state.changed  = true;
-        state.previousActivable = state.activable;
+        state.previousSwitchable = state.switchable;
       }      
 
       if (state.changed) state.broadcastState = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
@@ -246,7 +246,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     }
 
     virtual bool isActivable(){
-      return state.activable;
+      return state.switchable;
     }
 
     /*virtual void switchDevice(bool _enabled){
@@ -411,8 +411,8 @@ class NetWorkInterface{
       return nullptr;
     }
     virtual void connectedNetworkMonitor(){}
-    virtual bool connectDeviceToNetwork(){return false;}
-    virtual bool disconnectDeviceFromNetwork(){return false;}
+    virtual bool handleNetworkConnected(){return false;}
+    virtual bool handleNetworkDisconnected(){return false;}
 
    
     virtual void setStateDisconnected(){    // to be overrided by derived class
@@ -446,8 +446,8 @@ class NetWorkInterface{
       if (hwm.network->refreshed){
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.enabled){
-            DEBUG_PRINT("\n%s->monitor connectDeviceToNetwork()",deviceInterface->interfaceName.c_str());
-            if (!connectDeviceToNetwork()) setStateDisconnected();            
+            DEBUG_PRINT("\n%s->monitor handleNetworkConnected()",deviceInterface->interfaceName.c_str());
+            if (!handleNetworkConnected()) setStateDisconnected();            
             return;
           }else{
             DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored",deviceInterface->interfaceName.c_str());
@@ -455,8 +455,8 @@ class NetWorkInterface{
           }
         }else{
           setNetworkStateDown();    
-          DEBUG_PRINT("\n%s->disconnectDeviceFromNetwork()",deviceInterface->interfaceName.c_str());
-          disconnectDeviceFromNetwork();
+          DEBUG_PRINT("\n%s->handleNetworkDisconnected()",deviceInterface->interfaceName.c_str());
+          handleNetworkDisconnected();
           return;
         }
       }

@@ -8,7 +8,7 @@ class DMXInterface : public DeviceInterface{
 
   public:
     DMXInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
-      state.activable = false;
+      state.switchable = false;
     }
     
     virtual bool begin(){     // called by init()
@@ -28,7 +28,7 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkInterface {
     ArtnetDMXInterface(bool _configurable):DMXInterface(ARTNETDMX_INTERFACE, GROUP_INTERFACE_DMX, _configurable){
       icon = "b";
       attachDeviceInterface(this);
-      state.activable = false;
+      state.switchable = false;
     }
 
     virtual void monitor(){     
@@ -45,7 +45,7 @@ class ThreePinDMXInterface: public DMXInterface{
 
     ThreePinDMXInterface(bool _configurable):DMXInterface(THREEEPINDMX_INTERFACE,GROUP_INTERFACE_DMX, _configurable){
       icon = "a";
-      state.activable = false;
+      state.switchable = false;
     }
 
     virtual void monitor(){
