@@ -1,6 +1,7 @@
 #ifndef DEVICEINTERFACES_h
 #define DEVICEINTERFACES_h
 
+#include <algorithm>
 #include <vector>
 #include "Interval.h"
 
@@ -320,6 +321,16 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       state.progress = -1;
     }        
 
+    virtual void setStateLocked(){
+      DEBUG_PRINT("\n%s::setStateLocked()",interfaceName.c_str());
+      state.code = IF_NOT_READY;
+      state.label = IF_STATE_LOCKED;
+      state.subState = "";
+      state.details = *lang.getString("Connection locked");
+      state.led = "black";
+      state.progress = -1;
+    }
+
     #define IF_CFG_FILE_PATH "/"
 
     void load() { // some interfaces may override this to be empty as they do not load or save parameters
@@ -403,6 +414,123 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
 };
 
+class AutoLock{
+  public:
+    static constexpr uint8_t MAX_SIMULTANEOUS_CONNECTED = 3;
+
+    AutoLock(DeviceInterface* _deviceInterface): deviceInterface(_deviceInterface){
+      auto& allInstances = instances();
+      allInstances.push_back(this);
+    }
+
+    virtual ~AutoLock(){
+      unregisterInstance(this);
+    }
+
+    bool canConnectToNetwork(){
+      if (connectedToNetwork) return true;
+
+      if (connectedCount() >= MAX_SIMULTANEOUS_CONNECTED){
+        lockDisconnectedInterfaces();
+        return false;
+      }
+
+      connectedToNetwork = true;
+
+      // when the new connection reaches the quota, lock all non connected interfaces
+      if (connectedCount() >= MAX_SIMULTANEOUS_CONNECTED){
+        lockDisconnectedInterfaces();
+      }
+      updateSwitchableState();
+      return true;
+    }
+
+    void notifyNetworkDisconnected(){
+      if (connectedToNetwork) connectedToNetwork = false;
+      unlockLastLockedInterface();
+      updateSwitchableState();
+    }
+
+    bool isLocked() const {return locked;}
+
+  protected:
+    DeviceInterface* deviceInterface = nullptr;
+
+    virtual void onAutoUnlocked(){}
+
+  private:
+    bool connectedToNetwork = false;
+    bool locked = false;
+
+    static std::vector<AutoLock*>& instances(){
+      static std::vector<AutoLock*> _instances;
+      return _instances;
+    }
+
+    static std::vector<AutoLock*>& lockQueue(){
+      static std::vector<AutoLock*> _lockQueue;
+      return _lockQueue;
+    }
+
+    static void unregisterInstance(AutoLock* instance){
+      auto& allInstances = instances();
+      allInstances.erase(std::remove(allInstances.begin(), allInstances.end(), instance), allInstances.end());
+
+      auto& queue = lockQueue();
+      queue.erase(std::remove(queue.begin(), queue.end(), instance), queue.end());
+    }
+
+    static uint8_t connectedCount(){
+      uint8_t count = 0;
+      for (AutoLock* instance : instances()) {
+        if (instance->connectedToNetwork) count++;
+      }
+      return count;
+    }
+
+    static void lockDisconnectedInterfaces(){
+      for (AutoLock* instance : instances()) {
+        if (instance->connectedToNetwork || instance->locked == true) continue;
+        instance->locked = true;
+        if (instance->deviceInterface){
+          instance->deviceInterface->state.switchable = false;
+          instance->deviceInterface->setStateLocked();
+        }
+        lockQueue().push_back(instance);
+      }
+    }
+
+    static void unlockLastLockedInterface(){
+      auto& queue = lockQueue();
+      while (!queue.empty()){
+        AutoLock* candidate = queue.back();
+        queue.pop_back();
+        if (candidate == nullptr || candidate->locked == false) continue;
+
+        candidate->locked = false;
+        if (candidate->deviceInterface) candidate->deviceInterface->state.switchable = true;
+        candidate->onAutoUnlocked();
+        return;
+      }
+    }
+
+    static void updateSwitchableState(){
+      const bool atCapacity = (connectedCount() >= MAX_SIMULTANEOUS_CONNECTED);
+      for (AutoLock* instance : instances()) {
+        if (!instance->deviceInterface) continue;
+        if (instance->locked){
+          instance->deviceInterface->state.switchable = false;
+          continue;
+        }
+        // connected interfaces keep their current usability while disconnected
+        // interfaces are made non-switchable only when the auto lock is active.
+        if (instance->connectedToNetwork) instance->deviceInterface->state.switchable = true;
+        else instance->deviceInterface->state.switchable = !atCapacity;
+      }
+    }
+};
+
+
 class NetWorkInterface{
   public:
     PingEcho* destination;
@@ -413,6 +541,15 @@ class NetWorkInterface{
     virtual void connectedNetworkMonitor(){}
     virtual bool handleNetworkConnected(){return false;}
     virtual bool handleNetworkDisconnected(){return false;}
+
+    bool connectNetworkInterface(){
+      return handleNetworkConnectedWithAutoLock();
+    }
+
+    bool disconnectNetworkInterface(){
+      handleNetworkDisconnectedWithAutoLock();
+      return true;
+    }
 
    
     virtual void setStateDisconnected(){    // to be overrided by derived class
@@ -431,6 +568,28 @@ class NetWorkInterface{
   protected:
     DeviceInterface* deviceInterface = nullptr;
 
+    AutoLock* getAutoLock(){
+      return dynamic_cast<AutoLock*>(this);
+    }
+
+    bool handleNetworkConnectedWithAutoLock(){
+      AutoLock* lock = getAutoLock();
+      if (lock != nullptr && !lock->canConnectToNetwork()){
+        if (deviceInterface != nullptr && lock->isLocked()) deviceInterface->setStateLocked();
+        return false;
+      }
+
+      bool connected = handleNetworkConnected();
+      if (!connected && lock != nullptr) lock->notifyNetworkDisconnected();
+      return connected;
+    }
+
+    void handleNetworkDisconnectedWithAutoLock(){
+      AutoLock* lock = getAutoLock();
+      if (lock != nullptr) lock->notifyNetworkDisconnected();
+      handleNetworkDisconnected();
+    }
+
     void setNetworkStateDown(){
       if (!deviceInterface) return;
       deviceInterface->state.code = IF_NOT_READY;
@@ -447,7 +606,7 @@ class NetWorkInterface{
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.enabled){
             DEBUG_PRINT("\n%s->monitor handleNetworkConnected()",deviceInterface->interfaceName.c_str());
-            if (!handleNetworkConnected()) setStateDisconnected();            
+            if (!connectNetworkInterface() && (getAutoLock() == nullptr || !getAutoLock()->isLocked())) setStateDisconnected();            
             return;
           }else{
             DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored",deviceInterface->interfaceName.c_str());
@@ -456,7 +615,7 @@ class NetWorkInterface{
         }else{
           setNetworkStateDown();    
           DEBUG_PRINT("\n%s->handleNetworkDisconnected()",deviceInterface->interfaceName.c_str());
-          handleNetworkDisconnected();
+          disconnectNetworkInterface();
           return;
         }
       }

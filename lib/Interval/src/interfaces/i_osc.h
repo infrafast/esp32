@@ -18,7 +18,7 @@ class OSCPing: public PingEcho{
     String pingCommand; //the command used to monitor the connection    
 };
 
-class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should derive OSCInterface
+class NetworkOSC: public DeviceInterface, public NetWorkInterface, public AutoLock {  // should derive OSCInterface
 
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
@@ -31,7 +31,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
-    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_remotePort(_OSC_remotePort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_remotePort(_OSC_remotePort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable), AutoLock(this){
       icon = "g";     
       attachDeviceInterface(this);
 
@@ -73,8 +73,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void handlePropertyChange(){
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      handleNetworkDisconnected();  // force to reconnect
-      handleNetworkConnected();
+      disconnectNetworkInterface();  // force to reconnect
+      connectNetworkInterface();
     }
 
     virtual bool restoreProperty(const char* property) override{
@@ -128,7 +128,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
           setStateQueryingDevice();
           connectAttemptCount = 0;          
         }else{
-          if (!ping()) handleNetworkConnected();
+          if (!ping()) connectNetworkInterface();
         }                                                                 
       }                                                                   
     }
@@ -228,7 +228,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
-      return handleNetworkDisconnected();
+      return disconnectNetworkInterface();
     };  
 
     virtual bool isActivable(){
@@ -237,11 +237,11 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
 
     virtual void enable(bool _enabled) override{
       if (_enabled){
-        handleNetworkConnected();
+        connectNetworkInterface();
         enabledInstanceCount++;
       }else{
         if (enabledInstanceCount>0) enabledInstanceCount--;
-        handleNetworkDisconnected();  
+        disconnectNetworkInterface();  
       }
       DeviceInterface::enable(_enabled);      
     }   
@@ -252,7 +252,9 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       if (udpID == -1) {
         udpID = hwm.network->requestUDPslotID(OSC_localPort);   // the network will create or reuse a udp slot and give its ID to us
       }
-      if (udpID == -1) return false;                            // can't get any UDP connectivity => try again until next queryTime expired
+      if (udpID == -1){
+        return false;                            // can't get any UDP connectivity => try again until next queryTime expired
+      }
       
       DEBUG_PRINT("\nudp(%i) got UDP slot #%i",OSC_localPort,udpID);      
       setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
@@ -264,7 +266,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       DEBUG_PRINT("\nNetworkOSC::handleNetworkDisconnected()");
       destination->lastQueryTime = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
-      setStateDisconnected();
+      if (isLocked()) setStateLocked();
+      else setStateDisconnected();
       return true;
     }
 
@@ -278,6 +281,16 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       deviceInterface->state.details = concatStrings(*lang.getString("no UDP connection"));      
     }       
 
+
+    virtual void onAutoUnlocked() override{
+      if (state.enabled && hwm.network->state == CONNECTED) connectNetworkInterface();
+    }
+
+    virtual void setStateLocked() override{
+      DeviceInterface::setStateLocked();
+      state.subState = destination->ip.toString();
+      state.details = *lang.getString("Connection locked");
+    }
     void setStateQueryingDevice(){
       //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
       // network is connected but not the OSC device is not answering

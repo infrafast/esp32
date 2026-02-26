@@ -410,7 +410,7 @@ class AppleMidiSessionType : public DataSet{
 };
 
 
-class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
+class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface, public AutoLock {
   #define CONFIG_APPLE "voidAppleMidiParam"
   #define SESSION_DESC_LENGHT 128
 
@@ -430,7 +430,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     #define UNDEF_EXCEPTION "UndefinedException"
     String exception = UNDEF_EXCEPTION;
 
-    AppleMIDIInterface(bool _configurable, RtpDirectory* _rtpDirectory): rtpDirectory(_rtpDirectory),MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
+    AppleMIDIInterface(bool _configurable, RtpDirectory* _rtpDirectory): rtpDirectory(_rtpDirectory),MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable), AutoLock(this){
       icon = ICON_APPLEMIDI;
       attachDeviceInterface(this);
 
@@ -456,7 +456,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
-      return handleNetworkDisconnected();
+      return disconnectNetworkInterface();
     };   
 
     virtual bool end() override{
@@ -602,8 +602,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     virtual void handlePropertyChange() override{
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      handleNetworkDisconnected();
-      handleNetworkConnected();  // is called by handleDisconnect()
+      disconnectNetworkInterface();
+      connectNetworkInterface();  // is called by handleDisconnect()
     }
 
     virtual bool restoreProperty(const char* property) override{
@@ -777,13 +777,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     /*virtual void switchDevice(bool _enable){
       MIDIInterface::switchDevice(_enable);      
-      if (_enable) handleNetworkConnected();
-      else handleNetworkDisconnected();     // force disconnect in all case: either you will reconnect 
+      if (_enable) connectNetworkInterface();
+      else disconnectNetworkInterface();     // force disconnect in all case: either you will reconnect 
     }*/
     virtual void enable(bool _enable) override{
       DeviceInterface::enable(_enable);
-      if (_enable) handleNetworkConnected();
-      else handleNetworkDisconnected();     // force disconnect in all case: either you will reconnect 
+      if (_enable) connectNetworkInterface();
+      else disconnectNetworkInterface();     // force disconnect in all case: either you will reconnect 
       savedState = state;     // save current state as it may be recall after the refreshState
     }   
 
@@ -872,6 +872,17 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       savedState = state;     // save current state as it may be recall after the refreshState
     }
 
+
+    virtual void onAutoUnlocked() override{
+      if (state.enabled && hwm.network->state == CONNECTED) connectNetworkInterface();
+    }
+
+    virtual void setStateLocked() override{
+      DeviceInterface::setStateLocked();
+      state.subState = midiSessionName;
+      state.details = *lang.getString("Connection locked");
+    }
+
     virtual bool handleNetworkConnected() override{
       DEBUG_PRINT("\n%s::handleNetworkConnected()",name.c_str());
       // we connect the midi client to its callback
@@ -900,6 +911,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     virtual bool handleNetworkDisconnected() override{      
       DEBUG_PRINT("\n%s::handleNetworkDisconnected()",name.c_str());
       if (state.enabled == false) setStateDisabled();
+      else if (isLocked()) setStateLocked();
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
       if (appleMidiClient != nullptr) appleMidiClient->endSession();
       return true;
