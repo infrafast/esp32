@@ -431,6 +431,17 @@ class NetWorkInterface{
       return 1; // default
     }
 
+    /* 
+      Test de non regression:
+        - double click
+        - actualisation (sans modification des parametres) et avec differents etats
+        - actualisation (avec modification des parametres) et avec differents etats
+        - demarrer une interface alors qu'elle doit etre lock
+        - demarrer une interface en disable
+
+    
+    */
+
     void releaseCapacity(){
       if (hwm.network->media != CABLE_MEDIA) return;    // only applicable for ethernet
 
