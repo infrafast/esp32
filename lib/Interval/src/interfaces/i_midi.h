@@ -470,7 +470,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     void handleRefresh(){
       populateSessionOptions();     // regenerate the config data set
-      if (!locked) state = savedState;        // recall the state we had before refresh request, except if current state is locked
+      if (!serviceLocked) state = savedState;        // recall the state we had before refresh request, except if current state is locked
       DEBUG_PRINT("\n%s::handleRefresh() recall state:%s",interfaceName.c_str(),savedState.label.c_str());
       state.broadcastState = true; // communicate the new state
       state.broadcastConfig = true; // the new populatedSessions have to be communicated to the web app dropdown
