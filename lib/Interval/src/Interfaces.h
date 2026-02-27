@@ -123,8 +123,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return success;
     }
 
-    virtual void userRequestedRefreshInterface(){
-      DEBUG_PRINT("\n%s->userRequestedRefreshInterface() : void",interfaceName.c_str());           
+    virtual void handleRequestRefreshState(){
+      DEBUG_PRINT("\n%s->handleRequestRefreshState() : void",interfaceName.c_str());           
     }
 
     bool restore(const char* config){    
@@ -245,7 +245,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       }      
     }
 
-    virtual bool isActivable(){
+    virtual bool isSwitchable(){
       return state.switchable;
     }
 
@@ -257,7 +257,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     virtual void switchDevice(bool _enable){
       state.enabled = _enable;      
       DEBUG_PRINT("\n%s::switchDevice(%s)",interfaceName.c_str(),state.enabled?"true":"false");      
-      if (_enable) setStateDisconnected();
+      if (_enable) setStateDisconnected();  // if device is just switched off it can't be yet connected, hence we set its state to disconnected
       else setStateDisabled();
     }
 
@@ -290,8 +290,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       state.progress = -1;          
     }
 
-    virtual void setStateConnected(String led = "green", String label = *lang.getString(IF_STATE_CONNECTED)){            
-      DEBUG_PRINT("\n%s::setStateConnected()",interfaceName.c_str());
+    virtual void setStateReady(String led = "green", String label = *lang.getString(IF_STATE_READY)){            
+      DEBUG_PRINT("\n%s::setStateReady()",interfaceName.c_str());
       state.code = IF_READY;      
       state.label = label;
       state.subState = "";      
@@ -300,7 +300,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       state.progress = -1;      
     }
 
-    virtual void setStatePending(String led = "green medium", String details = *lang.getString("Trying to connect")){
+    virtual void setStatePending(String led = "green medium", String details = *lang.getString("Scanning devices")){
       DEBUG_PRINT("\n%s::setStatePending()",interfaceName.c_str());      
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
@@ -398,6 +398,10 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return &icon;
     }
 
+    virtual uint8_t getServiceWeight(){
+      return 1; // default
+    }     
+
   protected:
     String icon = ICON_LINK;
 
@@ -421,20 +425,28 @@ class NetWorkInterface{
         inventory.push_back(iface);
     }
 
-    static bool canConnectService(){
-      #define MAX_NETWORK_SERVICES_WEIGHT  2    
-      if (hwm.network->media != CABLE_MEDIA) return true;
+    #define MAX_NETWORK_SERVICES_WEIGHT  2
 
-      uint8_t servicesWeight = 0;
+    bool locked = true;
+
+    static uint8_t capacityLeft(){
+      return MAX_NETWORK_SERVICES_WEIGHT - countWeight();
+    }
+
+    static uint8_t countWeight(){
+      uint8_t totalWeight = 0;
       for (auto* iface : inventory) {
-          if (iface != nullptr && iface->state.enabled) {   // a partir du moment ou une interface est enable elle consomme les resources reseau
-              servicesWeight += ((NetWorkInterface*)iface)->getServiceWeight();
-          }
+        if (iface != nullptr && iface->state.enabled) {   // a partir du moment ou une interface est enable elle consomme les resources reseau
+          totalWeight += iface->getServiceWeight();
+        }
       }
-      if (servicesWeight > MAX_NETWORK_SERVICES_WEIGHT) return false;
+      return totalWeight;
+    }
 
-      return true;
-      
+    static bool reachedLimit(){        
+      if (hwm.network->media != CABLE_MEDIA) return false;    
+      if (countWeight() > MAX_NETWORK_SERVICES_WEIGHT) return true;
+      return false;
     }    
     
     virtual void setStateDisconnected(){    // to be overrided by derived class
@@ -463,37 +475,42 @@ class NetWorkInterface{
       deviceInterface->state.led = "red medium";
       deviceInterface->state.details = *lang.getString("setNetworkStateDown");                // connect Eth cable or attempt to connect a previous SSID
     }
-    
-    virtual uint8_t getServiceWeight(){
-      return 1; // default
-    }
-
-    bool unlocked = false;
 
     void switchDevice(bool _enable){
+      deviceInterface->state.enabled = _enable; 
       DEBUG_PRINT("\nNetworkInterface::switchDevice(%s)",_enable?"true":"false");  
       if(_enable) enable();
       else disable();      
     }
 
     void enable(){
+      /* attempts to enable devices may be done while the network is not yet connected
+      for instance at setup phase when loading the config file, hence it is important to 
+      catch the network state before calling handleConnectService */
+
       DEBUG_PRINT("\n%s->enable()",deviceInterface->interfaceName.c_str());    
-      unlocked = canConnectService();
-      if (unlocked){
-        DEBUG_PRINT("->unlocked");
-        if (!handleConnectService()){
-          setStateDisconnected();            
-        }
-      }else{
+      locked = reachedLimit();
+      if (locked){
         DEBUG_PRINT("->locked");    
         setStateLocked();
+      }else{
+        DEBUG_PRINT("->ok, no lock");
+        if (hwm.network->state == CONNECTED){
+          // see above comment, we only attempt to connect if network is up and runnig
+          if (!handleConnectService()){
+            setStateDisconnected();            
+          }
+        }else{
+          DEBUG_PRINT("\n%s::Network is not up and running, can't enable device",deviceInterface->interfaceName.c_str()); 
+          setStateDisconnected();
+        }
       }
     }
 
     void disable(){
       DEBUG_PRINT("\n%s->disable()",deviceInterface->interfaceName.c_str());
       //unlocked = false;
-      setStateDisconnected();            
+      deviceInterface->setStateDisabled();            
       handleDisconnectService();
     }
 
@@ -522,7 +539,7 @@ class NetWorkInterface{
         // otherwise we report on progress and the network we try to connect         
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
         deviceInterface->state.subState = hwm.network->SSID;
-      }else if (unlocked) monitorService();
+      }else if (!locked) monitorService();
       
     }
 

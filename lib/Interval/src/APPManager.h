@@ -575,15 +575,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     }
 
-
     void internetCallBack(PingEcho* echo){
       ///////////////////////// do what application manager has to do when internet is connected/disconnected      
       if (echo->alive){
-        //checkRemoteVersion();
+        DEBUG_PRINT("\n\n[ping] %s : internet connected\n\n",echo->host.c_str()); 
+        checkRemoteVersion();               
       }else{
-        DEBUG_PRINT("\nNo internet connection");          
-      }
-       
+        DEBUG_PRINT("\n\n[ping] %s : No internet connection\n\n",echo->host.c_str());          
+      }       
       ///////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
       evt.data = echo;
@@ -980,10 +979,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
               DeviceInterface* interface = getSelectedStrip()->interface;
               bool enabled = !interface->state.enabled;
               // if interface allows it, we switch its state
-              if (interface->isActivable()){
+              if (interface->isSwitchable()){
                 getSelectedStrip()->interface->switchDevice(enabled);
               }else{
-                DEBUG_PRINT("\nInterface %s is not switchable",interface->interfaceName.c_str());
+                DEBUG_PRINT("\n[DCLIC] Interface %s is not switchable",interface->interfaceName.c_str());
               }
             }
           }        
@@ -1818,9 +1817,7 @@ void setup() {
 
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                   
-
-          checkRemoteVersion(); 
-
+          
           // network has refreshed so we shift to appropriate configMedia
           if (hwm->network->media == WIFI_MEDIA){
             //we set last used Wifi SSID (id) and save config, hence keep WIFI_MEDIA credential
@@ -3235,7 +3232,7 @@ void setup() {
             }
           }else{
             DEBUG_PRINT("\nInterface no change");
-            interface->userRequestedRefreshInterface(); // to call for specific things like refreshing the exposed params list            
+            interface->handleRequestRefreshState(); // to call for specific things like refreshing the exposed params list            
             jsonAnswer.callback=RET_SAVEBUTTON;
             jsonAnswer.value ="0";            
           }
@@ -3437,8 +3434,7 @@ void setup() {
             continue; // Ignorer cette itération
         }        
         
-        DEBUG_PRINT("\nhttpPost <%s><%s>\n",name,options);
-
+        DEBUG_PRINT("\n\n[HTTP-POST] received <%s><%s>\n\n",name,options);
         String jsonAnswer = parseJsonInput(name);        
 
         // version compressée
@@ -3490,7 +3486,7 @@ void setup() {
         if (hwm->network->media == CABLE_MEDIA){
           // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
           EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
-          DEBUG_PRINT("\n\n[Bonjour] Scan RTP-MIDI lancé...\n");  
+          DEBUG_PRINT("\n\n[RTP-bonjour] Scan RTP-MIDI lancé...\n");  
         }else{
           // Wifi = bloquant
           xTaskCreate(
@@ -3507,12 +3503,12 @@ void setup() {
 
     void epDirectoryUpdated(){
       DEBUG_PRINT("\n\n[RTP] Scan terminé (timeout).");
-      DEBUG_PRINT("\n[RTP] %d endpoint(s) mémorisé(s:\n", rtpDir.epCount);      
+      DEBUG_PRINT("\n[RTP] %d endpoint(s) mémorisé(s):\n", rtpDir.epCount);      
       for (int i = 0; i < rtpDir.epCount; i++) {
         DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
       }
       // midi interface has to update its config and regenerate its state      
-      appleMIDIInterface->refreshInternalStateAndConfig();     
+      appleMIDIInterface->handleRefresh();     
     }
 
   private:

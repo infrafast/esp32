@@ -71,12 +71,6 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       free(buf);        
     }
 
-    virtual void handlePropertyChange(){
-      DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      handleDisconnectService();  // force to reconnect
-      handleConnectService();
-    }
-
     virtual bool restoreProperty(const char* property) override{
       bool changed = false;
       uint16_t OSCport;
@@ -109,7 +103,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       dataAvailable = readOSC();
 
       if (dataAvailable > 0){                                     // data has come
-        if (state.code != IF_READY) setStateConnected();          // set the device to connected
+        if (state.code != IF_READY) setStateReady();          // set the device to connected
         destination->lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
         connectAttemptCount = 0;                                  // reset attempt counter                
         return;                                                   
@@ -232,13 +226,12 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return handleDisconnectService();
     };  
 
-    virtual bool isActivable(){
+    virtual bool isSwitchable(){
       return true;
     }    
 
     virtual void switchDevice(bool _enabled) override{
-      DeviceInterface::switchDevice(_enabled);
-      NetWorkInterface::switchDevice(_enabled);
+      NetWorkInterface::switchDevice(_enabled); // we use our own
     }   
 
     virtual bool handleConnectService(){
@@ -263,8 +256,8 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       return true;
     }
 
-    virtual void setStateConnected(){            
-      DeviceInterface::setStateConnected();
+    virtual void setStateReady(){            
+      DeviceInterface::setStateReady();
       state.subState = destination->ip.toString();          
     }
 

@@ -2,6 +2,7 @@
 #define IF_STATES
 
 #define IF_STATE_DISCONNECTED       "disconnected"
+#define IF_STATE_READY              "ready"
 #define IF_STATE_PENDING            "pending"
 #define IF_STATE_ERROR              "error"
 #define IF_STATE_CONNECTING         "connecting"

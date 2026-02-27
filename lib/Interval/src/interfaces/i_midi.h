@@ -216,7 +216,7 @@ class BLEMIDIInterface: public MIDIInterface{
 
     void handleConnected() {
       DEBUG_PRINT("\n%s::handleConnected()",interfaceName.c_str());          
-      setStateConnected();
+      setStateReady();
     }    
 
     void handleDisconnected() {
@@ -226,8 +226,8 @@ class BLEMIDIInterface: public MIDIInterface{
     }
 
 
-    void setStateConnected(){            
-      DeviceInterface::setStateConnected("blue",*lang.getString("paired"));
+    void setStateReady(){            
+      DeviceInterface::setStateReady("blue",*lang.getString("paired"));
     }
 
     void setStatePending(){
@@ -290,7 +290,7 @@ class USBMIDIInterface: public MIDIInterface{
 
           lastPoll = millis();
 
-          if (tud_mounted() && state.code == IF_NOT_READY) setStateConnected();
+          if (tud_mounted() && state.code == IF_NOT_READY) setStateReady();
 
           if (!tud_mounted() && state.code == IF_READY) {
             setStateDisconnected();
@@ -461,17 +461,18 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }    
 
 
-    virtual void userRequestedRefreshInterface(){      
+    virtual void handleRequestRefreshState(){      
       evt.type = EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE;
-      fireEvent(&evt);
+      fireEvent(&evt);            // ask the application to perform a service discovery
+      savedState = state;         // before changing to "state refreshing", we save the current state so it is restore once the network scanning has finished
       setStateRefreshing();
     }
 
-    void refreshInternalStateAndConfig(){
-      populateSessionOptions();  // regenerate the config data set
-      //state = savedState;              // recall the state we had before refresh request
+    void handleRefresh(){
+      populateSessionOptions();     // regenerate the config data set
+      state = savedState;        // recall the state we had before refresh request
       state.broadcastState = true; // communicate the new state
-      state.broadcastConfig = true; // communicate the new parameters
+      state.broadcastConfig = true; // the new populatedSessions have to be communicated to the web app dropdown
     }
 
     void populateSessionOptions(){
@@ -594,11 +595,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }
 
 
-    virtual void handlePropertyChange() override{
+    virtual void handlePropertyChange(){
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      handleDisconnectService();
-      handleConnectService();  // is called by handleDisconnect()
+      handleDisconnectService();  // force to reconnect
     }
+
 
     virtual bool restoreProperty(const char* property) override{
 
@@ -611,10 +612,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       bool changed = false;
       if (parseSession(property, sessionOptions, sizeof(sessionOptions), sessionName, sizeof(sessionName), ipAddress, sizeof(ipAddress), port)){
 
-        DEBUG_PRINT("\nParsed sessionOptions: %s", sessionOptions);
-        DEBUG_PRINT("\nsessionName: %s", sessionName);
-        DEBUG_PRINT("\nipAddress: %s", ipAddress);
-        DEBUG_PRINT("\nport: %d", port);
+        DEBUG_PRINT("\n\t%s::restoreProperty: %s", interfaceName.c_str(), sessionOptions);
+        DEBUG_PRINT("\n\tsessionName: %s", sessionName);
+        DEBUG_PRINT("\n\tipAddress: %s", ipAddress);
+        DEBUG_PRINT("\n\tport: %d", port);
 
         if (strcmp(sessionName, PASSIVE_SESSION_NAME) == 0) {
             if (sessionType != APPLEMIDI_PASSIVE) changed = true;
@@ -655,7 +656,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
         // the read trigger callback like connection, hence it has to be called independantly from being connected to a session or not
         //we prefer  to put it here instead than in Network (who controls the object) as in case we are offline, monitor is not called and we save time        
         
-        hwm.network->appleMidiClient->read();                       
+        if (hasBegun) hwm.network->appleMidiClient->read();                       
 
         if (state.code != IF_READY) {
           if (millis() - lastInvite >= MIDI_INVITE_PERIOD) {
@@ -669,7 +670,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     void handleConnected(const ssrc_t& ssrc, const char* name) {
       DEBUG_PRINT("\n\nappleMidi session #%i %s connected\n", ssrc, name);
       midiSessionName = String(name);
-      setStateConnected();
+      setStateReady();
       // wake up
       // sendRealTime
     }    
@@ -770,9 +771,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }    
 
     virtual void switchDevice(bool _enabled) override{
-      DeviceInterface::switchDevice(_enabled);
       NetWorkInterface::switchDevice(_enabled);
-      savedState = state;     // save current state as it may be recall after the refreshState
+      // we save it here to force a savedState in case it goes straight to handleRefresh after RTP midi check without interface being enabled      
+      // it will become obsolete once we integrate the RTP scan into this class and not in the AppManager.
+      savedState = state;
     }   
 
 
@@ -831,9 +833,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       );
     }
 
-    virtual void setStateConnected(){
-      DeviceInterface::setStateConnected();
-      state.details = String(midiSessionName);// + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");     
+    virtual void setStateReady(){
+      DeviceInterface::setStateReady();
+      state.details = concatStrings((midiSessionName)," ",*lang.getString("connected"));
+      // + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");     
     }     
 
     void setStateDisconnected() override{
@@ -857,7 +860,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       lastInvite = millis();    // we reset the timer that controls the periodicity of the invites
       if (sessionType == APPLEMIDI_ACTIVE) setStateActiveSession();
       else setStatePassiveSession();
-      savedState = state;     // save current state as it may be recall after the refreshState
     }
 
     virtual bool handleConnectService() override{
@@ -877,7 +879,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       appleMidiClient->setHandleSystemExclusive(handleSysexStatic);
       appleMidiClient->setHandleControlChange(handleChangeControlStatic);
 
-      appleMidiClient->begin();      
+      appleMidiClient->begin();
+      hasBegun = true;  
 
       startSession();
       
@@ -889,6 +892,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       if (state.enabled == false) setStateDisabled();
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
       if (appleMidiClient != nullptr) appleMidiClient->endSession();
+      hasBegun = false;
       return true;
     }
 
@@ -896,6 +900,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
   private:
     static inline AppleMIDIInterface* appleInstancePtr = nullptr;
     unsigned long lastInvite = 0;
+    bool hasBegun = false;
 
 };
 

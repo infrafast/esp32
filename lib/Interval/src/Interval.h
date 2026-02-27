@@ -1372,6 +1372,7 @@ void scanNetworksTaskWrapper(void * parameter){
 // Choix du socket ICMP (0–7 sur W5x00) + identifiant ICMP
 void ping(PingParameters* params) {
   // NB: host resolution doesnt work
+  DEBUG_PRINT("\n\n\[ping] %s",params->echo->host.c_str());
   if (WiFi.hostByName(params->echo->host.c_str(), params->echo->ip) == 1){
 
     //DEBUG_PRINT("\npingTask running...");  
@@ -1403,10 +1404,10 @@ void ping(PingParameters* params) {
       params->callback(params->echo);  // Appel du callback en cas de succès
       xSemaphoreGive(hwm.network->networkBusy);      
     }else {
-      DEBUG_PRINT("\nasyncPing(%s) NETWORK BUSY",params->echo->host.c_str());
+        DEBUG_PRINT("\n\n\[ping] %s :: sempahore networkBusy",params->echo->host.c_str());
     }
   }else {
-    DEBUG_PRINT("\nasyncPing(%s) hostname unresovable\n",params->echo->host.c_str());
+    DEBUG_PRINT("\n\n\[ping] %s :: host no resolvable",params->echo->host.c_str());
   }
 }
 
@@ -1613,7 +1614,7 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                String& outRemoteVersion,
                                String& outFileUrl)
 {
-  //DEBUG_PRINT("\n(v%s) Listing: %s", _V, baseUrl.c_str());
+  DEBUG_PRINT("\n\n[FWUPDATE] (v%s) Listing: %s", _V, baseUrl.c_str());
 
   // 1) GET du listing
   UrlParts u = parseUrl(baseUrl);
@@ -1624,12 +1625,12 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
   outHttp.stop();
   int err = outHttp.startRequest(u.host.c_str(), u.port, u.path.c_str(), "GET", "ESP32HttpClient/1.0");
   if (err != 0) {
-    DEBUG_PRINT("\n/!\\startRequest listing err=%d", err);
+    DEBUG_PRINT("/!\\startRequest err=%d\n", err);
     return -1;
   }
   int status = outHttp.responseStatusCode();
   if (status != 200) {
-    DEBUG_PRINT("\n/!\\HTTP %d sur %s", status, baseUrl.c_str());
+    DEBUG_PRINT("/!\\HTTP %d sur %s", status, baseUrl.c_str());
     outHttp.stop();
     return -status;
   }
@@ -1646,7 +1647,7 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
   std::vector<String> hrefs;
   findFszLinksInHtml(html, hrefs);
   if (hrefs.empty()) {
-    DEBUG_PRINT("\n/!\\Aucun %s trouvé!!!",FW_EXTENSION);
+    DEBUG_PRINT("/!\\Aucun %s trouvé!!!",FW_EXTENSION);
     return 0;
   }
 
@@ -1674,11 +1675,11 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
   }
 
   if (!foundNewer) {
-    DEBUG_PRINT("\n/!\\Aucune version valide trouvée");
+    DEBUG_PRINT("/!\\Aucune version valide trouvée");
     return 0;
   }
   if (!(best > cur)) { // strictement supérieure
-    DEBUG_PRINT("\nVersion distante %.2f <= locale %.2f", best, cur);
+    DEBUG_PRINT("Version distante %.2f <= locale %.2f", best, cur);
     return 0;
   }
 
@@ -1940,7 +1941,7 @@ static bool isAppleMidiServiceType(const char* serviceType) {
 }
 
 void WiFiRTPDiscoveryTask(void* parameter){
-    DEBUG_PRINT("\n\n[WiFiRTPDiscoveryTask] Scan RTP-MIDI lancé...\n");    
+    DEBUG_PRINT("\n\n[RTP-WiFi] Scan RTP-MIDI lancé...\n");     
     int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
     DEBUG_PRINT("\ntrouvé %d service(s) AppleMIDI\n", n);
     for (int i = 0; i < n; i++) {

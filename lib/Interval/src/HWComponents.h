@@ -1555,10 +1555,16 @@ class WiFiEth : public Network{
             gateway = Ethernet.gatewayIP();                                      
            }
           lastActiveMedia = media;
-          checkInternet();
           DEBUG_PRINT("\n+-------------------+");
           DEBUG_PRINT("\n| NETWORK CONNECTED |");
           DEBUG_PRINT("\n+-------------------+");          
+          
+          // Utiliser des lambdas pour passer les méthodes membres comme callbacks
+          asyncPing(
+            &internet,
+            [&](PingEcho* echo) { onInternetPing(echo); }
+          );
+
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
             DEBUG_PRINT("\n+----------------------+");
@@ -1599,8 +1605,7 @@ class WiFiEth : public Network{
     }
 
     void onInternetPing(PingEcho* echo) {
-        if (internetCallback !=nullptr) internetCallback(echo);
-        //DEBUG_PRINT("\n\n\n\t\t\t * * * * onInternetPing %s latency:%i * * * *",echo->alive?"OK":"fail",echo->latency);        
+      if (internetCallback !=nullptr) internetCallback(echo);
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
@@ -1611,12 +1616,11 @@ class WiFiEth : public Network{
       xTaskCreate(
         pingTask,         // Tâche à exécuter
         "PingTask",       // Nom de la tâche
-        4096*2,             // Taille de la pile de la tâche
+        4096*2,           // Taille de la pile de la tâche
         params,           // Paramètres de la tâche (adresse IP et callbacks)
         2,                // Priorité
         &pingTaskHandle   // Handle de la tâche
       );
-      //DEBUG_PRINT("\nasyncPing(%s) task created",echo->host.c_str());
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
@@ -1654,19 +1658,6 @@ class WiFiEth : public Network{
       );
       
       return true;
-    }
-
-    void checkInternet(){
-      //DEBUG_PRINT("\n\n\tcheckInternet => ");
-      // Utiliser des lambdas pour passer les méthodes membres comme callbacks
-      asyncPing(
-        &internet,
-        [&](PingEcho* echo) { onInternetPing(echo); }
-      );
-      // latency
-      //if (LAN) 
-      //LANlatency = 20;
-      //else 
     }
 
     void restoreWiFiSSID(){
