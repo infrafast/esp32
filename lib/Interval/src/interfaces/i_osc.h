@@ -147,7 +147,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
             //xSemaphoreGive(udpSlot->mutex);
 
             if (osc.hasError()) {
-                DEBUG_PRINT("\nreadOSC: %s\n", osc.getError());
+                DEBUG_PRINT("\nreadOSC: %i\n", osc.getError());
                 return 0;   // message invalide
             }else{
               char addr[64];
@@ -198,12 +198,12 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
       
       bool success = false;
 
-      DEBUG_PRINT("\n>>%s(%s,%i->%i) ",msg->getAddress(),(OSCPing*)destination->ip.toString().c_str(),OSC_localPort, OSC_remotePort);
+      DEBUG_PRINT("\n>>%s(%s,%i->%i) ",msg->getAddress(),destination->ip.toString().c_str(),OSC_localPort, OSC_remotePort);
 
       UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
 
       if (udpSlot == nullptr){
-          DEBUG_PRINT(" **** FAIL (UdpSlot null) ****",msg->getAddress());
+          DEBUG_PRINT(" **** FAIL (UdpSlot null) ****");
           return false;
       }            
      
@@ -215,7 +215,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
         udp->endPacket();
         success = true;
       }else{
-        DEBUG_PRINT(" **** FAIL (udp null) ****",msg->getAddress());        
+        DEBUG_PRINT(" **** FAIL (udp null) ****");        
       }
 
       return success;          

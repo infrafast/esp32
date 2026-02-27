@@ -398,10 +398,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return &icon;
     }
 
-    virtual uint8_t getServiceWeight(){
-      return 1; // default
-    }     
-
   protected:
     String icon = ICON_LINK;
 
@@ -410,8 +406,10 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 class NetWorkInterface{
   public:
     PingEcho* destination;
-    
-    static std::vector<DeviceInterface*> inventory;  // list of device interface 
+
+    // ---- Global inventory of services (NetWorkInterface*) ----
+    static std::vector<NetWorkInterface*> inventory;
+    static int8_t enabledServicesWeightSum;
 
     virtual void* read(){
       return nullptr;
@@ -420,114 +418,164 @@ class NetWorkInterface{
     virtual bool handleConnectService(){return false;}
     virtual bool handleDisconnectService(){return false;}
 
-    static void addToInventory(DeviceInterface* iface) {
-        if (iface == nullptr) return;
-        inventory.push_back(iface);
+    static void addToInventory(NetWorkInterface* iface) {
+      if (iface == nullptr) return;
+      inventory.push_back(iface);
     }
 
-    #define MAX_NETWORK_SERVICES_WEIGHT  2
+    #define SERVICES_WEIGHT_LIMIT  2
 
-    bool locked = true;
+    bool serviceLocked = true; // by default locked to avoid monitoring straight after startup
 
-    static uint8_t capacityLeft(){
-      return MAX_NETWORK_SERVICES_WEIGHT - countWeight();
+    virtual uint8_t getServiceWeight(){
+      return 1; // default
     }
 
-    static uint8_t countWeight(){
-      uint8_t totalWeight = 0;
-      for (auto* iface : inventory) {
-        if (iface != nullptr && iface->state.enabled) {   // a partir du moment ou une interface est enable elle consomme les resources reseau
-          totalWeight += iface->getServiceWeight();
-        }
-      }
-      return totalWeight;
+    void releaseCapacity(){
+      if (hwm.network->media != CABLE_MEDIA) return;    // only applicable for ethernet
+
+      // first we release what we consume
+      enabledServicesWeightSum -= getServiceWeight();
+      if (enabledServicesWeightSum < 0) enabledServicesWeightSum = 0;
+
+      DEBUG_PRINT("\t%s::releaseCapacity() : %i",
+                  deviceInterface ? deviceInterface->interfaceName.c_str() : "<?>",
+                  getServiceWeight());
+
+      // then we check if any enabled interface that was serviceLocked can be unlocked
+      unlockWaitingEnabledServices();
+      /*
+        Un service locké n’a pas réservé de budget (reachedCapacity() n’incrémente que si ça passe).
+        Quand on “unlock”, on appelle enable(), qui rappelle reachedCapacity() :
+        si capacité dispo → ça incrémente enabledServicesWeightSum correctement
+        sinon → ça reste locké
+        Donc le budget reste cohérent sans double comptage.        
+      */
     }
 
-    static bool reachedLimit(){        
-      if (hwm.network->media != CABLE_MEDIA) return false;    
-      if (countWeight() > MAX_NETWORK_SERVICES_WEIGHT) return true;
-      return false;
-    }    
-    
-    virtual void setStateDisconnected(){    // to be overrided by derived class
+    bool reachedCapacity(){
+      bool limit = false;
+
+      if (hwm.network->media != CABLE_MEDIA) return limit;
+
+      if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) limit = true;  // already reached the limit
+      else enabledServicesWeightSum += getServiceWeight();                  // book the correct amount
+
+      return limit;
+    }
+
+    virtual void setStateDisconnected(){ // to be overrided by derived class
       if (!deviceInterface) return;
-      DEBUG_PRINT("\n%s::setStateDisconnected()",deviceInterface->interfaceName.c_str());   
+      DEBUG_PRINT("\n%s::setStateDisconnected()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
       deviceInterface->state.details = concatStrings(*lang.getString("disconnected"));
       deviceInterface->state.led = "red";
       deviceInterface->state.progress = -1;
-    }  
+    }
 
     void attachDeviceInterface(DeviceInterface* _devif){
       deviceInterface = _devif;
-      addToInventory(_devif);
+      addToInventory(this); // <-- single inventory of NetWorkInterface*
+    }
+
+    // ---- NEW: tries to unlock + (re)enable services waiting for capacity ----
+    /*
+    Objectif : parcourir les interfaces enabled et serviceLocked, et tenter de les activer tant que possible.
+    Comme ton enable() :
+    appelle reachedCapacity() (qui réserve le budget si possible),
+    met serviceLocked et l’état (LOCKED ou tentative de connect),
+    …le plus sûr est de réutiliser enable() pour éviter de dupliquer la logique de budget.    
+    */
+    static void unlockWaitingEnabledServices(){
+      // Only meaningful if network is connected; otherwise enable() would just set disconnected
+      if (hwm.network->state != CONNECTED) return;
+
+      // Try to enable locked-but-enabled services until we hit the capacity limit
+      for (NetWorkInterface* iface : inventory){
+        if (!iface || !iface->deviceInterface) continue;
+
+        if (!iface->deviceInterface->state.enabled) continue;  // only those enabled by user
+        if (!iface->serviceLocked) continue;                   // only those currently locked
+
+        if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) break;
+
+        // Reuse existing logic:
+        // - reachedCapacity() will book the budget if available
+        // - will set locked state or attempt handleConnectService()
+        iface->enable();
+
+        if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) break;
+      }
     }
 
   protected:
     DeviceInterface* deviceInterface = nullptr;
 
-    void setNetworkStateDown(){      
+    void setNetworkStateDown(){
       if (!deviceInterface) return;
-      DEBUG_PRINT("\n%s::setNetworkStateDown()",deviceInterface->interfaceName.c_str());      
+      DEBUG_PRINT("\n%s::setNetworkStateDown()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
-      deviceInterface->state.label = IF_STATE_DISCONNECTED;           
+      deviceInterface->state.label = IF_STATE_DISCONNECTED;
       deviceInterface->state.led = "red medium";
-      deviceInterface->state.details = *lang.getString("setNetworkStateDown");                // connect Eth cable or attempt to connect a previous SSID
+      deviceInterface->state.details = *lang.getString("setNetworkStateDown");
     }
 
     void switchDevice(bool _enable){
-      deviceInterface->state.enabled = _enable; 
-      DEBUG_PRINT("\nNetworkInterface::switchDevice(%s)",_enable?"true":"false");  
+      deviceInterface->state.enabled = _enable;
+      DEBUG_PRINT("\nNetworkInterface(%s)::switchDevice(%s)",
+                  deviceInterface->interfaceName.c_str(),
+                  _enable ? "true" : "false");
       if(_enable) enable();
-      else disable();      
+      else disable();
     }
 
     void enable(){
-      /* attempts to enable devices may be done while the network is not yet connected
-      for instance at setup phase when loading the config file, hence it is important to 
-      catch the network state before calling handleConnectService */
+      DEBUG_PRINT("\n%s->enable()", deviceInterface->interfaceName.c_str());
 
-      DEBUG_PRINT("\n%s->enable()",deviceInterface->interfaceName.c_str());    
-      locked = reachedLimit();
-      if (locked){
-        DEBUG_PRINT("->locked");    
+      serviceLocked = reachedCapacity();
+
+      DEBUG_PRINT("\tcounts %i/%i => %s",
+                  enabledServicesWeightSum,
+                  SERVICES_WEIGHT_LIMIT,
+                  serviceLocked ? "LOCKED" : "NOT LOCKED");
+
+      if (serviceLocked){
         setStateLocked();
       }else{
-        DEBUG_PRINT("->ok, no lock");
+        // attempts to enable devices may happen while network is not yet connected
         if (hwm.network->state == CONNECTED){
-          // see above comment, we only attempt to connect if network is up and runnig
           if (!handleConnectService()){
-            setStateDisconnected();            
+            setStateDisconnected();
           }
         }else{
-          DEBUG_PRINT("\n%s::Network is not up and running, can't enable device",deviceInterface->interfaceName.c_str()); 
+          DEBUG_PRINT("\n%s::Network down, skipped handleConnectService()",
+                      deviceInterface->interfaceName.c_str());
           setStateDisconnected();
         }
       }
     }
 
     void disable(){
-      DEBUG_PRINT("\n%s->disable()",deviceInterface->interfaceName.c_str());
-      //unlocked = false;
-      deviceInterface->setStateDisabled();            
+      DEBUG_PRINT("\n%s->disable()", deviceInterface->interfaceName.c_str());
+      releaseCapacity();
+      deviceInterface->setStateDisabled();
       handleDisconnectService();
     }
 
-
-    void monitorNetwork(){         
+    void monitorNetwork(){
       static uint8_t c = 0;
+      (void)c;
 
       if (!deviceInterface) return;
-     
+
       if (hwm.network->refreshed){
         if (hwm.network->state == CONNECTED){
           if (deviceInterface->state.enabled){
-            // check if we are allowed to engage network
             enable();
             return;
           }else{
-            DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored",deviceInterface->interfaceName.c_str());
+            DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored", deviceInterface->interfaceName.c_str());
             return;
           }
         }else{
@@ -535,27 +583,27 @@ class NetWorkInterface{
           return;
         }
       }
+
       if (hwm.network->state == DISCONNECTED){
-        // otherwise we report on progress and the network we try to connect         
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
         deviceInterface->state.subState = hwm.network->SSID;
-      }else if (!locked) monitorService();
-      
+      }else if (!serviceLocked){
+        monitorService();
+      }
     }
 
-    virtual void setStateLocked(String led = "black", String details = *lang.getString("Network busy")){            
-      DEBUG_PRINT("\n%s::setStateLocked()",deviceInterface->interfaceName.c_str());
-      deviceInterface->state.code = IF_NOT_READY;      
+    virtual void setStateLocked(String led = "orange",String details = *lang.getString("Network busy")){
+      DEBUG_PRINT("\n%s::setStateLocked()", deviceInterface->interfaceName.c_str());
+      deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_LOCKED;
-      deviceInterface->state.subState = "";      
+      deviceInterface->state.subState = "";
       deviceInterface->state.details = details;
       deviceInterface->state.led = led;
-      deviceInterface->state.progress = -1;      
+      deviceInterface->state.progress = -1;
     }
-
 };
-
-std::vector<DeviceInterface*> NetWorkInterface::inventory;
+std::vector<NetWorkInterface*>NetWorkInterface::inventory;
+int8_t NetWorkInterface::enabledServicesWeightSum = 0;
 
 class InterfaceRepository{
 

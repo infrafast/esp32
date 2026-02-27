@@ -609,7 +609,7 @@ virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
 
       if (!interface){
         renderError = true;
-        DEBUG_PRINT("\nStrip interface %s not instanciated");
+        DEBUG_PRINT("\nStrip interface %s not instanciated",interfaceName.c_str());
         pushSimpleText(layout, lang.getString("No interface"));
         return;
       }

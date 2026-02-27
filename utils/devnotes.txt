@@ -9,6 +9,13 @@ C:\Users\progman\.platformio\packages\framework-arduinoespressif32\tools\sdk\esp
 WiFi.setMinSecurity(WIFI_AUTH_WEP)
 
 
+POUR DETECTER LES DEBUG FAISANT DES PLANTAGES 
+
+	-Wformat
+	-Werror=format
+
+
+
 Terminal:
 CTRL+T (call menu) then CTRL+D (start debug/console/reset)
   

@@ -766,7 +766,7 @@ class Network : public HWComponent2State{
     Network(uint8_t pin, bool debug):HWComponent2State(pin,DISCONNECTED,debug){
       id = concatStrings("Network~", pin);
       networkBusy = xSemaphoreCreateMutex();
-      state = DISCONNECTED; previousState = CONNECTED; // we set the initial state to the opposite of the state we want to detect so it trigger the event at startup
+      state = DISCONNECTED; previousState = state; // we set the initial state to the opposite of the state we want to detect so it trigger the event at startup
     }
 
     virtual UdpSlot* useUDPslot(int i) = 0;
@@ -893,7 +893,7 @@ class Network : public HWComponent2State{
 
 class WiFiEth : public Network{
   public:
-    EthernetLinkStatus cable = Unknown, oldCable = cable;
+    EthernetLinkStatus cable = Unknown;//, oldCable = cable;
     unsigned long checkEthCableTime=0;
 
     WiFiEth(uint8_t pin, uint8_t rstP, bool enableEth = true, bool debug = true): Network(pin, debug){      
@@ -1102,7 +1102,7 @@ class WiFiEth : public Network{
     virtual int requestUDPslotID(int port) {
 
       if (port <= 0 || port > 65535) {
-        DEBUG_PRINT("\n[requestUDPslotID] invalid port %d", port);
+        DEBUG_PRINT("\n[requestUDPslotID]\t\tinvalid port %d", port);
         return -1;
       }
 
@@ -1110,7 +1110,7 @@ class WiFiEth : public Network{
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
         if (udpSlots[i].port == port && udpSlots[i].reservations > 0) {
           if (!ensureUDPslotMedia(i)) {
-            DEBUG_PRINT("\n[UDP-%d/%d] ensureUDPslotMedia failed", i, port);
+            DEBUG_PRINT("\n[UDP-%d/%d]\t\tensureUDPslotMedia failed", i, port);
             return -1;
           }
           udpSlots[i].reservations++;
@@ -1130,7 +1130,7 @@ class WiFiEth : public Network{
 
           if (!ensureUDPslotMedia(i)) {
             destroyUDPslot(i);
-            DEBUG_PRINT("\n[UDP] newUDP() failed");
+            DEBUG_PRINT("\n[UDP]\t\tnewUDP() failed");
             return -1;
           }
 
@@ -1139,7 +1139,7 @@ class WiFiEth : public Network{
         }
       }
 
-      DEBUG_PRINT("\n[UDP] Reached max!");
+      DEBUG_PRINT("\n[UDP]\t\tReached max!");
       return -1;
     }
 
@@ -1530,10 +1530,10 @@ class WiFiEth : public Network{
       }
 
       Network::refresh(force);
-      if (cable != oldCable){
+      /*if (cable != oldCable){
         oldCable = cable;
         refreshed = true;   // this refresh has to be flagged after NetworkRefresh to avoid being erased
-      }
+      }*/
 
       if (refreshed){
         DEBUG_PRINT("\n+------------------------------------------------+");

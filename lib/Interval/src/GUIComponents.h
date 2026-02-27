@@ -1158,9 +1158,6 @@ class Toggle : public Widget{
 
         uint16_t fillColor, textColor;
 
-        if (debug) 
-          DEBUG_PRINT("\n%s refreshed(%s,%d) force:%i",id.c_str(),*text, *revert,force);
-
         if(*revert) {
           //DEBUG_PRINT("\nFlip");
           fillColor    = TFT_RED;
@@ -1687,6 +1684,7 @@ class Led : public Widget{
         else if (token == "yellow") ledBaseColor = TFT_YELLOW;
         else if (token == "blue") ledBaseColor = TFT_BLUE;
         else if (token == "green") ledBaseColor = TFT_GREEN;
+        else if (token == "orange") ledBaseColor = TFT_ORANGE;
         else if (token == "grey" || token == "gray") ledBaseColor = TFT_SILVER;
         else if (token == "fast"){
           flashRequested = true;

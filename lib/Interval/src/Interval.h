@@ -34,7 +34,7 @@
 #include <array>
 #include <utility>
 
-#define USE_FTP
+//#define USE_FTP
 
 #if defined(USE_FTP) && defined(USE_NETWORK)
   #include "ESP-FTP-Server-Lib.h"
@@ -725,7 +725,7 @@ class JsonList{
       //DEBUG_PRINT("\ngetString(%s,%s)=>",name.c_str(),defaultValue.c_str());        
       if (index < 0) {
         noToken = defaultValue;
-        DEBUG_PRINT("\tno token");
+        //DEBUG_PRINT("\tno token");
         return &noToken;
       } else {        
         KeyValue* kv = keyValues.get(index);
@@ -836,7 +836,7 @@ class JsonListFile : public JsonList{
         
         if (!LittleFS.exists(filename)){
           success = false;     
-          DEBUG_PRINT("\nJsonListFile::file %s doesnt exit, use default values\n",filename.c_str());
+          //DEBUG_PRINT("\nJsonListFile::file %s doesnt exit, use default values\n",filename.c_str());
           if (defaultValues != "") deserialize(defaultValues);          
         }else{
 
@@ -1614,7 +1614,7 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                String& outRemoteVersion,
                                String& outFileUrl)
 {
-  DEBUG_PRINT("\n\n[FWUPDATE] (v%s) Listing: %s", _V, baseUrl.c_str());
+  DEBUG_PRINT("\n\n[FWUPDATE]\t\t(v%s) Listing: %s", _V, baseUrl.c_str());
 
   // 1) GET du listing
   UrlParts u = parseUrl(baseUrl);
@@ -1941,7 +1941,7 @@ static bool isAppleMidiServiceType(const char* serviceType) {
 }
 
 void WiFiRTPDiscoveryTask(void* parameter){
-    DEBUG_PRINT("\n\n[RTP-WiFi] Scan RTP-MIDI lancé...\n");     
+    DEBUG_PRINT("\n\n[RTP-WiFi]\t\tScan RTP-MIDI lancé...\n");     
     int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
     DEBUG_PRINT("\ntrouvé %d service(s) AppleMIDI\n", n);
     for (int i = 0; i < n; i++) {
@@ -2497,19 +2497,19 @@ void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *re
 
 
 void socketConnectionCallback(IWebSocket &ws) {
-  DEBUG_PRINT("\nwebAppConnected !");
+  DEBUG_PRINT("\n\n[WSS]\t\tconnected!\n\n");
   app.webAppConnected = true;
 
   const auto protocol = ws.getProtocol();
   if (protocol) {
-    DEBUG_PRINT("\nProtocol: %i",protocol);
+    //DEBUG_PRINT("\nProtocol: %i",protocol);
   }
 
   ws.onMessage(socketMessageCallback);
   ws.onClose(socketCloseCallback);
 
   app.configClientIP = ws.getRemoteIP().toString();
-  DEBUG_PRINT("\nNew websocket client IP: %s",app.configClientIP.c_str());
+  DEBUG_PRINT("\n\n[WSS]\t\tNew websocket client IP: %s\n\n",app.configClientIP.c_str());
 
   // any message to be send straigth after connexion was established would be put here.
   // app.broadCast(app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well  

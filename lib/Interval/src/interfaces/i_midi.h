@@ -470,7 +470,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
 
     void handleRefresh(){
       populateSessionOptions();     // regenerate the config data set
-      state = savedState;        // recall the state we had before refresh request
+      if (!locked) state = savedState;        // recall the state we had before refresh request, except if current state is locked
+      DEBUG_PRINT("\n%s::handleRefresh() recall state:%s",interfaceName.c_str(),savedState.label.c_str());
       state.broadcastState = true; // communicate the new state
       state.broadcastConfig = true; // the new populatedSessions have to be communicated to the web app dropdown
     }
@@ -766,7 +767,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
           exception = UNDEF_EXCEPTION;
           break;
       }
-      DEBUG_PRINT("\nAppleMIDI Exception: %s (value:%ld)",exception.c_str(),value);
+      DEBUG_PRINT("\nAppleMIDI Exception: %s (value:%i)",exception.c_str(),value);
       //handleDisconnected(); is then called by the library
     }    
 
@@ -860,6 +861,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
       lastInvite = millis();    // we reset the timer that controls the periodicity of the invites
       if (sessionType == APPLEMIDI_ACTIVE) setStateActiveSession();
       else setStatePassiveSession();
+      savedState = state;
     }
 
     virtual bool handleConnectService() override{

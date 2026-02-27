@@ -578,10 +578,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void internetCallBack(PingEcho* echo){
       ///////////////////////// do what application manager has to do when internet is connected/disconnected      
       if (echo->alive){
-        DEBUG_PRINT("\n\n[ping] %s : internet connected\n\n",echo->host.c_str()); 
+        DEBUG_PRINT("\n\n[ping]\t\t%s : internet connected\n\n",echo->host.c_str()); 
         checkRemoteVersion();               
       }else{
-        DEBUG_PRINT("\n\n[ping] %s : No internet connection\n\n",echo->host.c_str());          
+        DEBUG_PRINT("\n\n[ping]\t\t%s : No internet connection, skipping remote version check\n\n",echo->host.c_str());          
       }       
       ///////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
@@ -890,11 +890,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       minHeapSize = maxHeapSize = ESP.getFreeHeap();
 
+      // BY DEFAULT, WE DO NOT STARTUP, ONLY DISPLAY BATTERY LEVEL AND SWITCH OFF, SO WE HET THE ICON READY
       setAPIcon();
       setBatIcon();     
 
-      // BY DEFAULT, WE DO NOT STARTUP, ONLY DISPLAY BATTERY LEVEL AND SWITCH OFF                 
-
+                
       bool wizard = false;
 
       switch(hwm->startupState){
@@ -923,6 +923,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           startup(SCREEN_BANK);
         break;
       }
+    
+      DEBUG_PRINT("\n[ApplicationManager] ***************************************************\n\n");
+      DEBUG_PRINT("\n[ApplicationManager] ******************* INIT FINISHED *****************\n\n");
+      DEBUG_PRINT("\n[ApplicationManager] ***************************************************\n\n");     
     }
 
     void startup(uint8_t startupScreen){          
@@ -982,7 +986,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
               if (interface->isSwitchable()){
                 getSelectedStrip()->interface->switchDevice(enabled);
               }else{
-                DEBUG_PRINT("\n[DCLIC] Interface %s is not switchable",interface->interfaceName.c_str());
+                DEBUG_PRINT("\n[DCLIC]\t\tInterface %s is not switchable",interface->interfaceName.c_str());
               }
             }
           }        
@@ -1535,20 +1539,20 @@ void setup() {
       JsonDocument doc;      
       String tempJsonString="";
 
-      DEBUG_PRINT("\nserializing dataRepo");
+      //DEBUG_PRINT("\nserializing dataRepo");
       JsonObject ds = doc.createNestedObject(stripdatasets);
       dataRepo.serialize(ds);
 
-      DEBUG_PRINT("\nserializing IFconfig");
+      //DEBUG_PRINT("\nserializing IFconfig");
       JsonObject ifcfg = doc.createNestedObject(ifdatasets);
       IFdataRepo.serialize(ifcfg);
 
 
-      DEBUG_PRINT("\nserializing input (shortcuts & interfaces fields)");
+      //DEBUG_PRINT("\nserializing input (shortcuts & interfaces fields)");
       JsonArray ji = doc["jsonInput"].to<JsonArray>();
       jsonInputRepo.serialize(&ji);
 
-      DEBUG_PRINT("\nserializing interfaces");
+      //DEBUG_PRINT("\nserializing interfaces");
       JsonArray interfaces = doc["interfaces"].to<JsonArray>();  
       interfaceRepo.serialize(&interfaces);   
 
@@ -1556,16 +1560,16 @@ void setup() {
 
       doc[FW_UPDATE_URL] = fwUpdateURL;
 
-      DEBUG_PRINT("\nserializing skeletons");
+      //DEBUG_PRINT("\nserializing skeletons");
       JsonArray skel = doc["skeletons"].to<JsonArray>();
       stripFactory.serialize(&skel);  
 
-      DEBUG_PRINT("\nserializing system");
+      //DEBUG_PRINT("\nserializing system");
       tempJsonString="";
       systemCfg.serialize(&tempJsonString);  
       doc["system"]=tempJsonString;
 
-      DEBUG_PRINT("\nserializing bankCfg");
+      //DEBUG_PRINT("\nserializing bankCfg");
       tempJsonString = serializeBanks();      
       doc["banks"]=tempJsonString;
           
@@ -2139,7 +2143,7 @@ void setup() {
       if (hwm->configMedia != nullptr){
         if (webAppConnected && hwm->configMedia->state == CONNECTED){
           wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());  
-          DEBUG_PRINT("\n\n\t\t * * * * broadCast(%s) * * * ",msg.c_str());
+          DEBUG_PRINT("\n\n[BROADCAST]\t\t(%s)\n\n",msg.c_str());
         }
       }     
     }
@@ -2222,13 +2226,13 @@ void setup() {
       shutdownWSS();
    
       if (hwm->configMedia->media == CABLE_MEDIA){
-        DEBUG_PRINT("\nnew EthernetWebSocketServer{}");
+        DEBUG_PRINT("\n\n[WSS]\t\tinstanciated\n\n");
         wss = new EthernetWebSocketServer{};
       }else if (hwm->configMedia->media == WIFI_MEDIA){ 
         DEBUG_PRINT("\nnew WiFiWebSocketServer{}");
         wss = new WiFiWebSocketServer{};                
       }else{
-        DEBUG_PRINT("\nNo MEDIA to create WebSocketServer");
+        DEBUG_PRINT("\n\n[WSS]\t\tinstanciation failed, no media\n\n");
         return;
       }
       
@@ -2246,7 +2250,7 @@ void setup() {
         if (hwm->configMedia->state == CONNECTED){
           if (webServer == nullptr){          
             //start webserver     
-            DEBUG_PRINT("\nstartWebApp()");       
+            DEBUG_PRINT("\n\n[WEBAPP]\t\tstart\n\n");       
             
             webServer = new Application();
             webServer->setTimeout(3000);
@@ -2270,7 +2274,7 @@ void setup() {
                      
           }
           hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"," (http://",hwm->configMedia->IP.toString(),")"); // hwm->configMedia->IP.toString();
-          DEBUG_PRINT("\nWebserver serving on %s",hwm->configURL.c_str() );
+          DEBUG_PRINT("\n\n[WEBAPP]\t\tserving on %s",hwm->configURL.c_str() );
           return true;
         }
         return false;
@@ -2413,7 +2417,7 @@ void setup() {
       res.set("Content-Type", mimeType.c_str());
       res.set("Access-Control-Allow-Origin","*");
 
-      DEBUG_PRINT("\n------------->serving %s",fullPath.c_str());
+      DEBUG_PRINT("\n[WEBAPP]\t\tserving %s",fullPath.c_str());
 
       sendFileInChunks(&file, &res);
       res.end();
@@ -2592,7 +2596,7 @@ void setup() {
       // Lire et envoyer des paquets jusqu'à ce que tout le fichier soit envoyé
       while ((bytesRead = file->read(buffer, chunkedDataSize)) > 0) {
         res->write(buffer, bytesRead);  // Écrire le tampon complet dans le client        
-        DEBUG_PRINT( ".");  
+        //DEBUG_PRINT( ".");  
         //taskYIELD(); // ONLY IN A TASK        
         //yield();     // ==> when this yield is on, it create CONNECTION_REFUSED on iMac chrome as it slows down the sending of the data
       }
@@ -2985,6 +2989,7 @@ void setup() {
           jsonAnswer.value = jsonInput.as<String>();            
         }
       }else if (command == "scanWifi"){        // Create the parrallel scan task
+        DEBUG_PRINT("\n\n[WiFi Scan]\t\tstart\n\n");
         xTaskCreate(
           scanNetworksTaskWrapper,  // Function to implement the task
           "ScanNetworks",     // Name of the task
@@ -3359,7 +3364,7 @@ void setup() {
 /*      WiFi.mode(WIFI_STA); // dixit chatgpt mais d'apres mes tests ce n'est pas necessaire 
       vTaskDelay(500);*/
       int numberOfNetworks = WiFi.scanNetworks();
-      DEBUG_PRINT("\nWiFi Scan complete");
+      DEBUG_PRINT("\n\n[WiFi Scan]\t\tcomplete\n\n");
       for (int i = 0; i < numberOfNetworks && i<MAX_NUMBER_OF_NETWORK_TO_REPORT; i++) {
         //DEBUG_PRINT("\nNetwork name: %s",WiFi.SSID(i).c_str());
         scannedWifi.add(WiFi.SSID(i));
@@ -3434,7 +3439,7 @@ void setup() {
             continue; // Ignorer cette itération
         }        
         
-        DEBUG_PRINT("\n\n[HTTP-POST] received <%s><%s>\n\n",name,options);
+        DEBUG_PRINT("\n\n[HTTP-POST]\t\treceived <%s><%s>\n\n",name,options);
         String jsonAnswer = parseJsonInput(name);        
 
         // version compressée
@@ -3486,7 +3491,7 @@ void setup() {
         if (hwm->network->media == CABLE_MEDIA){
           // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
           EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
-          DEBUG_PRINT("\n\n[RTP-bonjour] Scan RTP-MIDI lancé...\n");  
+          DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
         }else{
           // Wifi = bloquant
           xTaskCreate(
@@ -3502,8 +3507,8 @@ void setup() {
     }
 
     void epDirectoryUpdated(){
-      DEBUG_PRINT("\n\n[RTP] Scan terminé (timeout).");
-      DEBUG_PRINT("\n[RTP] %d endpoint(s) mémorisé(s):\n", rtpDir.epCount);      
+      DEBUG_PRINT("\n\n[RTP]\t\tScan terminé (timeout).");
+      DEBUG_PRINT("\n[RTP]\t\t%d endpoint(s) mémorisé(s):\n", rtpDir.epCount);      
       for (int i = 0; i < rtpDir.epCount; i++) {
         DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
       }
