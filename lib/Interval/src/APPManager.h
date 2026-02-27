@@ -924,8 +924,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
       }
     
-      DEBUG_PRINT("\n[ApplicationManager] ***************************************************\n\n");
-      DEBUG_PRINT("\n[ApplicationManager] ******************* INIT FINISHED *****************\n\n");
+      DEBUG_PRINT("\n\n[ApplicationManager] *************************************************");
+      DEBUG_PRINT("\n[ApplicationManager] ******************* INIT FINISHED *****************");
       DEBUG_PRINT("\n[ApplicationManager] ***************************************************\n\n");     
     }
 
