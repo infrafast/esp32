@@ -3463,23 +3463,21 @@ void setup() {
 
     void startDirectoryServiceDiscovery(){
       // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
-      if (hwm->network->state == CONNECTED){
-        rtpDir.clear();
-        if (hwm->network->media == CABLE_MEDIA){
-          // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
-          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
-          DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
-        }else{
-          // Wifi = bloquant
-          xTaskCreate(
-            WiFiRTPDiscoveryTask,  // Function to implement the task
-            "WiFiRTPDiscoveryTask",     // Name of the task
-            4096,              // Stack size in words
-            NULL,               // Task input parameter
-            1,                  // Priority of the task
-            NULL                // Task handle
-          );          
-        }
+      rtpDir.clear();
+      if (hwm->network->media == CABLE_MEDIA){
+        // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
+        EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
+        DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
+      }else{
+        // Wifi = bloquant
+        xTaskCreate(
+          WiFiRTPDiscoveryTask,  // Function to implement the task
+          "WiFiRTPDiscoveryTask",     // Name of the task
+          4096,              // Stack size in words
+          NULL,               // Task input parameter
+          1,                  // Priority of the task
+          NULL                // Task handle
+        );          
       }
     }
 
