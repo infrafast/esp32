@@ -482,6 +482,8 @@ virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
         interfaceName = jsonStrip[C_INTERFACE].as<String>();//.as<int>();
         
         interface = interfaceRepo.retrieve(interfaceName);
+        return false;
+
         interface->stripCount++;
         //DEBUG_PRINT("\n%s has %i strips",interfaceName.c_str(), interface->stripCount);
 

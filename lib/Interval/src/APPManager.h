@@ -11,6 +11,7 @@
 #include "interfaces/i_midi.h"
 #include "interfaces/i_dmx.h"
 #include "interfaces/i_osc.h"
+#include "interfaces/i_system.h"
 
 ///////////////////// WIDGET LOCATION & SIZE ////////////////////////
 #define OVERLAY_ICON_SIZE TFT_HEIGHT/15
@@ -243,6 +244,14 @@ class StripHeaderWidget: public Top2Toggles{
 
 
 };
+
+#define MACRO_NUMBER_MAX      10
+#define ADDRESS_COMMAND    "/command/%s"
+#define ADDRESS_STIPID      "/strip/id/%s"
+#define ADDRESS_ACTION        "/action/%s"
+  #define ADDRESS_ACTION_SIZE 5
+#define ADDRESS_MACRONAME     "/macro/name/%s"
+
 
 #define SHORTCUT_GROUP "shortcut"
 class Shortcuts: public DataProvider{
@@ -738,7 +747,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //
       // general purposes / test skeletons
       //
-      stripTextSkel = new StripSkeleton(STRIP_TEXT,GROUP_INTERFACE_SYSTEM,textStripConstructorCallback,'*');        
+      stripTextSkel = new StripSkeleton(STRIP_TEXT,GROUP_INTERFACE_UTILS,textStripConstructorCallback,'*');        
         stripTextSkel->registerDataSetAddress(systemInterface.dsText.address);
 
       //
@@ -3518,7 +3527,7 @@ void setup() {
                              "\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03\"]}}"
         "}";
 
-    String banksDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\"system\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";
+    String banksDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";
     String defaultUserConf = "{}";
 
     ScreenUnion oldScreen;    

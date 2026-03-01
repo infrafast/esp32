@@ -420,9 +420,9 @@ class NetWorkService{
     virtual void* read(){
       return nullptr;
     }
-    virtual void monitorService(){}
-    virtual bool handleConnectService(){return false;}
-    virtual bool handleDisconnectService(){return false;}
+    virtual void monitorService()=0;
+    virtual bool handleConnectService()=0;
+    virtual bool handleDisconnectService()=0;
 
 
 
@@ -647,103 +647,6 @@ class InterfaceRepository{
     DeviceInterface* retrieve(String _interfaceName);
 }interfaceRepo;
 
-#define MACRO_NUMBER_MAX      10
-#define ADDRESS_TEXT    "/text/%s"
-#define ADDRESS_COMMAND    "/command/%s"
-#define ADDRESS_STIPID      "/strip/id/%s"
-#define ADDRESS_ACTION        "/action/%s"
-  #define ADDRESS_ACTION_SIZE 5
-#define ADDRESS_MACRONAME     "/macro/name/%s"
-#define ADDRESS_PROVIDER      "/provider/"
-
-#define SYSTEM_INTERFACE "system"
-class SystemInterface: public DeviceInterface, public DataProvider{
-  #define GROUP_INTERFACE_SYSTEM "utils"
-  public:    
-
-    SerializableParameters systemDS = SerializableParameters(SYSTEM_INTERFACE, GROUP_INTERFACE_SYSTEM, &dataRepo);   // one instance
-        
-    DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_STRING),this);  // create as many parameters as required
-
-    SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_SYSTEM,_configurable),DataProvider(getProviderNameForData()){
-      state.code = CONNECTED;     
-      state.enabled = true;       
-    }
-
-    virtual bool restore(const JsonObject& config){return false;}
-
-    virtual void derivedConfig(JsonObject& config){};    
-    
-    virtual void monitor(){}
-    
-    virtual void* read(){return nullptr;}
-    
-    virtual bool begin(){
-
-      systemDS.registerDataSetAddress(dsText.address);      // register all ds             
-      jsonInputRepo.add(&systemDS);     // registered once
-
-      //dataProviderName = getProviderNameForData();      
-
-      return true;
-    }
-
-    virtual uint16_t getSize(String addrr){
-      if (addrr == ADDRESS_TEXT) return 1;
-      else{
-        // IS IT AN INTERFACE ?
-        char group[64] = {0};
-        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
-        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
-          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX            
-          uint16_t count = 0;
-          for (const auto& interface : interfaceRepo.interfaces){
-            // check if we request provider listing
-            if (interface->group == group) count++;
-          }
-          //DEBUG_PRINT("\nDataSet getSize(%s) has %d items",addrr.c_str(),count);
-          return count;
-        }
-
-      }
-
-      
-      DEBUG_PRINT("\n<%s>DataSet getSize(%s) is not implemented",dataProviderName.c_str(),addrr.c_str());
-      return 0;
-
-    }    
-    
-    virtual const String* getValuePtr(String addrr, uint16_t index){
-      if (addrr == ADDRESS_TEXT){
-        textValue = concatStrings("hello", index);
-        return &textValue;
-      }else{
-        char group[64] = {0};
-        //DEBUG_PRINT("\nscanning %s against /provider/xxxx/~s",addrr.c_str());
-        if (sscanf(addrr.c_str(), "/provider/%63[^/]/%%s", group) == 1) {
-          //DEBUG_PRINT("\n found: %s\n", group);  // → DMX    
-          int16_t count = -1;        
-          for (const auto& interface : interfaceRepo.interfaces){
-            if (interface->group == group) count++;
-            if (count == index){
-              String* s = &interface->interfaceName;
-              //DEBUG_PRINT("\nDataSet getValuePtr(%s,%d) = %s",addrr.c_str(),index,s->c_str());
-              return s;
-            } 
-          }
-        }      
-      }     
-
-      DEBUG_PRINT("\n<%s>DataSet getValuePtr(%s,%d) is not implemented",dataProviderName.c_str(),addrr.c_str(),index);
-      return &voidStatic;      
-    }
-
-  private:
-
-    String textValue = "";    
-        
-    
-}systemInterface(false);
 
 DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _configurable = true):exposed(_configurable), SerializableParameters(name,_group,&IFdataRepo, true){   // the interfaces uses its own repository to store parameters to avoid conflict with data sets groups
   interfaceRepo.interfaces.push_back(this);
@@ -763,11 +666,5 @@ DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){
   DEBUG_PRINT("\nError: requested interface <%s> is not existing, returning nullptr",requestedInterface.c_str());
   return nullptr;
 }
-
-// a NetworkOSCInterface is an interface that connect and IP 
-class NetworkOSCInterface: public NetWorkService{
-  public:
-};
-
 
 #endif

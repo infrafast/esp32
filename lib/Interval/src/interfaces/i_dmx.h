@@ -35,6 +35,10 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkService {
       monitorNetwork();
     }
     
+    virtual void monitorService(){}
+    virtual bool handleConnectService(){return false;}
+    virtual bool handleDisconnectService(){return false;}
+        
 };
 
 
