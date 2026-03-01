@@ -403,7 +403,7 @@ class AppleMidiSessionType : public DataSet{
 };
 
 
-class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
+class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
   #define CONFIG_APPLE "voidAppleMidiParam"
   #define SESSION_DESC_LENGHT 128
 
@@ -772,7 +772,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkInterface {
     }    
 
     virtual void switchDevice(bool _enabled) override{
-      NetWorkInterface::switchDevice(_enabled);
+      NetWorkService::switchDevice(_enabled);
       // we save it here to force a savedState in case it goes straight to handleRefresh after RTP midi check without interface being enabled      
       // it will become obsolete once we integrate the RTP scan into this class and not in the AppManager.
       savedState = state;

@@ -20,7 +20,7 @@ class DMXInterface : public DeviceInterface{
 };
 
 #define ARTNETDMX_INTERFACE "Artnet"
-class ArtnetDMXInterface: public DMXInterface, public NetWorkInterface {
+class ArtnetDMXInterface: public DMXInterface, public NetWorkService {
 
   public:
     String voidArtnetParam = "artnet123";

@@ -18,7 +18,7 @@ class OSCPing: public PingEcho{
     String pingCommand; //the command used to monitor the connection    
 };
 
-class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should derive OSCInterface
+class NetworkOSC: public DeviceInterface, public NetWorkService {  // should derive OSCInterface
 
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
@@ -231,7 +231,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }    
 
     virtual void switchDevice(bool _enabled) override{
-      NetWorkInterface::switchDevice(_enabled); // we use our own
+      NetWorkService::switchDevice(_enabled); // we use our own
     }   
 
     virtual bool handleConnectService(){

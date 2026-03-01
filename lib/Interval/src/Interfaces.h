@@ -403,15 +403,15 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
 };
 
-class NetWorkInterface{
+class NetWorkService{
   public:
     PingEcho* destination;
 
-    // ---- Global inventory of services (NetWorkInterface*) ----
-    static std::vector<NetWorkInterface*> inventory;
+    // ---- Global inventory of services (NetWorkService*) ----
+    static std::vector<NetWorkService*> inventory;
     static int8_t enabledServicesWeightSum;
 
-    NetWorkInterface(){
+    NetWorkService(){
       hwm.network->registerEventHandler([this](Event* e) {
         networkEventHandler(e);   // équivaut à this->networkEventHandler(e)
       });
@@ -426,7 +426,7 @@ class NetWorkInterface{
 
 
 
-    static void addToInventory(NetWorkInterface* iface) {
+    static void addToInventory(NetWorkService* iface) {
       if (iface == nullptr) return;
       inventory.push_back(iface);
 
@@ -446,13 +446,14 @@ class NetWorkInterface{
           disable();
           break;
         case EventDispatcher::EVENT_NETWORK_CONNECTED:
-        if (hwm.network->state == CONNECTED){
-          if (deviceInterface->state.enabled){
-            enable();
-          }else{
-            DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored", deviceInterface->interfaceName.c_str());            
+          if (hwm.network->state == CONNECTED){
+            if (deviceInterface->state.enabled){
+              enable();
+            }else{
+              DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored", deviceInterface->interfaceName.c_str());            
+            }
           }
-        }
+        break;
       }
     }
 
@@ -513,7 +514,7 @@ class NetWorkInterface{
 
     void attachDeviceInterface(DeviceInterface* _devif){
       deviceInterface = _devif;
-      addToInventory(this); // <-- single inventory of NetWorkInterface*
+      addToInventory(this); // <-- single inventory of NetWorkService*
     }
 
     // ---- NEW: tries to unlock + (re)enable services waiting for capacity ----
@@ -529,7 +530,7 @@ class NetWorkInterface{
       if (hwm.network->state != CONNECTED) return;
 
       // Try to enable locked-but-enabled services until we hit the capacity limit
-      for (NetWorkInterface* iface : inventory){
+      for (NetWorkService* iface : inventory){
         if (!iface || !iface->deviceInterface) continue;
 
         if (!iface->deviceInterface->state.enabled) continue;  // only those enabled by user
@@ -622,8 +623,8 @@ class NetWorkInterface{
       deviceInterface->state.progress = -1;
     }
 };
-std::vector<NetWorkInterface*>NetWorkInterface::inventory;
-int8_t NetWorkInterface::enabledServicesWeightSum = 0;
+std::vector<NetWorkService*>NetWorkService::inventory;
+int8_t NetWorkService::enabledServicesWeightSum = 0;
 
 class InterfaceRepository{
 
@@ -672,6 +673,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     virtual bool restore(const JsonObject& config){return false;}
 
     virtual void derivedConfig(JsonObject& config){};    
+    
     virtual void monitor(){}
     
     virtual void* read(){return nullptr;}
@@ -684,15 +686,6 @@ class SystemInterface: public DeviceInterface, public DataProvider{
       //dataProviderName = getProviderNameForData();      
 
       return true;
-    }
-    
-    virtual bool end(){
-      DEBUG_PRINT("\n%s::end() void",interfaceName.c_str());
-      return true;
-    }     
-
-    String getFilename(){
-      return "system_if.cfg";
     }
 
     virtual uint16_t getSize(String addrr){
@@ -772,7 +765,7 @@ DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){
 }
 
 // a NetworkOSCInterface is an interface that connect and IP 
-class NetworkOSCInterface: public NetWorkInterface{
+class NetworkOSCInterface: public NetWorkService{
   public:
 };
 
