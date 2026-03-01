@@ -279,43 +279,58 @@ class GenericComponent{
 
 };
 
-class EventDispatcher {
-
-  public:
-
-      struct Event{
-        uint8_t type;
-        void* data;
-      }evt;
-
-      using EventCallback = std::function<void(Event*)>;
-
-      enum EventType {
-        EVENT_ANALOG_BUTTON,     
-        EVENT_DIGITAL_BUTTON,     
-        EVENT_NETWORK_CHANGED_STATE,
-        EVENT_NETWORK,
-        EVENT_INTERNET_PING,
-        EVENT_APPLICATION,
-        EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE,
-        EVENT_NETWORK_CHANGED_MEDIA
-      };
-
-
-
-    void registerCallback(EventCallback cb) {
-      eventCallBack = cb;
-    }
-
-    void fireEvent(Event* event) {
-      if (eventCallBack != nullptr) eventCallBack(event);
-    }
-
-  protected:
-    EventCallback eventCallBack = nullptr;
-
+struct Event {
+  uint8_t type;
+  void* data;
 };
 
+class EventDispatcher {
+public:
+  using EventHandler = std::function<void(Event*)>;
+
+  enum EventType : uint8_t {
+    EVENT_DIGITAL_BUTTON,
+    EVENT_ANALOG_BUTTON,
+    EVENT_NETWORK,
+    EVENT_NETWORK_DISCONNECTED,
+    EVENT_NETWORK_CONNECTED,    
+    EVENT_NETWORK_CONNECTION_CHANGED,
+    EVENT_INTERNET_PING,
+    EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE,
+    EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED
+  };
+
+  static constexpr uint8_t MAX_CALLBACKS = 8;
+
+  // Renvoie true si ajouté, false si plus de place ou cb vide
+  bool registerEventHandler(EventHandler cb) {
+    if (!cb) return false;
+
+    for (uint8_t i = 0; i < MAX_CALLBACKS; i++) {
+      if (!eventHandlers[i]) {                 // slot libre
+        eventHandlers[i] = std::move(cb);
+        return true;                           // IMPORTANT
+      }
+    }
+    return false; // tableau plein
+  }
+
+  void fireEvent(Event* event) {
+    if (!event) return;
+    for (uint8_t i = 0; i < MAX_CALLBACKS; ++i) {
+      if (eventHandlers[i]) eventHandlers[i](event);
+    }
+  }
+
+  void clearEventHandlers() {
+    for (uint8_t i = 0; i < MAX_CALLBACKS; ++i) {
+      eventHandlers[i] = nullptr;
+    }
+  }
+
+private:
+  EventHandler eventHandlers[MAX_CALLBACKS] = {}; // init à vide explicite
+};
 ///////////////////// API MANAGEMENT //////////////////////
 
 #define API_ORIGIN "origin"
@@ -2057,6 +2072,10 @@ void handleConfigConnection(){
       screen.state = STATE_UTILS_CONNECTCONFIGMEDIA;
       hwm.startAP(systemCfg.getString(S_AP_NAME));
       app.setAPIcon();
+      hwm.configMedia->registerEventHandler([](Event* e) {
+        app.handleAPevent(e);   // app global/static : pas besoin de capture
+      });
+
       //https://deepbluembedded.com/esp32-wifi-library-examples-tutorial-arduino/#esp32-wifi-modes
     }  
   }

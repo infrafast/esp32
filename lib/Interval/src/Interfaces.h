@@ -29,7 +29,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
     State state;
 
-    //Event evt;  // in EventDispatcher
+    Event evt;
 
     uint8_t stripCount = 0;      // indicate if an interface is not refered by any strip
 
@@ -114,9 +114,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return output;
     }  
 
-    bool init(EventCallback cb){
+    bool init(EventHandler cb){
       DEBUG_PRINT("\n\n----------------------------------  %s->init(...)  ---------------------------------- ",interfaceName.c_str());      
-      registerCallback(cb);
+      registerEventHandler(cb);
       load();
       bool success = begin();
       DEBUG_PRINT("\n-----------------------------------------------------------------------------------------------------\n");      
@@ -290,12 +290,12 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       state.progress = -1;          
     }
 
-    virtual void setStateReady(String led = "green", String label = *lang.getString(IF_STATE_READY)){            
+    virtual void setStateReady(String led = "green", String label = *lang.getString(IF_STATE_READY), String subState = "", String details = ""){            
       DEBUG_PRINT("\n%s::setStateReady()",interfaceName.c_str());
       state.code = IF_READY;      
       state.label = label;
-      state.subState = "";      
-      state.details = "";
+      state.subState = subState;
+      state.details = details;
       state.led = led;
       state.progress = -1;      
     }
@@ -411,6 +411,12 @@ class NetWorkInterface{
     static std::vector<NetWorkInterface*> inventory;
     static int8_t enabledServicesWeightSum;
 
+    NetWorkInterface(){
+      hwm.network->registerEventHandler([this](Event* e) {
+        networkEventHandler(e);   // équivaut à this->networkEventHandler(e)
+      });
+    }
+
     virtual void* read(){
       return nullptr;
     }
@@ -418,9 +424,12 @@ class NetWorkInterface{
     virtual bool handleConnectService(){return false;}
     virtual bool handleDisconnectService(){return false;}
 
+
+
     static void addToInventory(NetWorkInterface* iface) {
       if (iface == nullptr) return;
       inventory.push_back(iface);
+
     }
 
     #define SERVICES_WEIGHT_LIMIT  2
@@ -430,6 +439,23 @@ class NetWorkInterface{
     virtual uint8_t getServiceWeight(){
       return 1; // default
     }
+
+    void networkEventHandler(Event* event){
+      switch(event->type){
+        case EventDispatcher::EVENT_NETWORK_DISCONNECTED:
+          disable();
+          break;
+        case EventDispatcher::EVENT_NETWORK_CONNECTED:
+        if (hwm.network->state == CONNECTED){
+          if (deviceInterface->state.enabled){
+            enable();
+          }else{
+            DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored", deviceInterface->interfaceName.c_str());            
+          }
+        }
+      }
+    }
+
 
     /* 
       Test de non regression:
@@ -575,25 +601,8 @@ class NetWorkInterface{
     }
 
     void monitorNetwork(){
-      static uint8_t c = 0;
-      (void)c;
 
       if (!deviceInterface) return;
-
-      if (hwm.network->refreshed){
-        if (hwm.network->state == CONNECTED){
-          if (deviceInterface->state.enabled){
-            enable();
-            return;
-          }else{
-            DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored", deviceInterface->interfaceName.c_str());
-            return;
-          }
-        }else{
-          disable();
-          return;
-        }
-      }
 
       if (hwm.network->state == DISCONNECTED){
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;

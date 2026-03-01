@@ -343,11 +343,11 @@ public:
       if (ap == nullptr){
         ap = new AccessPoint(apName, true); 
         hwComponents.add(ap);
-        //if (debug) DEBUG_PRINT("\n setting the configMedia to ap");
       }
-      ap->init();
+      ap->init();         
       configMedia = ap;
     }
+          
 
     bool refresh(bool force=false) {  
       refreshed = force;     

@@ -891,7 +891,7 @@ void networkEvent(WiFiEvent_t event){
 bool eventHandling(EventDispatcher::Event* event){  
   switch(event->type){
     case EventDispatcher::EVENT_DIGITAL_BUTTON:{
-      ButtonEvent* btnEvt = (ButtonEvent*)event->data;
+      ButtonData* btnEvt = (ButtonData*)event->data;
       switch(btnEvt->id){
         case Interval::Button::BUTTON_SIMPLE_CLIC:
           //DEBUG_PRINT("\n\t\t *** EVENT_DIGITAL_BUTTON SIMPLE_CLIC");
@@ -907,7 +907,7 @@ bool eventHandling(EventDispatcher::Event* event){
       WiFiEvent_t* evt = (WiFiEvent_t*)event->data;
       networkEvent(*evt);
     }break;
-    case EventDispatcher::EVENT_NETWORK_CHANGED_STATE:{
+    case EventDispatcher::EVENT_NETWORK_CONNECTION_CHANGED_STATE:{
       bool state = (bool*)event->data;
       netChangeState(state);
     }break;
@@ -1021,7 +1021,7 @@ Serial.println(velocity);
   app.stripDataRepository.addDataSet(&portDS);  
   app.stripDataRepository.addDataSet(&msgDS);  */
 
-  app.registerCallback(eventHandling);
+  app.egisterEventHandler(eventHandling);
 
   app.userParseJsonInputCallback = userHTMLJsonInput;  // to be migrated to event
   app.userJsonPongCallback = userPongCallback;    

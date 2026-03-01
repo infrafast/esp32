@@ -321,7 +321,7 @@ class BatteryMonitor : public HWComponent{
 #define DCLIC_DETECTION_PUSHDOWNMAXTIME LONG_PUSH_DELAY-1       // pour detecter un double clic, le premier clic doit etre court   200
 
 // Structure pour les événements complexes
-struct ButtonEvent {
+struct ButtonData {
     uint8_t id;
     uint8_t buttonId;
     unsigned long time; // en ms
@@ -345,12 +345,14 @@ class Button : public HWComponent2State{
       BUTTON_RELEASE_HOLD,     
     };
 
+    Event evt;
+
     unsigned long pushedTime = 0;
     bool doubleClic = false;
     bool usesLed = true;    
     uint16_t push_reactivity = DEFAULT_PUSH_DELAY, dClic_reactivity = DEFAULT_DCLIC_DELAY;    
 
-    ButtonEvent btEvent;
+    ButtonData btEvent;
 
     Button(uint8_t p, int e=LOW, boolean d=true, uint16_t push=DEFAULT_PUSH_DELAY, uint16_t dClic=DEFAULT_DCLIC_DELAY): HWComponent2State(p,!e,d){
        // we set the initial state to the opposite of the state we want to detect so it doesnt trigger the event at startup
@@ -359,7 +361,7 @@ class Button : public HWComponent2State{
       dClic_reactivity = dClic;
       evt.data = &btEvent;
 
-      registerCallback([this](Event* event) {
+      registerEventHandler([this](Event* event) {
           this->default_buttonCallBack(event);
       });
 
@@ -373,7 +375,7 @@ class Button : public HWComponent2State{
     }
 
     void default_buttonCallBack(Event* event) {
-        /*ButtonEvent* btnEvt = (ButtonEvent*) event->data;
+        /*ButtonData* btnEvt = (ButtonData*) event->data;
         DEBUG_PRINT("\ndefault_buttonCallBack - %d => %d: %dms\n", btnEvt->id, btnEvt->buttonId, btnEvt->time);*/
     }
 
@@ -736,6 +738,8 @@ class Network : public HWComponent2State{
 
     float networkConnectAttemptProgress = 0.0;
 
+    Event evt;
+
     String iFconnectivityIcon = ICON_MIXETHWIFI;
 
     SemaphoreHandle_t networkBusy;
@@ -766,7 +770,7 @@ class Network : public HWComponent2State{
     Network(uint8_t pin, bool debug):HWComponent2State(pin,DISCONNECTED,debug){
       id = concatStrings("Network~", pin);
       networkBusy = xSemaphoreCreateMutex();
-      state = DISCONNECTED; previousState = state; // we set the initial state to the opposite of the state we want to detect so it trigger the event at startup
+      state = DISCONNECTED; previousState = CONNECTED; // we set the initial state to the opposite of the state we want to detect so it doesnt trigger the event at startup
     }
 
     virtual UdpSlot* useUDPslot(int i) = 0;
@@ -893,7 +897,7 @@ class Network : public HWComponent2State{
 
 class WiFiEth : public Network{
   public:
-    EthernetLinkStatus cable = Unknown;//, oldCable = cable;
+    EthernetLinkStatus cable = Unknown, oldCable = cable;
     unsigned long checkEthCableTime=0;
 
     WiFiEth(uint8_t pin, uint8_t rstP, bool enableEth = true, bool debug = true): Network(pin, debug){      
@@ -1102,7 +1106,7 @@ class WiFiEth : public Network{
     virtual int requestUDPslotID(int port) {
 
       if (port <= 0 || port > 65535) {
-        DEBUG_PRINT("\n[requestUDPslotID]\t\tinvalid port %d", port);
+        DEBUG_PRINT("\n[requestUDPslotID] invalid port %d", port);
         return -1;
       }
 
@@ -1110,7 +1114,7 @@ class WiFiEth : public Network{
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
         if (udpSlots[i].port == port && udpSlots[i].reservations > 0) {
           if (!ensureUDPslotMedia(i)) {
-            DEBUG_PRINT("\n[UDP-%d/%d]\t\tensureUDPslotMedia failed", i, port);
+            DEBUG_PRINT("\n[UDP-%d/%d] ensureUDPslotMedia failed", i, port);
             return -1;
           }
           udpSlots[i].reservations++;
@@ -1130,7 +1134,7 @@ class WiFiEth : public Network{
 
           if (!ensureUDPslotMedia(i)) {
             destroyUDPslot(i);
-            DEBUG_PRINT("\n[UDP]\t\tnewUDP() failed");
+            DEBUG_PRINT("\n[UDP] newUDP() failed");
             return -1;
           }
 
@@ -1139,7 +1143,7 @@ class WiFiEth : public Network{
         }
       }
 
-      DEBUG_PRINT("\n[UDP]\t\tReached max!");
+      DEBUG_PRINT("\n[UDP] Reached max!");
       return -1;
     }
 
@@ -1481,7 +1485,7 @@ class WiFiEth : public Network{
       }else if (state == CONNECTED) {
         //ethernet has priority over wifi, hence if we are connected by WiFi but the cable is plugged, we disconnect WiFi
         if (media == WIFI_MEDIA && cable == LinkON){
-          evt.type = EVENT_NETWORK_CHANGED_MEDIA; // inform immediately the webapp to terminate
+          evt.type = EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED; // inform immediately the webapp to terminate
           fireEvent(&evt);        
           disconnectWifi();
           state = DISCONNECTED; // cable will try reconnect at next refresh
@@ -1510,30 +1514,30 @@ class WiFiEth : public Network{
             if (WiFi.status() == WL_CONNECTED){
               // do whatever is required when we are connected by WiFI
               // this code is executed in loop
-
               int8_t signalStrength = abs(WiFi.RSSI());
+
               if (signalStrength >=90) iFconnectivityIcon = ICON_WIFI_STRENGTH_0;
               else if (signalStrength >=75) iFconnectivityIcon = ICON_WIFI_STRENGTH_1;
               else if (signalStrength >=45) iFconnectivityIcon = ICON_WIFI_STRENGTH_2;
               else iFconnectivityIcon = ICON_WIFI_STRENGTH_3;                
+
               //ArduinoOTA.handle();     
               if (wsWiFiClient != nullptr) wsWiFiClient->listen();
             }else{
-              // this code is executed in loop
+              // this code is executed once
               state = DISCONNECTED; 
               media = NO_MEDIA;     
-              if (!ethEnabled) iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
-              else iFconnectivityIcon = ICON_MIXETHWIFI;
+
             }
           }
         }
       }
 
       Network::refresh(force);
-      /*if (cable != oldCable){
+      if (cable != oldCable){
         oldCable = cable;
         refreshed = true;   // this refresh has to be flagged after NetworkRefresh to avoid being erased
-      }*/
+      }
 
       if (refreshed){
         DEBUG_PRINT("\n+------------------------------------------------+");
@@ -1555,15 +1559,15 @@ class WiFiEth : public Network{
             gateway = Ethernet.gatewayIP();                                      
            }
           lastActiveMedia = media;
+          checkInternet();
           DEBUG_PRINT("\n+-------------------+");
           DEBUG_PRINT("\n| NETWORK CONNECTED |");
-          DEBUG_PRINT("\n+-------------------+");          
+          DEBUG_PRINT("\n+-------------------+");
           
-          // Utiliser des lambdas pour passer les méthodes membres comme callbacks
-          asyncPing(
-            &internet,
-            [&](PingEcho* echo) { onInternetPing(echo); }
-          );
+
+          ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
+          evt.type = EVENT_NETWORK_CONNECTED;
+          fireEvent(&evt);
 
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
@@ -1594,18 +1598,29 @@ class WiFiEth : public Network{
             else iFconnectivityIcon = ICON_MIXETHWIFI;            
             DEBUG_PRINT("\n ALL NETWORK OBJECTED CLEANED");
             DEBUG_PRINT("\n+----------------------------+");
+
+            ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
+            evt.type = EVENT_NETWORK_DISCONNECTED;
+            fireEvent(&evt);
+
             xSemaphoreGive(networkBusy);              
           }else{
             DEBUG_PRINT("\nnetwork DISCONNECTED: networkBusy"); 
           }
           restoreWiFiSSID();
         }
+
+        evt.type = EVENT_NETWORK_CONNECTION_CHANGED;
+        fireEvent(&evt);        
+
       }
+
       return refreshed;
     }
 
     void onInternetPing(PingEcho* echo) {
-      if (internetCallback !=nullptr) internetCallback(echo);
+        if (internetCallback !=nullptr) internetCallback(echo);
+        //DEBUG_PRINT("\n\n\n\t\t\t * * * * onInternetPing %s latency:%i * * * *",echo->alive?"OK":"fail",echo->latency);        
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
@@ -1616,11 +1631,12 @@ class WiFiEth : public Network{
       xTaskCreate(
         pingTask,         // Tâche à exécuter
         "PingTask",       // Nom de la tâche
-        4096*2,           // Taille de la pile de la tâche
+        4096*2,             // Taille de la pile de la tâche
         params,           // Paramètres de la tâche (adresse IP et callbacks)
         2,                // Priorité
         &pingTaskHandle   // Handle de la tâche
       );
+      //DEBUG_PRINT("\nasyncPing(%s) task created",echo->host.c_str());
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
@@ -1658,6 +1674,19 @@ class WiFiEth : public Network{
       );
       
       return true;
+    }
+
+    void checkInternet(){
+      //DEBUG_PRINT("\n\n\tcheckInternet => ");
+      // Utiliser des lambdas pour passer les méthodes membres comme callbacks
+      asyncPing(
+        &internet,
+        [&](PingEcho* echo) { onInternetPing(echo); }
+      );
+      // latency
+      //if (LAN) 
+      //LANlatency = 20;
+      //else 
     }
 
     void restoreWiFiSSID(){
@@ -1866,20 +1895,23 @@ class AccessPoint : public Network{
     bool refresh(bool force=false) {      
       // the state is modified by onEvent()
       if (WiFi.softAPgetStationNum()>0){
-        state = CONNECTED;        
+        state = CONNECTED;      
       }else{
         state = DISCONNECTED;
       }
       Network::refresh(force);
-
       if (refreshed){
         if (state == CONNECTED){
           //if (debug) DEBUG_PRINT("\nCient connected to AP");
           if (server == NULL) server = new WiFiServer(80,1);         
           server->begin();
+          evt.type = EVENT_NETWORK_CONNECTED;
+          fireEvent(&evt);            
         }else{
           //if (debug) DEBUG_PRINT("\nCient disconnected from AP");
           if (server != NULL){if (debug) DEBUG_PRINT("\nDELETING SERVER");delete server; server  = NULL;} 
+          evt.type = EVENT_NETWORK_DISCONNECTED;
+          fireEvent(&evt);
         }                
       }
       return refreshed;

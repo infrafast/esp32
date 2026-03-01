@@ -257,8 +257,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkInterface {  // should d
     }
 
     virtual void setStateReady(){            
-      DeviceInterface::setStateReady();
-      state.subState = destination->ip.toString();          
+      DeviceInterface::setStateReady("green", *lang.getString(IF_STATE_CONNECTED), destination->ip.toString(),destination->ip.toString());
     }
 
     virtual void setStateDisconnected() override{

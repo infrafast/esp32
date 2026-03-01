@@ -338,7 +338,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     std::queue<EthernetClient*> clientQueue;
 
-    //Event evt;  // in EventDispatcher
+    Event evt; 
     std::vector<String> broadcastQueue;
 
     Application* webServer = nullptr;
@@ -833,17 +833,17 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
             
       for (uint8_t i=0;i<MAXB;i++){
-        hwm->buttons[i]->registerCallback([this](Event* event) {
-            this->buttonCallBack(event);
+        hwm->buttons[i]->registerEventHandler([this](Event* event) {
+            this->handleSwitchEvent(event);
         });
       }
 
-      hwm->onOff.registerCallback([this](Event* event) {
-        this->onOffBtnEventHandler(event);
+      hwm->onOff.registerEventHandler([this](Event* event) {
+        this->handleOnOffEvent(event);
       });
 
-      hwm->network->registerCallback([this](Event* event) {
-        this->networkEventHandler(event);
+      hwm->network->registerEventHandler([this](Event* event) {
+        this->handleNetworkEvent(event);
       });
       
       back_menu_item = new MenuItem(quitMenuString, &back_menu_item_selected);
@@ -945,16 +945,54 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       restoreScreen();       // restore the screen that persists => called by 
     }
 
-    // EVENTS HANDLING
-    void networkEventHandler(Event* event){
+    // *********************************
+    // EVENTS HANDLERS
+    // *********************************
+    void handleNetworkEvent(Event* event){
       DEBUG_PRINT("\n+---------------------+");
       DEBUG_PRINT("\n| Network event: %d   |",event->type);
       DEBUG_PRINT("\n+---------------------+");
       switch(event->type){
-        case EVENT_NETWORK_CHANGED_MEDIA:          
+        case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
           sendTerminateMessageToWebApp("Network connection changed. Close this page");         // the browser becomes unavialble, so terminate the application
           shutdownWSS();      //
           stopInterfaces();
+        break;
+        case EVENT_NETWORK_CONNECTED:
+          // discover RTP services available on the network
+          startDirectoryServiceDiscovery();
+          // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
+          if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                           
+          // network has refreshed so we shift to appropriate configMedia
+          if (hwm->network->media == WIFI_MEDIA){
+            //we set last used Wifi SSID (id) and save config, hence keep WIFI_MEDIA credential
+            //DEBUG_PRINT("\n------> SAVING SSID");
+            systemCfg.setValue(S_LAST_USED_SSID,hwm->network->SSID);
+            systemCfg.save(); 
+            /* add this to the possible SSID "ssid": {
+            "intervalmix": "intervalpop74",
+            "infrafast": "Mf9k8iie2",
+            "ssid3": "pass3"
+            */
+          }          
+          if (!webAppConnected){
+            // there is no connection to any application, therefore, we prefer to use the network as the one to configure the application
+            //if (debug) DEBUG_PRINT("\n\tsetting the configMedia to WiFiEth");
+            hwm->configMedia = hwm->network;    // since the normal network gets reconnected,
+          }
+        break;
+        case EVENT_NETWORK_CONNECTION_CHANGED:
+          setiFconnectivityColor();
+        break;         
+      }
+      // propagate the event
+      fireEvent(event);      
+    }
+
+    void handleAPevent(Event* event){
+      switch(event->type){
+        case EVENT_NETWORK_CONNECTION_CHANGED:
+          setAPIcon();
         break;
       }
       // propagate the event
@@ -971,9 +1009,32 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       fireEvent(event);      
     }
 
+    void handleSwitchEvent(Event* event) {
+      ButtonData* btnEvt = (ButtonData*) event->data;             
+      switch(btnEvt->id){
+        case IntervalButton::BUTTON_DOUBLE_CLIC:
+          doubleClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+        case IntervalButton::BUTTON_HOLD:
+          holdCallback(btnEvt->buttonId,btnEvt->time);
+        break;
+        case IntervalButton::BUTTON_LONG_CLIC:
+          longClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+        case IntervalButton::BUTTON_RELEASE_HOLD:
+          releaseHoldCallback(btnEvt->buttonId,btnEvt->time);
+        break;
+        case IntervalButton::BUTTON_SIMPLE_CLIC:
+          simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+      }
+      // propagate the event
+      fireEvent(event);
+    }
 
-    void onOffBtnEventHandler(Event* event){
-      ButtonEvent* btnEvt = (ButtonEvent*) event->data;
+
+    void handleOnOffEvent(Event* event){
+      ButtonData* btnEvt = (ButtonData*) event->data;
       switch(btnEvt->id){
         case IntervalButton::BUTTON_DOUBLE_CLIC:
 
@@ -1065,30 +1126,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         
         promptScreen();
       }
-    }
-
-
-    void buttonCallBack(Event* event) {
-      ButtonEvent* btnEvt = (ButtonEvent*) event->data;             
-      switch(btnEvt->id){
-        case IntervalButton::BUTTON_DOUBLE_CLIC:
-          doubleClicCallBack(btnEvt->buttonId,btnEvt->time);
-        break;
-        case IntervalButton::BUTTON_HOLD:
-          holdCallback(btnEvt->buttonId,btnEvt->time);
-        break;
-        case IntervalButton::BUTTON_LONG_CLIC:
-          longClicCallBack(btnEvt->buttonId,btnEvt->time);
-        break;
-        case IntervalButton::BUTTON_RELEASE_HOLD:
-          releaseHoldCallback(btnEvt->buttonId,btnEvt->time);
-        break;
-        case IntervalButton::BUTTON_SIMPLE_CLIC:
-          simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
-        break;
-      }
-      // propagate the event
-      fireEvent(event);
     }
 
 
@@ -1777,81 +1814,21 @@ void setup() {
       // PERFORM ALL REFRESH AND UPDATES
       // ********************************
       hwm->refresh();         
-                    
-      if (hwm->ap != nullptr){if (hwm->ap->refreshed) setAPIcon();}      
-      
+                         
       //------------------
       //
       // MANAGE NETWORK
       //
       //------------------
-      if (hwm->configMedia->refreshed){
-        utilsBlinkIcon = hwm->configMedia->iFconnectivityIcon;
-        utilsBlinkLabel = *lang.getString("Bringing network up");        
-        //startGUIThread(SCREEN_UTILS,STATE_UTILS_BLINK_ICON_TEXT);              
+      if (hwm->configMedia->refreshed){        
         if (hwm->configMedia->state == CONNECTED){            
           setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
         }else{
           webAppConnected = false;            
         }
-        //stopGUIThread();        
       } 
 
-      handleWeb();
-
-      if (hwm->network->refreshed){ // network changed its statusset
-       
-        setiFconnectivityColor();
-
-        // ============>>> CALLBACK APPLICATION
-        evt.type = EVENT_NETWORK_CHANGED_STATE;
-        evt.data = &hwm->network->state;
-        fireEvent(&evt);
-        //userNetworkChangeStateCallback(hwm->network->state);
-
-        if (hwm->network->state == CONNECTED){    
-
-          #if defined(USE_FTP) && defined(USE_NETWORK)
-            ftp.handle();
-          #endif
-
-
-          // discover RTP services available on the network
-          startDirectoryServiceDiscovery();
-
-          // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
-          if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                   
-          
-          // network has refreshed so we shift to appropriate configMedia
-          if (hwm->network->media == WIFI_MEDIA){
-            //we set last used Wifi SSID (id) and save config, hence keep WIFI_MEDIA credential
-            //DEBUG_PRINT("\n------> SAVING SSID");
-            systemCfg.setValue(S_LAST_USED_SSID,hwm->network->SSID);
-            systemCfg.save(); 
-            /* add this to the possible SSID "ssid": {
-            "intervalmix": "intervalpop74",
-            "infrafast": "Mf9k8iie2",
-            "ssid3": "pass3"
-            */
-          }else{
-            
-          }
-          
-          if (!webAppConnected){
-            // there is no connection to any application, therefore, we prefer to use the network as the one to configure the application
-            //if (debug) DEBUG_PRINT("\n\tsetting the configMedia to WiFiEth");
-            hwm->configMedia = hwm->network;    // since the normal network gets reconnected,
-
-          }else{
-
-          }
-        }else{
-
-
-        }
-
-      }  
-        
+      handleWeb();     
 
       //------------------
       //
