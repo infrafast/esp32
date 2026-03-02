@@ -674,14 +674,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       
       DeserializationError error = deserializeJson(jsonBanks, *bankJsonString);
       if (error){
-
+        DEBUG_PRINT("\ndeserializeBanks()::%s",error.c_str());
+        return nullptr;
       }else{              
         JsonObject root = jsonBanks.as<JsonObject>();      
         for (JsonPair kv : root) {
-
           bank = new IntervalBank(kv.key().c_str(),kv.value().as<String>());
-          //DEBUG_PRINT("\n new IntervalBank(%s,%s)",kv.key().c_str(),kv.value().as<String>().c_str());
-          bank->init();
+          //DEBUG_PRINT("\nIntervalBank(%s,%s)",kv.key().c_str(),kv.value().as<String>().c_str());
           banks.push_back(bank);
         }
         refreshBankMenu();
@@ -943,15 +942,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);            
       // we init banks and then go to banks or fail screen
       String bankFilename = concatStrings(concatStrings("/", *systemCfg.getString(S_PROFILE, DEFAULT_PROFILE)), ".bank");
-      loadBanks(bankFilename);
-      if (deserializeBanks(&banksDefinition) == nullptr){
+      if (!loadBanks(bankFilename)){
         menuTopText = *lang.getString("Bank creation");
         menuBottomLabel = emptyString;
         byeIconColor = &GUI::red; byeIcon = &iconForbid;
         screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
       }        
       checkAndDeleteFile(FIRMWARE_BIN_FILENAME);  // in case there is a .bin.gz file leftover from previous firmware update
-      restoreScreen();       // restore the screen that persists => called by 
+      restoreScreen();       // restore the screen that persists 
     }
 
     // *********************************
@@ -1483,20 +1481,23 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   }
 
   bool loadBanks(const String& bankFileName){
-    bool success = false;
+   
+    String bankDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";
+
     if (LittleFS.exists(bankFileName)){
       File file = LittleFS.open(bankFileName);
       if (file) {
-        banksDefinition = file.readString();  // lit tout le contenu
-        success = true;        
+        bankDefinition = file.readString();  // lit tout le contenu
       }else{
-        DEBUG_PRINT("\n%s open failed",bankFileName.c_str());          
+        DEBUG_PRINT("\n%s open failed, using default bank definition",bankFileName.c_str());          
       }        
       file.close();
     }else{
-      DEBUG_PRINT("\n%s doesnt exists",bankFileName.c_str()); 
+      DEBUG_PRINT("\n%s doesnt exists, using default bank definition",bankFileName.c_str()); 
     }
-    return success;
+
+    return deserializeBanks(&bankDefinition) != nullptr ? true:false;
+
   }
 
 
@@ -3526,8 +3527,7 @@ void setup() {
                              "\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},"
                              "\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03\"]}}"
         "}";
-
-    String banksDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";
+    
     String defaultUserConf = "{}";
 
     ScreenUnion oldScreen;    

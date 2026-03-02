@@ -83,7 +83,8 @@ namespace Interval {
         JsonDocument bank;
         DeserializationError error = deserializeJson(bank, value);
         if (error){
-  
+          DEBUG_PRINT("\ndeserialize()::%s",error.c_str());
+          return false;
         }else{
   
           layout = LAYOUT_DETAILS; //bank[C_CURRENTLAYOUT];
@@ -92,7 +93,7 @@ namespace Interval {
           JsonArray stripArray = bank[C_STRIPS];
           for (int i=0; i<stripArray.size() && i<BANK_MAX_STRIPS; i++){        
             JsonObject jsonStrip = stripArray[i];        
-            if (!addStrip(jsonStrip)) return false;
+            if (!addStrip(jsonStrip)) continue; // process next strip
           }
           init();
           success = true;

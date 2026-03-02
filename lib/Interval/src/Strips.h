@@ -464,43 +464,42 @@ virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
     }
 
     bool deserialize(String values){
-      bool ret = false;
+
       uint8_t n = getNumberOfProperties();
       JsonDocument jsonStrip;
       DeserializationError error = deserializeJson(jsonStrip, values);
       if (error){
-        
-      }else{      
-        type = jsonStrip[C_STRIPTYPE].as<String>();
-        // set index; 
-        x = jsonStrip["position"][C_X].as<int>();
-        y = jsonStrip["position"][C_Y].as<int>();
-        win = jsonStrip["position"][C_WIN].as<int>();
-        index = jsonStrip["position"][C_INDEX].as<int>();
-        size = jsonStrip[C_SIZE].as<String>();
-        colorID = jsonStrip[C_COLOR];//.as<int>();
-        interfaceName = jsonStrip[C_INTERFACE].as<String>();//.as<int>();
-        
-        interface = interfaceRepo.retrieve(interfaceName);
+        DEBUG_PRINT("\nStrip::deserialize() error %s",error.c_str());
         return false;
-
-        interface->stripCount++;
-        //DEBUG_PRINT("\n%s has %i strips",interfaceName.c_str(), interface->stripCount);
-
-        if (colorID>MAX_COLOR_ID-1) colorID = 0;
-        frontColor = colorMap[colorID].fColor;
-        backColor = colorMap[colorID].bColor;  
-
-        icon = jsonStrip[C_ICON];//.as<unsigned char>();
-        properties = jsonStrip[KEY_PROPERTIES];
-        for (uint8_t i = 0; i< properties.size(); i++){
-          deserializeProperty(properties[i].as<String>());
-        }
-        ret = true;
-        // each derived strip then deserialiuze its own other values
-        
       }
-      return ret;
+
+      // find the interface corresponding to the strip
+      interfaceName = jsonStrip[C_INTERFACE].as<String>();//.as<int>();
+      interface = interfaceRepo.retrieve(interfaceName);
+      if (interface == nullptr) return false; // if it has no interface, no need to continue
+
+      type = jsonStrip[C_STRIPTYPE].as<String>();
+      // set index; 
+      x = jsonStrip["position"][C_X].as<int>();
+      y = jsonStrip["position"][C_Y].as<int>();
+      win = jsonStrip["position"][C_WIN].as<int>();
+      index = jsonStrip["position"][C_INDEX].as<int>();
+      size = jsonStrip[C_SIZE].as<String>();
+      colorID = jsonStrip[C_COLOR];//.as<int>();      
+
+      interface->stripCount++;
+      
+      if (colorID>MAX_COLOR_ID-1) colorID = 0;
+      frontColor = colorMap[colorID].fColor;
+      backColor = colorMap[colorID].bColor;  
+
+      icon = jsonStrip[C_ICON];//.as<unsigned char>();
+      properties = jsonStrip[KEY_PROPERTIES];
+      for (uint8_t i = 0; i< properties.size(); i++){
+        deserializeProperty(properties[i].as<String>());
+      }             
+
+      return true;
     };
 
     String serialize(){

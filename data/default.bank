@@ -1,0 +1,866 @@
+{
+  "Midi": {
+    "layout": 2,
+    "icon": 3,
+    "strips": [
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 4,
+          "win": 0
+        },
+        "properties": [
+          "/sysex/toto"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "DINMIDI",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 3,
+          "win": 0
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/33",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "BLEMIDI",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 2,
+          "win": 0
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/12",
+          "/value2/43",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 1,
+          "win": 0
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "4x1",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 5,
+          "win": 1
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "text",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "system",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "id": 6,
+          "win": 1
+        },
+        "properties": [
+          "/text/mediumsizetext"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "BLEMIDI",
+        "position": {
+          "x": 2,
+          "y": 1,
+          "id": 8,
+          "win": 1
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "text",
+        "color": 0,
+        "icon": 5,
+        "size": "4x1",
+        "interface": "system",
+        "position": {
+          "x": 0,
+          "y": 3,
+          "id": 7,
+          "win": 1
+        },
+        "properties": [
+          "/text/verylongstringsizetext"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 9,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/23",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 10,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/52",
+          "/value2/57",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 1,
+          "y": 2,
+          "id": 11,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/52",
+          "/value2/57",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 12,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/23",
+          "/note/Off"
+        ]
+      }
+    ]
+  },
+  "midi2": {
+    "layout": 2,
+    "icon": 3,
+    "strips": [
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 1,
+          "win": 0
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "BLEMIDI",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 2,
+          "win": 0
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/12",
+          "/value2/43",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "DINMIDI",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 3,
+          "win": 0
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/33",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 4,
+          "win": 0
+        },
+        "properties": [
+          "/sysex/toto"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "4x1",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 5,
+          "win": 1
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "text",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "system",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "id": 6,
+          "win": 1
+        },
+        "properties": [
+          "/text/mediumsizetext"
+        ]
+      },
+      {
+        "type": "text",
+        "color": 0,
+        "icon": 5,
+        "size": "4x1",
+        "interface": "system",
+        "position": {
+          "x": 0,
+          "y": 3,
+          "id": 7,
+          "win": 1
+        },
+        "properties": [
+          "/text/verylongstringsizetext"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "BLEMIDI",
+        "position": {
+          "x": 2,
+          "y": 1,
+          "id": 8,
+          "win": 1
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 9,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/23",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 10,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/52",
+          "/value2/57",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 1,
+          "y": 2,
+          "id": 11,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/52",
+          "/value2/57",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 12,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/23",
+          "/note/Off"
+        ]
+      }
+    ]
+  },
+  "midi3": {
+    "layout": 2,
+    "icon": 3,
+    "strips": [
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 1,
+          "win": 0
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "BLEMIDI",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 2,
+          "win": 0
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/12",
+          "/value2/43",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "DINMIDI",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 3,
+          "win": 0
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/33",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 4,
+          "win": 0
+        },
+        "properties": [
+          "/sysex/toto"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "4x1",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 5,
+          "win": 1
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "text",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "system",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "id": 6,
+          "win": 1
+        },
+        "properties": [
+          "/text/mediumsizetext"
+        ]
+      },
+      {
+        "type": "text",
+        "color": 0,
+        "icon": 5,
+        "size": "4x1",
+        "interface": "system",
+        "position": {
+          "x": 0,
+          "y": 3,
+          "id": 7,
+          "win": 1
+        },
+        "properties": [
+          "/text/verylongstringsizetext"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "BLEMIDI",
+        "position": {
+          "x": 2,
+          "y": 1,
+          "id": 8,
+          "win": 1
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 9,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/23",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 10,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/52",
+          "/value2/57",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 1,
+          "y": 2,
+          "id": 11,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/52",
+          "/value2/57",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 12,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/23",
+          "/note/Off"
+        ]
+      }
+    ]
+  },
+  "midi4": {
+    "layout": 2,
+    "icon": 3,
+    "strips": [
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 1,
+          "win": 0
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "BLEMIDI",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 2,
+          "win": 0
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/12",
+          "/value2/43",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "DINMIDI",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 3,
+          "win": 0
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/33",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 4,
+          "win": 0
+        },
+        "properties": [
+          "/sysex/toto"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "4x1",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 5,
+          "win": 1
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "text",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "system",
+        "position": {
+          "x": 0,
+          "y": 1,
+          "id": 6,
+          "win": 1
+        },
+        "properties": [
+          "/text/mediumsizetext"
+        ]
+      },
+      {
+        "type": "text",
+        "color": 0,
+        "icon": 5,
+        "size": "4x1",
+        "interface": "system",
+        "position": {
+          "x": 0,
+          "y": 3,
+          "id": 7,
+          "win": 1
+        },
+        "properties": [
+          "/text/verylongstringsizetext"
+        ]
+      },
+      {
+        "type": "Sysex",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "BLEMIDI",
+        "position": {
+          "x": 2,
+          "y": 1,
+          "id": 8,
+          "win": 1
+        },
+        "properties": [
+          "/sysex/firstkey"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 9,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/23",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 10,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/52",
+          "/value2/57",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "2x2",
+        "interface": "USBMIDI",
+        "position": {
+          "x": 1,
+          "y": 2,
+          "id": 11,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/52",
+          "/value2/57",
+          "/note/Off"
+        ]
+      },
+      {
+        "type": "Note",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "AppleMIDI",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 12,
+          "win": 2
+        },
+        "properties": [
+          "/channel/0",
+          "/value1/11",
+          "/value2/23",
+          "/note/Off"
+        ]
+      }
+    ]
+  }
+}
