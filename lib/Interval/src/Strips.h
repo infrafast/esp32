@@ -241,7 +241,11 @@ class Strip {
     }    
 
     virtual ~Strip(){
-      interface->stripCount -= 1;
+
+      if (interface != nullptr){
+        interface->stripCount -= 1;
+        if (interface->stripCount<0) interface->stripCount = 0;
+      }
     }    
 
     //////////// BUTTON MANAGEMENT
@@ -478,6 +482,8 @@ virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
       interface = interfaceRepo.retrieve(interfaceName);
       if (interface == nullptr) return false; // if it has no interface, no need to continue
 
+      interface->stripCount++;
+
       type = jsonStrip[C_STRIPTYPE].as<String>();
       // set index; 
       x = jsonStrip["position"][C_X].as<int>();
@@ -486,9 +492,7 @@ virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
       index = jsonStrip["position"][C_INDEX].as<int>();
       size = jsonStrip[C_SIZE].as<String>();
       colorID = jsonStrip[C_COLOR];//.as<int>();      
-
-      interface->stripCount++;
-      
+     
       if (colorID>MAX_COLOR_ID-1) colorID = 0;
       frontColor = colorMap[colorID].fColor;
       backColor = colorMap[colorID].bColor;  
@@ -808,6 +812,8 @@ virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
     } 
 
     void drawWidgetsFrames(uint8_t layout){
+
+      if (interface != nullptr) return;
       
       if (interface->state.enabled) frameColor = GUI::luminance(TFT_GOLD,127);     // dark frame
       else frameColor = TFT_RED;    // indicate offline

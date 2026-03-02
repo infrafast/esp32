@@ -32,13 +32,13 @@ using WSclientOnMessageCallback = std::function<void(const char*)>;
 ////////////////////////////////////////////////////////////////////
 #include "interfaces/appleMidiHelpers.h"
 #define MIDI_CHANNEL_OMNI 0
-/*#define APPLE_MIDIETHCLIENT_NAME  "interval"    
-#define APPLE_MIDIWIFICLIENT_NAME  "interval"    */
+
+#define APPLE_MIDI_PORT DEFAULT_CONTROL_PORT
 #define MDNS_ANNOUNCED_APPLEMIDI_SERVICE "apple-midi"   // standard name for apple midi. Do not change
-//APPLEMIDI_CREATE_INSTANCE(EthernetUDP,MIDI_RTP_ETH,"Interval-footswitch-Ethernet",DEFAULT_CONTROL_PORT);
-//APPLEMIDI_CREATE_INSTANCE(WiFiUDP,MIDI_RTP_WIFI,"Interval-footswitch-WiFi",DEFAULT_CONTROL_PORT);
-//APPLEMIDI_CREATE_DEFAULTSESSION_INSTANCE();
+
 using namespace APPLEMIDI_NAMESPACE;
+
+
 /*
 AppleMIDISession<WiFiUDP> *appleMidiSession;
 MidiInterface<AppleMIDISession<WiFiUDP>,AppleMIDISettings> *myMidi;
@@ -93,7 +93,6 @@ void connectHTTPTask(void*);
 class HWComponent: public GenericComponent, public EventDispatcher{
   public:
     uint8_t CSPin;
-    //Event evt;  // in EventDispatcher
 
     HWComponent(uint8_t pin, boolean d=true):GenericComponent(d){
       CSPin = pin;
@@ -345,7 +344,7 @@ class Button : public HWComponent2State{
       BUTTON_RELEASE_HOLD,     
     };
 
-    Event evt;
+    //Event evt;
 
     unsigned long pushedTime = 0;
     bool doubleClic = false;
@@ -410,7 +409,7 @@ class Button : public HWComponent2State{
                 btEvent.time = pushedTime;
                 btEvent.id = BUTTON_SIMPLE_CLIC;
               }           
-              fireEvent(&evt);
+              fireEvent();
             }
           }
           
@@ -425,7 +424,7 @@ class Button : public HWComponent2State{
             doubleClic = true;
             btEvent.time = millis()-startTimeBetween2Clics;
             btEvent.id = BUTTON_DOUBLE_CLIC;
-            fireEvent(&evt); 
+            fireEvent(); 
             /*if (usesLed) {
               ledcWrite(0,0);   // if we want to light the double clic
             }*/           
@@ -437,7 +436,7 @@ class Button : public HWComponent2State{
           if (pushedTime>push_reactivity){
             btEvent.time = pushedTime-push_reactivity;
             btEvent.id = BUTTON_HOLD;
-            fireEvent(&evt);
+            fireEvent();
             if (usesLed){
               ledcWrite(0,255);
             }            
@@ -453,7 +452,7 @@ class Button : public HWComponent2State{
             if (!doubleClic){
               btEvent.time = pushedTime;
               btEvent.id = BUTTON_SIMPLE_CLIC;
-              fireEvent(&evt);
+              fireEvent();
             }         
           }  
         }      
@@ -738,7 +737,7 @@ class Network : public HWComponent2State{
 
     float networkConnectAttemptProgress = 0.0;
 
-    Event evt;
+    //Event evt;
 
     String iFconnectivityIcon = ICON_MIXETHWIFI;
 
@@ -943,8 +942,7 @@ class WiFiEth : public Network{
           if (debug) DEBUG_PRINT("\n%s !!! THERE IS NO ETHERNET HW !!!",id.c_str());
         }else{
           if (debug) DEBUG_PRINT("\n%s Using WiFi & Ethernet",id.c_str());
-          DEBUG_PRINT("\nregistering onEthernetBonjourServiceFoundCallback");
-          EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);         
+          //EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);         
           setLink(Ethernet.linkStatus());   // check immediately if ethernet is connected so it has priority on WiFI connection    => done in the thread
         }
       }else{
@@ -983,15 +981,16 @@ class WiFiEth : public Network{
 
     #include <utility/w5100.h>
     /*
-    Bonjour / mDNS	    1 UDP
-    Serveur HTTP	      2 = 1 LISTEN + 1 ESTABLISHED par client
-    WebSocket	          1 TCP
-    Behringer OSC       1 UDP       
-    OSC natif           1 UDP
-    Mixing station OSC  1 UDP
-    Mixing station sock 1 TCP
-    AppleMIDI           1 UDP
-    Artnet              1 UDP
+    Bonjour / mDNS	        1 UDP
+    Serveur HTTP	          2 = 1 LISTEN + 1 ESTABLISHED par client
+    WebSocket	              1 TCP
+    Behringer OSC           1 UDP       
+    OSC natif               1 UDP
+    Mixing station websock  1 TCP
+    AppleMIDI               1 UDP
+    Artnet                  1 UDP
+    FTP                     1 TCP
+
     */
 
     static const char* socketStatusToString(uint8_t st) {
@@ -1393,15 +1392,17 @@ class WiFiEth : public Network{
                   wsEthClient->onError(socketClientOnErrorCallback);
                   wsEthClient->onClose(socketClientOnClose);                        
                 }
-                if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);
-                String midiName = concatStrings(appleMidiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
+                if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);
+
+/*                String midiName = concatStrings(appleMidiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
                 String httpName = concatStrings(appleMidiClient->getName(), "._http");
-                if (EthernetBonjour.begin(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str())){
+                if (EthernetBonjour.begin(systemCfg.getString(S_AP_NAME)->c_str())){
                   EthernetBonjour.addServiceRecord(midiName.c_str(), appleMidiClient->getPort(),MDNSServiceUDP);
                   EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
                 }else{
                   DEBUG_PRINT("\nEthernetBonjour registration <%s> failed", systemCfg.getString(S_AP_NAME)->c_str());
                 }   
+*/
                 state = CONNECTED;
                 media = CABLE_MEDIA;                
                 DEBUG_PRINT("\t...all Eth object instantiated\n");                  
@@ -1465,13 +1466,14 @@ class WiFiEth : public Network{
                 wsWiFiClient->onError(socketClientOnErrorCallback);
                 wsWiFiClient->onClose(socketClientOnClose);
               }
-              if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(/*APPLE_MIDIWIFICLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),DEFAULT_CONTROL_PORT);                     
-              if (MDNS.begin(systemCfg.getString(S_AP_NAME)->c_str())){
+              if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);                     
+              
+/*              if (MDNS.begin(systemCfg.getString(S_AP_NAME)->c_str())){
                 MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", appleMidiClient->getPort());
                 MDNS.addService("http", "tcp", 80);                                
               }else{
                 DEBUG_PRINT("\nMDNS registration <%s> failed",appleMidiClient->getName());
-              }
+              }*/
               state = CONNECTED;
               media = WIFI_MEDIA;
               DEBUG_PRINT("\t...all WiFi object instantiated\n");                                
@@ -1486,7 +1488,7 @@ class WiFiEth : public Network{
         //ethernet has priority over wifi, hence if we are connected by WiFi but the cable is plugged, we disconnect WiFi
         if (media == WIFI_MEDIA && cable == LinkON){
           evt.type = EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED; // inform immediately the webapp to terminate
-          fireEvent(&evt);        
+          fireEvent();        
           disconnectWifi();
           state = DISCONNECTED; // cable will try reconnect at next refresh
           lastEthAttempt = 0; // with no delay
@@ -1503,12 +1505,10 @@ class WiFiEth : public Network{
             if (cable == LinkON){
               // do whatever is required when we are connected by cable
               if (wsEthClient != nullptr) wsEthClient->listen();
-              EthernetBonjour.run();
+              //EthernetBonjour.run();
             }else{
               state = DISCONNECTED; 
               media = NO_MEDIA;
-              if (!ethEnabled) iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
-              else iFconnectivityIcon = ICON_MIXETHWIFI;
             }
           }else{
             if (WiFi.status() == WL_CONNECTED){
@@ -1567,7 +1567,7 @@ class WiFiEth : public Network{
 
           ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
           evt.type = EVENT_NETWORK_CONNECTED;
-          fireEvent(&evt);
+          fireEvent();
 
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
@@ -1586,22 +1586,24 @@ class WiFiEth : public Network{
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
             
             // specific destruction to WIFI or ETH
-            if (lastActiveMedia == CABLE_MEDIA){
+            /*if (lastActiveMedia == CABLE_MEDIA){
               // eth
               EthernetBonjour.stop();
             }else if (lastActiveMedia == WIFI_MEDIA){
               // wifi
               MDNS.end();
-            }
+            }*/
+
             lastActiveMedia = NO_MEDIA;
             if (!ethEnabled) iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
-            else iFconnectivityIcon = ICON_MIXETHWIFI;            
+            else iFconnectivityIcon = ICON_MIXETHWIFI; 
+                       
             DEBUG_PRINT("\n ALL NETWORK OBJECTED CLEANED");
             DEBUG_PRINT("\n+----------------------------+");
 
             ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
             evt.type = EVENT_NETWORK_DISCONNECTED;
-            fireEvent(&evt);
+            fireEvent();
 
             xSemaphoreGive(networkBusy);              
           }else{
@@ -1611,7 +1613,7 @@ class WiFiEth : public Network{
         }
 
         evt.type = EVENT_NETWORK_CONNECTION_CHANGED;
-        fireEvent(&evt);        
+        fireEvent();        
 
       }
 
@@ -1906,12 +1908,12 @@ class AccessPoint : public Network{
           if (server == NULL) server = new WiFiServer(80,1);         
           server->begin();
           evt.type = EVENT_NETWORK_CONNECTED;
-          fireEvent(&evt);            
+          fireEvent();            
         }else{
           //if (debug) DEBUG_PRINT("\nCient disconnected from AP");
           if (server != NULL){if (debug) DEBUG_PRINT("\nDELETING SERVER");delete server; server  = NULL;} 
           evt.type = EVENT_NETWORK_DISCONNECTED;
-          fireEvent(&evt);
+          fireEvent();
         }                
       }
       return refreshed;

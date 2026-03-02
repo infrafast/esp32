@@ -29,9 +29,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
     State state;
 
-    Event evt;
+    //Event evt;
 
-    uint8_t stripCount = 0;      // indicate if an interface is not refered by any strip
+    int8_t stripCount = 0;      // indicate if an interface is not refered by any strip
 
 
     String interfaceName; 
@@ -127,7 +127,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       DEBUG_PRINT("\n%s->handleRequestRefreshState() : void",interfaceName.c_str());           
     }
 
-    bool restore(const char* config){    
+    virtual bool restore(const char* config){    
       JsonDocument doc;
       DeserializationError error = deserializeJson(doc, config);
       if (error) {
@@ -138,7 +138,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return restore(configJson, false);       // true means => trigger an interface property change check that may lead to disconnecting/reconnecting , which is not the case when we start the interface
     }
 
-    virtual bool restore(const JsonObject& config, bool triggerPropertyChange = true){   // == trigger or not the handlePropertyChange at the end of the restore
+    bool restore(const JsonObject& config, bool triggerPropertyChange = true){   // == trigger or not the handlePropertyChange at the end of the restore
       String cfgString;
       serializeJson(config, cfgString);     
       DEBUG_PRINT("\n%s->restore(%s,%s)",interfaceName.c_str(),cfgString.c_str(),triggerPropertyChange?"triggerPropertyChange yes":"triggerPropertyChange no");           
@@ -148,7 +148,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       // this restore the base parameters common to all base class interface
       if (config.containsKey(INTERFACE_ENABLED)){
         bool enabled = config[INTERFACE_ENABLED];
-        switchDevice(enabled);
+        state.enabled = enabled;  //switchDevice(enabled); // BE CAREFULL!
+        DEBUG_PRINT("\n%s : %s",interfaceName.c_str(),enabled?"ENABLED":"DISABLED");
       }
       
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -322,7 +323,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
     #define IF_CFG_FILE_PATH "/"
 
-    void load() { // some interfaces may override this to be empty as they do not load or save parameters
+    virtual void load() { // some interfaces may override this to be empty as they do not load or save parameters
       String fname = concatStrings(IF_CFG_FILE_PATH,getFilename());
       DEBUG_PRINT("\nload(%s)",fname.c_str());
       // Ouvrir le fichier
@@ -339,7 +340,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
           content = defaultConfig;
         }        
       }else{
-        DEBUG_PRINT("\t::file open failed, use default");
+        //DEBUG_PRINT("\t::file open failed, use default");
         content = defaultConfig;
       }
       restore(content.c_str());      
@@ -432,8 +433,8 @@ class NetWorkService{
 
     }
 
-    #define SERVICES_WEIGHT_LIMIT  2
-
+    #define SERVICES_WEIGHT_LIMIT  3
+    
     bool serviceLocked = true; // by default locked to avoid monitoring straight after startup
 
     virtual uint8_t getServiceWeight(){

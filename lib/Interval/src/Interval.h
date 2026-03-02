@@ -288,6 +288,8 @@ class EventDispatcher {
 public:
   using EventHandler = std::function<void(Event*)>;
 
+  Event evt;
+
   enum EventType : uint8_t {
     EVENT_DIGITAL_BUTTON,
     EVENT_ANALOG_BUTTON,
@@ -297,6 +299,7 @@ public:
     EVENT_NETWORK_CONNECTION_CHANGED,
     EVENT_INTERNET_PING,
     EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE,
+    EVENT_DIRECTORY_SERVICE_REFRESHED,
     EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED
   };
 
@@ -315,10 +318,9 @@ public:
     return false; // tableau plein
   }
 
-  void fireEvent(Event* event) {
-    if (!event) return;
-    for (uint8_t i = 0; i < MAX_CALLBACKS; ++i) {
-      if (eventHandlers[i]) eventHandlers[i](event);
+  void fireEvent() {
+      for (uint8_t i = 0; i < MAX_CALLBACKS; ++i) {
+      if (eventHandlers[i]) eventHandlers[i](&evt);
     }
   }
 
@@ -991,7 +993,9 @@ void xTaskBackground(void *pvParameters);
 #define PERSISTANT_BRIGHTNESS     "brightness"
 #define PERSISTANT_STARTUP        "startup"
 
+APPLE_MIDI_SERVICE "_apple-midi"
 
+#define MAX_RTP_DIR_ENDPOINTS 3
 // ====== Liste simple des endpoints découverts ======
 struct RtpmidiEndpoint {
   char name[64];        // nom d'instance (ex: "Mon MacBook Pro")
@@ -1000,7 +1004,6 @@ struct RtpmidiEndpoint {
   uint32_t lastSeenMs;
 };
 
-static const int MAX_RTP_DIR_ENDPOINTS = 3;
 class RtpDirectory {
 public:
   RtpmidiEndpoint ep[MAX_RTP_DIR_ENDPOINTS];
@@ -1088,9 +1091,9 @@ public:
     epCount = w;
   }
 
-private:
+  private:
 
-static bool isLinkLocal169(const IPAddress& ip) {
+  static bool isLinkLocal169(const IPAddress& ip) {
     return ip[0] == 169 && ip[1] == 254;
   }
 
@@ -1107,7 +1110,8 @@ static bool isLinkLocal169(const IPAddress& ip) {
     // Comparer au plus sur la longueur stockée
     return strncmp(a, b, 63) == 0; // 63 car name[64] ci-dessus
   }
-}rtpDir;
+};
+
 
 
 #include "HWManager.h"
@@ -1918,15 +1922,17 @@ void expandTGZstreamToFSTask(void* parameter){
   vTaskDelete(NULL);
 }                              
 
+WiFiEvent_t wiFiEvent;
 ////////////////////////////////////////////////////////////////////////
 ///////////////////////                              ///////////////////
 ///////////////////////  EVENTS HANDLERS             ///////////////////
 ///////////////////////                              ///////////////////
 //////////////////////////////////////////////////////////////////////// 
 void OnWiFiEvent(WiFiEvent_t event){
+  wiFiEvent = event;
   app.evt.type = EventDispatcher::EVENT_NETWORK;
-  app.evt.data = &event;
-  app.fireEvent(&app.evt);
+  app.evt.data = &wiFiEvent;
+  app.fireEvent();
   // below line is to avoid that a call to start wifi cut a pending connection DIRTY CODE
   if (event == ARDUINO_EVENT_WIFI_STA_CONNECTED){    
     hwm.network->wiFiTimeout = 10000; // we let 10s to get the IP and setup the wifi link
@@ -1945,7 +1951,7 @@ void OnWiFiEvent(WiFiEvent_t event){
 // - ignore les IP 0.0.0.0
 // - laisse upsertEndpoint fusionner correctement
 // ============================================================
-static bool isZeroIP(const byte ip[4]) {
+/*static bool isZeroIP(const byte ip[4]) {
   return ip && ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0;
 }
 
@@ -1953,9 +1959,9 @@ static bool isAppleMidiServiceType(const char* serviceType) {
   // Accepte "_apple-midi" ou "_apple-midi." (point final parfois présent)
   if (!serviceType) return false;
   return (strncmp(serviceType, "_apple-midi", 11) == 0);
-}
+}*/
 
-void WiFiRTPDiscoveryTask(void* parameter){
+/*void WiFiRTPDiscoveryTask(void* parameter){
     DEBUG_PRINT("\n\n[RTP-WiFi]\t\tScan RTP-MIDI lancé...\n");     
     int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
     DEBUG_PRINT("\ntrouvé %d service(s) AppleMIDI\n", n);
@@ -1966,12 +1972,12 @@ void WiFiRTPDiscoveryTask(void* parameter){
     //fallbackDiscoveryRtpMidiAsTask(nullptr);
     app.epDirectoryUpdated();
     vTaskDelete(NULL);
-}
+}*/
 
 // ====== Callback EthernetBonjour quand un service est trouvé ======
 // Signature d'après la doc EthernetBonjour :
 // (serviceType, proto, serviceName, ip[4], port, txt)
-void onEthernetBonjourServiceFoundCallback(const char* serviceType,
+/*void onEthernetBonjourServiceFoundCallback(const char* serviceType,
                                            MDNSServiceProtocol_t proto,
                                            const char* serviceName,
                                            const byte ipAddr[4],
@@ -1999,7 +2005,7 @@ void onEthernetBonjourServiceFoundCallback(const char* serviceType,
   // if (ipAddr[0] == 169 && ipAddr[1] == 254) return;
 
   rtpDir.upsertEndpoint(serviceName, ipAddr, port);
-}
+}*/
 
 
 

@@ -11,7 +11,7 @@
 #include "interfaces/i_midi.h"
 #include "interfaces/i_dmx.h"
 #include "interfaces/i_osc.h"
-#include "interfaces/i_system.h"
+#include "interfaces/i_utils.h"
 
 ///////////////////// WIDGET LOCATION & SIZE ////////////////////////
 #define OVERLAY_ICON_SIZE TFT_HEIGHT/15
@@ -595,7 +595,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       ///////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
       evt.data = echo;
-      fireEvent(&evt);
+      fireEvent();
     }
 
     void setBatIcon(){
@@ -780,8 +780,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       artnetDMXInterface = new ArtnetDMXInterface(true);
       threePinDMXInterface = new ThreePinDMXInterface(true);     
       // RTPMIDI
-      appleMIDIInterface = new AppleMIDIInterface(true,&rtpDir);
-      //AppleMIDIInterface::setInstance(appleMIDIInterface);
+      appleMIDIInterface = new AppleMIDIInterface(true);
+      //we tell appleMIDIInterface to listen to event raised by directoryService
+      directoryService.registerEventHandler([this](Event* e) {
+        appleMIDIInterface->handleDirectoryEvent(e);
+      });
 
       std::vector<String> groupesUniques;
       /* register the interface names in the dataset of their group, without duplating the groups 
@@ -932,12 +935,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
       }
     
-      DEBUG_PRINT("\n\n[ApplicationManager] ***************************************************");
-      DEBUG_PRINT("\n[ApplicationManager] ******************* INIT FINISHED *****************");
-      DEBUG_PRINT("\n[ApplicationManager] ***************************************************\n\n");     
+      DEBUG_PRINT("\n\n[APP] ***************************************************");
+      DEBUG_PRINT("\n[APP] ******************* INIT FINISHED *****************");
+      DEBUG_PRINT("\n[APP] ***************************************************\n\n");     
     }
 
     void startup(uint8_t startupScreen){          
+      DEBUG_PRINT("\n[APP] ******************* startup *****************");
       // save the screen to be called (wiuard or bank)
       hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);            
       // we init banks and then go to banks or fail screen
@@ -947,9 +951,24 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         menuBottomLabel = emptyString;
         byeIconColor = &GUI::red; byeIcon = &iconForbid;
         screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
-      }        
+      }
+
+      disableUnusedInterface();      // optimize
+
       checkAndDeleteFile(FIRMWARE_BIN_FILENAME);  // in case there is a .bin.gz file leftover from previous firmware update
       restoreScreen();       // restore the screen that persists 
+      DEBUG_PRINT("\n[APP] ******************* startup.end *****************\n\n");      
+    }
+
+    void disableUnusedInterface(){
+      // unsused interfaces are the one which are not referred by any instanciated strips
+      for (const auto& interface : interfaceRepo.interfaces){       
+        if (interface->stripCount <=0 && interface->exposed){ // only for interfaces that are exposed => means they can be configured by user
+          DEBUG_PRINT("\n%s has no strip : DISABLED",interface->interfaceName.c_str());
+          //interface->switchDevice(false);  // BE CAREFULL
+          interface->state.enabled = false;
+        }
+      }      
     }
 
     // *********************************
@@ -967,7 +986,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
         case EVENT_NETWORK_CONNECTED:
           // discover RTP services available on the network
-          startDirectoryServiceDiscovery();
+          //startDirectoryServiceDiscovery();
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                           
           // network has refreshed so we shift to appropriate configMedia
@@ -993,7 +1012,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;         
       }
       // propagate the event
-      fireEvent(event);      
+      evt.type = event->type;
+      evt.data = event->data;      
+      fireEvent();      
     }
 
     void handleAPevent(Event* event){
@@ -1003,17 +1024,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
       }
       // propagate the event
-      fireEvent(event);      
+      evt.type = event->type;
+      evt.data = event->data;      
+      fireEvent();       
     }
 
     void interfaceEventHandler(Event* event){
       switch(event->type){
         case EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE:
-          startDirectoryServiceDiscovery();
+          directoryService.startDiscovery();
         break;
       }
       // propagate the event
-      fireEvent(event);      
+      evt.type = event->type;
+      evt.data = event->data;      
+      fireEvent();      
     }
 
     void handleSwitchEvent(Event* event) {
@@ -1036,7 +1061,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
       }
       // propagate the event
-      fireEvent(event);
+      evt.type = event->type;
+      evt.data = event->data;      
+      fireEvent(); 
     }
 
 
@@ -1078,9 +1105,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
       }
 
-
       // propagate the event
-      fireEvent(event);      
+      evt.type = event->type;
+      evt.data = event->data;      
+      fireEvent();    
     }
 
     void promptScreen(){
@@ -3471,7 +3499,7 @@ void setup() {
       //DEBUG_PRINT("\tend()");      
     }     
 
-    void startDirectoryServiceDiscovery(){
+    /*void startDirectoryServiceDiscovery(){
       // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
       rtpDir.clear();
       if (hwm->network->media == CABLE_MEDIA){
@@ -3489,9 +3517,9 @@ void setup() {
           NULL                // Task handle
         );          
       }
-    }
+    }*/
 
-    void epDirectoryUpdated(){
+/*    void epDirectoryUpdated(){
       DEBUG_PRINT("\n\n[RTP]\t\tScan terminé (timeout).");
       DEBUG_PRINT("\n[RTP]\t\t%d endpoint(s) mémorisé(s):\n", rtpDir.epCount);      
       for (int i = 0; i < rtpDir.epCount; i++) {
@@ -3500,6 +3528,7 @@ void setup() {
       // midi interface has to update its config and regenerate its state      
       appleMIDIInterface->handleRefresh();     
     }
+*/
 
   private:
     HardwareManager* hwm;

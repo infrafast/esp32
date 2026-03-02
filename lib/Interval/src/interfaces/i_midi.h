@@ -379,7 +379,7 @@ enum{
 #define APPLEMIDI_SESSIONS_NUMBER   MAX_RTP_DIR_ENDPOINTS+1     // the dropdown will contains as many sessions as there are RTP endpoints + 1 for "passive"
 
 struct SessionOptions{
-  String name[APPLEMIDI_SESSIONS_NUMBER];
+  String name[APPLEMIDI_SESSIONS_NUMBER+2]; //+2 because of the saved session than comes in addition and the "passive"
   int count = 0;
 };
 
@@ -410,8 +410,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
   public: 
     
     SessionOptions sessionOptions;
+
+    String savedSession="";
+
     AppleMidiSessionType dsAppleMidiSessions = AppleMidiSessionType(new DropDownAddress(ADDRESS_APPLEMIDISESSION),&sessionOptions);
-    RtpDirectory* rtpDirectory;     // directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
+    RtpDirectory* rtpDirectory = nullptr;     // directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
     
     State savedState;
 
@@ -423,7 +426,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     #define UNDEF_EXCEPTION "UndefinedException"
     String exception = UNDEF_EXCEPTION;
 
-    AppleMIDIInterface(bool _configurable, RtpDirectory* _rtpDirectory): rtpDirectory(_rtpDirectory),MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
+    AppleMIDIInterface(bool _configurable): MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
       attachDeviceInterface(this);
 
@@ -460,32 +463,41 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       return true;
     }    
 
-
     virtual void handleRequestRefreshState(){      
       evt.type = EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE;
-      fireEvent(&evt);            // ask the application to perform a service discovery
-      savedState = state;         // before changing to "state refreshing", we save the current state so it is restore once the network scanning has finished
+      fireEvent();            // ask the application to perform a service discovery
+      savedState = state;     // before changing to "state refreshing", we save the current state so it is restore once the network scanning has finished
       setStateRefreshing();
     }
 
-    void handleRefresh(){
-      populateSessionOptions();     // regenerate the config data set
-      if (!serviceLocked) state = savedState;        // recall the state we had before refresh request, except if current state is locked
-      DEBUG_PRINT("\n%s::handleRefresh() recall state:%s",interfaceName.c_str(),savedState.label.c_str());
-      state.broadcastState = true; // communicate the new state
-      state.broadcastConfig = true; // the new populatedSessions have to be communicated to the web app dropdown
+    void handleDirectoryEvent(Event* evt) {
+      switch(evt->type){
+        case EVENT_DIRECTORY_SERVICE_REFRESHED:
+          rtpDirectory = (RtpDirectory*)evt->data;
+          populateSessionOptions();     // regenerate the config data set
+          if (!serviceLocked) state = savedState;        // recall the state we had before refresh request, except if current state is locked
+          DEBUG_PRINT("\n%s::handleRefresh() recall state:%s",interfaceName.c_str(),savedState.label.c_str());
+          state.broadcastState = true; // communicate the new state
+          state.broadcastConfig = true; // the new populatedSessions have to be communicated to the web app dropdown
+        break;
+      }     
     }
 
     void populateSessionOptions(){
-      sessionOptions.name[0] = PASSIVE_SESSION_NAME;   // first entry is always "passive"
-      for (int i = 0; i < MAX_RTP_DIR_ENDPOINTS; i++) {
-        if (rtpDirectory->ep[i].name != "") {
-          sessionOptions.name[i+1] = concatStrings(rtpDirectory->ep[i].name, " (", rtpDirectory->ep[i].ip.toString(), ":", rtpDirectory->ep[i].port, ")");          
-        } else {
-          sessionOptions.name[i+1] = "";  // empty entry
+
+      sessionOptions.count = 0;
+      sessionOptions.name[sessionOptions.count++] = PASSIVE_SESSION_NAME;   // first entry is always "passive"
+      sessionOptions.name[sessionOptions.count++] = savedSession;   // add the session saved by the user duiring the last connect
+      
+      // id directory has been received by event, we populate the session with its content
+      if (rtpDirectory != nullptr){
+        for (int i = 0; i < rtpDirectory->epCount; i++) {
+          if (rtpDirectory->ep[i].name != "") {
+            sessionOptions.name[i+1] = concatStrings(rtpDirectory->ep[i].name, " (", rtpDirectory->ep[i].ip.toString(), ":", rtpDirectory->ep[i].port, ")");          
+          }
+          sessionOptions.count++;
         }
       }
-      sessionOptions.count = rtpDirectory->epCount+1;
     }
 
     virtual void serializeProperties(JsonArray& properties) override{   
@@ -636,7 +648,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
           // the session description is added to the list of end point so it appears on the drop down even if it was not detected (as a recall from saved interface parameter)
           uint8_t ipBytes[4] = {destination->ip[0], destination->ip[1], destination->ip[2], destination->ip[3]};          
-          rtpDirectory->upsertEndpoint(sessionName, ipBytes, port);          
+          
+          //rtpDirectory->upsertEndpoint(sessionName, ipBytes, port);           // ADD PREVIOUS 
+
+          savedSession = property;   
         }
        
 
@@ -856,9 +871,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }    
 
     void startSession(){      
-      state.progress = -1;  // hide the progress bar      
+      state.progress = -1;        // hide the progress bar      
       populateSessionOptions();   // refresh the session descriptors in case the rtp directory has changed
-      lastInvite = millis();    // we reset the timer that controls the periodicity of the invites
+      lastInvite = millis();      // we reset the timer that controls the periodicity of the invites
       if (sessionType == APPLEMIDI_ACTIVE) setStateActiveSession();
       else setStatePassiveSession();
       savedState = state;
@@ -906,7 +921,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
 };
 
-class MIDIOSC/*: public OSCInterface*/{
+/*class MIDIOSC{
   public:
     MIDIInterface* midiTransport = nullptr;
 
@@ -924,9 +939,7 @@ class MIDIOSC/*: public OSCInterface*/{
       if (midiInterface == APPLEMIDI_INTERFACE) midiTransport = new AppleMIDIInterface(_configurable, &rtpDir);
       else if (midiInterface == BLEMIDI_INTERFACE) midiTransport = new BLEMIDIInterface(_configurable);
       else midiTransport = new USBMIDIInterface(_configurable);      
-    }
-
-           
-};
+    }         
+};*/
 
 #endif

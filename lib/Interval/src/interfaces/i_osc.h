@@ -54,6 +54,11 @@ class NetworkOSC: public DeviceInterface, public NetWorkService {  // should der
       delete destination;
     }
 
+    virtual void handlePropertyChange(){
+      DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
+      handleDisconnectService();  // force to reconnect
+    }
+
     virtual void serializeProperties(JsonArray& properties) override{
       char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
       sprintf(buf,ADDRESS_OSCPORT,OSC_remotePort);
