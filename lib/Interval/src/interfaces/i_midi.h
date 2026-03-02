@@ -905,9 +905,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       appleMidiClient->begin();
       hasBegun = true;  
       
+      startSession();
       handleRequestRefreshState(); //requestDirectoryRefresh();      // as we just connect we request the directory to update itself plus we indicate we are refreshing ourselves
-      startSession();  // <== c'est lui qui override l'etat d'avant, il faut probablement le  mettre que dans monitorService() c'est tout
-
+    
       
       return true;
     }
