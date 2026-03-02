@@ -148,7 +148,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           } 
         }
 
-        startDiscovery();
+        //startDiscovery();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
 
         return true;
       }
@@ -158,7 +158,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         rtpDir.clear();
         if (hwm.network->media == CABLE_MEDIA){
           // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
-          EthernetBonjour.startDiscoveringService(APPLE_MIDI_SERVICE, MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
+          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
           DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
         }else{
           // Wifi = bloquant
@@ -208,7 +208,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       static bool isAppleMidiServiceType(const char* serviceType) {
         // Accepte "_apple-midi" ou "_apple-midi." (point final parfois présent)
         if (!serviceType) return false;
-        return (strncmp(serviceType, APPLE_MIDI_SERVICE, 11) == 0);
+        return (strncmp(serviceType, "_apple-midi", 11) == 0);
       }
 
       void onEthernetBonjourServiceFoundCallback(const char* serviceType,

@@ -379,7 +379,7 @@ enum{
 #define APPLEMIDI_SESSIONS_NUMBER   MAX_RTP_DIR_ENDPOINTS+1     // the dropdown will contains as many sessions as there are RTP endpoints + 1 for "passive"
 
 struct SessionOptions{
-  String name[APPLEMIDI_SESSIONS_NUMBER+2]; //+2 because of the saved session than comes in addition and the "passive"
+  
   int count = 0;
 };
 
@@ -388,18 +388,20 @@ struct SessionOptions{
 class AppleMidiSessionType : public DataSet{
   
   public:
-    SessionOptions* sessionOptions = nullptr;
-   
-    AppleMidiSessionType(Address* _address, SessionOptions* s): sessionOptions(s), DataSet(_address, APPLEMIDI_INTERFACE, &IFdataRepo){}
+    uint16_t count = 0;
+    String name[APPLEMIDI_SESSIONS_NUMBER+2]; //+2 because of the saved session than comes in addition and the "passive" entry
+
+    AppleMidiSessionType(Address* _address): DataSet(_address, APPLEMIDI_INTERFACE, &IFdataRepo){}
     
     virtual const String* getValuePtr(uint16_t index){
       if (index>getSize()-1) return &errorDatasetOOR;
-      return &sessionOptions->name[index];    //local javascript function 
+      return &name[index];    
     }  
 
     virtual uint16_t getSize(){
-      return sessionOptions->count;
+      return count;
     }
+       
 };
 
 
@@ -409,11 +411,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
   public: 
     
-    SessionOptions sessionOptions;
-
     String savedSession="";
 
-    AppleMidiSessionType dsAppleMidiSessions = AppleMidiSessionType(new DropDownAddress(ADDRESS_APPLEMIDISESSION),&sessionOptions);
+    AppleMidiSessionType dsAppleMidiSessions = AppleMidiSessionType(new DropDownAddress(ADDRESS_APPLEMIDISESSION));
     RtpDirectory* rtpDirectory = nullptr;     // directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
     
     State savedState;
@@ -463,10 +463,15 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       return true;
     }    
 
-    virtual void handleRequestRefreshState(){      
+    void requestDirectoryRefresh(){
       evt.type = EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE;
       fireEvent();            // ask the application to perform a service discovery
-      savedState = state;     // before changing to "state refreshing", we save the current state so it is restore once the network scanning has finished
+    }
+
+    virtual void handleRequestRefreshState(){      
+      // when we arrive here, it means user is asking to refresh the interface values
+      requestDirectoryRefresh();       // so we drop the directory refresh request
+      savedState = state;             // before changing to "state refreshing", we save the current state so it is restore once the network scanning has finished
       setStateRefreshing();
     }
 
@@ -484,19 +489,20 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
     void populateSessionOptions(){
-
-      sessionOptions.count = 0;
-      sessionOptions.name[sessionOptions.count++] = PASSIVE_SESSION_NAME;   // first entry is always "passive"
-      sessionOptions.name[sessionOptions.count++] = savedSession;   // add the session saved by the user duiring the last connect
+      dsAppleMidiSessions.count = 0;
+      dsAppleMidiSessions.name[dsAppleMidiSessions.count++] = PASSIVE_SESSION_NAME;   // first entry is always "passive"
+      if (savedSession != PASSIVE_SESSION_NAME) dsAppleMidiSessions.name[dsAppleMidiSessions.count++] = savedSession;   // add the session saved by the user duiring the last connect
       
-      // id directory has been received by event, we populate the session with its content
+      // if we recived a directory update by event, we populate the session with its content
       if (rtpDirectory != nullptr){
+        DEBUG_PRINT("\n%s:retrieving directory entries",interfaceName.c_str());
         for (int i = 0; i < rtpDirectory->epCount; i++) {
           if (rtpDirectory->ep[i].name != "") {
-            sessionOptions.name[i+1] = concatStrings(rtpDirectory->ep[i].name, " (", rtpDirectory->ep[i].ip.toString(), ":", rtpDirectory->ep[i].port, ")");          
-          }
-          sessionOptions.count++;
+            dsAppleMidiSessions.name[dsAppleMidiSessions.count++] = concatStrings(rtpDirectory->ep[i].name, " (", rtpDirectory->ep[i].ip.toString(), ":", rtpDirectory->ep[i].port, ")");          
+          }         
         }
+      }else{
+        DEBUG_PRINT("\n%s: null directory",interfaceName.c_str());
       }
     }
 
@@ -650,8 +656,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
           uint8_t ipBytes[4] = {destination->ip[0], destination->ip[1], destination->ip[2], destination->ip[3]};          
           
           //rtpDirectory->upsertEndpoint(sessionName, ipBytes, port);           // ADD PREVIOUS 
-
-          savedSession = property;   
+          savedSession = property;
+             
         }
        
 
@@ -872,7 +878,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
     void startSession(){      
       state.progress = -1;        // hide the progress bar      
-      populateSessionOptions();   // refresh the session descriptors in case the rtp directory has changed
+      //populateSessionOptions();   // refresh the session descriptors in case the rtp directory has changed
       lastInvite = millis();      // we reset the timer that controls the periodicity of the invites
       if (sessionType == APPLEMIDI_ACTIVE) setStateActiveSession();
       else setStatePassiveSession();
@@ -898,8 +904,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
       appleMidiClient->begin();
       hasBegun = true;  
+      
+      handleRequestRefreshState(); //requestDirectoryRefresh();      // as we just connect we request the directory to update itself plus we indicate we are refreshing ourselves
+      startSession();  // <== c'est lui qui override l'etat d'avant, il faut probablement le  mettre que dans monitorService() c'est tout
 
-      startSession();
       
       return true;
     }

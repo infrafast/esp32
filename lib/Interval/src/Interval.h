@@ -993,8 +993,6 @@ void xTaskBackground(void *pvParameters);
 #define PERSISTANT_BRIGHTNESS     "brightness"
 #define PERSISTANT_STARTUP        "startup"
 
-APPLE_MIDI_SERVICE "_apple-midi"
-
 #define MAX_RTP_DIR_ENDPOINTS 3
 // ====== Liste simple des endpoints découverts ======
 struct RtpmidiEndpoint {
