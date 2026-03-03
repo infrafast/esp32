@@ -11,6 +11,8 @@
 #define IF_STATE_NOTIMPLEMENTED     "unavailable"
 #define IF_STATE_LOCKED             "locked"
 #define IF_STATE_DEACTIVATED        "deactivated"
+#define IF_STATE_LISTENING          "listening"
+#define IF_STATE_INVITING           "inviting"
 
 
 #endif

@@ -20,9 +20,20 @@ class SystemInterface: public DeviceInterface, public DataProvider{
 
     SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_UTILS,_configurable),DataProvider(getProviderNameForData()){
       state.code = IF_READY;     
-      state.enabled = true;       
     }
   
+      virtual void load() override{
+        DEBUG_PRINT("\n%s::load() default ignored => DISABLED", interfaceName.c_str()); 
+        // ignore the given parameter. Just enable the interface
+        state.enabled = false;       
+        usedByStrip = true;             // textStrip...
+      }
+
+      virtual bool save() override{
+        DEBUG_PRINT("\n%s::save() IGNORED", interfaceName.c_str()); 
+        return true;
+      } 
+
     virtual void monitor(){}
     
     virtual void* read(){return nullptr;}
@@ -91,7 +102,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     String textValue = "";    
         
     
-}systemInterface(false);
+}systemInterface(false);      // not exposed
 
 class DirectoryInterface: public DeviceInterface, public NetWorkService{
     #define DIRECTORY_INTERFACE "Directory"
@@ -101,16 +112,26 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
 
       DirectoryInterface(bool _configurable = false):DeviceInterface(DIRECTORY_INTERFACE,GROUP_INTERFACE_UTILS,_configurable),NetWorkService(){
         attachDeviceInterface(this);
-        instance_ = this;  // enregistrer l’instance active
-        EthernetBonjour.setServiceFoundCallback(&DirectoryInterface::serviceFoundWrapper);
       }
 
-      virtual bool restore(const char* config) override{
-        DEBUG_PRINT("\n%s::restore(...) default ignored => ENABLE", interfaceName.c_str()); 
+      virtual void load() override{
+        DEBUG_PRINT("\n%s::load() default ignored => ENABLE", interfaceName.c_str()); 
         // ignore the given parameter. Just enable the interface
         state.enabled = true;       
-        return true;
+        usedByStrip = false;             
       }
+
+      virtual bool begin(){     // called by init()
+        DEBUG_PRINT("\n%s::begin() registering serviceFoundWrapper and _instance",interfaceName.c_str());
+        instance_ = this;  // enregistrer l’instance active       // we don't do that in the constructor as the instance has multiple heritage, hence we want to be sure the object is fully created
+        EthernetBonjour.setServiceFoundCallback(&DirectoryInterface::serviceFoundWrapper);  
+        return true;        
+      }
+
+      virtual bool save() override{
+        DEBUG_PRINT("\n%s::save() IGNORED", interfaceName.c_str()); 
+        return true;
+      }      
 
       virtual void monitor(){
           monitorNetwork();
@@ -127,7 +148,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
       
       virtual bool handleConnectService(){
-
+        DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
         String baseName = *systemCfg.getString(S_AP_NAME);
 
         if (hwm.network->media == WIFI_MEDIA){
@@ -154,6 +175,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
 
       void startDiscovery(){
+        DEBUG_PRINT("\n%s::startDiscovery()",interfaceName.c_str());
         // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
         rtpDir.clear();
         if (hwm.network->media == CABLE_MEDIA){
@@ -174,6 +196,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
       
       virtual bool handleDisconnectService(){
+        DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
         if (hwm.network->lastActiveMedia == CABLE_MEDIA){
           // eth
           EthernetBonjour.stop();
@@ -280,7 +303,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
      
 
 
-}directoryService(false);
+}directoryService(true);    // exposed
 DirectoryInterface* DirectoryInterface::instance_ = nullptr;
 
 

@@ -963,7 +963,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void disableUnusedInterface(){
       // unsused interfaces are the one which are not referred by any instanciated strips
       for (const auto& interface : interfaceRepo.interfaces){       
-        if (interface->stripCount <=0 && interface->exposed){ // only for interfaces that are exposed => means they can be configured by user
+        if (interface->stripCount <=0 && interface->usedByStrip){ // only for interfaces that are exposed => means they can be configured by user
           DEBUG_PRINT("\n%s has no strip : DISABLED",interface->interfaceName.c_str());
           //interface->switchDevice(false);  // BE CAREFULL
           interface->state.enabled = false;
@@ -1080,6 +1080,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
               // if interface allows it, we switch its state
               if (interface->isSwitchable()){
                 getSelectedStrip()->interface->switchDevice(enabled);
+                interface->state.broadcastState = true;
+                interface->save();
               }else{
                 DEBUG_PRINT("\n[DCLIC]\t\tInterface %s is not switchable",interface->interfaceName.c_str());
               }
@@ -3276,7 +3278,6 @@ void setup() {
         DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);        
         if (interface && interface->interfaceName == interfaceName){
           bool enabled = first.value();
-          //interface->switchDevice(enabled);
           interface->switchDevice(enabled);
           interface->state.broadcastState = true;
           if (interface->save()){
@@ -3286,6 +3287,9 @@ void setup() {
             jsonAnswer.callback=RET_COMMANDERROR;
             jsonAnswer.value = "interface save error";                
           }
+        }else{
+          jsonAnswer.callback=RET_COMMANDERROR;
+          jsonAnswer.value = "interface not found";             
         }
       }else if (command == "saveLibrary"){
         // {"command":"saveLibrary","param":{"file":"sysexlib.json","entries":{"abc":"aa bb","key2":"01bb","key3":"1ef0","ghijk":"12 34 56"}}}}

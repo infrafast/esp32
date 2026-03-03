@@ -21,6 +21,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
   #define INTERFACE_DETAILS     "details"
   #define INTERFACE_LED         "led"
   #define INTERFACE_CONFIG      "deviceConfig"
+  #define INTERFACE_USEDBYSTRIP "hasStrip"          // linked to the property usedByStrip and indicate if it should show up in the menu to create a strip for this interface
   
   #define DEVICE_ON true
   #define DEVICE_OFF false
@@ -39,7 +40,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     int dataAvailable;
     void* data;
 
-    bool exposed = true;
+    bool exposed = true;          // 
+    bool usedByStrip = true;      // if the interface is used by a strip (ex. Midi) or not (ex. Directory Service)
 
     String group = "undef"; // used by the strip to define which deviceinterface they can connect
 
@@ -98,6 +100,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       if (mainNode == true){
         // that's the attribute we do not serialize in case of partial serialization
         config[INTERFACE_EXPOSED] = exposed;
+        config[INTERFACE_USEDBYSTRIP] = usedByStrip;
         config[INTERFACE_GROUP] = group;
         config[INTERFACE_PROVIDER] = getProviderNameForData();      
         config[INTERFACE_ICON] = icon;
@@ -127,7 +130,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       DEBUG_PRINT("\n%s->handleRequestRefreshState() : void",interfaceName.c_str());           
     }
 
-    virtual bool restore(const char* config){    
+    bool restore(const char* config){    
       JsonDocument doc;
       DeserializationError error = deserializeJson(doc, config);
       if (error) {
@@ -246,14 +249,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       }      
     }
 
-    virtual bool isSwitchable(){
+    bool isSwitchable(){
       return state.switchable;
     }
-
-    /*virtual void switchDevice(bool _enabled){
-      enable(_enabled);
-      DEBUG_PRINT("\n%s switchDevice=>%s",interfaceName.c_str(),state.enabled?"true":"false");      
-    }*/
 
     virtual void switchDevice(bool _enable){
       state.enabled = _enable;      
@@ -346,7 +344,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       restore(content.c_str());      
     }
 
-    bool save(){  // some interfaces may override this to be empty as they do not load or save parameters
+    virtual bool save(){  // some interfaces may override this to be empty as they do not load or save parameters
       File file = LittleFS.open(IF_CFG_FILE_PATH+getFilename(), "w");
       if (!file) {
         DEBUG_PRINT("\t%s::save : impossible d'ouvrir %s en écriture\t", interfaceName.c_str(),getFilename().c_str());
@@ -560,9 +558,9 @@ class NetWorkService{
       deviceInterface->state.details = *lang.getString("setNetworkStateDown");
     }
 
-    void switchDevice(bool _enable){
+    void switchNetworkService(bool _enable){
       deviceInterface->state.enabled = _enable;
-      DEBUG_PRINT("\nNetworkInterface(%s)::switchDevice(%s)",
+      DEBUG_PRINT("\n(%s)::switchNetworkService(%s)",
                   deviceInterface->interfaceName.c_str(),
                   _enable ? "true" : "false");
       if(_enable) enable();

@@ -315,6 +315,7 @@ public:
         return true;                           // IMPORTANT
       }
     }
+    DEBUG_PRINT("\n\n\t\t\t\t\t !!! EventDispatcher IS FULL !!! \n\n");
     return false; // tableau plein
   }
 
@@ -324,11 +325,11 @@ public:
     }
   }
 
-  void clearEventHandlers() {
+  /*void clearEventHandlers() {
     for (uint8_t i = 0; i < MAX_CALLBACKS; ++i) {
       eventHandlers[i] = nullptr;
     }
-  }
+  }*/
 
 private:
   EventHandler eventHandlers[MAX_CALLBACKS] = {}; // init à vide explicite

@@ -89,7 +89,7 @@ public:
     session->sendEndSession();
   }
 
-virtual void sendRealTime(MidiType inType) {
+  virtual void sendRealTime(MidiType inType) {
     appleMIDI->sendRealTime(inType);
   }
 

@@ -236,7 +236,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkService {  // should der
     }    
 
     virtual void switchDevice(bool _enabled) override{
-      NetWorkService::switchDevice(_enabled); // we use our own
+      switchNetworkService(_enabled); // we use our own
     }   
 
     virtual bool handleConnectService(){
