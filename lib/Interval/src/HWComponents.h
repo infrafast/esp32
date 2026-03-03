@@ -1043,11 +1043,10 @@ class WiFiEth : public Network{
 
       snprintf(buffer + offset,
               sizeof(buffer) - offset,
-              "\t\t\t\t\t | FREE=%d TCP=%d UDP=%d",
+              "\t\t| FREE=%d TCP=%d UDP=%d",
               freeCount,
               tcpCount,
-              udpCount);
-
+              udpCount);      
       return String(buffer);
     }
 
@@ -1117,7 +1116,7 @@ class WiFiEth : public Network{
             return -1;
           }
           udpSlots[i].reservations++;
-          //DEBUG_PRINT("\n[UDP-%d/%d] ID reclaimed (refs=%d)", i, port, udpSlots[i].reservations);
+          DEBUG_PRINT("\n[UDP-%d/%d] ID reclaimed (refs=%d)", i, port, udpSlots[i].reservations);
           return i;
         }
       }
@@ -1137,7 +1136,7 @@ class WiFiEth : public Network{
             return -1;
           }
 
-          //DEBUG_PRINT("\n[UDP-%d/%d] ID created", i, port);
+          DEBUG_PRINT("\n[UDP-%d/%d] ID created", i, port);
           return i;
         }
       }
@@ -1181,10 +1180,10 @@ class WiFiEth : public Network{
       if (slot.reservations > 0) slot.reservations--;
 
       if (slot.reservations == 0) {
-        //DEBUG_PRINT("\n[UDP-%d/%d] released (destroy)", *i, slot.port);
+        DEBUG_PRINT("\n[UDP-%d/%d] released (destroy)", *i, slot.port);
         destroyUDPslot(*i);
       } else {
-        //DEBUG_PRINT("\n[UDP-%d/%d] released (refs=%d)", *i, slot.port, slot.reservations);
+        DEBUG_PRINT("\n[UDP-%d/%d] released (refs=%d)", *i, slot.port, slot.reservations);
       }
 
       *i = -1;   // invalidate slot ID
@@ -1200,7 +1199,7 @@ class WiFiEth : public Network{
       if (udpSlots[i].udp != nullptr){
         udpSlots[i].udp->stop();
         udpSlots[i].active = false;
-        //DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);
+        DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);
         return &udpSlots[i];
       }else{
         DEBUG_PRINT("\n[UDP-%d/%d] stopped failed", i, udpSlots[i].port);        

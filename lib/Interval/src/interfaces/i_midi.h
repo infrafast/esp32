@@ -426,6 +426,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     #define UNDEF_EXCEPTION "UndefinedException"
     String exception = UNDEF_EXCEPTION;
 
+    virtual uint8_t getServiceWeight(){
+      return 2; // consume 2 udp slot
+    }    
+
+
     AppleMIDIInterface(bool _configurable): MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
       attachDeviceInterface(this);
@@ -801,10 +806,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
     virtual void switchDevice(bool _enabled) override{
       switchNetworkService(_enabled);
-      // we save it here to force a savedState in case it goes straight to handleRefresh after RTP midi check without interface being enabled      
-      //saveState();
     }   
-
 
     void setStatePassiveSession(){
       DEBUG_PRINT("\nAppleMIDIInterface::setStatePassiveSession");      

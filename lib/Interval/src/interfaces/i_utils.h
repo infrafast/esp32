@@ -137,6 +137,10 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           monitorNetwork();
       }
 
+      virtual void switchDevice(bool _enabled) override{
+        switchNetworkService(_enabled);
+      }         
+
       virtual void* read(){return nullptr;}
 
       virtual void monitorService(){
@@ -146,7 +150,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           //Sur ESP32, mDNS n’a PAS besoin d’être appelé dans loop() une fois qu’il est démarré.
         }         
       }
-      
+     
       virtual bool handleConnectService(){
         DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
         String baseName = *systemCfg.getString(S_AP_NAME);
@@ -193,7 +197,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
             NULL                // Task handle
           );          
         }
-      }
+      }      
       
       virtual bool handleDisconnectService(){
         DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
