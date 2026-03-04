@@ -19,7 +19,7 @@ class MixerInterface {
 class MixingStation: public NetworkDevice, public MixerInterface{
   public:
   
-    MixingStation():NetworkDevice(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,8887,10024,true){
+    MixingStation():NetworkDevice(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,8887,true){
       //destination->host = "192.168.99.99";
       destination = new PingEcho("0.0.0.0");      
     }
@@ -42,7 +42,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
 #define INTERFACE_BEHRINGERXM "BehringerXM"
 class BehringerXM: public NetworkOSC, public MixerInterface{
   public:
-    BehringerXM():NetworkOSC(INTERFACE_BEHRINGERXM,8888,"192.168.0.1",10023,"/xinfo",true,GROUP_INTERFACE_MIXER){
+    BehringerXM():NetworkOSC(INTERFACE_BEHRINGERXM,8888,"192.168.0.1",10023, "/xinfo",true,GROUP_INTERFACE_MIXER){
       //destination->host = "192.168.0.1";
     }     
 };

@@ -697,7 +697,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     int remotePort;
     int localPort;  
 
-    NetworkDevice(String name, String group, int lport, int rport, bool _configurable=false):DeviceInterface(name, group,_configurable), localPort(lport), remotePort(rport){
+    NetworkDevice(String name, String group, int lport, bool _configurable=false):DeviceInterface(name, group,_configurable), localPort(lport){
       
       attachDeviceInterface(this);
       
