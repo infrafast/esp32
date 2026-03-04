@@ -116,8 +116,8 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
 
       virtual void load() override{
         DEBUG_PRINT("\n%s::load() default ignored => ENABLE", interfaceName.c_str()); 
-        // ignore the given parameter. Just enable the interface
-        state.enabled = true;       
+        // ignore the given parameter. 
+        state.enabled = false;          // the interface is forced disabled at startup as we do not need to browse network until a request is sent (by startWebApp to publish DNS name or by appleMidi to advert)
         hasStrip = false;             
       }
 
@@ -173,39 +173,33 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           } 
         }
 
-        //startDiscovery();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
+        //discoveryRequest();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
 
         setStateReady("green",*lang.getString("online"),"",*systemCfg.getString(S_AP_NAME));
 
         return true;
       }
 
-      void startDiscovery(){
-        DEBUG_PRINT("\n%s::startDiscovery()",interfaceName.c_str());
-
-        if (deviceInterface->state.code == IF_NOT_READY){
-          epDirectoryNotReady();
+      void discoveryRequest(){
+        DEBUG_PRINT("\n%s::discoveryRequest()",interfaceName.c_str());   
+        if (deviceInterface->state.enabled){       
+          // drop the request if interface is up and running
+          startDiscovery();
         }else{
-          // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
-          rtpDir.clear();
-          if (hwm.network->media == CABLE_MEDIA){
-            // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
-            EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 6000); // :contentReference[oaicite:3]{index=3} 
-            DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
-          }else{
-            // Wifi = bloquant
-            xTaskCreate(
-              wiFiRTPDiscoveryTaskWrapper,  // Function to implement the task
-              "WiFiRTPDiscoveryTask",     // Name of the task
-              4096,              // Stack size in words
-              NULL,               // Task input parameter
-              1,                  // Priority of the task
-              NULL                // Task handle
-            );          
-          }
+          // if interface is not up and running, we try to bring it up
+          switchNetworkService(true);
+          startDiscovery();
         }
       }      
       
+      void startDiscovery(){
+        if (deviceInterface->state.code == IF_NOT_READY){
+          epDirectoryNotReady();
+        }else{
+          epDirectoryRefresh();
+        }        
+      }
+
       virtual bool handleDisconnectService(){
         DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
         if (hwm.network->lastActiveMedia == CABLE_MEDIA){
@@ -294,8 +288,28 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         DEBUG_PRINT("\n\n[RTP]\t\tDirectory not ready");
         evt.type = EVENT_DIRECTORY_NOT_READY;
         evt.data = &rtpDir;
-        fireEvent();
+        fireEvent();        
       }      
+
+      void epDirectoryRefresh(){
+        // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
+        rtpDir.clear();
+        if (hwm.network->media == CABLE_MEDIA){
+          // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
+          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 6000); // :contentReference[oaicite:3]{index=3} 
+          DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
+        }else{
+          // Wifi = bloquant
+          xTaskCreate(
+            wiFiRTPDiscoveryTaskWrapper,  // Function to implement the task
+            "WiFiRTPDiscoveryTask",     // Name of the task
+            4096,              // Stack size in words
+            NULL,               // Task input parameter
+            1,                  // Priority of the task
+            NULL                // Task handle
+          );          
+        }      
+      }
 
       void wiFiRTPDiscoveryTask(){
         DEBUG_PRINT("\n\n[RTP-WiFi]\t\tScan RTP-MIDI lancé...\n");     

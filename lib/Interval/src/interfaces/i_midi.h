@@ -490,7 +490,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }    
 
     void requestDirectoryRefresh(){
-      // trigger application manager to call discovery.startDiscovery()
+      // trigger application manager to call discovery.discoveryRequest()
       DEBUG_PRINT("\n%s::requestDirectoryRefresh()",interfaceName.c_str());
       // state will be recalled when directory service has finished
       saveState();                

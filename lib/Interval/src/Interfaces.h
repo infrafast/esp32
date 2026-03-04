@@ -432,7 +432,7 @@ class NetWorkService{
 
     }
 
-    #define SERVICES_WEIGHT_LIMIT  3
+    #define SERVICES_WEIGHT_LIMIT  4
     
     bool serviceLocked = true; // by default locked to avoid monitoring straight after startup
 
@@ -500,7 +500,10 @@ class NetWorkService{
       }
 
       if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) limit = true;  // already reached the limit
-      else enabledServicesWeightSum += getServiceWeight();                  // book the correct amount
+      else{
+        if (enabledServicesWeightSum + getServiceWeight() >= SERVICES_WEIGHT_LIMIT) limit = true; // enabling this interface would consumme the remaining budget
+        else enabledServicesWeightSum += getServiceWeight();                  // book the correct amount
+      }
 
       DEBUG_PRINT("\tcounts %i/%i => %s",
                   enabledServicesWeightSum,

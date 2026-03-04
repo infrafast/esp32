@@ -1032,7 +1032,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void interfaceEventHandler(Event* event){
       switch(event->type){
         case EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE:
-          directoryService.startDiscovery();
+          directoryService.discoveryRequest();
         break;
       }
       // propagate the event
