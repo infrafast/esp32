@@ -693,4 +693,21 @@ DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){
   return nullptr;
 }
 
+class NetworkDevice: public DeviceInterface, public NetWorkService{
+
+  public:
+
+    NetworkDevice(String name, String group, bool _configurable=false):DeviceInterface(name, group,_configurable){}
+
+    virtual void monitor(){           
+      monitorNetwork();      
+    }    
+
+    virtual void switchDevice(bool _enabled) override{
+      switchNetworkService(_enabled); // we use our own
+    }   
+
+};
+
+//DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable)
 #endif

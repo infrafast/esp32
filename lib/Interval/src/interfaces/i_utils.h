@@ -7,7 +7,7 @@
 #define ADDRESS_PROVIDER      "/provider/"
 #define ADDRESS_TEXT    "/text/%s"
 
-#define GROUP_INTERFACE_UTILS "utils"
+#define GROUP_INTERFACE_UTILS "Utils"
 
 
 class SystemInterface: public DeviceInterface, public DataProvider{
@@ -100,7 +100,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
   private:
 
     String textValue = "";    
-        
+       
     
 }systemInterface(false);      // not exposed
 
@@ -148,7 +148,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           EthernetBonjour.run();
         }else if (hwm.network->media == WIFI_MEDIA){
           //Sur ESP32, mDNS n’a PAS besoin d’être appelé dans loop() une fois qu’il est démarré.
-        }         
+        }               
       }
      
       virtual bool handleConnectService(){
@@ -192,14 +192,6 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         }
       }      
       
-      void startDiscovery(){
-        if (deviceInterface->state.code == IF_NOT_READY){
-          epDirectoryNotReady();
-        }else{
-          epDirectoryRefresh();
-        }        
-      }
-
       virtual bool handleDisconnectService(){
         DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
         if (hwm.network->lastActiveMedia == CABLE_MEDIA){
@@ -210,14 +202,22 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           MDNS.end();
         }          
 
-        setStateOffline(concatStrings(*lang.getString("Device is not detectable on the network. Use")," ",hwm.network->IP.toString()," ",*lang.getString("to connect this device")));                
+        setStateOffline(concatStrings(*lang.getString("Device is not detectable on the network. Use")," ",hwm.network->IP.toString()," ",*lang.getString("to connect")));                
 
         return true;
       }        
 
     protected:
       
-    static DirectoryInterface* instance_;
+      static DirectoryInterface* instance_;
+
+      void startDiscovery(){
+        if (deviceInterface->state.code == IF_NOT_READY){
+          epDirectoryNotReady();
+        }else{
+          epDirectoryRefresh();
+        }        
+      }      
       
       // Méthode statique compatible FreeRTOS
       static void wiFiRTPDiscoveryTaskWrapper(void* pvParameters) {        
@@ -296,7 +296,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         rtpDir.clear();
         if (hwm.network->media == CABLE_MEDIA){
           // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
-          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 6000); // :contentReference[oaicite:3]{index=3} 
+          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, EP_DISCOVERY_TIME_OUT); // :contentReference[oaicite:3]{index=3} 
           DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
         }else{
           // Wifi = bloquant
@@ -333,9 +333,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           instance_->onEthernetBonjourServiceFoundCallback(serviceType,proto,serviceName,ipAddr,port,txt);
         }
       }      
-
-     
-
+      
 
 }directoryService(true);    // exposed
 DirectoryInterface* DirectoryInterface::instance_ = nullptr;

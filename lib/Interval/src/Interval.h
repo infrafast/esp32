@@ -996,6 +996,7 @@ void xTaskBackground(void *pvParameters);
 #define PERSISTANT_STARTUP        "startup"
 
 #define MAX_RTP_DIR_ENDPOINTS 3
+#define EP_DISCOVERY_TIME_OUT 6000
 // ====== Liste simple des endpoints découverts ======
 struct RtpmidiEndpoint {
   char name[64];        // nom d'instance (ex: "Mon MacBook Pro")

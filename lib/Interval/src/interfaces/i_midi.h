@@ -977,6 +977,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     unsigned long lastInvite = 0;
     bool hasBegun = false;
 
+/*    unsigned long startDiscoveryTime = 0;  
+    unsigned long delta = millis()-startDiscoveryTime;        
+    state.progress = scaleValue(delta,0,EP_DISCOVERY_TIME_OUT,0.0,1.0);        */
+
+
 };
 
 /*class MIDIOSC{

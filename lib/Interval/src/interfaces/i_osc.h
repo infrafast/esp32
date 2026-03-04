@@ -18,7 +18,7 @@ class OSCPing: public PingEcho{
     String pingCommand; //the command used to monitor the connection    
 };
 
-class NetworkOSC: public DeviceInterface, public NetWorkService {  // should derive OSCInterface
+class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
@@ -31,7 +31,7 @@ class NetworkOSC: public DeviceInterface, public NetWorkService {  // should der
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
-    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String pingCommand, bool _configurable=false):OSC_localPort(_OSC_localPort), OSC_remotePort(_OSC_remotePort), DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable){
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String pingCommand, bool _configurable=false, String group = GROUP_INTERFACE_OSC):OSC_localPort(_OSC_localPort), OSC_remotePort(_OSC_remotePort), NetworkDevice(name, group ,_configurable){
       icon = "g";     
       attachDeviceInterface(this);
 
@@ -98,10 +98,6 @@ class NetworkOSC: public DeviceInterface, public NetWorkService {  // should der
       }
       return changed;
     }        
-
-    virtual void monitor(){           
-      monitorNetwork();      
-    }    
 
      virtual void monitorService(){
       // Check if packet was received
@@ -234,10 +230,6 @@ class NetworkOSC: public DeviceInterface, public NetWorkService {  // should der
     virtual bool isSwitchable(){
       return true;
     }    
-
-    virtual void switchDevice(bool _enabled) override{
-      switchNetworkService(_enabled); // we use our own
-    }   
 
     virtual bool handleConnectService(){
       DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
