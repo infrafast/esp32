@@ -41,7 +41,6 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     virtual bool begin(){
       DEBUG_PRINT("\n%s::begin() => registered systemDS",interfaceName.c_str());          
       systemDS.registerDataSetAddress(dsText.address);      // register all ds             
-      jsonInputRepo.add(&systemDS);     // registered once
 
       //dataProviderName = getProviderNameForData();      
 

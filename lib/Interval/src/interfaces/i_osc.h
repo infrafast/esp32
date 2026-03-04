@@ -10,8 +10,6 @@
   public:
 };*/
 
-#define ADDRESS_OSCPORT "/oscport/%d"
-
 class OSCPing: public PingEcho{
   public:
     OSCPing(String host, String _command):PingEcho(host), pingCommand(_command){}
@@ -22,31 +20,20 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
-    FreeTextAddress* addressOSCport = new FreeTextAddress(ADDRESS_OSCPORT,"OSCport", REGEX_0to65535);
-    
-    int OSC_remotePort;
-    int OSC_localPort;
-
     OSCMessage osc;
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
-    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String pingCommand, bool _configurable=false, String group = GROUP_INTERFACE_OSC):OSC_localPort(_OSC_localPort), OSC_remotePort(_OSC_remotePort), NetworkDevice(name, group ,_configurable){
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String pingCommand, bool _configurable=false, String group = GROUP_INTERFACE_OSC):NetworkDevice(name, group ,_OSC_localPort, _OSC_remotePort,_configurable){
       icon = "g";     
-      attachDeviceInterface(this);
 
-      destination = new OSCPing(_OSC_IPaddress,pingCommand);
-      
+      destination = new OSCPing(_OSC_IPaddress,pingCommand);   
 
       if (!(OSCPing*)destination->ip.fromString(_OSC_IPaddress)) destination->ip = IPAddress(0,0,0,0);
-
-      registerDataSetAddress(addressOSCport);
-      registerDataSetAddress(&addressIP);           // global      
+  
       registerDataSetAddress(&addressPing);         // global      
-
-      jsonInputRepo.add(this);        
-      
-      data = &osc;
+    
+      data = &osc;                                  // this interface manage OSCMessage as data 
 
     }
 
@@ -54,49 +41,28 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       delete destination;
     }
 
-    virtual void handlePropertyChange(){
-      DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      handleDisconnectService();  // force to reconnect
-    }
-
     virtual void serializeProperties(JsonArray& properties) override{
-      char* buf = (char*)malloc((strlen(ADDRESS_OSCPORT)+6)*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_OSCPORT,OSC_remotePort);
-      properties.add(String(buf)); 
-      free(buf);
-
-      buf = (char*)malloc((strlen(ADDRESS_IP)+destination->ip.toString().length())*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_IP,destination->ip.toString());
-      properties.add(String(buf)); 
-      free(buf);    
+      NetworkDevice::serializeProperties(properties);
       
       buf = (char*)malloc((strlen(ADDRESS_PING)+((OSCPing*)destination)->pingCommand.length())*sizeof(char*)+1);
       sprintf(buf,ADDRESS_PING,((OSCPing*)destination)->pingCommand);
       properties.add(String(buf)); 
       free(buf);        
+
     }
 
     virtual bool restoreProperty(const char* property) override{
+      
       bool changed = false;
-      uint16_t OSCport;
       #define MAXLENGHTINPUT 32
-      char inputStr[MAXLENGHTINPUT];      
-      if (sscanf(property, ADDRESS_OSCPORT, &OSCport) == 1) {
-        if (OSCport != OSC_remotePort)   changed = true;
-        OSC_remotePort = OSCport;       
-      }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
-        IPAddress ip;
-        if (ip.fromString(inputStr)){
-          if (destination->ip != ip)  changed = true;
-          destination->ip = ip;      
-        }else{
-          DEBUG_PRINT("\ninvalid IP address: %s",inputStr);
-        }
-      }else if (sscanf(property, ADDRESS_PING, &inputStr)) {
+      char inputStr[MAXLENGHTINPUT];   
+
+      if (sscanf(property, ADDRESS_PING, &inputStr)) {
         if (((OSCPing*)destination)->pingCommand != inputStr)  changed = true;
         ((OSCPing*)destination)->pingCommand = inputStr;    
       }
-      return changed;
+
+      return changed | NetworkDevice::restoreProperty(property);
     }        
 
      virtual void monitorService(){
@@ -153,7 +119,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
             }else{
               char addr[64];
               osc.getAddress(addr, 0);
-              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),OSC_remotePort);
+              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),remotePort);
               if ( ((OSCPing*)destination)->pingCommand == addr ){
                 /* we got a pingCommand echo, so we calculate the latency
                 Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
@@ -199,7 +165,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       
       bool success = false;
 
-      DEBUG_PRINT("\n>>%s(%s,%i->%i) ",msg->getAddress(),destination->ip.toString().c_str(),OSC_localPort, OSC_remotePort);
+      DEBUG_PRINT("\n>>%s(%s,%i->%i) ",msg->getAddress(),destination->ip.toString().c_str(),localPort, remotePort);
 
       UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
 
@@ -211,7 +177,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       UDP* udp = udpSlot->udp; 
 
       if (udp != nullptr){
-        udp->beginPacket(destination->ip, OSC_remotePort);
+        udp->beginPacket(destination->ip, remotePort);
         msg->send(*udp);
         udp->endPacket();
         success = true;
@@ -235,33 +201,24 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
       // network connection is established so we now try to connect the device to its protocol
       if (udpID == -1) {
-        udpID = hwm.network->requestUDPslotID(OSC_localPort);   // the network will create or reuse a udp slot and give its ID to us
+        udpID = hwm.network->requestUDPslotID(localPort);   // the network will create or reuse a udp slot and give its ID to us
       }
       if (udpID == -1) return false;                            // can't get any UDP connectivity => try again until next queryTime expired
       
-      DEBUG_PRINT("\nudp(%i) got UDP slot #%i",OSC_localPort,udpID);      
+      DEBUG_PRINT("\nudp(%i) got UDP slot #%i",localPort,udpID);      
       setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
       destination->lastQueryTime = 0;                           // with the valid UDP we just got so we force ping to be triggered immediately
       return true;
     }
 
-   virtual bool handleDisconnectService(){
+    virtual bool handleDisconnectService(){
       DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
       destination->lastQueryTime = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
       //setStateDisconnected();
       return true;
-    }
-
-    virtual void setStateReady(){            
-      DeviceInterface::setStateReady("green", *lang.getString(IF_STATE_CONNECTED), destination->ip.toString(),destination->ip.toString());
-    }
-
-    virtual void setStateDisconnected() override{
-      DeviceInterface::setStateDisconnected();
-      deviceInterface->state.details = concatStrings(*lang.getString("no UDP connection"));      
-    }       
-
+    }    
+  
     void setStateQueryingDevice(){
       //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
       // network is connected but not the OSC device is not answering

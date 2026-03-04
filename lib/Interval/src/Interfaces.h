@@ -38,7 +38,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     String interfaceName; 
   
     int dataAvailable;
-    void* data;
+    void* data;                 // MUST BE AFFECTED IN CONSTRUCTOR OF DERIVED CLASS AND THEN CASTED IN THE UPDATE() MEDTHOD OF STRIP (WHICH IS CALLED WHEN AVAILABLE RETURN > 0 in STRIP PROCESS())
 
     bool exposed = true;          // 
     bool hasStrip = true;      // if the interface is used by a strip (ex. Midi) or not (ex. Directory Service), by default yes, but some interface are more technical and not relevant for the user to create a strip with them, so we can hide them in the strip creation menu by setting this parameter to false
@@ -384,7 +384,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return false;
     } 
     
-    // monitor manage internal state and set the dataAvailable flag using internal functions to indicate data are available to be read with read() method
+    // monitor manage internal state and set the dataAvailable flag using internal functions to indicate data are available with available() method that expose the value in "data"
     // do not need to care about offline state as it is managed by update method
     virtual void monitor() = 0; 
 
@@ -417,13 +417,10 @@ class NetWorkService{
       });
     }
 
-    virtual void* read(){
-      return nullptr;
-    }
+    
     virtual void monitorService()=0;
     virtual bool handleConnectService()=0;
     virtual bool handleDisconnectService()=0;
-
 
 
     static void addToInventory(NetWorkService* iface) {
@@ -697,7 +694,17 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
   public:
 
-    NetworkDevice(String name, String group, bool _configurable=false):DeviceInterface(name, group,_configurable){}
+    int remotePort;
+    int localPort;  
+
+    NetworkDevice(String name, String group, int lport, int rport, bool _configurable=false):DeviceInterface(name, group,_configurable), localPort(lport), remotePort(rport){
+      
+      attachDeviceInterface(this);
+      
+      registerDataSetAddress(addressPort);          // global
+      registerDataSetAddress(&addressIP);           // global       
+      
+    }
 
     virtual void monitor(){           
       monitorNetwork();      
@@ -706,6 +713,52 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     virtual void switchDevice(bool _enabled) override{
       switchNetworkService(_enabled); // we use our own
     }   
+
+    virtual void handlePropertyChange(){
+      DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
+      handleDisconnectService();  // force to reconnect
+    }
+
+    virtual void serializeProperties(JsonArray& properties) override{
+      buf = (char*)malloc((strlen(ADDRESS_PORT)+6)*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_PORT,remotePort);
+      properties.add(String(buf)); 
+      free(buf);
+
+      buf = (char*)malloc((strlen(ADDRESS_IP)+destination->ip.toString().length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,destination->ip.toString());
+      properties.add(String(buf)); 
+      free(buf);                
+    }
+
+    virtual bool restoreProperty(const char* property) override{
+      bool changed = false;
+      uint16_t _port;
+      #define MAXLENGHTINPUT 32
+      char inputStr[MAXLENGHTINPUT];      
+      if (sscanf(property, ADDRESS_PORT, &_port) == 1) {
+        if (_port != remotePort)   changed = true;
+        remotePort = _port;       
+      }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
+        IPAddress ip;
+        if (ip.fromString(inputStr)){
+          if (destination->ip != ip)  changed = true;
+          destination->ip = ip;      
+        }else{
+          DEBUG_PRINT("\ninvalid IP address: %s",inputStr);
+        }
+      }
+      return changed;
+    }       
+
+    virtual void setStateReady(){            
+      DeviceInterface::setStateReady("green", *lang.getString(IF_STATE_CONNECTED), destination->ip.toString(),destination->ip.toString());
+    }
+
+    virtual void setStateDisconnected() override{
+      DeviceInterface::setStateDisconnected();
+      deviceInterface->state.details = concatStrings(*lang.getString("no connection"));      
+    }       
 
 };
 

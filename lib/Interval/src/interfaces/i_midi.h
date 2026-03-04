@@ -65,7 +65,7 @@ class MIDIInterface: public DeviceInterface{
     MidiData midiData;
 
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
-      data = &midiData;     
+      data = &midiData;       // this inertaface handle  MidiData
     }
    
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
@@ -460,7 +460,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       
       destination = new PingEcho("0.0.0.0");
 
-      jsonInputRepo.add(this); 
+      //jsonInputRepo.add(this); 
 
       populateSessionOptions();      
 
@@ -566,7 +566,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       }
       
 
-      char* buf = (char*)malloc((strlen(ADDRESS_APPLEMIDISESSION)+sessionOptions.length()+1)*sizeof(char*));
+      buf = (char*)malloc((strlen(ADDRESS_APPLEMIDISESSION)+sessionOptions.length()+1)*sizeof(char*));
       sprintf(buf,ADDRESS_APPLEMIDISESSION,sessionOptions.c_str());
       properties.add(String(buf)); 
       free(buf);

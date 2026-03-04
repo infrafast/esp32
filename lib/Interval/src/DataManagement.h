@@ -38,6 +38,7 @@ enum {
 
 #define ADDRESS_IP "/ip/%s"  
 #define ADDRESS_PING "/ping/%s"
+#define ADDRESS_PORT "/port/%d"
 
 #define KEY_PROPERTIES    "properties"
 
@@ -97,7 +98,8 @@ class FreeTextAddress: public Address{
 };
 
 FreeTextAddress addressIP = FreeTextAddress(ADDRESS_IP, "ip", REGEX_IPADDRESS);    
-FreeTextAddress addressPing = FreeTextAddress(ADDRESS_PING, "ping", REGEX_STRING);    
+FreeTextAddress addressPing = FreeTextAddress(ADDRESS_PING, "ping", REGEX_STRING);  
+FreeTextAddress* addressPort = new FreeTextAddress(ADDRESS_PORT,"port", REGEX_0to65535);  
 
 String errorDatasetOOR = "outOfRange";
 
@@ -264,6 +266,18 @@ void DataRepository::removeDataSet(DataSet* ds) {
   }
 }
 
+class SerializableParameters;
+
+class JsonTemplateRepository{
+  public:
+    std::vector<SerializableParameters*> jsonTemplateRepo;
+
+    void serialize(JsonArray* jsonTPLArray);
+    bool add(SerializableParameters* sd);
+
+}jsonInputRepo;
+
+
 #define DATASET_PROPERTIES "properties"
 
 class SerializableParameters {
@@ -275,7 +289,10 @@ class SerializableParameters {
       : name(n),
         group(g),
         repo(r),
-        registerConfigDataSets(autoRegisterConfigDataSets) {}
+        registerConfigDataSets(autoRegisterConfigDataSets) {
+          jsonInputRepo.add(this);          
+        }
+
     virtual ~SerializableParameters() {
       for (DataSet* ds : ownedDataSets) {
         delete ds;
@@ -340,29 +357,23 @@ class SerializableParameters {
     DataRepository* repo;
     bool registerConfigDataSets = false;
 
+    protected:
+      char* buf;    //used for serialization
+
+
 };
 
-
-
-class JsonTemplateRepository{
-  public:
-    std::vector<SerializableParameters*> jsonTemplateRepo;
-
-    void serialize(JsonArray* jsonTPLArray){
+void JsonTemplateRepository::serialize(JsonArray* jsonTPLArray){
       for (uint8_t i=0;i<jsonTemplateRepo.size();i++){
         SerializableParameters* jsonTPL = jsonTemplateRepo[i];
         jsonTPLArray->add(jsonTPL->serialize());
       }
-    }
+    };
 
-    bool add(SerializableParameters* sd){
+bool JsonTemplateRepository::add(SerializableParameters* sd){
       jsonTemplateRepo.push_back(sd);
       return true;
-    }
-
-}jsonInputRepo;
-
-
+    };
 
 class WebLibrary : public DataSet, public JsonListFile{
   public:
