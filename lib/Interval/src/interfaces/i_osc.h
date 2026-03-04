@@ -51,14 +51,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }
 
     virtual bool restoreProperty(const char* property) override{
-      
       bool changed = false;
-      #define MAXLENGHTINPUT 32
-      char inputStr[MAXLENGHTINPUT];   
+      String pingCommand;
 
-      if (sscanf(property, ADDRESS_PING, &inputStr)) {
-        if (((OSCPing*)destination)->pingCommand != inputStr)  changed = true;
-        ((OSCPing*)destination)->pingCommand = inputStr;    
+      if (restoreValuesFromTemplate(ADDRESS_PING, property, &pingCommand)) {
+        if (((OSCPing*)destination)->pingCommand != pingCommand) changed = true;
+        ((OSCPing*)destination)->pingCommand = pingCommand;
       }
 
       return changed | NetworkDevice::restoreProperty(property);

@@ -1,6 +1,12 @@
 #ifndef DEVICEINTERFACES_h
 #define DEVICEINTERFACES_h
 
+#include <cstdlib>
+#include <cstring>
+#include <limits>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 #include <vector>
 #include "Interval.h"
 
@@ -27,6 +33,12 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
   #define DEVICE_OFF false
 
   public:
+
+    enum class PropertyTemplateArgType : uint8_t {
+      Integer,
+      StringValue,
+      Unsupported
+    };
 
     State state;
 
@@ -383,6 +395,111 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       DEBUG_PRINT("\n%s::restoreProperty(%s) not applicable",interfaceName.c_str(),property);
       return false;
     } 
+
+    template<typename... Args>
+    static bool restoreValuesFromTemplate(const char* formatTemplate, const char* input, Args... args){
+      if (formatTemplate == nullptr || input == nullptr) return false;
+
+      std::tuple<Args...> tupleArgs(args...);
+      constexpr size_t argCount = sizeof...(Args);
+
+      PropertyTemplateArgType expectedTypes[argCount == 0 ? 1 : argCount] = { deduceArgType<Args>()... };
+      size_t expectedCount = 0;
+      bool expectedTypeError = false;
+      for (size_t i = 0; i < argCount; ++i){
+        if (expectedTypes[i] == PropertyTemplateArgType::Unsupported){
+          DEBUG_PRINT("\nDeviceInterface::restoreValuesFromTemplate unsupported argument type at index %d", (int)i);
+          expectedTypeError = true;
+        }
+        expectedCount++;
+      }
+      if (expectedTypeError) return false;
+
+      std::vector<PropertyTemplateArgType> foundTypes;
+      std::vector<long> values;
+      std::vector<String> strings;
+
+      const char* f = formatTemplate;
+      const char* p = input;
+
+      while (*f != '\0'){
+        if (*f != '%'){
+          if (*p != *f) return false;
+          ++f;
+          ++p;
+          continue;
+        }
+
+        ++f;
+        if (*f == '\0') return false;
+
+        PropertyTemplateArgType formatType = PropertyTemplateArgType::Unsupported;
+        if (*f == 'd') formatType = PropertyTemplateArgType::Integer;
+        else if (*f == 's') formatType = PropertyTemplateArgType::StringValue;
+        else return false;
+
+        foundTypes.push_back(formatType);
+        values.push_back(0);
+        strings.push_back("");
+        size_t foundIndex = foundTypes.size() - 1;
+
+        const char* tailStart = f + 1;
+        const char* nextPercent = strchr(tailStart, '%');
+        size_t tailLen = nextPercent ? (size_t)(nextPercent - tailStart) : strlen(tailStart);
+
+        const char* valueEnd = nullptr;
+        if (tailLen == 0){
+          valueEnd = p + strlen(p);
+        } else {
+          valueEnd = findLiteral(p, tailStart, tailLen);
+          if (valueEnd == nullptr) return false;
+        }
+
+        size_t valueLen = (size_t)(valueEnd - p);
+        String rawValue;
+        rawValue.reserve(valueLen);
+        for (size_t i = 0; i < valueLen; ++i) rawValue += p[i];
+
+        if (formatType == PropertyTemplateArgType::Integer){
+          if (rawValue.length() == 0) return false;
+
+          char* endPtr = nullptr;
+          long parsed = strtol(rawValue.c_str(), &endPtr, 10);
+          if (endPtr == nullptr || *endPtr != '\0') return false;
+          values[foundIndex] = parsed;
+        } else {
+          strings[foundIndex] = rawValue;
+        }
+
+        p = valueEnd + tailLen;
+        f = tailStart + tailLen;
+      }
+
+      if (*p != '\0') return false;
+
+      size_t foundCount = foundTypes.size();
+
+      if (foundCount != expectedCount){
+        DEBUG_PRINT("\nDeviceInterface::restoreValuesFromTemplate mismatch argument count for template %s (expected=%d, got=%d)",
+          formatTemplate,
+          (int)expectedCount,
+          (int)foundCount);
+        return false;
+      }
+
+      for (size_t i = 0; i < foundCount; ++i){
+        if (foundTypes[i] != expectedTypes[i]){
+          DEBUG_PRINT("\nDeviceInterface::restoreValuesFromTemplate mismatch argument type at index %d for template %s", (int)i, formatTemplate);
+          return false;
+        }
+      }
+
+      bool assigned = assignValues(tupleArgs, foundTypes.data(), values.data(), strings.data(), std::make_index_sequence<argCount>{});
+      if (!assigned) return false;
+
+      DEBUG_PRINT("\nDeviceInterface::restoreValuesFromTemplate match: template=%s input=%s values=%d", formatTemplate, input, (int)foundCount);
+      return true;
+    }
     
     // monitor manage internal state and set the dataAvailable flag using internal functions to indicate data are available with available() method that expose the value in "data"
     // do not need to care about offline state as it is managed by update method
@@ -400,6 +517,61 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
   protected:
     String icon = ICON_LINK;
+
+  private:
+    template<typename T>
+    static constexpr PropertyTemplateArgType deduceArgType(){
+      using Raw = typename std::remove_cv<typename std::remove_pointer<T>::type>::type;
+      if (!std::is_pointer<T>::value) return PropertyTemplateArgType::Unsupported;
+      if (std::is_integral<Raw>::value) return PropertyTemplateArgType::Integer;
+      if (std::is_same<Raw, String>::value) return PropertyTemplateArgType::StringValue;
+      return PropertyTemplateArgType::Unsupported;
+    }
+
+    static const char* findLiteral(const char* start, const char* literal, size_t literalLen){
+      if (literalLen == 0) return start;
+      for (const char* cursor = start; *cursor != '\0'; ++cursor){
+        if (strncmp(cursor, literal, literalLen) == 0) return cursor;
+      }
+      return nullptr;
+    }
+
+    template<typename T>
+    static typename std::enable_if<std::is_integral<T>::value, bool>::type
+    assignTypedValue(T* target, PropertyTemplateArgType valueType, long intValue, const String&){
+      if (target == nullptr || valueType != PropertyTemplateArgType::Integer) return false;
+      if (intValue < (long)std::numeric_limits<T>::min() || intValue > (long)std::numeric_limits<T>::max()) return false;
+      *target = (T)intValue;
+      return true;
+    }
+
+    template<typename T>
+    static typename std::enable_if<std::is_same<T, String>::value, bool>::type
+    assignTypedValue(T* target, PropertyTemplateArgType valueType, long, const String& stringValue){
+      if (target == nullptr || valueType != PropertyTemplateArgType::StringValue) return false;
+      *target = stringValue;
+      return true;
+    }
+
+    template<typename T>
+    static typename std::enable_if<!std::is_integral<T>::value && !std::is_same<T, String>::value, bool>::type
+    assignTypedValue(T*, PropertyTemplateArgType, long, const String&){
+      return false;
+    }
+
+    template<typename T>
+    static bool assignOne(T* target, PropertyTemplateArgType valueType, long intValue, const String& stringValue){
+      return assignTypedValue<typename std::remove_cv<T>::type>(target, valueType, intValue, stringValue);
+    }
+
+    template<typename Tuple, size_t... I>
+    static bool assignValues(Tuple& tupleArgs, const PropertyTemplateArgType* foundTypes, const long* intValues, const String* stringValues, std::index_sequence<I...>){
+      bool ok = true;
+      (void)std::initializer_list<int>{
+        (ok = ok && assignOne(std::get<I>(tupleArgs), foundTypes[I], intValues[I], stringValues[I]), 0)...
+      };
+      return ok;
+    }
 
 };
 
@@ -733,20 +905,20 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
     virtual bool restoreProperty(const char* property) override{
       bool changed = false;
-      uint16_t _port;
-      #define MAXLENGHTINPUT 32
-      char inputStr[MAXLENGHTINPUT];      
-      if (sscanf(property, ADDRESS_PORT, &_port) == 1) {
-        if (_port != remotePort)   changed = true;
-        remotePort = _port;
-        if (remotePort>65535 || remotePort<0) remotePort = 0;
-      }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
+      int parsedPort = 0;
+      String input;
+
+      if (restoreValuesFromTemplate(ADDRESS_PORT, property, &parsedPort)) {
+        if (parsedPort != remotePort) changed = true;
+        remotePort = parsedPort;
+        if (remotePort > 65535 || remotePort < 0) remotePort = 0;
+      }else if (restoreValuesFromTemplate(ADDRESS_IP, property, &input)) {
         IPAddress ip;
-        if (ip.fromString(inputStr)){
-          if (destination->ip != ip)  changed = true;
-          destination->ip = ip;      
+        if (ip.fromString(input.c_str())){
+          if (destination->ip != ip) changed = true;
+          destination->ip = ip;
         }else{
-          DEBUG_PRINT("\ninvalid IP address: %s",inputStr);
+          DEBUG_PRINT("\ninvalid IP address: %s", input.c_str());
         }
       }
       return changed;
