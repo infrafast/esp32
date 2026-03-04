@@ -26,7 +26,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
         DEBUG_PRINT("\n%s::load() default ignored => DISABLED", interfaceName.c_str()); 
         // ignore the given parameter. Just enable the interface
         state.enabled = false;       
-        usedByStrip = true;             // textStrip...
+        hasStrip = true;             // textStrip...
       }
 
       virtual bool save() override{
@@ -118,7 +118,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         DEBUG_PRINT("\n%s::load() default ignored => ENABLE", interfaceName.c_str()); 
         // ignore the given parameter. Just enable the interface
         state.enabled = true;       
-        usedByStrip = false;             
+        hasStrip = false;             
       }
 
       virtual bool begin(){     // called by init()
@@ -184,7 +184,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         rtpDir.clear();
         if (hwm.network->media == CABLE_MEDIA){
           // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
-          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
+          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 6000); // :contentReference[oaicite:3]{index=3} 
           DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
         }else{
           // Wifi = bloquant

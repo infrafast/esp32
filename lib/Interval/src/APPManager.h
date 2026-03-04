@@ -963,7 +963,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void disableUnusedInterface(){
       // unsused interfaces are the one which are not referred by any instanciated strips
       for (const auto& interface : interfaceRepo.interfaces){       
-        if (interface->stripCount <=0 && interface->usedByStrip){ // only for interfaces that are exposed => means they can be configured by user
+        if (interface->stripCount <=0 && interface->hasStrip){ // only for interfaces that are exposed => means they can be configured by user
           DEBUG_PRINT("\n%s has no strip : DISABLED",interface->interfaceName.c_str());
           //interface->switchDevice(false);  // BE CAREFULL
           interface->state.enabled = false;
@@ -1752,10 +1752,11 @@ void setup() {
   
             EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                                                              
             if (newEthClient) {
-              //DEBUG_PRINT("\n\tEth ---> ");
+              DEBUG_PRINT("\nDump before serving %s",hwm->network->dumpW5500Sockets().c_str());
               webServer->process(&newEthClient);
               newEthClient.stop();  
               //DEBUG_PRINT(" STOP");
+              DEBUG_PRINT("\nDump after serving %s",hwm->network->dumpW5500Sockets().c_str());
             }
                           
           }else{
@@ -2267,6 +2268,7 @@ void setup() {
         if (hwm->configMedia->state == CONNECTED){
           if (webServer == nullptr){          
             //start webserver     
+            DEBUG_PRINT("\nDump before webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
             DEBUG_PRINT("\n\n[WEBAPP]\t\tstart\n\n");       
             
             webServer = new Application();
@@ -2292,6 +2294,7 @@ void setup() {
           }
           hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"," (http://",hwm->configMedia->IP.toString(),")"); // hwm->configMedia->IP.toString();
           DEBUG_PRINT("\n\n[WEBAPP]\t\tserving on %s",hwm->configURL.c_str() );
+          DEBUG_PRINT("\nDump after webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
           return true;
         }
         return false;

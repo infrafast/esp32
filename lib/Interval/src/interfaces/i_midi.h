@@ -401,6 +401,27 @@ class AppleMidiSessionType : public DataSet{
     virtual uint16_t getSize(){
       return count;
     }
+
+    bool addIfNotExists(const String& value) {
+
+      // Vérifier si déjà présent
+      for (uint16_t i = 0; i < count; i++) {
+        if (name[i] == value) {
+          return false; // déjà présent
+        }
+      }
+
+      // Vérifier si il reste de la place
+      if (count >= APPLEMIDI_SESSIONS_NUMBER + 2) {
+        return false; // tableau plein
+      }
+
+      // Ajouter
+      name[count] = value;
+      count++;
+
+      return true;
+    }    
        
 };
 
@@ -475,6 +496,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       saveState();                
       // indicate we are busy      
       setStateRefreshing();   
+      // reset the timer so we are not interrupted by a startSession()
+      lastInvite = millis();
       // ask the application to perform a service discovery    
       evt.type = EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE;
       fireEvent();            
@@ -501,8 +524,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     void populateSessionOptions(){
       dsAppleMidiSessions.count = 0;
       dsAppleMidiSessions.name[dsAppleMidiSessions.count++] = PASSIVE_SESSION_NAME;   // first entry is always "passive"
-      if (savedSession != PASSIVE_SESSION_NAME) dsAppleMidiSessions.name[dsAppleMidiSessions.count++] = savedSession;   // add the session saved by the user duiring the last connect
-      
+     
       // if we recived a directory update by event, we populate the session with its content
       if (rtpDirectory != nullptr){
         DEBUG_PRINT("\n%s:retrieving directory entries",interfaceName.c_str());
@@ -514,13 +536,28 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       }else{
         DEBUG_PRINT("\n%s: null directory",interfaceName.c_str());
       }
+
+      // we had the saved session in the directory entries if not already existing
+      if (savedSession != ""){
+        dsAppleMidiSessions.addIfNotExists(savedSession);
+      }
+
+    }
+
+    String forgeSessionOptionFromProperties(){      
+      // create the string that appears on the drop down from current properties
+      // /sessions/session name (192.168.0.1:5004)
+      // or
+      // /sessions/passive
+      if (sessionType == APPLEMIDI_PASSIVE) return PASSIVE_SESSION_NAME;
+      else return concatStrings(midiSessionName, " (", destination->ip.toString(), ":", rtpPort, ")");  
     }
 
     virtual void serializeProperties(JsonArray& properties) override{   
       
       String sessionOptions = "";
       if (sessionType == APPLEMIDI_ACTIVE){
-        sessionOptions = concatStrings(midiSessionName, " (", destination->ip.toString(), ":", rtpPort, ")");  // /sessions/session name (192.168.0.1:5004)
+        sessionOptions = forgeSessionOptionFromProperties();
       }else{
         sessionOptions = PASSIVE_SESSION_NAME;     // /session/passive
       }
@@ -637,6 +674,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       char ipAddress[32];
       int port = 0;      
 
+      savedSession = "";      // full string of session
 
       bool changed = false;
       if (parseSession(property, sessionOptions, sizeof(sessionOptions), sessionName, sizeof(sessionName), ipAddress, sizeof(ipAddress), port)){
@@ -663,16 +701,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
           destination->ip.fromString(ipAddress);            
 
           // the session description is added to the list of end point so it appears on the drop down even if it was not detected (as a recall from saved interface parameter)
-          uint8_t ipBytes[4] = {destination->ip[0], destination->ip[1], destination->ip[2], destination->ip[3]};          
-          
-          //rtpDirectory->upsertEndpoint(sessionName, ipBytes, port);           // ADD PREVIOUS 
-          savedSession = property;
+          uint8_t ipBytes[4] = {destination->ip[0], destination->ip[1], destination->ip[2], destination->ip[3]};                              
              
         }
-       
-
+        savedSession = forgeSessionOptionFromProperties() ;
       }      
-
       return changed;
     }      
 
@@ -703,7 +736,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       DEBUG_PRINT("\n\nappleMidi session #%i %s connected\n", ssrc, name);
       midiSessionName = String(name);
       setStateReady();
-      isConnected = true;
       // wake up
       // sendRealTime
     }    
@@ -713,7 +745,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       if (state.enabled == false) setStateDisabled();
       else setStateDisconnected();
       lastInvite = 0;    // we reset the timer that controls the periodicity of the invites because in case of disconnection, we want to trigger a new session (invite or passive immediately to reconnect as soon as possible)
-      isConnected = false;
     }
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override{                  
@@ -847,7 +878,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;
 
-      if (!isConnected) appleMidiClient->sendInvite(destination->ip, rtpPort);
+      appleMidiClient->sendInvite(destination->ip, rtpPort);
 
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_INVITING;
@@ -942,7 +973,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     static inline AppleMIDIInterface* appleInstancePtr = nullptr;
     unsigned long lastInvite = 0;
     bool hasBegun = false;
-    bool isConnected = false;
 
 };
 

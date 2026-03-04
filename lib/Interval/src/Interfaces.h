@@ -21,7 +21,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
   #define INTERFACE_DETAILS     "details"
   #define INTERFACE_LED         "led"
   #define INTERFACE_CONFIG      "deviceConfig"
-  #define INTERFACE_USEDBYSTRIP "hasStrip"          // linked to the property usedByStrip and indicate if it should show up in the menu to create a strip for this interface
+  #define INTERFACE_USEDBYSTRIP "hasStrip"          // linked to the property hasStrip and indicate if it should show up in the menu to create a strip for this interface
   
   #define DEVICE_ON true
   #define DEVICE_OFF false
@@ -41,7 +41,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
     void* data;
 
     bool exposed = true;          // 
-    bool usedByStrip = true;      // if the interface is used by a strip (ex. Midi) or not (ex. Directory Service)
+    bool hasStrip = true;      // if the interface is used by a strip (ex. Midi) or not (ex. Directory Service), by default yes, but some interface are more technical and not relevant for the user to create a strip with them, so we can hide them in the strip creation menu by setting this parameter to false
 
     String group = "undef"; // used by the strip to define which deviceinterface they can connect
 
@@ -100,7 +100,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       if (mainNode == true){
         // that's the attribute we do not serialize in case of partial serialization
         config[INTERFACE_EXPOSED] = exposed;
-        config[INTERFACE_USEDBYSTRIP] = usedByStrip;
+        config[INTERFACE_USEDBYSTRIP] = hasStrip;
         config[INTERFACE_GROUP] = group;
         config[INTERFACE_PROVIDER] = getProviderNameForData();      
         config[INTERFACE_ICON] = icon;

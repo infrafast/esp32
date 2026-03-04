@@ -1043,7 +1043,7 @@ class WiFiEth : public Network{
 
       snprintf(buffer + offset,
               sizeof(buffer) - offset,
-              "\t\t| FREE=%d TCP=%d UDP=%d",
+              "\t| FREE=%d TCP=%d UDP=%d",
               freeCount,
               tcpCount,
               udpCount);      
