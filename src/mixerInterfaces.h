@@ -16,12 +16,12 @@ class MixerInterface {
 };
 
 #define INTERFACE_MIXINGSTATION "MixingStation"
-/*class MixingStation: public OSCMixerInterface{
+class MixingStation: public NetworkDevice, public MixerInterface{
   public:
-    MixingStation():OSCMixerInterface(INTERFACE_MIXINGSTATION,8889,"192.168.0.1",10023,"/info"){
+    MixingStation():NetworkDevice(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER, true){
       //destination->host = "192.168.99.99";
     }     
-};*/
+};
 
 #define INTERFACE_BEHRINGERXM "BehringerXM"
 class BehringerXM: public NetworkOSC, public MixerInterface{
