@@ -1,19 +1,7 @@
-#ifndef MixerInterface_h
-#define MixerInterface_h
+#ifndef _MSTATION_h
+#define _MSTATION_h
 
-#include "Interfaces.h"
-
-
-#define GROUP_INTERFACE_MIXER "Mixer"   
-#define ADDRESS_MIXERMODEL  "/mixer/model/%s"
-#define ADDRESS_MIXERNAME   "/mixer/name/%s"
-
-class MixerInterface {
-  public:
-
-    MixerInterface(){
-    }       
-};
+#include "mixer.h"
 
 #define INTERFACE_MIXINGSTATION "MixingStation"
 class MixingStation: public NetworkDevice, public MixerInterface{
@@ -39,12 +27,5 @@ class MixingStation: public NetworkDevice, public MixerInterface{
     virtual bool handleDisconnectService(){return false;}    
 };
 
-#define INTERFACE_BEHRINGERXM "BehringerXM"
-class BehringerXM: public NetworkOSC, public MixerInterface{
-  public:
-    BehringerXM():NetworkOSC(INTERFACE_BEHRINGERXM,8888,"192.168.0.1",10023, "/xinfo",true,GROUP_INTERFACE_MIXER){
-      //destination->host = "192.168.0.1";
-    }     
-};
 
 #endif

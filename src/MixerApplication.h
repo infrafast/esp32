@@ -6,7 +6,8 @@
 
 #include "Interval.h"
 
-#include "mixerInterfaces.h"
+#include "mixers/m_mstation.h"
+#include "mixers/m_XMbehringer.h"
 
 MixingStation* msMixer;
 BehringerXM* xmMixer;
