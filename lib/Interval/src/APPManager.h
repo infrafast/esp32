@@ -2292,7 +2292,13 @@ void setup() {
             );*/
                      
           }
-          hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"," (http://",hwm->configMedia->IP.toString(),")"); // hwm->configMedia->IP.toString();
+
+          String ipURL = concatStrings("http://",hwm->configMedia->IP.toString());
+          
+          // if MDNS is up and running, we provide the name as URL, otherwise, just IP address
+          if (directoryService.state.code == IF_READY) hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"); //concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local (",ipURL,")");
+          else hwm->configURL = ipURL;
+
           DEBUG_PRINT("\n\n[WEBAPP]\t\tserving on %s",hwm->configURL.c_str() );
           DEBUG_PRINT("\nDump after webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
           return true;
