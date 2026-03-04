@@ -694,10 +694,10 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
   public:
 
-    int remotePort;
-    int localPort;  
+    int remotePort = 0;
+    int localPort = 0;  
 
-    NetworkDevice(String name, String group, int lport, bool _configurable=false):DeviceInterface(name, group,_configurable), localPort(lport){
+    NetworkDevice(String name, String group, int lport, int rport, bool _configurable=false):DeviceInterface(name, group,_configurable), localPort(lport), remotePort(rport){
       
       attachDeviceInterface(this);
       
@@ -738,7 +738,8 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       char inputStr[MAXLENGHTINPUT];      
       if (sscanf(property, ADDRESS_PORT, &_port) == 1) {
         if (_port != remotePort)   changed = true;
-        remotePort = _port;       
+        remotePort = _port;
+        if (remotePort>65535 || remotePort<0) remotePort = 0;
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
         IPAddress ip;
         if (ip.fromString(inputStr)){

@@ -504,7 +504,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
     virtual void handleRequestRefreshState(){    
-      DEBUG_PRINT("\n%s::handleRequestRefreshState(),interfaceName.c_str()");  
+      DEBUG_PRINT("\n%s::handleRequestRefreshState()",interfaceName.c_str());  
       requestDirectoryRefresh();
     }
 

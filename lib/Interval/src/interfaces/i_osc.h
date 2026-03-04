@@ -24,7 +24,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
-    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String pingCommand, bool _configurable=false, String group = GROUP_INTERFACE_OSC):NetworkDevice(name, group ,_OSC_localPort,_configurable){
+    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String pingCommand, bool _configurable=false, String group = GROUP_INTERFACE_OSC):NetworkDevice(name, group ,_OSC_localPort,_OSC_remotePort,_configurable){
       icon = "g";     
 
       destination = new OSCPing(_OSC_IPaddress,pingCommand);   
@@ -47,8 +47,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       buf = (char*)malloc((strlen(ADDRESS_PING)+((OSCPing*)destination)->pingCommand.length())*sizeof(char*)+1);
       sprintf(buf,ADDRESS_PING,((OSCPing*)destination)->pingCommand);
       properties.add(String(buf)); 
-      free(buf);        
-
+      free(buf);              
     }
 
     virtual bool restoreProperty(const char* property) override{

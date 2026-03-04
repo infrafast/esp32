@@ -7,7 +7,7 @@
 class MixingStation: public NetworkDevice, public MixerInterface{
   public:
   
-    MixingStation():NetworkDevice(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,8887,true){
+    MixingStation():NetworkDevice(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,8887,8088,true){
       //destination->host = "192.168.99.99";
       destination = new PingEcho("0.0.0.0");      
     }
