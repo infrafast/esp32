@@ -1,6 +1,9 @@
 #ifndef DEVICEINTERFACES_h
 #define DEVICEINTERFACES_h
 
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
 #include <vector>
 #include "Interval.h"
 
@@ -27,6 +30,122 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
   #define DEVICE_OFF false
 
   public:
+
+    struct RestorePropertyArg {
+      enum ArgType : uint8_t { ARG_STRING, ARG_INT } type;
+      void* target;
+    };
+
+    static RestorePropertyArg makeRestorePropertyArg(String& value){
+      return {RestorePropertyArg::ARG_STRING, &value};
+    }
+
+    static RestorePropertyArg makeRestorePropertyArg(String* value){
+      return {RestorePropertyArg::ARG_STRING, value};
+    }
+
+    static RestorePropertyArg makeRestorePropertyArg(int& value){
+      return {RestorePropertyArg::ARG_INT, &value};
+    }
+
+    static RestorePropertyArg makeRestorePropertyArg(int* value){
+      return {RestorePropertyArg::ARG_INT, value};
+    }
+
+    static bool parseStrictInt(const String& input, int& output){
+      if (input.length() == 0) return false;
+
+      char* end = nullptr;
+      long value = strtol(input.c_str(), &end, 10);
+      if (end == input.c_str() || *end != '\0') return false;
+      if (value < INT_MIN || value > INT_MAX) return false;
+
+      output = (int)value;
+      return true;
+    }
+
+    static const char* findLiteral(const char* source, const char* literal, size_t literalLength){
+      if (literalLength == 0) return source;
+      if (source == nullptr || literal == nullptr) return nullptr;
+
+      for (const char* cursor = source; *cursor != '\0'; ++cursor){
+        if (strncmp(cursor, literal, literalLength) == 0) return cursor;
+      }
+
+      return nullptr;
+    }
+
+    static bool restorePropertyFromTemplateImpl(const char* property, const char* propertyTemplate, RestorePropertyArg* args, size_t argCount){
+      if (property == nullptr || propertyTemplate == nullptr) return false;
+
+      const char* p = property;
+      const char* t = propertyTemplate;
+      size_t argIndex = 0;
+
+      while (*t != '\0'){
+        if (*t != '%'){
+          if (*p != *t) return false;
+          ++t;
+          ++p;
+          continue;
+        }
+
+        ++t;
+        if (*t == '\0') return false;
+
+        if (*t == '%'){
+          if (*p != '%') return false;
+          ++t;
+          ++p;
+          continue;
+        }
+
+        const char specifier = *t;
+        if (specifier != 's' && specifier != 'd') return false;
+
+        if (argIndex >= argCount || args[argIndex].target == nullptr) return false;
+
+        RestorePropertyArg& arg = args[argIndex];
+        if ((specifier == 's' && arg.type != RestorePropertyArg::ARG_STRING)
+          || (specifier == 'd' && arg.type != RestorePropertyArg::ARG_INT)) return false;
+
+        const char* literalStart = t + 1;
+        const char* literalEnd = literalStart;
+        while (*literalEnd != '\0' && *literalEnd != '%') ++literalEnd;
+        const size_t literalLength = (size_t)(literalEnd - literalStart);
+
+        const char* valueEnd = nullptr;
+        if (literalLength == 0){
+          if (*literalEnd == '%') return false; // two placeholders side-by-side are ambiguous
+          valueEnd = p + strlen(p);
+        } else {
+          valueEnd = findLiteral(p, literalStart, literalLength);
+          if (valueEnd == nullptr) return false;
+        }
+
+        String extractedValue = String(p).substring(0, (int)(valueEnd - p));
+
+        if (specifier == 's'){
+          *((String*)arg.target) = extractedValue;
+        } else {
+          int parsedInt = 0;
+          if (!parseStrictInt(extractedValue, parsedInt)) return false;
+          *((int*)arg.target) = parsedInt;
+        }
+
+        p = valueEnd;
+        ++argIndex;
+        ++t;
+      }
+
+      return (*p == '\0') && (argIndex == argCount);
+    }
+
+    template<typename... Args>
+    static bool restorePropertyFromTemplate(const char* property, const char* propertyTemplate, Args... args){
+      RestorePropertyArg packedArgs[] = { makeRestorePropertyArg(args)... };
+      return restorePropertyFromTemplateImpl(property, propertyTemplate, packedArgs, sizeof...(args));
+    }
 
     State state;
 
@@ -733,20 +852,20 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
     virtual bool restoreProperty(const char* property) override{
       bool changed = false;
-      uint16_t _port;
-      #define MAXLENGHTINPUT 32
-      char inputStr[MAXLENGHTINPUT];      
-      if (sscanf(property, ADDRESS_PORT, &_port) == 1) {
-        if (_port != remotePort)   changed = true;
-        remotePort = _port;
+      int restoredPort = 0;
+      String restoredIp;
+
+      if (DeviceInterface::restorePropertyFromTemplate(property, ADDRESS_PORT, restoredPort)) {
+        if (restoredPort != remotePort)   changed = true;
+        remotePort = restoredPort;
         if (remotePort>65535 || remotePort<0) remotePort = 0;
-      }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
+      }else if (DeviceInterface::restorePropertyFromTemplate(property, ADDRESS_IP, restoredIp)) {
         IPAddress ip;
-        if (ip.fromString(inputStr)){
+        if (ip.fromString(restoredIp)){
           if (destination->ip != ip)  changed = true;
           destination->ip = ip;      
         }else{
-          DEBUG_PRINT("\ninvalid IP address: %s",inputStr);
+          DEBUG_PRINT("\ninvalid IP address: %s",restoredIp.c_str());
         }
       }
       return changed;

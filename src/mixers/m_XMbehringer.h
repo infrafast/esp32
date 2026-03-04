@@ -57,9 +57,11 @@ class BehringerXM: public NetworkOSC, public MixerInterface{
 
     virtual bool restoreProperty(const char* property) override{     
       bool changed = false;
-      
-      if (sscanf(property, ADDRESS_CONNECT_METHOD, &connectMethod)){
-        changed = true;
+      int restoredConnectMethod = 0;
+
+      if (DeviceInterface::restorePropertyFromTemplate(property, ADDRESS_CONNECT_METHOD, restoredConnectMethod)){
+        if (connectMethod != restoredConnectMethod) changed = true;
+        connectMethod = restoredConnectMethod;
       }
 
       return changed | NetworkOSC::restoreProperty(property);
