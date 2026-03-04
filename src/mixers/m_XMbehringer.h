@@ -38,7 +38,7 @@ class ConnectMethodDS : public DataSet{
 class BehringerXM: public NetworkOSC, public MixerInterface{
   public:
 
-    uint8_t connectMethod = CONNECT_DISCOVER;
+    int connectMethod = CONNECT_DISCOVER;
 
     ConnectMethodDS connectMethodDS = ConnectMethodDS(new DropDownAddress(ADDRESS_CONNECT_METHOD));
     
@@ -57,13 +57,15 @@ class BehringerXM: public NetworkOSC, public MixerInterface{
 
     virtual bool restoreProperty(const char* property) override{     
       bool changed = false;
-      
+
       if (sscanf(property, ADDRESS_CONNECT_METHOD, &connectMethod)){
         changed = true;
       }
 
       return changed | NetworkOSC::restoreProperty(property);
     }   
+
+    
 
 };
 

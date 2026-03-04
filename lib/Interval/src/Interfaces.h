@@ -258,7 +258,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       DEBUG_PRINT("\n%s::switchDevice(%s)",interfaceName.c_str(),state.enabled?"true":"false");      
       if (_enable) setStateDisconnected();  // if device is just switched off it can't be yet connected, hence we set its state to disconnected
       else setStateDisabled();
-      DEBUG_PRINT("\nDump after %s switchDevice: %s",interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
+      //DEBUG_PRINT("\nDump after %s switchDevice: %s",interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
     void setStateDeactivated(){
@@ -569,7 +569,7 @@ class NetWorkService{
 
     void switchNetworkService(bool _enable){      
       deviceInterface->state.enabled = _enable;
-      DEBUG_PRINT("\nDump before switchNetworkService: %s",hwm.network->dumpW5500Sockets().c_str());
+      //DEBUG_PRINT("\nDump before switchNetworkService: %s",hwm.network->dumpW5500Sockets().c_str());
       DEBUG_PRINT("\n(%s)::switchNetworkService(%s)",
                   deviceInterface->interfaceName.c_str(),
                   _enable ? "true" : "false");              

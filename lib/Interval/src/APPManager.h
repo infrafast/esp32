@@ -1752,11 +1752,11 @@ void setup() {
   
             EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                                                              
             if (newEthClient) {
-              DEBUG_PRINT("\nDump before serving %s",hwm->network->dumpW5500Sockets().c_str());
+              //DEBUG_PRINT("\nDump before serving %s",hwm->network->dumpW5500Sockets().c_str());
               webServer->process(&newEthClient);
               newEthClient.stop();  
               //DEBUG_PRINT(" STOP");
-              DEBUG_PRINT("\nDump after serving %s",hwm->network->dumpW5500Sockets().c_str());
+              //DEBUG_PRINT("\nDump after serving %s",hwm->network->dumpW5500Sockets().c_str());
             }
                           
           }else{
@@ -2268,7 +2268,7 @@ void setup() {
         if (hwm->configMedia->state == CONNECTED){
           if (webServer == nullptr){          
             //start webserver     
-            DEBUG_PRINT("\nDump before webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
+            //DEBUG_PRINT("\nDump before webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
             DEBUG_PRINT("\n\n[WEBAPP]\t\tstart\n\n");       
             
             webServer = new Application();
@@ -2301,7 +2301,7 @@ void setup() {
           hwm->configURL = ipURL;     // experience shows that if we use MDNS to connect, request is more slow and lead to some UDP packet conflict, so we prefer only exposing the IP to connect
 
           DEBUG_PRINT("\n\n[WEBAPP]\t\tserving on %s",hwm->configURL.c_str() );
-          DEBUG_PRINT("\nDump after webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
+          //DEBUG_PRINT("\nDump after webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
           return true;
         }
         return false;

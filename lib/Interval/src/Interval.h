@@ -74,7 +74,6 @@ bool useUSBMidi = false;
 #define WIFI_CHECK_TIMEOUT_MIN  ((ETH_CABLE_CHECK_FREQUENCY >= 3000) ? (ETH_CABLE_CHECK_FREQUENCY*1.5) : 3000)
 #define WIFI_CHECK_TIMEOUT_MAX  9000
 
-
 class PingEcho{
   public:
     bool alive = false;
@@ -2518,7 +2517,7 @@ void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, con
 
 void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *reason, uint16_t length) {
   DEBUG_PRINT("\n\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
-  DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
+  //DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
   app.webAppConnected = false;  
 }
 
