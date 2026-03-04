@@ -175,27 +175,34 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
 
         //startDiscovery();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
 
+        setStateReady("green",*lang.getString("online"),"",*systemCfg.getString(S_AP_NAME));
+
         return true;
       }
 
       void startDiscovery(){
         DEBUG_PRINT("\n%s::startDiscovery()",interfaceName.c_str());
-        // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
-        rtpDir.clear();
-        if (hwm.network->media == CABLE_MEDIA){
-          // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
-          EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 6000); // :contentReference[oaicite:3]{index=3} 
-          DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
+
+        if (deviceInterface->state.code == IF_NOT_READY){
+          epDirectoryNotReady();
         }else{
-          // Wifi = bloquant
-          xTaskCreate(
-            wiFiRTPDiscoveryTaskWrapper,  // Function to implement the task
-            "WiFiRTPDiscoveryTask",     // Name of the task
-            4096,              // Stack size in words
-            NULL,               // Task input parameter
-            1,                  // Priority of the task
-            NULL                // Task handle
-          );          
+          // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
+          rtpDir.clear();
+          if (hwm.network->media == CABLE_MEDIA){
+            // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
+            EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 6000); // :contentReference[oaicite:3]{index=3} 
+            DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
+          }else{
+            // Wifi = bloquant
+            xTaskCreate(
+              wiFiRTPDiscoveryTaskWrapper,  // Function to implement the task
+              "WiFiRTPDiscoveryTask",     // Name of the task
+              4096,              // Stack size in words
+              NULL,               // Task input parameter
+              1,                  // Priority of the task
+              NULL                // Task handle
+            );          
+          }
         }
       }      
       
@@ -208,6 +215,9 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           // wifi
           MDNS.end();
         }          
+
+        setStateOffline(concatStrings(*lang.getString("Device is not detectable on the network. Use")," ",hwm.network->IP.toString()," ",*lang.getString("to connect this device")));                
+
         return true;
       }        
 
@@ -278,8 +288,14 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         evt.type = EVENT_DIRECTORY_SERVICE_REFRESHED;
         evt.data = &rtpDir;
         fireEvent();
-        //appleMIDIInterface->handleRefresh();     
       }
+
+      void epDirectoryNotReady(){
+        DEBUG_PRINT("\n\n[RTP]\t\tDirectory not ready");
+        evt.type = EVENT_DIRECTORY_NOT_READY;
+        evt.data = &rtpDir;
+        fireEvent();
+      }      
 
       void wiFiRTPDiscoveryTask(){
         DEBUG_PRINT("\n\n[RTP-WiFi]\t\tScan RTP-MIDI lancé...\n");     

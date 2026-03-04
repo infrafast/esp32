@@ -518,6 +518,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
           state.broadcastState = true; // communicate the new state
           state.broadcastConfig = true; // the new populatedSessions have to be communicated to the web app dropdown
         break;
+        case EVENT_DIRECTORY_NOT_READY:
+          setSetDirectoryServiceDown();
+        break;
       }     
     }
 

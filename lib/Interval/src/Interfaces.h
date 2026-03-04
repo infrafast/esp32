@@ -310,12 +310,12 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       state.progress = -1;
     }
 
-    virtual void setStateDisconnected(){
+    virtual void setStateDisconnected(String details=""){
       DEBUG_PRINT("\n%s::setStateDisconnected()",interfaceName.c_str());      
       state.code = IF_NOT_READY;
       state.label = IF_STATE_DISCONNECTED;
       state.subState = "";
-      state.details = "";
+      state.details = details;
       state.led = "red fast";
       state.progress = -1;
     }        
@@ -450,7 +450,7 @@ class NetWorkService{
             if (deviceInterface->state.enabled){
               enable();
             }else{
-              DEBUG_PRINT("\n%s->monitor<DISABLED>() ignored", deviceInterface->interfaceName.c_str());            
+              deviceInterface->setStateDisabled();
             }
           }
         break;
@@ -494,10 +494,18 @@ class NetWorkService{
     bool reachedCapacity(){
       bool limit = false;
 
-      if (hwm.network->media != CABLE_MEDIA) return limit;
+      if (hwm.network->media != CABLE_MEDIA){
+        DEBUG_PRINT("\tNOT LOCKED (WiFi)");
+        return limit;
+      }
 
       if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) limit = true;  // already reached the limit
       else enabledServicesWeightSum += getServiceWeight();                  // book the correct amount
+
+      DEBUG_PRINT("\tcounts %i/%i => %s",
+                  enabledServicesWeightSum,
+                  SERVICES_WEIGHT_LIMIT,
+                  serviceLocked ? "LOCKED" : "NOT LOCKED");
 
       return limit;
     }
@@ -574,11 +582,6 @@ class NetWorkService{
 
       serviceLocked = reachedCapacity();
 
-      DEBUG_PRINT("\tcounts %i/%i => %s",
-                  enabledServicesWeightSum,
-                  SERVICES_WEIGHT_LIMIT,
-                  serviceLocked ? "LOCKED" : "NOT LOCKED");
-
       if (serviceLocked){
         setStateLocked();
       }else{
@@ -616,7 +619,17 @@ class NetWorkService{
       }
     }
 
-    virtual void setStateLocked(String led = "orange",String details = *lang.getString("Network busy")){
+    virtual void setStateOffline(String details=""){
+      DEBUG_PRINT("\n%s::setStateOffline()",deviceInterface->interfaceName.c_str());      
+      deviceInterface->state.code = IF_NOT_READY;
+      deviceInterface->state.label = IF_STATE_OFFLINE;
+      deviceInterface->state.subState = "";
+      deviceInterface->state.details = details;
+      deviceInterface->state.led = "red";
+      deviceInterface->state.progress = -1;
+    }     
+
+    virtual void setStateLocked(String led = "orange",String details = *lang.getString("Reached maximum network device capacity. Disable other device(s) to enable this one.")){
       DEBUG_PRINT("\n%s::setStateLocked()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_LOCKED;
@@ -625,6 +638,13 @@ class NetWorkService{
       deviceInterface->state.led = led;
       deviceInterface->state.progress = -1;
     }
+
+    virtual void setSetDirectoryServiceDown(){
+      DEBUG_PRINT("\n%s::setStateLocked()", deviceInterface->interfaceName.c_str());
+      deviceInterface->state.subState = "";
+      deviceInterface->state.details = *lang.getString("Enable Directory to browse devices");
+    }
+
 };
 std::vector<NetWorkService*>NetWorkService::inventory;
 int8_t NetWorkService::enabledServicesWeightSum = 0;

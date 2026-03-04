@@ -769,7 +769,7 @@ class Network : public HWComponent2State{
     Network(uint8_t pin, bool debug):HWComponent2State(pin,DISCONNECTED,debug){
       id = concatStrings("Network~", pin);
       networkBusy = xSemaphoreCreateMutex();
-      state = DISCONNECTED; previousState = CONNECTED; // we set the initial state to the opposite of the state we want to detect so it doesnt trigger the event at startup
+      state = DISCONNECTED; previousState = state; // if we set the initial state to the opposite of the state we want to detect it trigger the event DISCONNECT otherwise if previousState = state, it goes straight 
     }
 
     virtual UdpSlot* useUDPslot(int i) = 0;
@@ -896,7 +896,7 @@ class Network : public HWComponent2State{
 
 class WiFiEth : public Network{
   public:
-    EthernetLinkStatus cable = Unknown, oldCable = cable;
+    EthernetLinkStatus cable = Unknown;//, oldCable = cable;
     unsigned long checkEthCableTime=0;
 
     WiFiEth(uint8_t pin, uint8_t rstP, bool enableEth = true, bool debug = true): Network(pin, debug){      
@@ -1533,10 +1533,10 @@ class WiFiEth : public Network{
       }
 
       Network::refresh(force);
-      if (cable != oldCable){
+      /*if (cable != oldCable){
         oldCable = cable;
         refreshed = true;   // this refresh has to be flagged after NetworkRefresh to avoid being erased
-      }
+      }*/
 
       if (refreshed){
         DEBUG_PRINT("\n+------------------------------------------------+");
