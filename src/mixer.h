@@ -6,6 +6,7 @@
 class MixerInterface{
   public:
 
+    String mixerName ="mixerName";
 };
 
 #endif

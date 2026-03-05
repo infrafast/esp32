@@ -1308,13 +1308,13 @@ class WiFiEth : public Network{
         if (wsEthClient!= nullptr){      
           if (wsEthClient->getReadyState() == WebSocketReadyState::OPEN){
             wsEthClient->send(WebSocketDataType::TEXT, message, strlen(message));
-            //DEBUG_PRINT("\nwsEthClientSend(%s)",message);
+            DEBUG_PRINT("\n[ETHSocketSend] <%s>",message);
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){      
           wsWiFiClient->send(WebSocketDataType::TEXT, message, strlen(message));
-          //DEBUG_PRINT("\nwsWiFiClientSend(%s)",message);
+          DEBUG_PRINT("\n[WIFISocketSend] <%s>",message);
         }
       }      
     }

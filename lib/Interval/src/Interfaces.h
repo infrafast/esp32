@@ -480,34 +480,38 @@ class NetWorkService{
       // then we check if any enabled interface that was serviceLocked can be unlocked
       unlockWaitingEnabledServices();
       /*
-        Un service locké n’a pas réservé de budget (reachedCapacity() n’incrémente que si ça passe).
-        Quand on “unlock”, on appelle enable(), qui rappelle reachedCapacity() :
+        Un service locké n’a pas réservé de budget (reserveCapacity() n’incrémente que si ça passe).
+        Quand on “unlock”, on appelle enable(), qui rappelle reserveCapacity() :
         si capacité dispo → ça incrémente enabledServicesWeightSum correctement
         sinon → ça reste locké
         Donc le budget reste cohérent sans double comptage.        
       */
     }
 
-    bool reachedCapacity(){
-      bool limit = false;
-
-      if (hwm.network->media != CABLE_MEDIA){
-        DEBUG_PRINT("\tNOT LOCKED (WiFi)");
-        return limit;
+    bool reserveCapacity() {
+      // Sur WiFi: pas de limitation
+      if (hwm.network->media != CABLE_MEDIA) {
+        DEBUG_PRINT("\tNOT LIMIT (WiFi)");
+        return false; // limit = false
       }
 
-      if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) limit = true;  // already reached the limit
-      else{
-        if (enabledServicesWeightSum + getServiceWeight() >= SERVICES_WEIGHT_LIMIT) limit = true; // enabling this interface would consumme the remaining budget
-        else enabledServicesWeightSum += getServiceWeight();                  // book the correct amount
+      const int w = getServiceWeight();
+
+      // Refuser si l'ajout dépasserait ou atteindrait la limite
+      // (choisis > ou >= selon ta règle exacte)
+      if (enabledServicesWeightSum + w >= SERVICES_WEIGHT_LIMIT) {
+        DEBUG_PRINT("\tcapacity %i+%i >= %i => LOCKED",
+                    enabledServicesWeightSum, w, SERVICES_WEIGHT_LIMIT);
+        return true; // limit = true
       }
 
-      DEBUG_PRINT("\tcounts %i/%i => %s",
-                  enabledServicesWeightSum,
-                  SERVICES_WEIGHT_LIMIT,
-                  serviceLocked ? "LOCKED" : "NOT LOCKED");
+      // OK: on réserve
+      enabledServicesWeightSum += w;
 
-      return limit;
+      DEBUG_PRINT("\tRESERVED => %i/%i",
+                  enabledServicesWeightSum, SERVICES_WEIGHT_LIMIT);
+
+      return false; // limit = false
     }
 
     virtual void setStateDisconnected(){ // to be overrided by derived class
@@ -529,7 +533,7 @@ class NetWorkService{
     /*
     Objectif : parcourir les interfaces enabled et serviceLocked, et tenter de les activer tant que possible.
     Comme ton enable() :
-    appelle reachedCapacity() (qui réserve le budget si possible),
+    appelle reserveCapacity() (qui réserve le budget si possible),
     met serviceLocked et l’état (LOCKED ou tentative de connect),
     …le plus sûr est de réutiliser enable() pour éviter de dupliquer la logique de budget.    
     */
@@ -547,7 +551,7 @@ class NetWorkService{
         if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) break;
 
         // Reuse existing logic:
-        // - reachedCapacity() will book the budget if available
+        // - reserveCapacity() will book the budget if available
         // - will set locked state or attempt handleConnectService()
         iface->enable();
 
@@ -557,15 +561,6 @@ class NetWorkService{
 
   protected:
     DeviceInterface* deviceInterface = nullptr;
-
-    void setNetworkStateDown(){
-      if (!deviceInterface) return;
-      DEBUG_PRINT("\n%s::setNetworkStateDown()", deviceInterface->interfaceName.c_str());
-      deviceInterface->state.code = IF_NOT_READY;
-      deviceInterface->state.label = IF_STATE_DISCONNECTED;
-      deviceInterface->state.led = "red medium";
-      deviceInterface->state.details = *lang.getString("setNetworkStateDown");
-    }
 
     void switchNetworkService(bool _enable){      
       deviceInterface->state.enabled = _enable;
@@ -580,7 +575,7 @@ class NetWorkService{
     void enable(){
       DEBUG_PRINT("\n%s->enable()", deviceInterface->interfaceName.c_str());
 
-      serviceLocked = reachedCapacity();
+      serviceLocked = reserveCapacity();
 
       if (serviceLocked){
         setStateLocked();
@@ -618,6 +613,17 @@ class NetWorkService{
         monitorService();
       }
     }
+    
+    void setNetworkStateDown(){
+      if (!deviceInterface) return;
+      DEBUG_PRINT("\n%s::setNetworkStateDown()", deviceInterface->interfaceName.c_str());
+      deviceInterface->state.code = IF_NOT_READY;
+      deviceInterface->state.label = IF_STATE_DISCONNECTED;
+      deviceInterface->state.led = "red medium";
+      deviceInterface->state.details = *lang.getString("setNetworkStateDown");
+      deviceInterface->state.progress = 0; // show progress bar
+      // progress is altered by the network
+    }
 
     virtual void setStateOffline(String details=""){
       DEBUG_PRINT("\n%s::setStateOffline()",deviceInterface->interfaceName.c_str());      
@@ -644,6 +650,23 @@ class NetWorkService{
       deviceInterface->state.subState = "";
       deviceInterface->state.details = *lang.getString("Enable Directory to browse devices");
     }
+
+    void setStateConnecting(String subState, String details){
+      DEBUG_PRINT("\n%s: setStateConnecting()",deviceInterface->interfaceName.c_str());
+      deviceInterface->state.code = IF_NOT_READY;      
+      deviceInterface->state.label = IF_STATE_CONNECTING;   
+      deviceInterface->state.subState = subState;
+      deviceInterface->state.details = details;
+      deviceInterface->state.led = "green slow";
+      deviceInterface->state.progress = 0; //show progress bar
+    }     
+
+    void setStateSyncing(String details){
+      setStateConnecting(IF_STATE_SYNCING,details);
+      DEBUG_PRINT("\n%s: setStateSyncing()",deviceInterface->interfaceName.c_str());
+      deviceInterface->state.led = "green fast";
+      deviceInterface->state.progress = 0; //show progress bar
+    }     
 
 };
 std::vector<NetWorkService*>NetWorkService::inventory;
@@ -744,7 +767,8 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
         IPAddress ip;
         if (ip.fromString(inputStr)){
           if (destination->ip != ip)  changed = true;
-          destination->ip = ip;      
+          destination->ip = ip;    
+          destination->host = inputStr;  
         }else{
           DEBUG_PRINT("\ninvalid IP address: %s",inputStr);
         }

@@ -14,6 +14,7 @@
 #define IF_STATE_LISTENING          "listening"
 #define IF_STATE_INVITING           "inviting"
 #define IF_STATE_OFFLINE            "offline"
+#define IF_STATE_SYNCING            "syncing"
 
 
 #endif

@@ -10,24 +10,30 @@ class MixingStation: public NetworkDevice, public MixerInterface{
     MixingStation():NetworkDevice(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,8887,8088,true){
       //destination->host = "192.168.99.99";
       destination = new TargetEcho("192.168.0.1");    
-      // prepare websocket API callback
-      wsClientOnTXTmessage().set(
-        this,
+      
+      // prepare websocket callback      
+      wsClientOnTXTmessage().set(this,
         [](void* ctx, const char* message, uint16_t length) {
-          static_cast<MixingStation*>(ctx)->routeTXTmessage(message, length);
+          static_cast<MixingStation*>(ctx)->onTXTmessage(message, length);
         }
-      ); 
+      );    
+
+      wsClientOnOpen().set(this,
+        [](void* ctx) {
+          static_cast<MixingStation*>(ctx)->onSocketOpen();
+        }
+      );     
+
+      wsClientOnClose().set(
+        this,
+        [](void* ctx, WebSocketCloseCode code, const char* reason, uint16_t length) {
+          static_cast<MixingStation*>(ctx)->onSocketClose(code, reason, length);
+        }
+      );
 
     }
 
     /*
-    
-      wsClientOnOpen().set(
-        this,
-        [](void* ctx) {
-          static_cast<MixingStation*>(ctx)->onWsOpen();
-        }
-      );
 
       wsClientOnError().set(
         this,
@@ -35,24 +41,21 @@ class MixingStation: public NetworkDevice, public MixerInterface{
           static_cast<MixingStation*>(ctx)->onWsError(error);
         }
       );
-
-      wsClientOnClose().set(
-        this,
-        [](void* ctx, WebSocketCloseCode code, const char* reason, uint16_t length) {
-          static_cast<MixingStation*>(ctx)->onWsClose(code, reason, length);
-        }
-      )    
-
-
+    
     */
 
-
      virtual void monitorService(){
-
-      // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
-      #define STATE_PING_DELAY 3000
+      // time to ping the device to see if it's still alive after certain time or if we have no connection, we reconnect
+      #define PULSE_CHECK_DELAY 3000
       // delay expired
-      if (millis()-destination->lastQueryTime > STATE_PING_DELAY){        
+      if (millis()-destination->lastQueryTime > PULSE_CHECK_DELAY){                
+        if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
+          // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
+          hwm.network->clientSocketSend(get("/app/state"));
+        }else{
+          // if we have no socket connection or we loose it, we try to esbalish one
+          handleConnectService();
+        }
 
       }                                                                   
     }
@@ -61,10 +64,10 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
       if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
         DEBUG_PRINT(":client already opened\n");
+        return true;
       }else{
-        hwm.network->clientSocketOpen(destination->host.c_str(), remotePort, "/"); 
+        return hwm.network->clientSocketOpen(destination->host.c_str(), remotePort, "/"); 
       }
-      return true;
     }
 
     virtual bool handleDisconnectService(){
@@ -73,32 +76,228 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       hwm.network->clientSocketClose(); 
       return false;
     }    
-
+ 
   protected:
-    #define JSON_RX_BUFFER 4096
-    static char rxBuf[JSON_RX_BUFFER];
-    static JsonDocument doc;
+    ////////////////////////////////////////////
+    // HELPER TO BUILD AND RETURN SOCKET REQUEST
+    //  {
+    //    "path": <path>,
+    //    "method": <GET/POST>,
+    //    "body": null
+    //  }
+    ////////////////////////////////////////////  
+    const char* build(const char* path, const char* method) {
+        static char buffer[150];
 
-    void routeTXTmessage(const char *message, uint16_t length) {
+        snprintf(buffer, sizeof(buffer),
+                 "{"
+                 "\"path\":\"%s\","
+                 "\"method\":\"%s\","
+                 "\"body\":null"
+                 "}",
+                 path, method);
 
-      if (length >= sizeof(rxBuf)) return; // trop gros, à gérer
-      // copie dans buffer local modifiable afin que JsonArduino travaille directement sans mode copie lui meme
-      // = gain de CPU et de memoire
+        return buffer;
+    }
+
+    const char* get(const char* path) {
+        return build(path, "GET");
+    }
+
+    const char* post(const char* path) {
+        return build(path, "POST");
+    }
+
+  
+    ////////////////////////////////////////
+    // JSON and ROUTE HANDLING DEFINITION
+    ///////////////////////////////////////
+    // RX_MAX aligné sur le buffer max de la lib (+1 pour terminator) utilisé pour le parsing du json
+    static constexpr size_t RX_MAX = kBufferMaxSize + 1;
+    char rxBuf[RX_MAX];
+
+    // doc "header" (petit) + doc "full" (réutilisé)
+    JsonDocument docHeader;
+    JsonDocument docFull;
+
+    enum class RouteMode : uint8_t { JsonBody, RxMessage };
+
+    using JsonHandler = void (MixingStation::*)(JsonVariant body);      // pour les GROS objet json qui doivent être filtrés
+    using RxHandler   = void (MixingStation::*)(char* rx, size_t len);  // pour les petits objet json du style /app/state
+
+    struct Route {
+      const char* path;
+      RouteMode mode;
+      union { JsonHandler jh; RxHandler rh; } fn;
+    };
+
+    static const Route routes[];
+
+    #define ROUTES_COUNT 2
+    const Route* findRoute(const char* path) const {
+      for (size_t i = 0; i < ROUTES_COUNT; ++i)
+        if (strcmp(path, routes[i].path) == 0) return &routes[i];
+      return nullptr;
+    }
+  
+    ////////////////////////////////////////
+    // JSON PATH ROUTER
+    ///////////////////////////////////////    
+    void onTXTmessage(const char *message, uint16_t length) {
+
+      // we received a message so we reset the lastQuery timer
+      destination->lastQueryTime = millis(); 
+
+      if (length + 1 > RX_MAX){
+        DEBUG_PRINT("%s::onTXTmessage(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
+      } 
+
+      // -------- Pass 1 : parse HEADER ONLY (sans memcpy) --------
+      // Filtre minimal : path + error
+      JsonDocument filter;
+      filter["path"]  = true;
+      filter["error"] = true;
+
+      docHeader.clear();
+      DeserializationError e = deserializeJson(
+        docHeader,
+        message,
+        length,
+        DeserializationOption::Filter(filter)
+      );
+      if (e) return;
+
+      const char* error = docHeader["error"] | nullptr;
+      if (error && *error) {
+        // processError(...) si tu veux
+        DEBUG_PRINT("%s::onTXTmessage() error:%s",interfaceName.c_str(),error);        
+        return;
+      }
+
+      const char* path = docHeader["path"] | "";
+      if (!path[0]) return;
+
+      const Route* r = findRoute(path);
+      if (!r) return;
+
+      // -------- Phase "on s'engage" : on copie UNE FOIS si nécessaire --------
       memcpy(rxBuf, message, length);
       rxBuf[length] = '\0';
 
-      doc.clear();
-      if (deserializeJson(doc, rxBuf)) return;
+      if (r->mode == RouteMode::RxMessage) {
+        // Le handler décidera s'il reparses avec filtre / zero-copy etc.
+        (this->*(r->fn.rh))(rxBuf, (size_t)length);
+        return;
+      }
 
-      const char* path = doc["path"] | "";
-      JsonVariant body = doc["body"];
-      // dispatch(path, body) ...
+      // RouteMode::JsonBody : on veut body en JsonVariant
+      // Parse complet en ZERO-COPY (buffer modifiable)
+      docFull.clear();
+      if (deserializeJson(docFull, rxBuf, length)) return;
+
+      JsonVariant body = docFull["body"];
+      (this->*(r->fn.jh))(body);
+    }  
+
+    // ------------------ Path Handlers ------------------
+
+    void processState(JsonVariant body) {
+      // see https://mixingstation.app/ms-docs/use-cases/app-states/
+      #define MS_IDLE         "IDLE"
+      #define MS_CONNECTING   "CONNECTING"
+      #define MS_CONNECTED    "CONNECTED"
+      #define MS_RECONNECTING "RECONNECTING"
+      #define MS_SYNCING      "SYNCHRONIZING"
+
+      const char* msg      = body["msg"]      | "";
+      int progress         = body["progress"] | 0;
+      const char* state    = body["state"]    | "";
+      const char* topState = body["topState"] | "";
+      DEBUG_PRINT("%s::processState: msg:%s,progress:%i,state:%s,topState:%s",interfaceName.c_str(),msg,progress,state,topState);
+
+      if (strcmp(topState, MS_IDLE) == 0) {
+        // état IDLE
+        setStatePending("green medium", *lang.getString("Idle"));
+      }
+      else if (strcmp(topState, MS_CONNECTING) == 0) {
+        // état CONNECTING
+        if (strcmp(state, MS_SYNCING) == 0){         // check substate
+          if (deviceInterface->state.subState != IF_STATE_SYNCING){
+            setStateSyncing("Syncing software");
+          }
+        }else{
+          if (deviceInterface->state.subState != state){
+            setStateConnecting(state,msg);
+          }
+        }
+        deviceInterface->state.progress = scaleValue(progress,0,100,0.0,1.0);         
+      }
+      else if (strcmp(topState, MS_CONNECTED) == 0) {
+        // état CONNECTED
+      }
+      else if (strcmp(topState, MS_RECONNECTING) == 0) {
+        // état RECONNECTING
+      }
+      else{
+        setStateDisconnected();       // unknow state
+        deviceInterface->state.label = topState;
+        deviceInterface->state.details = "UNHANDLED MS STATE";
+      }
+
+    }
+
+    void processMixersAvailable(char* rx, size_t len) {
+      // Exemple : parse filtré pour réduire RAM/CPU
+      JsonDocument filter;
+      filter["body"]["consoles"][0]["consoleId"]     = true;
+      filter["body"]["consoles"][0]["models"]        = true;
+      filter["body"]["consoles"][0]["manufacturer"]  = true;
+      filter["body"]["consoles"][0]["name"]          = true;
+
+      JsonDocument d;
+      if (deserializeJson(d, rx, len, DeserializationOption::Filter(filter))) return;
+
+      JsonArray consoles = d["body"]["consoles"].as<JsonArray>();
+      for (JsonObject c : consoles) {
+        int id = c["consoleId"] | -1;
+        const char* name = c["name"] | "";
+        const char* mfg  = c["manufacturer"] | "";
+        bool canSearch   = c["canSearch"] | false;
+
+        (void)id; (void)name; (void)mfg; (void)canSearch;
+      }
+    }    
+
+    ////////////////////////////////////////
+    //           SOCKET CALLBACK        ///
+    ///////////////////////////////////////    
+    void onSocketOpen(){
+      // connexion has just been made to MixingStation
+      setStateMSconnected();
+      destination->lastQueryTime = 0;   // request an immediate /app/state to get state
+    }
+
+    void onSocketClose(WebSocketCloseCode code, const char *reason,uint16_t length){
+      // this is called when closing socket => so could be by handleDisconnectService or because we lost the connection
+      deviceInterface->setStateDisconnected(*lang.getString("MixingStation unreachable"));
+    }
+
+    //////////////////////////////////////////////////////////////
+    ///                      DEVICE STATES                    ///
+    /////////////////////////////////////////////////////////////
+    void setStateMSconnected(){
+      DEBUG_PRINT("\n%s: setStateMSconnected()",interfaceName.c_str());
+      DeviceInterface::setStatePending();
+      state.details = "Connected to MixingStation";
+      state.progress = -1;     
     }  
   
 };
 
-char MixingStation::rxBuf[JSON_RX_BUFFER];
-JsonDocument MixingStation::doc;
+const MixingStation::Route MixingStation::routes[] = {
+  { "/app/state",            RouteMode::JsonBody,  { .jh = &MixingStation::processState } },
+  { "/app/mixers/available", RouteMode::RxMessage, { .rh = &MixingStation::processMixersAvailable } },
+};
 
 
 #endif
