@@ -458,7 +458,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
       registerDataSetAddress(dsAppleMidiSessions.address);
       
-      destination = new PingEcho("0.0.0.0");
+      destination = new TargetEcho("0.0.0.0");
 
       //jsonInputRepo.add(this); 
 

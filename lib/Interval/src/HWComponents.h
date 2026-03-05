@@ -24,7 +24,7 @@
 using namespace net;
 using WiFiWebSocketClient = WebSocketClient<WiFiClient>;
 using EthernetWebSocketClient = WebSocketClient<EthernetClient>;
-using WSclientOnMessageCallback = std::function<void(const char*)>;
+using WSclientOnMessageCallback = std::function<void(const char*, uint16_t length)>;
 // using WSclientOnMessageCallback = std::function<void(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length)>;
 
 ////////////////////////////////////////////////////////////////////
@@ -47,11 +47,11 @@ void OnAppleMidiException(const ssrc_t& ssrc, const Exception& e, const int32_t 
 ////////////////////////////////////////////////////////////////////
 ///                CLIENT SOCKET CALLBACKS                  ///////
 ////////////////////////////////////////////////////////////////////
-void defaultWSclientOnMessage(const char* message){
+void defaultWSclientOnMessage(const char* message, uint16_t length){
   //DEBUG_PRINT("\nWebsocketclient Message reçu : %s",message);
 }
 
-WSclientOnMessageCallback userWSclientOnMessage = defaultWSclientOnMessage;
+WSclientOnMessageCallback wsClientOnTXTmessage = defaultWSclientOnMessage;
 
 void socketClientOnOpenCallback(IWebSocket &ws) {
   //DEBUG_PRINT("\nConnecté au serveur WebSocket !");
@@ -69,7 +69,7 @@ void onEthernetBonjourServiceFoundCallback(const char* serviceType,
 void socketClientOnMessageCallback(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length){
   switch (dataType) {
     case net::WebSocketDataType::TEXT:
-      userWSclientOnMessage(message);
+      wsClientOnTXTmessage(message, length);
       break;
     case net::WebSocketDataType::BINARY:
       //DEBUG_PRINT("\nDonnées binaires reçues");
@@ -743,7 +743,7 @@ class Network : public HWComponent2State{
 
     SemaphoreHandle_t networkBusy;
 
-    StdFunctionCallbackVoidPingEcho internetCallback = nullptr;    
+    StdFunctionCallbackVoidTargetEcho internetCallback = nullptr;    
     // Déclarer un pointeur générique pour le client
     //IWebSocket* wsClient = nullptr;  //     wsClient = wifiClient;   
 
@@ -758,7 +758,7 @@ class Network : public HWComponent2State{
     IPAddress IP, gateway,subnet;
     //HttpClient* http = NULL;    
     Client* client = NULL;   
-    PingEcho internet = PingEcho("8.8.8.8"); 
+    TargetEcho internet = TargetEcho("8.8.8.8"); 
     uint16_t LANlatency = 38;
 
     bool ethEnabled = true;
@@ -785,7 +785,7 @@ class Network : public HWComponent2State{
     virtual WebSocketReadyState clientSocketState()=0;
     virtual EthernetLinkStatus getLink() = 0;
     virtual String getConnectedDeviceIP() = 0;
-    virtual void asyncPing(PingEcho* echo, PingCallback callBack)=0;
+    virtual void asyncPing(TargetEcho* echo, PingCallback callBack)=0;
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
     virtual String dumpW5500Sockets()=0;
     
@@ -1619,13 +1619,13 @@ class WiFiEth : public Network{
       return refreshed;
     }
 
-    void onInternetPing(PingEcho* echo) {
+    void onInternetPing(TargetEcho* echo) {
         if (internetCallback !=nullptr) internetCallback(echo);
         //DEBUG_PRINT("\n\n\n\t\t\t * * * * onInternetPing %s latency:%i * * * *",echo->alive?"OK":"fail",echo->latency);        
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
-    virtual void asyncPing(PingEcho* echo, PingCallback callBack) {
+    virtual void asyncPing(TargetEcho* echo, PingCallback callBack) {
       PingParameters* params = new PingParameters;
       params->echo = echo;
       params->callback = callBack;
@@ -1682,7 +1682,7 @@ class WiFiEth : public Network{
       // Utiliser des lambdas pour passer les méthodes membres comme callbacks
       asyncPing(
         &internet,
-        [&](PingEcho* echo) { onInternetPing(echo); }
+        [&](TargetEcho* echo) { onInternetPing(echo); }
       );
       // latency
       //if (LAN) 
@@ -1806,7 +1806,7 @@ class  NoNetwork: public Network{
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
     virtual EthernetLinkStatus getLink(){return LinkOFF;}
     virtual String getConnectedDeviceIP(){return "";}
-    virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
+    virtual void asyncPing(TargetEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
     virtual UDP* newUDP(){return nullptr;}
     virtual String dumpW5500Sockets(){return "";}
@@ -1852,7 +1852,7 @@ class AccessPoint : public Network{
     virtual void stopAllUDP(){}
     virtual UdpSlot* stopUDPslot(int i){return nullptr;}
     virtual void releaseUDPSlot(int* i){}
-    virtual void asyncPing(PingEcho* echo, PingCallback callBack){}
+    virtual void asyncPing(TargetEcho* echo, PingCallback callBack){}
     virtual bool asyncConnect(AsyncHttpClient *clientParam){ return false;}
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}
     virtual void clientSocketSend(const char *message){};

@@ -517,7 +517,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       promptTimeoutMax = 1;
       promptRemainingTime = 0;
        
-      hwm->network->internetCallback = [this](PingEcho* internet) {
+      hwm->network->internetCallback = [this](TargetEcho* internet) {
           this->internetCallBack(internet);
       };         
 
@@ -584,7 +584,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     }
 
-    void internetCallBack(PingEcho* echo){
+    void internetCallBack(TargetEcho* echo){
       ///////////////////////// do what application manager has to do when internet is connected/disconnected      
       if (echo->alive){
         DEBUG_PRINT("\n\n[ping]\t\t%s : internet connected\n\n",echo->host.c_str()); 

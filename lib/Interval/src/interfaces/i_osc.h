@@ -10,9 +10,9 @@
   public:
 };*/
 
-class OSCPing: public PingEcho{
+class OSCPing: public TargetEcho{
   public:
-    OSCPing(String host, String _command):PingEcho(host), pingCommand(_command){}
+    OSCPing(String host, String _command):TargetEcho(host), pingCommand(_command){}
     String pingCommand; //the command used to monitor the connection    
 };
 

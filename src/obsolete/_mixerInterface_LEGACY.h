@@ -846,7 +846,7 @@ class MixingStation : public OSCMixerInterface {
       
 
       // prepare websocket API callback
-      userWSclientOnMessage = std::bind(&MixingStation::wsOnMessageCallback, this, std::placeholders::_1);
+      wsClientOnTXTmessage = std::bind(&MixingStation::wsOnMessageCallback, this, std::placeholders::_1);
       hwm.network->clientSocketClose();                
       
       // addresses definition

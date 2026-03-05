@@ -75,7 +75,7 @@ bool useUSBMidi = false;
 #define WIFI_CHECK_TIMEOUT_MAX  9000
 
 
-class PingEcho{
+class TargetEcho{
   public:
     bool alive = false;
     unsigned long lastQueryTime ;    
@@ -83,10 +83,10 @@ class PingEcho{
     uint16_t jitter = 0;
     String host;
     IPAddress ip;  
-    PingEcho(String h):host(h){} 
+    TargetEcho(String h):host(h){} 
 };
 
-typedef std::function<void(PingEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité
+typedef std::function<void(TargetEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité
 
 class PingParameters {
 public:
@@ -96,7 +96,7 @@ public:
   ~PingParameters(){
     //DEBUG_PRINT("\nPingParameters deleted");
   }
-  PingEcho* echo;
+  TargetEcho* echo;
   PingCallback callback;
 };
 
@@ -110,7 +110,7 @@ typedef void (*VoidCallback)();
 typedef void (*VoidIntCallback)(int);
 typedef void (*VoidDoubleIntCallback)(int,int);
 typedef String (*ReturnStringCallback)();
-typedef std::function<void(PingEcho*)> StdFunctionCallbackVoidPingEcho; 
+typedef std::function<void(TargetEcho*)> StdFunctionCallbackVoidTargetEcho; 
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief // Callback to report progress during unpacking

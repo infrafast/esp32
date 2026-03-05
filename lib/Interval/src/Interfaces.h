@@ -405,7 +405,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
 class NetWorkService{
   public:
-    PingEcho* destination;
+    TargetEcho* destination;
 
     // ---- Global inventory of services (NetWorkService*) ----
     static std::vector<NetWorkService*> inventory;

@@ -57,7 +57,7 @@ class MixerServer: public HWComponent2State{
       msHttpClientParam.timeOut = MIXER_DETECTION_PERIOD-1000; // maximum duration of the request is the period of check minus one second    
       msHttpClientParam.URL = APICALL_APP_STATE;  
       //
-      userWSclientOnMessage = std::bind(&MixerServer::wsOnMessageCallback, this, std::placeholders::_1);
+      wsClientOnTXTmessage = std::bind(&MixerServer::wsOnMessageCallback, this, std::placeholders::_1);
       
       pingParam.osc = osc;
       pingParam.data = pingData.to<JsonObject>();
