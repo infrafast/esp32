@@ -2518,7 +2518,7 @@ void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, con
 
 void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *reason, uint16_t length) {
   DEBUG_PRINT("\n\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
-  DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
+  //DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
   app.webAppConnected = false;  
 }
 

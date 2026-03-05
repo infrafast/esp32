@@ -258,7 +258,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       DEBUG_PRINT("\n%s::switchDevice(%s)",interfaceName.c_str(),state.enabled?"true":"false");      
       if (_enable) setStateDisconnected();  // if device is just switched off it can't be yet connected, hence we set its state to disconnected
       else setStateDisabled();
-      DEBUG_PRINT("\nDump after %s switchDevice: %s",interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
+      //DEBUG_PRINT("\nDump after %s switchDevice: %s",interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
     void setStateDeactivated(){
@@ -569,7 +569,7 @@ class NetWorkService{
 
     void switchNetworkService(bool _enable){      
       deviceInterface->state.enabled = _enable;
-      DEBUG_PRINT("\nDump before switchNetworkService: %s",hwm.network->dumpW5500Sockets().c_str());
+      //DEBUG_PRINT("\nDump before switchNetworkService: %s",hwm.network->dumpW5500Sockets().c_str());
       DEBUG_PRINT("\n(%s)::switchNetworkService(%s)",
                   deviceInterface->interfaceName.c_str(),
                   _enable ? "true" : "false");              
@@ -694,10 +694,10 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
   public:
 
-    int remotePort;
-    int localPort;  
+    int remotePort = 0;
+    int localPort = 0;  
 
-    NetworkDevice(String name, String group, int lport, bool _configurable=false):DeviceInterface(name, group,_configurable), localPort(lport){
+    NetworkDevice(String name, String group, int lport, int rport, bool _configurable=false):DeviceInterface(name, group,_configurable), localPort(lport), remotePort(rport){
       
       attachDeviceInterface(this);
       
@@ -738,7 +738,8 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       char inputStr[MAXLENGHTINPUT];      
       if (sscanf(property, ADDRESS_PORT, &_port) == 1) {
         if (_port != remotePort)   changed = true;
-        remotePort = _port;       
+        remotePort = _port;
+        if (remotePort>65535 || remotePort<0) remotePort = 0;
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
         IPAddress ip;
         if (ip.fromString(inputStr)){
