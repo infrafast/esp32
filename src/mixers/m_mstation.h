@@ -11,12 +11,41 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       //destination->host = "192.168.99.99";
       destination = new TargetEcho("192.168.0.1");    
       // prepare websocket API callback
-      wsClientOnTXTmessage =
-      std::bind(&MixingStation::routeTXTmessage,
-                this,
-                std::placeholders::_1,
-                std::placeholders::_2);        
+      wsClientOnTXTmessage().set(
+        this,
+        [](void* ctx, const char* message, uint16_t length) {
+          static_cast<MixingStation*>(ctx)->routeTXTmessage(message, length);
+        }
+      ); 
+
     }
+
+    /*
+    
+      wsClientOnOpen().set(
+        this,
+        [](void* ctx) {
+          static_cast<MixingStation*>(ctx)->onWsOpen();
+        }
+      );
+
+      wsClientOnError().set(
+        this,
+        [](void* ctx, WebSocketError error) {
+          static_cast<MixingStation*>(ctx)->onWsError(error);
+        }
+      );
+
+      wsClientOnClose().set(
+        this,
+        [](void* ctx, WebSocketCloseCode code, const char* reason, uint16_t length) {
+          static_cast<MixingStation*>(ctx)->onWsClose(code, reason, length);
+        }
+      )    
+
+
+    */
+
 
      virtual void monitorService(){
 
@@ -28,9 +57,19 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       }                                                                   
     }
 
-    virtual bool handleConnectService(){return false;}
+    virtual bool handleConnectService(){
+      DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
+      if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
+        DEBUG_PRINT(":client already opened\n");
+      }else{
+        hwm.network->clientSocketOpen(destination->host.c_str(), remotePort, "/"); 
+      }
+      return true;
+    }
 
     virtual bool handleDisconnectService(){
+      DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
+      destination->lastQueryTime = 0;                                // force immediate ping attempt
       hwm.network->clientSocketClose(); 
       return false;
     }    

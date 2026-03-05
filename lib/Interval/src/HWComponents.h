@@ -24,8 +24,112 @@
 using namespace net;
 using WiFiWebSocketClient = WebSocketClient<WiFiClient>;
 using EthernetWebSocketClient = WebSocketClient<EthernetClient>;
-using WSclientOnMessageCallback = std::function<void(const char*, uint16_t length)>;
-// using WSclientOnMessageCallback = std::function<void(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length)>;
+
+// =========================================================
+// Generic callback containers: ctx + function pointer
+// =========================================================
+
+struct Cb0 {
+  using Fn = void(*)(void* ctx);
+  void* ctx = nullptr;
+  Fn fn = nullptr;
+  void set(void* c, Fn f) { ctx = c; fn = f; }
+  inline void call() const { if (fn) fn(ctx); }
+  inline bool isSet() const { return fn != nullptr; }
+};
+
+template<typename A1>
+struct Cb1 {
+  using Fn = void(*)(void* ctx, A1);
+  void* ctx = nullptr;
+  Fn fn = nullptr;
+  void set(void* c, Fn f) { ctx = c; fn = f; }
+  inline void call(A1 a1) const { if (fn) fn(ctx, a1); }
+  inline bool isSet() const { return fn != nullptr; }
+};
+
+template<typename A1, typename A2>
+struct Cb2 {
+  using Fn = void(*)(void* ctx, A1, A2);
+  void* ctx = nullptr;
+  Fn fn = nullptr;
+  void set(void* c, Fn f) { ctx = c; fn = f; }
+  inline void call(A1 a1, A2 a2) const { if (fn) fn(ctx, a1, a2); }
+  inline bool isSet() const { return fn != nullptr; }
+};
+
+template<typename A1, typename A2, typename A3>
+struct Cb3 {
+  using Fn = void(*)(void* ctx, A1, A2, A3);
+  void* ctx = nullptr;
+  Fn fn = nullptr;
+  void set(void* c, Fn f) { ctx = c; fn = f; }
+  inline void call(A1 a1, A2 a2, A3 a3) const { if (fn) fn(ctx, a1, a2, a3); }
+  inline bool isSet() const { return fn != nullptr; }
+};
+
+// =========================================================
+// "Events" as singleton references (no extern, no .cpp needed)
+// =========================================================
+
+inline Cb0& wsClientOnOpen() {
+  static Cb0 cb;
+  return cb;
+}
+
+inline Cb2<const char*, uint16_t>& wsClientOnTXTmessage() {
+  static Cb2<const char*, uint16_t> cb;
+  return cb;
+}
+
+inline Cb1<WebSocketError>& wsClientOnError() {
+  static Cb1<WebSocketError> cb;
+  return cb;
+}
+
+inline Cb3<WebSocketCloseCode, const char*, uint16_t>& wsClientOnClose() {
+  static Cb3<WebSocketCloseCode, const char*, uint16_t> cb;
+  return cb;
+}
+
+////////////////////////////////////////////////////////////////////
+///                CLIENT SOCKET CALLBACKS                  ///////
+////////////////////////////////////////////////////////////////////
+void socketClientOnOpenCallback(IWebSocket &ws) {
+  //DEBUG_PRINT("\nConnecté au serveur WebSocket !");
+  /*const char message[]{ "Hello from Arduino client!" };
+  ws.send(WebSocketDataType::TEXT, message, strlen(message));  */
+  (void)ws;                // not forwarded, by design (matches your wsClientOnOpen())
+  wsClientOnOpen().call();  
+}
+
+void socketClientOnMessageCallback(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length){
+  switch (dataType) {
+    case net::WebSocketDataType::TEXT:
+       wsClientOnTXTmessage().call(message, length);
+    break;
+    case net::WebSocketDataType::BINARY:
+      //DEBUG_PRINT("\nDonnées binaires reçues");
+    break;
+  }                     
+}
+
+void socketClientOnErrorCallback(WebSocketError error) {
+  wsClientOnError().call(error);
+}
+
+void socketClientOnClose(IWebSocket &ws, WebSocketCloseCode code, const char *reason,uint16_t length){
+  wsClientOnClose().call(code, reason, length);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////
+void onEthernetBonjourServiceFoundCallback(const char* serviceType,
+                           MDNSServiceProtocol_t proto,
+                           const char* serviceName,
+                           const byte ipAddr[4],
+                           unsigned short port,
+                           const char* txt);
+
 
 ////////////////////////////////////////////////////////////////////
 ///                MIDI LAYER OBJECTS DECLARATION            ///////
@@ -39,51 +143,6 @@ using WSclientOnMessageCallback = std::function<void(const char*, uint16_t lengt
 using namespace APPLEMIDI_NAMESPACE;
 
 
-/*
-AppleMIDISession<WiFiUDP> *appleMidiSession;
-MidiInterface<AppleMIDISession<WiFiUDP>,AppleMIDISettings> *myMidi;
-void OnAppleMidiException(const ssrc_t& ssrc, const Exception& e, const int32_t value );
-*/
-////////////////////////////////////////////////////////////////////
-///                CLIENT SOCKET CALLBACKS                  ///////
-////////////////////////////////////////////////////////////////////
-void defaultWSclientOnMessage(const char* message, uint16_t length){
-  //DEBUG_PRINT("\nWebsocketclient Message reçu : %s",message);
-}
-
-WSclientOnMessageCallback wsClientOnTXTmessage = defaultWSclientOnMessage;
-
-void socketClientOnOpenCallback(IWebSocket &ws) {
-  //DEBUG_PRINT("\nConnecté au serveur WebSocket !");
-  /*const char message[]{ "Hello from Arduino client!" };
-  ws.send(WebSocketDataType::TEXT, message, strlen(message));  */
-}
-
-void onEthernetBonjourServiceFoundCallback(const char* serviceType,
-                           MDNSServiceProtocol_t proto,
-                           const char* serviceName,
-                           const byte ipAddr[4],
-                           unsigned short port,
-                           const char* txt);
-
-void socketClientOnMessageCallback(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length){
-  switch (dataType) {
-    case net::WebSocketDataType::TEXT:
-      wsClientOnTXTmessage(message, length);
-      break;
-    case net::WebSocketDataType::BINARY:
-      //DEBUG_PRINT("\nDonnées binaires reçues");
-      break;
-  }                     
-}
-
-void socketClientOnErrorCallback(WebSocketError error) {
-  //DEBUG_PRINT("\nErreur WebSocket : %d",static_cast<int>(error));
-}
-
-void socketClientOnClose(IWebSocket &ws, WebSocketCloseCode code, const char *reason,uint16_t length){
-  //DEBUG_PRINT("\nWebSocket closed: %d %s",static_cast<int>(code),reason);
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 void pingTask(void*);
@@ -1218,7 +1277,7 @@ class WiFiEth : public Network{
     }
 
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){
-      //DEBUG_PRINT("\nclientSocketOpen(%s,%d,%s)",host,port,path);
+      DEBUG_PRINT("\n%s::clientSocketOpen(%s,%d,%s)",id.c_str(),host,port,path);
       return false;
      
       if (state != CONNECTED){
@@ -1261,6 +1320,7 @@ class WiFiEth : public Network{
     }
 
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){
+      DEBUG_PRINT("\n%s::clientSocketClose()",id.c_str());      
       const char reason[]={"application close"};
       if (media == CABLE_MEDIA){
         if (wsEthClient != nullptr){
