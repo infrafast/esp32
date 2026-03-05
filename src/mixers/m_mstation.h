@@ -45,18 +45,21 @@ class MixingStation: public NetworkDevice, public MixerInterface{
     */
 
      virtual void monitorService(){
-      // time to ping the device to see if it's still alive after certain time or if we have no connection, we reconnect
-      #define PULSE_CHECK_DELAY 3000
-      // delay expired
+      
+      //...nothing to interogate here, all is done via socket event...
+
+      #define PULSE_CHECK_DELAY 5000
+      // delay expired, we didn't receive any incoming socket message...
+      // time to ping the device to see if it's still alive or if we have to attempt reconnecting      
       if (millis()-destination->lastQueryTime > PULSE_CHECK_DELAY){                
+        destination->lastQueryTime = millis(); // reset timer
         if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
           // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
           hwm.network->clientSocketSend(get("/app/state"));
         }else{
           // if we have no socket connection or we loose it, we try to esbalish one
           handleConnectService();
-        }
-
+        }        
       }                                                                   
     }
 
@@ -72,20 +75,20 @@ class MixingStation: public NetworkDevice, public MixerInterface{
 
     virtual bool handleDisconnectService(){
       DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
-      destination->lastQueryTime = 0;                                // force immediate ping attempt
+      destination->lastQueryTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
       hwm.network->clientSocketClose(); 
       return false;
     }    
  
   protected:
-    ////////////////////////////////////////////
-    // HELPER TO BUILD AND RETURN SOCKET REQUEST
+    //////////////////////////////////////////////
+    // HELPER TO BUILD AND RETURN A SOCKET REQUEST
     //  {
     //    "path": <path>,
     //    "method": <GET/POST>,
     //    "body": null
     //  }
-    ////////////////////////////////////////////  
+    //////////////////////////////////////////////  
     const char* build(const char* path, const char* method) {
         static char buffer[150];
 
@@ -144,20 +147,27 @@ class MixingStation: public NetworkDevice, public MixerInterface{
     // JSON PATH ROUTER
     ///////////////////////////////////////    
     void onTXTmessage(const char *message, uint16_t length) {
-
       // we received a message so we reset the lastQuery timer
       destination->lastQueryTime = millis(); 
-
+    
       if (length + 1 > RX_MAX){
         DEBUG_PRINT("%s::onTXTmessage(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
       } 
 
       // -------- Pass 1 : parse HEADER ONLY (sans memcpy) --------
+      /* at that time we are only interested in path or error
+        {
+          "path": "/app/state",
+          "method": "GET",
+          "body": {},
+          "error": null
+        }           
+      */      
       // Filtre minimal : path + error
       JsonDocument filter;
-      filter["path"]  = true;
-      filter["error"] = true;
-
+      filter["path"]  = true;    
+      filter["error"] = true;   
+      // most of the message contains a small payload that's why we do it in two pass.
       docHeader.clear();
       DeserializationError e = deserializeJson(
         docHeader,
@@ -180,6 +190,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       const Route* r = findRoute(path);
       if (!r) return;
 
+      // -------- Pass 2 : parse Full doc. and focus on body by avoid parsing by copy: we do the copy ourself
       // -------- Phase "on s'engage" : on copie UNE FOIS si nécessaire --------
       memcpy(rxBuf, message, length);
       rxBuf[length] = '\0';
