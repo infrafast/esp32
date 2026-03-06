@@ -113,12 +113,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
             //xSemaphoreGive(udpSlot->mutex);
 
             if (osc.hasError()) {
-                DEBUG_PRINT("\nreadOSC: %i\n", osc.getError());
+                DEBUG_INFO("readOSC: %i\n", osc.getError());
                 return 0;   // message invalide
             }else{
               char addr[64];
               osc.getAddress(addr, 0);
-              DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),remotePort);
+              DEBUG_INFO("<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),remotePort);
 
               // NEW MECHANISM      
               /*InterfaceEventFrame frame;
@@ -144,12 +144,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       
       bool success = false;
 
-      DEBUG_PRINT("\n>>%s(%s,%i->%i) ",msg->getAddress(),destination->ip.toString().c_str(),localPort, remotePort);
+      DEBUG_INFO(">>%s(%s,%i->%i) ",msg->getAddress(),destination->ip.toString().c_str(),localPort, remotePort);
 
       UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
 
       if (udpSlot == nullptr){
-          DEBUG_PRINT(" **** FAIL (UdpSlot null) ****");
+          DEBUG_ERROR(" **** FAIL (UdpSlot null) ****");
           return false;
       }            
      
@@ -161,14 +161,14 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         udp->endPacket();
         success = true;
       }else{
-        DEBUG_PRINT(" **** FAIL (udp null) ****");        
+        DEBUG_ERROR(" **** FAIL (udp null) ****");        
       }
 
       return success;          
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
-      DEBUG_PRINT("\n%s::stop()",interfaceName.c_str());
+      DEBUG_INFO("%s::stop()",interfaceName.c_str());
       return handleDisconnectService();
     };  
 
@@ -177,21 +177,21 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }    
 
     virtual bool handleConnectService(){
-      DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
+      DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
       // network connection is established so we now try to connect the device to its protocol
       if (udpID == -1) {
         udpID = hwm.network->requestUDPslotID(localPort);   // the network will create or reuse a udp slot and give its ID to us
       }
       if (udpID == -1) return false;                            // can't get any UDP connectivity => try again until next queryTime expired
       
-      DEBUG_PRINT("\nudp(%i) got UDP slot #%i",localPort,udpID);      
+      DEBUG_INFO("udp(%i) got UDP slot #%i",localPort,udpID);      
       setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
       destination->lastQueryTime = 0;                           // with the valid UDP we just got so we force ping to be triggered immediately
       return true;
     }
 
     virtual bool handleDisconnectService(){
-      DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
+      DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
       destination->lastQueryTime = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
       //setStateDisconnected();
@@ -240,7 +240,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
       }
 
-      DEBUG_PRINT("\t latency: %i, jitter:%i",destination->latency,destination->jitter);      
+      DEBUG_INFO("\t latency: %i, jitter:%i",destination->latency,destination->jitter);      
 
       // Sécurité bornes
       if (destination->latency > 500) destination->latency = 500;

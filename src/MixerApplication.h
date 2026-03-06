@@ -13,7 +13,6 @@ MixingStation* msMixer;
 BehringerXM* xmMixer;
 
 void setup(){
-    DEBUG_PRINT("go4");
     
     msMixer = new MixingStation();    
     xmMixer = new BehringerXM();

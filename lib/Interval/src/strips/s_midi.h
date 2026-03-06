@@ -414,7 +414,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       }
 
       // Debug utile pendant la migration
-      DEBUG_PRINT("\nSysexStrip::handleSysexBuffer len=%u", (unsigned)dataLen);
+      DEBUG_INFO("SysexStrip::handleSysexBuffer len=%u", (unsigned)dataLen);
     }    
 
     // ----------------------------------------------------------------------

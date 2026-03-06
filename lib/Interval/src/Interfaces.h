@@ -126,16 +126,16 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     virtual void onEvent(struct Event* event){}
 
     virtual bool begin(){     // called by init()
-      DEBUG_PRINT("\n%s::begin() void",interfaceName.c_str());
+      DEBUG_INFO("%s::begin() void",interfaceName.c_str());
       return true;
     };        
 
     virtual bool end(){         // called to shutdown completely
-      DEBUG_PRINT("\n%s::end() void",interfaceName.c_str());
+      DEBUG_INFO("%s::end() void",interfaceName.c_str());
       return true;
     };          
     virtual bool stop(){          // called to stop (ex. disconnect the network for network interface) require a begin() to start again
-      DEBUG_PRINT("\n%s::stop() void",interfaceName.c_str());
+      DEBUG_INFO("%s::stop() void",interfaceName.c_str());
       return true;
     };           
 
@@ -224,28 +224,28 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       String output;
       serializeJson(doc, output);    
       //{"MixerOffline":{"config":{FILLED BY DERIVED CLASS}}}
-      DEBUG_PRINT("\n%s->serializeConfig(%d): %s",interfaceName.c_str(),mainNode,output.c_str());          
+      DEBUG_INFO("%s->serializeConfig(%d): %s",interfaceName.c_str(),mainNode,output.c_str());          
       return output;
     }  
 
     bool init(EventListener* listener) {
-      DEBUG_PRINT("\n\n----------------------------------  %s->init(...)  ---------------------------------- ", interfaceName.c_str());
+      DEBUG_INFO("----------------------------------  %s->init(...)  ---------------------------------- ", interfaceName.c_str());
       registerEventListener(listener);
       load();
       bool success = begin();
-      DEBUG_PRINT("\n-----------------------------------------------------------------------------------------------------\n");
+      DEBUG_INFO("-----------------------------------------------------------------------------------------------------\n");
       return success;
     }
 
     virtual void handleRequestRefreshState(){
-      DEBUG_PRINT("\n%s->handleRequestRefreshState() : void",interfaceName.c_str());           
+      DEBUG_INFO("%s->handleRequestRefreshState() : void",interfaceName.c_str());           
     }
 
     bool restore(const char* config){    
       JsonDocument doc;
       DeserializationError error = deserializeJson(doc, config);
       if (error) {
-        DEBUG_PRINT("\n%s restore %s",interfaceName.c_str(),error.c_str());
+        DEBUG_INFO("%s restore %s",interfaceName.c_str(),error.c_str());
         return false;
       }
       JsonObject configJson = doc.as<JsonObject>();
@@ -255,7 +255,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     bool restore(const JsonObject& config, bool triggerPropertyChange = true){   // == trigger or not the handlePropertyChange at the end of the restore
       String cfgString;
       serializeJson(config, cfgString);     
-      DEBUG_PRINT("\n%s->restore(%s,%s)",interfaceName.c_str(),cfgString.c_str(),triggerPropertyChange?"triggerPropertyChange yes":"triggerPropertyChange no");           
+      DEBUG_INFO("%s->restore(%s,%s)",interfaceName.c_str(),cfgString.c_str(),triggerPropertyChange?"triggerPropertyChange yes":"triggerPropertyChange no");           
       
       bool changed = false;
       //DEBUG_PRINT("\n%s restore(JsonObject<...>)",interfaceName.c_str());
@@ -263,7 +263,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       if (config.containsKey(INTERFACE_ENABLED)){
         bool enabled = config[INTERFACE_ENABLED];
         state.enabled = enabled;  //switchDevice(enabled); // BE CAREFULL!
-        DEBUG_PRINT("\n%s : %s",interfaceName.c_str(),enabled?"ENABLED":"DISABLED");
+        DEBUG_INFO("%s : %s",interfaceName.c_str(),enabled?"ENABLED":"DISABLED");
       }
       
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -366,14 +366,14 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     virtual void switchDevice(bool _enable){
       state.enabled = _enable;      
-      DEBUG_PRINT("\n%s::switchDevice(%s)",interfaceName.c_str(),state.enabled?"true":"false");      
+      DEBUG_INFO("%s::switchDevice(%s)",interfaceName.c_str(),state.enabled?"true":"false");      
       if (_enable) setStateDisconnected();  // if device is just switched off it can't be yet connected, hence we set its state to disconnected
       else setStateDisabled();
       //DEBUG_PRINT("\nDump after %s switchDevice: %s",interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
     void setStateDeactivated(){
-      DEBUG_PRINT("\n%s::setStateDeactivated()",interfaceName.c_str());
+      DEBUG_INFO("%s::setStateDeactivated()",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_DEACTIVATED;
       state.subState =  "";
@@ -382,7 +382,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     void setStateDisabled(){
-      DEBUG_PRINT("\n%s::setStateDisabled()",interfaceName.c_str());
+      DEBUG_INFO("%s::setStateDisabled()",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_DISABLED;
       state.subState =  IF_STATE_DISABLED;
@@ -392,7 +392,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     void setStateNotImplemented(){
-      DEBUG_PRINT("\n%s:setStateNotImplemented",interfaceName.c_str());
+      DEBUG_INFO("%s:setStateNotImplemented",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_NOTIMPLEMENTED;
       state.subState =  IF_STATE_DISABLED;
@@ -402,7 +402,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     virtual void setStateReady(String led = "green", String label = *lang.getString(IF_STATE_READY), String subState = "", String details = ""){            
-      DEBUG_PRINT("\n%s::setStateReady()",interfaceName.c_str());
+      DEBUG_INFO("%s::setStateReady()",interfaceName.c_str());
       state.code = IF_READY;      
       state.label = label;
       state.subState = subState;
@@ -412,7 +412,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     virtual void setStatePending(String led = "green medium", String details = *lang.getString("Scanning devices")){
-      DEBUG_PRINT("\n%s::setStatePending()",interfaceName.c_str());      
+      DEBUG_INFO("%s::setStatePending()",interfaceName.c_str());      
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
       state.details = details;
@@ -422,7 +422,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     virtual void setStateDisconnected(String details=""){
-      DEBUG_PRINT("\n%s::setStateDisconnected()",interfaceName.c_str());      
+      DEBUG_INFO("%s::setStateDisconnected()",interfaceName.c_str());      
       state.code = IF_NOT_READY;
       state.label = IF_STATE_DISCONNECTED;
       state.subState = "";
@@ -435,7 +435,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     virtual void load() { // some interfaces may override this to be empty as they do not load or save parameters
       String fname = concatStrings(IF_CFG_FILE_PATH,getFilename());
-      DEBUG_PRINT("\nload(%s)",fname.c_str());
+      DEBUG_INFO("load(%s)",fname.c_str());
       // Ouvrir le fichier
       File file = LittleFS.open(fname, "r");
       String content="";
@@ -446,7 +446,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
         file.close();
         if (content.length() == 0) {
           // Appeler la fonction de restauration
-          DEBUG_PRINT("\t::empty file, use default"); 
+          DEBUG_INFO("\t::empty file, use default"); 
           content = defaultConfig;
         }        
       }else{
@@ -459,7 +459,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     virtual bool save(){  // some interfaces may override this to be empty as they do not load or save parameters
       File file = LittleFS.open(IF_CFG_FILE_PATH+getFilename(), "w");
       if (!file) {
-        DEBUG_PRINT("\t%s::save : impossible d'ouvrir %s en écriture\t", interfaceName.c_str(),getFilename().c_str());
+        DEBUG_ERROR("\t%s::save : impossible d'ouvrir %s en écriture\t", interfaceName.c_str(),getFilename().c_str());
         return false;
       }
 
@@ -476,9 +476,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       file.close();
 
       if (written == content.length()) {
-        DEBUG_PRINT("\n%s::saved : %s", interfaceName.c_str(),content.c_str());  
+        DEBUG_INFO("%s::saved : %s", interfaceName.c_str(),content.c_str());  
       }else{
-        DEBUG_PRINT("\n%s::save : ony %d/%d bytes in %s\t", interfaceName.c_str(),written, content.length(), getFilename().c_str());
+        DEBUG_INFO("%s::save : ony %d/%d bytes in %s\t", interfaceName.c_str(),written, content.length(), getFilename().c_str());
         return false;
 
       }
@@ -491,7 +491,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     virtual void serializeProperties(JsonArray& properties){}
 
     virtual bool restoreProperty(const char* property){
-      DEBUG_PRINT("\n%s::restoreProperty(%s) not applicable",interfaceName.c_str(),property);
+      DEBUG_INFO("%s::restoreProperty(%s) not applicable",interfaceName.c_str(),property);
       return false;
     } 
     
@@ -499,7 +499,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     // do not need to care about offline state as it is managed by update method
     virtual void monitor() = 0; 
 
-    virtual void handlePropertyChange(){DEBUG_PRINT("\n%s::handlePropertyChange() : void",name.c_str());} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
+    virtual void handlePropertyChange(){DEBUG_INFO("%s::handlePropertyChange() : void",name.c_str());} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
 
     String getFilename(){
       return  concatStrings(interfaceName,"_if.cfg");
@@ -582,7 +582,7 @@ class NetWorkService{
       enabledServicesWeightSum -= getServiceWeight();
       if (enabledServicesWeightSum < 0) enabledServicesWeightSum = 0;
 
-      DEBUG_PRINT("\t%s::releaseCapacity() : %i",
+      DEBUG_INFO("\t%s::releaseCapacity() : %i",
                   deviceInterface ? deviceInterface->interfaceName.c_str() : "<?>",
                   getServiceWeight());
 
@@ -600,7 +600,7 @@ class NetWorkService{
     bool reserveCapacity() {
       // Sur WiFi: pas de limitation
       if (hwm.network->media != CABLE_MEDIA) {
-        DEBUG_PRINT("\tNOT LIMIT (WiFi)");
+        DEBUG_INFO("\tNOT LIMIT (WiFi)");
         return false; // limit = false
       }
 
@@ -609,7 +609,7 @@ class NetWorkService{
       // Refuser si l'ajout dépasserait ou atteindrait la limite
       // (choisis > ou >= selon ta règle exacte)
       if (enabledServicesWeightSum + w >= SERVICES_WEIGHT_LIMIT) {
-        DEBUG_PRINT("\tcapacity %i+%i >= %i => LOCKED",
+        DEBUG_INFO("\tcapacity %i+%i >= %i => LOCKED",
                     enabledServicesWeightSum, w, SERVICES_WEIGHT_LIMIT);
         return true; // limit = true
       }
@@ -617,7 +617,7 @@ class NetWorkService{
       // OK: on réserve
       enabledServicesWeightSum += w;
 
-      DEBUG_PRINT("\tRESERVED => %i/%i",
+      DEBUG_INFO("\tRESERVED => %i/%i",
                   enabledServicesWeightSum, SERVICES_WEIGHT_LIMIT);
 
       return false; // limit = false
@@ -625,7 +625,7 @@ class NetWorkService{
 
     virtual void setStateDisconnected(){ // to be overrided by derived class
       if (!deviceInterface) return;
-      DEBUG_PRINT("\n%s::setStateDisconnected()", deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s::setStateDisconnected()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
       deviceInterface->state.details = concatStrings(*lang.getString("disconnected"));
@@ -674,7 +674,7 @@ class NetWorkService{
     void switchNetworkService(bool _enable){      
       deviceInterface->state.enabled = _enable;
       //DEBUG_PRINT("\nDump before switchNetworkService: %s",hwm.network->dumpW5500Sockets().c_str());
-      DEBUG_PRINT("\n(%s)::switchNetworkService(%s)",
+      DEBUG_INFO("(%s)::switchNetworkService(%s)",
                   deviceInterface->interfaceName.c_str(),
                   _enable ? "true" : "false");              
       if(_enable) enable();
@@ -682,7 +682,7 @@ class NetWorkService{
     }
 
     void enable(){
-      DEBUG_PRINT("\n%s->enable()", deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s->enable()", deviceInterface->interfaceName.c_str());
 
       serviceLocked = reserveCapacity();
 
@@ -695,20 +695,20 @@ class NetWorkService{
             setStateDisconnected();
           }
         }else{
-          DEBUG_PRINT("\n%s::Network down, skipped handleConnectService()",
+          DEBUG_INFO("%s::Network down, skipped handleConnectService()",
                       deviceInterface->interfaceName.c_str());
           setStateDisconnected();
         }
       }
-      DEBUG_PRINT("\nAfter %s enable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
+      DEBUG_INFO("After %s enable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
     void disable(){
-      DEBUG_PRINT("\n%s->disable()", deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s->disable()", deviceInterface->interfaceName.c_str());
       releaseCapacity();
       deviceInterface->setStateDisabled();
       handleDisconnectService();
-      DEBUG_PRINT("\nAfter %s disable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
+      DEBUG_INFO("After %s disable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
     void monitorNetwork(){
@@ -725,7 +725,7 @@ class NetWorkService{
     
     void setNetworkStateDown(){
       if (!deviceInterface) return;
-      DEBUG_PRINT("\n%s::setNetworkStateDown()", deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s::setNetworkStateDown()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
       deviceInterface->state.led = "red medium";
@@ -735,7 +735,7 @@ class NetWorkService{
     }
 
     virtual void setStateOffline(String details=""){
-      DEBUG_PRINT("\n%s::setStateOffline()",deviceInterface->interfaceName.c_str());      
+      DEBUG_INFO("%s::setStateOffline()",deviceInterface->interfaceName.c_str());      
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_OFFLINE;
       deviceInterface->state.subState = "";
@@ -745,7 +745,7 @@ class NetWorkService{
     }     
 
     virtual void setStateLocked(String led = "orange",String details = *lang.getString("Reached maximum network device capacity. Disable other device(s) to enable this one.")){
-      DEBUG_PRINT("\n%s::setStateLocked()", deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s::setStateLocked()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_LOCKED;
       deviceInterface->state.subState = "";
@@ -755,13 +755,13 @@ class NetWorkService{
     }
 
     virtual void setSetDirectoryServiceDown(){
-      DEBUG_PRINT("\n%s::setStateLocked()", deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s::setStateLocked()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.subState = "";
       deviceInterface->state.details = *lang.getString("Enable Directory to browse devices");
     }
 
     void setStateConnecting(String subState, String details){
-      DEBUG_PRINT("\n%s: setStateConnecting()",deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s: setStateConnecting()",deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;      
       deviceInterface->state.label = IF_STATE_CONNECTING;   
       deviceInterface->state.subState = subState;
@@ -772,7 +772,7 @@ class NetWorkService{
 
     void setStateSyncing(String details){
       setStateConnecting(IF_STATE_SYNCING,details);
-      DEBUG_PRINT("\n%s: setStateSyncing()",deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s: setStateSyncing()",deviceInterface->interfaceName.c_str());
       deviceInterface->state.led = "green fast";
       deviceInterface->state.progress = 0; //show progress bar
     }     
@@ -820,7 +820,7 @@ DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){
     //DEBUG_PRINT("\nInterfaceRepository::retrieve(%s)=>%s",requestedInterface.c_str(),interface->interfaceName.c_str())     ;
     if (interface->interfaceName == requestedInterface) return interface;
   }
-  DEBUG_PRINT("\nError: requested interface <%s> is not existing, returning nullptr",requestedInterface.c_str());
+  DEBUG_ERROR("\nError: requested interface <%s> is not existing, returning nullptr",requestedInterface.c_str());
   return nullptr;
 }
 
@@ -839,11 +839,6 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       registerDataSetAddress(&addressIP);           // global       
       
     }
-
-    virtual bool begin(){     // called by init()
-      DEBUG_PRINT("\n%s::begin() : self-registering to ...",interfaceName.c_str());
-      return true;
-    };      
 
     virtual void monitor(){           
       monitorNetwork();      
@@ -872,7 +867,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     }    
 
     virtual void handlePropertyChange(){
-      DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
+      DEBUG_INFO("%s::handlePropertyChange()",interfaceName.c_str());
       handleDisconnectService();  // force to reconnect
     }
 
@@ -904,7 +899,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
         if (ip.fromString(inputStr)){
           destination->ip = ip;                
         }else{
-          DEBUG_PRINT("\ninvalid IP address: %s",inputStr);
+          DEBUG_ERROR("\ninvalid IP address: %s",inputStr);
         }
       }
       return changed;

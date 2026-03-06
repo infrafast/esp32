@@ -239,7 +239,7 @@ class DynamicDataSet : public DataSet{
     virtual const String* getValuePtr(uint16_t i) {
         //DEBUG_PRINT("\tgetValuePtr(%d) provider: ",i);
         if (dataProvider == nullptr){
-            DEBUG_PRINT("DS NULL");
+            DEBUG_ERROR("DS NULL");
             return &emptyString;
         } 
         const String* v = dataProvider->getValuePtr(address->pattern, i);

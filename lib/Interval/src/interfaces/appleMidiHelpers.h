@@ -73,7 +73,7 @@ public:
   }
 
   virtual void begin(){
-    DEBUG_PRINT("\nmidiClient(%s)->begin()",session->getName());
+    DEBUG_INFO("midiClient(%s)->begin()",session->getName());
     session->begin();    
 
     session->setHandleReceivedRtp([](const APPLEMIDI_NAMESPACE::ssrc_t & ssrc, const APPLEMIDI_NAMESPACE::Rtp_t & rtp, const int32_t& latency) {
@@ -126,17 +126,17 @@ public:
   }
   /////////////////////////
   void sendNoteOn(byte note, byte velocity, byte channel) override {
-    DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sendNoteOn(%d,%d,%d)",note, velocity, channel);
+    DEBUG_INFO("AppleMidiWithInterfaceWrapper::sendNoteOn(%d,%d,%d)",note, velocity, channel);
     appleMIDI->sendNoteOn(note, velocity, channel);
   }
 
   void sendNoteOff(byte note, byte velocity, byte channel) override {
-    DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sendNoteOff(%d,%d,%d)",note, velocity, channel);
+    DEBUG_INFO("AppleMidiWithInterfaceWrapper::sendNoteOff(%d,%d,%d)",note, velocity, channel);
     appleMIDI->sendNoteOff(note, velocity, channel);    
   }
 
   void sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
-    DEBUG_PRINT("\tAppleMidiWithInterfaceWrapper::sendSysex ");
+    DEBUG_INFO("AppleMidiWithInterfaceWrapper::sendSysex ");
     appleMIDI->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
     for (uint16_t i = 0; i < inLength; i++) DEBUG_PRINT("%02X ",inArray[i]);    
   }

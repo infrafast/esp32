@@ -183,7 +183,7 @@ class HWComponent2State : public HWComponent{
       if (previousState != state || force){
         previousState = state;
         if (debug){
-          DEBUG_PRINT("\n%s changed state to: %i",id.c_str(),state);
+          DEBUG_INFO("%s changed state to: %i",id.c_str(),state);
         }
         refreshed = true;
       }
@@ -992,9 +992,9 @@ class WiFiEth : public Network{
         // test if ethernet module is present and instantiate class accordingly
         Ethernet.begin(ethMac,100,100);
         if (Ethernet.hardwareStatus() == EthernetNoHardware){
-          if (debug) DEBUG_PRINT("\n%s !!! THERE IS NO ETHERNET HW !!!",id.c_str());
+          if (debug) DEBUG_WARN("%s !!! THERE IS NO ETHERNET HW !!!",id.c_str());
         }else{
-          if (debug) DEBUG_PRINT("\n%s Using WiFi & Ethernet",id.c_str());
+          if (debug) DEBUG_INFO("%s Using WiFi & Ethernet",id.c_str());
           //EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);         
           setLink(Ethernet.linkStatus());   // check immediately if ethernet is connected so it has priority on WiFI connection    => done in the thread
         }
@@ -1157,7 +1157,7 @@ class WiFiEth : public Network{
     virtual int requestUDPslotID(int port) {
 
       if (port <= 0 || port > 65535) {
-        DEBUG_PRINT("\n[requestUDPslotID] invalid port %d", port);
+        DEBUG_ERROR("[requestUDPslotID] invalid port %d", port);
         return -1;
       }
 
@@ -1165,11 +1165,11 @@ class WiFiEth : public Network{
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
         if (udpSlots[i].port == port && udpSlots[i].reservations > 0) {
           if (!ensureUDPslotMedia(i)) {
-            DEBUG_PRINT("\n[UDP-%d/%d] ensureUDPslotMedia failed", i, port);
+            DEBUG_WARN("[UDP-%d/%d] ensureUDPslotMedia failed", i, port);
             return -1;
           }
           udpSlots[i].reservations++;
-          DEBUG_PRINT("\n[UDP-%d/%d] ID reclaimed (refs=%d)", i, port, udpSlots[i].reservations);
+          DEBUG_INFO("[UDP-%d/%d] ID reclaimed (refs=%d)", i, port, udpSlots[i].reservations);
           return i;
         }
       }
@@ -1185,16 +1185,16 @@ class WiFiEth : public Network{
 
           if (!ensureUDPslotMedia(i)) {
             destroyUDPslot(i);
-            DEBUG_PRINT("\n[UDP] newUDP() failed");
+            DEBUG_WARN("[UDP] newUDP() failed");
             return -1;
           }
 
-          DEBUG_PRINT("\n[UDP-%d/%d] ID created", i, port);
+          DEBUG_INFO("[UDP-%d/%d] ID created", i, port);
           return i;
         }
       }
 
-      DEBUG_PRINT("\n[UDP] Reached max!");
+      DEBUG_WARN("[UDP] Reached max!");
       return -1;
     }
 
@@ -1233,10 +1233,10 @@ class WiFiEth : public Network{
       if (slot.reservations > 0) slot.reservations--;
 
       if (slot.reservations == 0) {
-        DEBUG_PRINT("\n[UDP-%d/%d] released (destroy)", *i, slot.port);
+        DEBUG_INFO("[UDP-%d/%d] released (destroy)", *i, slot.port);
         destroyUDPslot(*i);
       } else {
-        DEBUG_PRINT("\n[UDP-%d/%d] released (refs=%d)", *i, slot.port, slot.reservations);
+        DEBUG_INFO("[UDP-%d/%d] released (refs=%d)", *i, slot.port, slot.reservations);
       }
 
       *i = -1;   // invalidate slot ID
@@ -1245,17 +1245,17 @@ class WiFiEth : public Network{
     virtual UdpSlot* stopUDPslot(int i){
       
       if (!isValidUDPslotIndex(i)){
-        DEBUG_PRINT("\nstopUDP(%i) out of range", i);
+        DEBUG_ERROR("\nstopUDP(%i) out of range", i);
         return nullptr;
       }
 
       if (udpSlots[i].udp != nullptr){
         udpSlots[i].udp->stop();
         udpSlots[i].active = false;
-        DEBUG_PRINT("\n[UDP-%d/%d] stopped", i, udpSlots[i].port);
+        DEBUG_INFO("[UDP-%d/%d] stopped", i, udpSlots[i].port);
         return &udpSlots[i];
       }else{
-        DEBUG_PRINT("\n[UDP-%d/%d] stopped failed", i, udpSlots[i].port);        
+        DEBUG_ERROR("[UDP-%d/%d] stopped failed", i, udpSlots[i].port);        
       }
 
       return nullptr;
@@ -1271,24 +1271,24 @@ class WiFiEth : public Network{
     }
 
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){
-      DEBUG_PRINT("\n%s::clientSocketOpen(%s,%d,%s)",id.c_str(),host,port,path);
+      DEBUG_INFO("%s::clientSocketOpen(%s,%d,%s)",id.c_str(),host,port,path);
       return false;
      
       if (state != CONNECTED){
-        DEBUG_PRINT("\t failed, network not connected!");
+        DEBUG_WARN("\t failed, network not connected!");
         return false;
       } 
       if (media == CABLE_MEDIA){
         if (wsEthClient!= nullptr){
           if (!wsEthClient->open(host, port, path)){
-            DEBUG_PRINT("\t open wsEthClient failed!");
+            DEBUG_WARN("\t open wsEthClient failed!");
             return false;
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){
           if (!wsWiFiClient->open(host, port, path)){
-            DEBUG_PRINT("\t open wsWiFiClient failed!");
+            DEBUG_WARN("\t open wsWiFiClient failed!");
             return false;
           }
         }
@@ -1302,19 +1302,19 @@ class WiFiEth : public Network{
         if (wsEthClient!= nullptr){      
           if (wsEthClient->getReadyState() == WebSocketReadyState::OPEN){
             wsEthClient->send(WebSocketDataType::TEXT, message, strlen(message));
-            DEBUG_PRINT("\n[ETHSocketSend] <%s>",message);
+            DEBUG_INFO("[ETHSocketSend] <%s>",message);
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){      
           wsWiFiClient->send(WebSocketDataType::TEXT, message, strlen(message));
-          DEBUG_PRINT("\n[WIFISocketSend] <%s>",message);
+          DEBUG_INFO("[WIFISocketSend] <%s>",message);
         }
       }      
     }
 
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){
-      DEBUG_PRINT("\n%s::clientSocketClose()",id.c_str());      
+      DEBUG_INFO("%s::clientSocketClose()",id.c_str());      
       const char reason[]={"application close"};
       if (media == CABLE_MEDIA){
         if (wsEthClient != nullptr){
@@ -1366,7 +1366,7 @@ class WiFiEth : public Network{
       WiFi.setSleep(false); // Désactiver le mode veille Wi-Fi
       WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); // Reconfigurer DHCP    */
 
-      DEBUG_PRINT("\nstartWifi(%s,%s), wifiEnabled=%d, status: %d, MAC:%s",SSID.c_str(),pwd.c_str(),WiFiEnabled,WiFi.status(),WiFi.macAddress().c_str());                
+      DEBUG_INFO("startWifi(%s,%s), wifiEnabled=%d, status: %d, MAC:%s",SSID.c_str(),pwd.c_str(),WiFiEnabled,WiFi.status(),WiFi.macAddress().c_str());                
       // Hostname avant begin
       //WiFi.setHostname("esp32-client");
       // Pas d’économie d’énergie pendant les tests
@@ -1434,7 +1434,7 @@ class WiFiEth : public Network{
                 // we just connected ETH so we do everything related to ETH specialized object instanciation
                 IP = Ethernet.localIP();      
                 subnet = Ethernet.subnetMask();   
-                DEBUG_PRINT("\n\nEthernet.begin() => got IP:%s",IP.toString().c_str());  
+                DEBUG_INFO("Ethernet.begin() => got IP:%s",IP.toString().c_str());  
                 if (client == NULL) client = new EthernetClient();
                 if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
                 //if (udp == NULL) udp = new EthernetUDP;
@@ -1458,11 +1458,11 @@ class WiFiEth : public Network{
 */
                 state = CONNECTED;
                 media = CABLE_MEDIA;                
-                DEBUG_PRINT("\t...all Eth object instantiated\n");                  
+                DEBUG_INFO("\t...all Eth object instantiated\n");                  
                 iFconnectivityIcon = ICON_ETH;
                 xSemaphoreGive(networkBusy);
               }else{
-                DEBUG_PRINT("\nETH CONNECT: networkBusy\n"); 
+                DEBUG_WARN("ETH CONNECT: networkBusy\n"); 
               }
             }else{
               DEBUG_PRINT(".");
@@ -1532,7 +1532,7 @@ class WiFiEth : public Network{
               DEBUG_PRINT("\t...all WiFi object instantiated\n");                                
               xSemaphoreGive(networkBusy);
             }else{
-              DEBUG_PRINT("\nWIFI CONNECT: networkBusy"); 
+              DEBUG_WARN("WIFI CONNECT: networkBusy"); 
             }
 
           }
@@ -1593,9 +1593,9 @@ class WiFiEth : public Network{
       }*/
 
       if (refreshed){
-        DEBUG_PRINT("\n+------------------------------------------------+");
-        DEBUG_PRINT("\n| %s changed state => cable:%i, media:%i    |",id.c_str(),cable,media);
-        DEBUG_PRINT("\n+------------------------------------------------+\n");         
+        DEBUG_INFO("+------------------------------------------------+");
+        DEBUG_INFO("| %s changed state => cable:%i, media:%i    |",id.c_str(),cable,media);
+        DEBUG_INFO("+------------------------------------------------+\n");         
        
         if (state == CONNECTED){
           // reset the progress indicator
@@ -1613,9 +1613,9 @@ class WiFiEth : public Network{
            }
           lastActiveMedia = media;
           checkInternet();
-          DEBUG_PRINT("\n+-------------------+");
-          DEBUG_PRINT("\n| NETWORK CONNECTED |");
-          DEBUG_PRINT("\n+-------------------+");
+          DEBUG_INFO("+-------------------+");
+          DEBUG_INFO("| NETWORK CONNECTED |");
+          DEBUG_INFO("+-------------------+");
           
 
           ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
@@ -1624,9 +1624,9 @@ class WiFiEth : public Network{
 
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
-            DEBUG_PRINT("\n+----------------------+");
-            DEBUG_PRINT("\n| NETWORK DISCONNECTED |");
-            DEBUG_PRINT("\n+----------------------+"); 
+            DEBUG_INFO("+----------------------+");
+            DEBUG_INFO("| NETWORK DISCONNECTED |");
+            DEBUG_INFO("+----------------------+"); 
             // common destruction
             internet.alive = false;
             internet.latency = 0;
@@ -1650,9 +1650,9 @@ class WiFiEth : public Network{
             lastActiveMedia = NO_MEDIA;
             if (!ethEnabled) iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
             else iFconnectivityIcon = ICON_MIXETHWIFI; 
-                       
-            DEBUG_PRINT("\n ALL NETWORK OBJECTED CLEANED");
-            DEBUG_PRINT("\n+----------------------------+");
+            DEBUG_INFO("+----------------------------+");           
+            DEBUG_INFO(" ALL NETWORK OBJECTED CLEANED");
+            DEBUG_INFO("+----------------------------+");
 
             ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
             evt.type = EVENT_NETWORK_DISCONNECTED;
@@ -1660,7 +1660,7 @@ class WiFiEth : public Network{
 
             xSemaphoreGive(networkBusy);              
           }else{
-            DEBUG_PRINT("\nnetwork DISCONNECTED: networkBusy"); 
+            DEBUG_WARN("network DISCONNECTED: networkBusy"); 
           }
           restoreWiFiSSID();
         }
@@ -1695,20 +1695,20 @@ class WiFiEth : public Network{
     }
 
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
-      DEBUG_PRINT("\n\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
+      DEBUG_INFO("\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
       if (clientParam->host[3] == 255){
-        DEBUG_PRINT("\t=>broadcast, stop.");  
+        DEBUG_WARN("\t=>broadcast, stop.");  
         return false;
       }
 
       if (clientParam->URL == ""){
-        DEBUG_PRINT("\t=>empty URL invalid, stop.");  
+        DEBUG_WARN("\t=>empty URL invalid, stop.");  
         return false;
       }
 
       // Si nous sommes déjà en train de tenter une connexion, on ne relance pas la tâche
       if (clientParam->isClientConnecting ) {
-        DEBUG_PRINT("\tconnection pending, no more attempt allowed, stop.");
+        DEBUG_WARN("\tconnection pending, no more attempt allowed, stop.");
         //clientParam->client->stop();
         //vTaskDelete(httpTaskHandle);
         //clientParam->taskHandle = nullptr;
@@ -1944,7 +1944,7 @@ class AccessPoint : public Network{
 
      IP = WiFi.softAPIP();
       WiFi.enableLongRange(true);
-      DEBUG_PRINT("\nAccessPoint.init (%s) %s",SSID.c_str(),IP.toString().c_str());        
+      DEBUG_INFO("AccessPoint.init (%s) %s",SSID.c_str(),IP.toString().c_str());        
     }
 
     bool refresh(bool force=false) {      
@@ -1964,7 +1964,7 @@ class AccessPoint : public Network{
           fireEvent(&evt);            
         }else{
           //if (debug) DEBUG_PRINT("\nCient disconnected from AP");
-          if (server != NULL){if (debug) DEBUG_PRINT("\nDELETING SERVER");delete server; server  = NULL;} 
+          if (server != NULL){if (debug) DEBUG_INFO("DELETING SERVER");delete server; server  = NULL;} 
           evt.type = EVENT_NETWORK_DISCONNECTED;
           fireEvent(&evt);
         }                

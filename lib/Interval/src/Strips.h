@@ -517,7 +517,7 @@ class Strip : public EventListener {
       JsonDocument jsonStrip;
       DeserializationError error = deserializeJson(jsonStrip, values);
       if (error){
-        DEBUG_PRINT("\nStrip::deserialize() error %s",error.c_str());
+        DEBUG_ERROR("\nStrip::deserialize() error %s",error.c_str());
         return false;
       }
 
@@ -585,7 +585,7 @@ class Strip : public EventListener {
 
       if (!interface){
         renderError = true;
-        DEBUG_PRINT("\nStrip interface %s not instanciated",interfaceName.c_str());
+        DEBUG_ERROR("\nStrip interface %s not instanciated",interfaceName.c_str());
         pushSimpleText(layout, lang.getString("No interface"));
         return;
       }
@@ -593,14 +593,14 @@ class Strip : public EventListener {
 
       if (x>3 || y>3){
         renderError = true;
-        DEBUG_PRINT("\nIncorrect strip location: %dx%d",x,y);
+        DEBUG_ERROR("\nIncorrect strip location: %dx%d",x,y);
         pushSimpleText(layout, lang.getString("Strip x/y error"));
         return;
       }
             
       if (!determineXY(layout)){
         renderError = true;
-        DEBUG_PRINT("\nIncorrect strip size of layout: %s / %d",size.c_str(), layout);
+        DEBUG_ERROR("\nIncorrect strip size of layout: %s / %d",size.c_str(), layout);
         pushSimpleText(layout, lang.getString("Strip shape error"));
         return;
       }

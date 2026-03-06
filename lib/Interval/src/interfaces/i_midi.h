@@ -37,17 +37,17 @@ typedef struct MidiData{
   class USBMIDISimul{
     public:
       USBMIDISimul(){}
-      void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendNoteOn(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
-      void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendNoteOff(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
-      void sendProgramChange(DataByte inProgramNumber,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendProgramChange(%d,%d)\t",inProgramNumber,inChannel);}
-      void sendControlChange(DataByte inControlNumber,DataByte inControlValue,Channel inChannel){DEBUG_PRINT("\tUSBMIDI::sendControlChange(%d,%d,%d)\t",inControlNumber,inControlValue,inChannel);}
+      void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendNoteOn(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
+      void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendNoteOff(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
+      void sendProgramChange(DataByte inProgramNumber,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendProgramChange(%d,%d)\t",inProgramNumber,inChannel);}
+      void sendControlChange(DataByte inControlNumber,DataByte inControlValue,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendControlChange(%d,%d,%d)\t",inControlNumber,inControlValue,inChannel);}
       bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries=false){
-        DEBUG_PRINT("\tUSBMIDI::sendSysEx(%u,[", inLength);
-        for (unsigned i=0;i<inLength;i++) DEBUG_PRINT("%02X", inArray[i]);
-        DEBUG_PRINT("],%d)\t", inArrayContainsBoundaries ? 1 : 0);
+        DEBUG_INFO("\tUSBMIDI::sendSysEx(%u,[", inLength);
+        for (unsigned i=0;i<inLength;i++) DEBUG_INFO("%02X", inArray[i]);
+        DEBUG_INFO("],%d)\t", inArrayContainsBoundaries ? 1 : 0);
         return true;
       }
-      void setHandleSystemExclusive(SystemExclusiveCallback fptr) { DEBUG_PRINT("\tUSBMIDI::setHandleSystemExclusive(f*)\t");}
+      void setHandleSystemExclusive(SystemExclusiveCallback fptr) { DEBUG_INFO("\tUSBMIDI::setHandleSystemExclusive(f*)\t");}
       bool read(){return false;}
   }usbMIDI;
 #else
@@ -85,7 +85,7 @@ class MIDIInterface: public DeviceInterface{
     }
 
     virtual void handleChangeControl(byte channel, byte number, byte value){
-      DEBUG_PRINT("\nhandleChangeControl channel:%i, number:%i value:%i",channel,number,value);
+      DEBUG_INFO("handleChangeControl channel:%i, number:%i value:%i",channel,number,value);
 
       // ------------------------------------------------------------------------
       // Ancien mécanisme conservé pour compatibilité
@@ -102,12 +102,12 @@ class MIDIInterface: public DeviceInterface{
       bool ok = publishMidiCCEvent(channel, number, value);
 
       if (!ok) {
-        DEBUG_PRINT("\nMIDIInterface: queue pleine, impossible de publier le CC");
+        DEBUG_WARN("MIDIInterface: queue pleine, impossible de publier le CC");
       }
     }
 
     virtual void handleSysex(byte* sysexdata, unsigned length){
-      DEBUG_PRINT("\nhandleSysex: %c, %i bytes: ",getSysExStatus(sysexdata, length),length);
+      DEBUG_INFO("handleSysex: %c, %i bytes: ",getSysExStatus(sysexdata, length),length);
       for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",sysexdata[i]);
 
       // ------------------------------------------------------------------------
@@ -135,7 +135,7 @@ class MIDIInterface: public DeviceInterface{
       bool ok = publishMidiSysexEvent(sysexdata, length);
 
       if (!ok) {
-        DEBUG_PRINT("\nMIDIInterface: queue pleine, impossible de publier le SysEx");
+        DEBUG_WARN("MIDIInterface: queue pleine, impossible de publier le SysEx");
       }
     } 
 
@@ -230,7 +230,7 @@ class BLEMIDIInterface: public MIDIInterface{
     }
 
     virtual bool begin(){
-      DEBUG_PRINT("\n%s::begin()",interfaceName.c_str());          
+      DEBUG_INFO("%s::begin()",interfaceName.c_str());          
       MIDIInterface::init();  
       bleInstancePtr = this;   // do not forget otherwise callback function will crash
 
@@ -247,31 +247,31 @@ class BLEMIDIInterface: public MIDIInterface{
       if (!hasBegun){
         if (state.enabled){
           setStatePending();            
-          DEBUG_PRINT("\n\tbleMIDI.begin()");          
+          DEBUG_INFO("\tbleMIDI.begin()");          
           bleMIDI.begin();                
           hasBegun = true;
         }else{
-          DEBUG_PRINT("\n\tbleMIDI.begin() ignored (disabled)");          
+          DEBUG_INFO("\tbleMIDI.begin() ignored (disabled)");          
         }
       }else{
-        DEBUG_PRINT("\n\tbleMIDI.begin() ignored (hasBegun)");          
+        DEBUG_INFO("\tbleMIDI.begin() ignored (hasBegun)");          
       }             
 
       return true;
     }
 
     virtual bool stop() override{
-      DEBUG_PRINT("\n%s::stop()",interfaceName.c_str());          
+      DEBUG_INFO("%s::stop()",interfaceName.c_str());          
       auto transport = bleMIDI.getTransport();  // ✅ On récupère le transport BLE
       hasBegun = false;
       if (transport) {
           if (hasBegun){
             //transport->end();     // stops the connexion but does not trigger the disconnect callback, hence we set the state to disconnected before to avoid having a wrong state until the next connection attempt
             //BLEbleMIDI.end();    // does nothing     
-            DEBUG_PRINT("\n\ttransport->end()");          
+            DEBUG_INFO("\ttransport->end()");          
             //BLEDevice::getAdvertising()->stop();            
           }else{
-            DEBUG_PRINT("\n\ttransport->end() ignored (!hasBegun)");    
+            DEBUG_INFO("\ttransport->end() ignored (!hasBegun)");    
           }
           // bleMIDI.end() doesnt exists
           return true;
@@ -280,12 +280,12 @@ class BLEMIDIInterface: public MIDIInterface{
     }     
 
     void handleConnected() {
-      DEBUG_PRINT("\n%s::handleConnected()",interfaceName.c_str());          
+      DEBUG_INFO("%s::handleConnected()",interfaceName.c_str());          
       setStateReady();
     }    
 
     void handleDisconnected() {
-      DEBUG_PRINT("\n%s::handleDisconnected()",interfaceName.c_str());          
+      DEBUG_INFO("%s::handleDisconnected()",interfaceName.c_str());          
       if (state.enabled) setStatePending();
       //else setStateDisabled();                // uncomment this when stop() is correctly implemented
     }
@@ -312,21 +312,21 @@ class BLEMIDIInterface: public MIDIInterface{
     } 
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
-      DEBUG_PRINT("\nBLEMIDIInterface::sendSysex(%i) ",inLength);
+      DEBUG_INFO("BLEMIDIInterface::sendSysex(%i) ",inLength);
       if (state.code == IF_READY) bleMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);      
       else return false;
       return true; 
     }
 
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-      DEBUG_PRINT("\tnBLEMIDIInterface::sendNoteOn(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
+      DEBUG_INFO("\tnBLEMIDIInterface::sendNoteOn(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
       if (state.code == IF_READY) bleMIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);      
       else return false;
       return true; 
     }
 
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-      DEBUG_PRINT("\tnBLEMIDIInterface::sendNoteOff(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
+      DEBUG_INFO("\tnBLEMIDIInterface::sendNoteOff(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
       if (state.code == IF_READY) bleMIDI.sendNoteOff(inNoteNumber,inVelocity,inChannel);      
       else return false;
       return true; 
@@ -367,7 +367,7 @@ class USBMIDIInterface: public MIDIInterface{
     }
 
     void setStateRestart(){
-      DEBUG_PRINT("\n%s::setStateRestart()",interfaceName.c_str());
+      DEBUG_INFO("%s::setStateRestart()",interfaceName.c_str());
       state.code = IF_NOT_READY;
       state.label = IF_STATE_DISABLED;
       state.subState = IF_STATE_DISABLED;
@@ -377,7 +377,7 @@ class USBMIDIInterface: public MIDIInterface{
     }
 
     virtual bool begin() override{
-      DEBUG_PRINT("\n%s::begin()",interfaceName.c_str());
+      DEBUG_INFO("%s::begin()",interfaceName.c_str());
       MIDIInterface::init();
       // if the fooswtich has started in FW update or debug mode, USB MIDI is not active, hence we set the status once for all
       if (!useUSBMidi){
@@ -401,7 +401,7 @@ class USBMIDIInterface: public MIDIInterface{
     }
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){    
-      DEBUG_PRINT("\nUSBMIDI::sendSysex(%i) ",inLength);      
+      DEBUG_INFO("USBMIDI::sendSysex(%i) ",inLength);      
       usbMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);
       return true;
     }    
@@ -535,19 +535,19 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }    
 
     virtual bool begin() override{      
-      DEBUG_PRINT("\nAppleMIDIInterface::begin()");
+      DEBUG_INFO("AppleMIDIInterface::begin()");
       MIDIInterface::init();
       appleInstancePtr = this;   // do not forget otherwise callback function will crash
       return true;      
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
-      DEBUG_PRINT("\n%s::stop()",interfaceName.c_str());
+      DEBUG_INFO("%s::stop()",interfaceName.c_str());
       return handleDisconnectService();
     };   
 
     virtual bool end() override{
-      DEBUG_PRINT("\nAppleMIDIInterface::end()");
+      DEBUG_INFO("AppleMIDIInterface::end()");
       //switchDevice(DEVICE_OFF);     // disable the device completely
       switchDevice(DEVICE_OFF);     // disable the device completely
       return true;
@@ -555,7 +555,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
     void requestDirectoryRefresh(){
       // trigger application manager to call discovery.discoveryRequest()
-      DEBUG_PRINT("\n%s::requestDirectoryRefresh()",interfaceName.c_str());
+      DEBUG_INFO("%s::requestDirectoryRefresh()",interfaceName.c_str());
       // state will be recalled when directory service has finished
       saveState();                
       // indicate we are busy      
@@ -563,12 +563,12 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       // reset the timer so we are not interrupted by a startSession()
       lastInvite = millis();
       // ask the application to perform a service discovery    
-      evt.type = EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE;
+      evt.type = EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH;
       fireEvent(&evt);            
     }
 
     virtual void handleRequestRefreshState(){    
-      DEBUG_PRINT("\n%s::handleRequestRefreshState()",interfaceName.c_str());  
+      DEBUG_INFO("%s::handleRequestRefreshState()",interfaceName.c_str());  
       requestDirectoryRefresh();
     }
 
@@ -607,14 +607,14 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
      
       // if we recived a directory update by event, we populate the session with its content
       if (rtpDirectory != nullptr){
-        DEBUG_PRINT("\n%s:retrieving directory entries",interfaceName.c_str());
+        DEBUG_INFO("%s:retrieving directory entries",interfaceName.c_str());
         for (int i = 0; i < rtpDirectory->epCount; i++) {
           if (rtpDirectory->ep[i].name != "") {
             dsAppleMidiSessions.name[dsAppleMidiSessions.count++] = concatStrings(rtpDirectory->ep[i].name, " (", rtpDirectory->ep[i].ip.toString(), ":", rtpDirectory->ep[i].port, ")");          
           }         
         }
       }else{
-        DEBUG_PRINT("\n%s: null directory",interfaceName.c_str());
+        DEBUG_WARN("%s: null directory",interfaceName.c_str());
       }
 
       // we had the saved session in the directory entries if not already existing
@@ -742,8 +742,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
 
     virtual void handlePropertyChange(){
-      DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());
-      handleDisconnectService();  // force to reconnect
+      DEBUG_INFO("%s::handlePropertyChange()",interfaceName.c_str());
+      handleDisconnectService();  
+      handleConnectService();
     }
 
 
@@ -759,10 +760,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       bool changed = false;
       if (parseSession(property, sessionOptions, sizeof(sessionOptions), sessionName, sizeof(sessionName), ipAddress, sizeof(ipAddress), port)){
 
-        DEBUG_PRINT("\n\t%s::restoreProperty: %s", interfaceName.c_str(), sessionOptions);
-        DEBUG_PRINT("\n\tsessionName: %s", sessionName);
-        DEBUG_PRINT("\n\tipAddress: %s", ipAddress);
-        DEBUG_PRINT("\n\tport: %d", port);
+        DEBUG_INFO("\t%s::restoreProperty: %s", interfaceName.c_str(), sessionOptions);
+        DEBUG_INFO("\tsessionName: %s", sessionName);
+        DEBUG_INFO("\tipAddress: %s", ipAddress);
+        DEBUG_INFO("\tport: %d", port);
 
         if (strcmp(sessionName, PASSIVE_SESSION_NAME) == 0) {
             if (sessionType != APPLEMIDI_PASSIVE) changed = true;
@@ -813,7 +814,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     
     // Méthode de l'instance réellement appelée
     void handleConnected(const ssrc_t& ssrc, const char* name) {
-      DEBUG_PRINT("\n\nappleMidi session #%i %s connected\n", ssrc, name);
+      DEBUG_INFO("appleMidi session #%i %s connected\n", ssrc, name);
       midiSessionName = String(name);
       setStateReady();
       // wake up
@@ -821,7 +822,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }    
 
     void handleDisconnected(const ssrc_t& ssrc) {
-      DEBUG_PRINT("\n\nappleMidi session #%i disconnected\n", ssrc);
+      DEBUG_INFO("appleMidi session #%i disconnected\n", ssrc);
       if (state.enabled == false) setStateDisabled();
       else setStateDisconnected();
       lastInvite = 0;    // we reset the timer that controls the periodicity of the invites because in case of disconnection, we want to trigger a new session (invite or passive immediately to reconnect as soon as possible)
@@ -911,7 +912,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
           exception = UNDEF_EXCEPTION;
           break;
       }
-      DEBUG_PRINT("\nAppleMIDI Exception: %s (value:%i)",exception.c_str(),value);
+      DEBUG_INFO("AppleMIDI Exception: %s (value:%i)",exception.c_str(),value);
       //handleDisconnected(); is then called by the library
     }    
 
@@ -920,7 +921,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }   
 
     void setStatePassiveSession(){
-      DEBUG_PRINT("\nAppleMIDIInterface::setStatePassiveSession");      
+      DEBUG_INFO("AppleMIDIInterface::setStatePassiveSession");      
       //"details": "footswitch (192.168.0.56/5004) ready to be invited",
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_LISTENING;
@@ -945,7 +946,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
     void setStateRefreshing(){
-      DEBUG_PRINT("\n%s::setStateRefreshing()",interfaceName.c_str()); 
+      DEBUG_INFO("%s::setStateRefreshing()",interfaceName.c_str()); 
       state.details = "Getting things up to date...";   // retour semantique for the user, without changing the interface state
       state.progress = -1;  // hide the progress bar
       state.led = "green fast";
@@ -954,7 +955,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
     void setStateActiveSession(){
-      DEBUG_PRINT("\n%s::setStateActiveSession() to %s:%d",destination->host.c_str(),interfaceName.c_str(), rtpPort);  
+      DEBUG_INFO("%s::setStateActiveSession() to %s:%d",destination->host.c_str(),interfaceName.c_str(), rtpPort);  
 
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;
 
@@ -997,12 +998,12 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
     void saveState(){
       savedState = state;            
-      DEBUG_PRINT("\n%s:saveState() : code:%d/%s/%s",interfaceName.c_str(),savedState.code,savedState.label.c_str(),state.details.substring(0,30).c_str());      
+      DEBUG_INFO("%s:saveState() : code:%d/%s/%s",interfaceName.c_str(),savedState.code,savedState.label.c_str(),state.details.substring(0,30).c_str());      
     }
 
     void recallState(){      
       state = savedState;
-      DEBUG_PRINT("\n%s:recallState() : code:%d/%s/%s",interfaceName.c_str(),state.code,state.label.c_str(),state.details.substring(0,30).c_str());      
+      DEBUG_INFO("%s:recallState() : code:%d/%s/%s",interfaceName.c_str(),state.code,state.label.c_str(),state.details.substring(0,30).c_str());      
     }
 
     void startSession(){      
@@ -1014,13 +1015,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
     virtual bool handleConnectService() override{
-      DEBUG_PRINT("\n%s::handleConnectService()",name.c_str());
+      DEBUG_INFO("%s::handleConnectService()",name.c_str());
       // we connect the midi client to its callback
       // this should not go to the begin
       
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;      
       if (appleMidiClient == nullptr) {
-        DEBUG_PRINT("\nError: AppleMIDI client is null");
+        DEBUG_WARN("Error: AppleMIDI client is null");
         return false;
       }
 
@@ -1040,7 +1041,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
     virtual bool handleDisconnectService() override{      
-      DEBUG_PRINT("\n%s::handleDisconnectService()",name.c_str());
+      DEBUG_INFO("%s::handleDisconnectService()",name.c_str());
       if (state.enabled == false) setStateDisabled();
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;       
       if (appleMidiClient != nullptr) appleMidiClient->endSession();

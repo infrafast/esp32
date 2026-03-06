@@ -83,7 +83,7 @@ namespace Interval {
         JsonDocument bank;
         DeserializationError error = deserializeJson(bank, value);
         if (error){
-          DEBUG_PRINT("\ndeserialize()::%s",error.c_str());
+          DEBUG_INFO("deserialize()::%s",error.c_str());
           return false;
         }else{
   
@@ -121,7 +121,7 @@ namespace Interval {
             strips.push_back(strip);
           }  
         }else{
-          DEBUG_PRINT("\nbuildStrip(%s) failed",jsonStripString.c_str());
+          DEBUG_ERROR("\nbuildStrip(%s) failed",jsonStripString.c_str());
         }
         return strip;
       }

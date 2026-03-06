@@ -12,7 +12,7 @@ class DMXInterface : public DeviceInterface{
     }
     
     virtual bool begin(){     // called by init()
-      DEBUG_PRINT("\n%s::begin() setStateNotImplemented",interfaceName.c_str());
+      DEBUG_INFO("%s::begin() setStateNotImplemented",interfaceName.c_str());
       setStateNotImplemented();
       return true;
     };        

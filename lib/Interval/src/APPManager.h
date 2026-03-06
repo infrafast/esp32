@@ -155,7 +155,7 @@ typedef bool (*ParseJsonInputCallback)(JsonObject&,JsonAnswer*);
 //typedef void (*NetworkChangeStateCallback)(bool state);
 
 bool defaultParseJsonInputCallback(JsonObject& jsonObject,JsonAnswer* jsonAnswer){
-  DEBUG_PRINT("\ndefaultParseJsonInputCallback: %s",jsonObject["command"].as<String>().c_str());
+  DEBUG_INFO("defaultParseJsonInputCallback: %s",jsonObject["command"].as<String>().c_str());
   return false;
 }
 
@@ -293,7 +293,7 @@ class Shortcuts: public DataProvider{
       if (addrr == ADDRESS_STIPID) return 0;       // 0 => means this is not an array of data but a javascript callback name
       else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
       else if (addrr == ADDRESS_MACRONAME) return MACRO_NUMBER_MAX;
-      DEBUG_PRINT("\n<%s>:DataSet getSize(%s) is not implemented",dataProviderName.c_str(),addrr.c_str());
+      DEBUG_WARN("<%s>:DataSet getSize(%s) is not implemented",dataProviderName.c_str(),addrr.c_str());
       return 0;
 
     }    
@@ -306,7 +306,7 @@ class Shortcuts: public DataProvider{
       }else if (addrr == ADDRESS_MACRONAME){
         return &dsMacroNamesValues[index];      
       }      
-      DEBUG_PRINT("\n<%s>:DataSet getValuePtr(%s,%d) is not implemented",dataProviderName.c_str(),addrr.c_str(),index);
+      DEBUG_WARN("<%s>:DataSet getValuePtr(%s,%d) is not implemented",dataProviderName.c_str(),addrr.c_str(),index);
       return &voidStatic;      
     }    
 
@@ -596,10 +596,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void internetCallBack(TargetEcho* internetEcho){
       ///////////////////////// do what application manager has to do when internet is connected/disconnected      
       if (internetEcho->alive){
-        DEBUG_PRINT("\n\n[ping]\t\t%s : internet connected\n\n",internetEcho->host.c_str()); 
+        DEBUG_INFO("[ping]\t\t%s : internet connected\n\n",internetEcho->host.c_str()); 
         checkRemoteVersion();               
       }else{
-        DEBUG_PRINT("\n\n[ping]\t\t%s : No internet connection, skipping remote version check\n\n",internetEcho->host.c_str());          
+        DEBUG_INFO("[ping]\t\t%s : No internet connection, skipping remote version check\n\n",internetEcho->host.c_str());          
       }       
       ///////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
@@ -683,7 +683,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       
       DeserializationError error = deserializeJson(jsonBanks, *bankJsonString);
       if (error){
-        DEBUG_PRINT("\ndeserializeBanks()::%s",error.c_str());
+        DEBUG_INFO("deserializeBanks()::%s",error.c_str());
         return nullptr;
       }else{              
         JsonObject root = jsonBanks.as<JsonObject>();      
@@ -804,10 +804,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       for (const auto& interface : interfaceRepo.interfaces){
         
         if (!interface->init(this)){
-          DEBUG_PRINT("\n%s->init() failed or is not fully implemented",interface->interfaceName.c_str());    
+          DEBUG_WARN("%s->init() failed or is not fully implemented",interface->interfaceName.c_str());    
         }
 
-        registerEventListener(interface);   // propagate the event
+        if (!registerEventListener(interface)){
+          DEBUG_ERROR("\n⛔ ApplicationManager::init() registerEventListener(%s) failed (max reached?) ",interface->interfaceName.c_str());
+          while(1);
+        };// propagate the event   
         
         bool exists = false;
         for (const String& g : groupesUniques) {
@@ -939,13 +942,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
       }
     
-      DEBUG_PRINT("\n\n[APP] ***************************************************");
-      DEBUG_PRINT("\n[APP] ******************* INIT FINISHED *****************");
-      DEBUG_PRINT("\n[APP] ***************************************************\n\n");     
+      DEBUG_INFO("[APP] ***************************************************");
+      DEBUG_INFO("[APP] ******************* INIT FINISHED *****************");
+      DEBUG_INFO("[APP] ***************************************************\n\n");     
     }
 
     void startup(uint8_t startupScreen){          
-      DEBUG_PRINT("\n[APP] ******************* startup *****************");
+      DEBUG_INFO("[APP] ******************* startup *****************");
       // save the screen to be called (wiuard or bank)
       hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);            
       // we init banks and then go to banks or fail screen
@@ -961,14 +964,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       checkAndDeleteFile(FIRMWARE_BIN_FILENAME);  // in case there is a .bin.gz file leftover from previous firmware update
       restoreScreen();       // restore the screen that persists 
-      DEBUG_PRINT("\n[APP] ******************* startup.end *****************\n\n");      
+      DEBUG_INFO("[APP] ******************* startup.end *****************\n\n");      
     }
 
     void disableUnusedInterface(){
       // unsused interfaces are the one which are not referred by any instanciated strips
       for (const auto& interface : interfaceRepo.interfaces){       
         if (interface->stripCount <=0 && interface->hasStrip){ // only for interfaces that are exposed => means they can be configured by user
-          DEBUG_PRINT("\n%s has no strip : DISABLED",interface->interfaceName.c_str());
+          DEBUG_INFO("%s has no strip : DISABLED",interface->interfaceName.c_str());
           //interface->switchDevice(false);  // BE CAREFULL
           interface->state.enabled = false;
         }
@@ -1014,7 +1017,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         case EVENT_NETWORK_CONNECTION_CHANGED:
           setIcons();
         break;         
-        case EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE:
+        case EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH:
           directoryService.discoveryRequest();
         break;
         case EVENT_ANALOG_BUTTON:
@@ -1070,7 +1073,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
                 interface->state.broadcastState = true;
                 interface->save();
               }else{
-                DEBUG_PRINT("\n[DCLIC]\t\tInterface %s is not switchable",interface->interfaceName.c_str());
+                DEBUG_INFO("[DCLIC]\t\tInterface %s is not switchable",interface->interfaceName.c_str());
               }
             }
           }        
@@ -1125,7 +1128,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         screen.state = STATE_UTILS_SHOW_PROGRESS_SINGLE;           
         setBinaryFlashScreen();
       }else{
-        DEBUG_PRINT("\nPreparing SW update prompt screen for v%s",newSWversion.c_str());
+        DEBUG_INFO("Preparing SW update prompt screen for v%s",newSWversion.c_str());
         // prepare software update promnpt screen
         promptParams.message = concatStrings(*lang.getString("Update to firmware")," v",newSWversion,"?");              
         
@@ -1433,7 +1436,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // at the moment, this is hard coded
     if (buttonID == hwm->buttons[MIDDLEB]->getID()){
       if (!stripAction(IntervalButton::BUTTON_SIMPLE_CLIC)){
-        DEBUG_PRINT("\nstripAction failed");
+        DEBUG_WARN("stripAction failed");
         // code if execution fails: example: popup a message with the error
       }
     }
@@ -1481,10 +1484,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // Ouvrir le fichier en écriture
     File file = LittleFS.open(bankFileName, "w");
     if (!file) {
-      DEBUG_PRINT("\nError creation:%s",bankFileName.c_str());          
+      DEBUG_ERROR("\nError creation:%s",bankFileName.c_str());          
     }else{
       if (file.print(serializeBanks()) == 0){
-        DEBUG_PRINT("\nError writting to:%s",bankFileName.c_str());
+        DEBUG_ERROR("\nError writting to:%s",bankFileName.c_str());
         success = false;
       }
       file.close();
@@ -1501,11 +1504,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       if (file) {
         bankDefinition = file.readString();  // lit tout le contenu
       }else{
-        DEBUG_PRINT("\n%s open failed, using default bank definition",bankFileName.c_str());          
+        DEBUG_WARN("%s open failed, using default bank definition",bankFileName.c_str());          
       }        
       file.close();
     }else{
-      DEBUG_PRINT("\n%s doesnt exists, using default bank definition",bankFileName.c_str()); 
+      DEBUG_WARN("%s doesnt exists, using default bank definition",bankFileName.c_str()); 
     }
 
     return deserializeBanks(&bankDefinition) != nullptr ? true:false;
@@ -1809,7 +1812,7 @@ void setup() {
     bool shutdownDone = false;
     void shutdownInterfaces(){
       // called when system stops
-      DEBUG_PRINT("\nshuting down interfaces");     
+      DEBUG_INFO("shuting down interfaces");     
       shutdownDone = true;           
       for (const auto& interface : interfaceRepo.interfaces){       
         interface->end();
@@ -1819,7 +1822,7 @@ void setup() {
 
     void stopInterfaces(){
       // called when network change its media and we need to correcly close all connection
-      DEBUG_PRINT("\nshuting down interfaces");     
+      DEBUG_INFO("stoping down interfaces");     
       shutdownDone = true;           
       for (const auto& interface : interfaceRepo.interfaces){       
         interface->stop();    
@@ -2143,7 +2146,7 @@ void setup() {
       if (hwm->configMedia != nullptr){
         if (webAppConnected && hwm->configMedia->state == CONNECTED){
           wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());  
-          DEBUG_PRINT("\n\n[BROADCAST]\t\t(%s)\n\n",msg.c_str());
+          DEBUG_INFO("[BROADCAST]\t\t(%s)\n\n",msg.c_str());
         }
       }     
     }
@@ -2171,14 +2174,14 @@ void setup() {
       LittleFSInfo fsInfo;
       getLittleFSInfo(fsInfo);     
       
-      DEBUG_PRINT("\nFree: %i, totalGBsize: %i,  fsInfo.freeSpace - totalGzSize: %i", fsInfo.freeSpace, totalGzSize, fsInfo.freeSpace - totalGzSize);
+      DEBUG_INFO("Free: %i, totalGBsize: %i,  fsInfo.freeSpace - totalGzSize: %i", fsInfo.freeSpace, totalGzSize, fsInfo.freeSpace - totalGzSize);
 
       if ( (int)((int)fsInfo.freeSpace - (int)totalGzSize) < 1024*8){  
         singlePromptScreen("file is too big","Abort");
         return false;
       }
 
-      DEBUG_PRINT("\nstreamToFile(%s) %i bytes",fullPath.c_str(),totalGzSize);            
+      DEBUG_INFO("streamToFile(%s) %i bytes",fullPath.c_str(),totalGzSize);            
       size_t totalWritten = 0;
       uint8_t buf[512];   // 256–1024 selon ta RAM
       while (true) {
@@ -2208,7 +2211,7 @@ void setup() {
     void shutdownWSS(){
       if (wss != nullptr){
         wss->shutdown();  // need the patch here: https://github.com/skaarj1989/mWebSockets/discussions/67#       
-        DEBUG_PRINT("\ndelete wss");
+        DEBUG_INFO("delete wss");
         delete wss; 
         wss = nullptr;
       }      
@@ -2226,13 +2229,13 @@ void setup() {
       shutdownWSS();
    
       if (hwm->configMedia->media == CABLE_MEDIA){
-        DEBUG_PRINT("\n\n[WSS]\t\tinstanciated\n\n");
+        DEBUG_INFO("[WSS]\t\tinstanciated\n\n");
         wss = new EthernetWebSocketServer{};
       }else if (hwm->configMedia->media == WIFI_MEDIA){ 
-        DEBUG_PRINT("\nnew WiFiWebSocketServer{}");
+        DEBUG_INFO("new WiFiWebSocketServer{}");
         wss = new WiFiWebSocketServer{};                
       }else{
-        DEBUG_PRINT("\n\n[WSS]\t\tinstanciation failed, no media\n\n");
+        DEBUG_ERROR("\n[WSS]\t\tinstanciation failed, no media\n\n");
         return;
       }
       
@@ -2251,7 +2254,7 @@ void setup() {
           if (webServer == nullptr){          
             //start webserver     
             //DEBUG_PRINT("\nDump before webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
-            DEBUG_PRINT("\n\n[WEBAPP]\t\tstart\n\n");       
+            DEBUG_INFO("[WEBAPP]\t\tstart\n\n");       
             
             webServer = new Application();
             webServer->setTimeout(3000);
@@ -2282,7 +2285,7 @@ void setup() {
           //else 
           hwm->configURL = ipURL;     // experience shows that if we use MDNS to connect, request is more slow and lead to some UDP packet conflict, so we prefer only exposing the IP to connect
 
-          DEBUG_PRINT("\n\n[WEBAPP]\t\tserving on %s",hwm->configURL.c_str() );
+          DEBUG_INFO("[WEBAPP]\t\tserving on %s",hwm->configURL.c_str() );
           //DEBUG_PRINT("\nDump after webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
           return true;
         }
@@ -2297,7 +2300,7 @@ void setup() {
         delete webServer;
         webServer = nullptr;
       }
-      DEBUG_PRINT("\nWebAppservices down");        
+      DEBUG_INFO("WebAppservices down");        
     }
     
     #define MIME_TYPES_MAX 15
@@ -2371,7 +2374,7 @@ void setup() {
           return;
         }
         if (path == "/upload") {
-          DEBUG_PRINT("\nupload has been CALLED");
+          DEBUG_INFO("upload has been CALLED");
           String message = "Abort";
           httpUpload(req, res);
           return;
@@ -2426,7 +2429,7 @@ void setup() {
       res.set("Content-Type", mimeType.c_str());
       res.set("Access-Control-Allow-Origin","*");
 
-      DEBUG_PRINT("\n[WEBAPP]\t\tserving %s",fullPath.c_str());
+      DEBUG_INFO("[WEBAPP]\t\tserving %s",fullPath.c_str());
 
       sendFileInChunks(&file, &res);
       res.end();
@@ -2468,7 +2471,7 @@ void setup() {
       // 2) lire headers de la part (Content-Disposition) jusqu'à ligne vide
       String cd;
       while (readLine(req, line)) {
-        DEBUG_PRINT("\nLine: %s",line.c_str());
+        DEBUG_INFO("Line: %s",line.c_str());
         if (line.length() == 0) break;
         if (line.startsWith("Content-Disposition:")) cd = line;
       }
@@ -2998,7 +3001,7 @@ void setup() {
           jsonAnswer.value = jsonInput.as<String>();            
         }
       }else if (command == "scanWifi"){        // Create the parrallel scan task
-        DEBUG_PRINT("\n\n[WiFi Scan]\t\tstart\n\n");
+        DEBUG_INFO("[WiFi Scan]\t\tstart\n\n");
         xTaskCreate(
           scanNetworksTaskWrapper,  // Function to implement the task
           "ScanNetworks",     // Name of the task
@@ -3091,7 +3094,7 @@ void setup() {
                   jsonAnswer.value = "1";   
                   // we check if we delete the strip which is currently focused
                   if (indexToDelete == currentStrip->index){                   
-                    DEBUG_PRINT("\nDELETED FOCUSED STRIP");
+                    DEBUG_INFO("DELETED FOCUSED STRIP");
                     restoreScreen();
                   }else{
                     // since updatePositions has shifted the index, the selector points to a strip that is not the one which was preivously displayed, we restore it
@@ -3160,11 +3163,11 @@ void setup() {
 
           // 3. Gérer l'affichage ou la banque active
           if (bankIndex == screen.state || screen.id == SCREEN_BANK_SWITCH) {
-            DEBUG_PRINT("\nDELETE CURRENT BANK, jumping to bank 0");
+            DEBUG_INFO("DELETE CURRENT BANK, jumping to bank 0");
             screen.state = 0;
             triggerRedraw();
           } else {
-            DEBUG_PRINT("\nBank deleted");
+            DEBUG_INFO("Bank deleted");
           }
 
           refreshBankMenu();   // rebuild the bank switch menu
@@ -3245,7 +3248,7 @@ void setup() {
               jsonAnswer.value = "interface save error";                
             }
           }else{
-            DEBUG_PRINT("\nInterface no change");
+            DEBUG_INFO("Interface no change");
             interface->handleRequestRefreshState(); // to call for specific things like refreshing the exposed params list            
             jsonAnswer.callback=RET_SAVEBUTTON;
             jsonAnswer.value ="0";            
@@ -3375,7 +3378,7 @@ void setup() {
 /*      WiFi.mode(WIFI_STA); // dixit chatgpt mais d'apres mes tests ce n'est pas necessaire 
       vTaskDelay(500);*/
       int numberOfNetworks = WiFi.scanNetworks();
-      DEBUG_PRINT("\n\n[WiFi Scan]\t\tcomplete\n\n");
+      DEBUG_INFO("[WiFi Scan]\t\tcomplete\n\n");
       for (int i = 0; i < numberOfNetworks && i<MAX_NUMBER_OF_NETWORK_TO_REPORT; i++) {
         //DEBUG_PRINT("\nNetwork name: %s",WiFi.SSID(i).c_str());
         scannedWifi.add(WiFi.SSID(i));
@@ -3435,7 +3438,7 @@ void setup() {
         if (!req.form(name, MAX_POST_COMMAND_SIZE, options, OPTION_SIZE)){
             res.sendStatus(400); // Internal Server Error
             String err = "{\"error\": \"value-pair oversize or missing\"}";
-            DEBUG_PRINT("\t%s",err.c_str());
+            DEBUG_WARN("\t%s",err.c_str());
             res.print(err.c_str());
             continue; // Ignorer cette itération
             //return;          
@@ -3445,12 +3448,12 @@ void setup() {
         if (strlen(name) >= MAX_POST_COMMAND_SIZE || strlen(options) >= OPTION_SIZE) {            
             res.sendStatus(500); // Internal Server Error
             String err = "{\"error\": \"Parameters too long\"}";
-            DEBUG_PRINT("\t%s",err.c_str());
+            DEBUG_WARN("\t%s",err.c_str());
             res.print(err.c_str());
             continue; // Ignorer cette itération
         }        
         
-        DEBUG_PRINT("\n\n[HTTP-POST]\t\treceived <%s><%s>\n\n",name,options);
+        DEBUG_INFO("[HTTP-POST]\t\treceived <%s><%s>\n\n",name,options);
         String jsonAnswer = parseJsonInput(name);        
 
         // version compressée
@@ -3653,10 +3656,10 @@ void setup() {
       }else{        
         if (banks.size() == 1){
           bankMenu->get_root_menu().add_item(new MenuItem(banks[0]->name.c_str(), &switchToBank_item_selected));               
-          DEBUG_PRINT("\nMenu bank one item: %s",banks[0]->name.c_str());  
+          DEBUG_INFO("Menu bank one item: %s",banks[0]->name.c_str());  
         }else{
           bankMenu->get_root_menu().add_item(new MenuItem(lang.getString(NO_BANK_MENU_ITEM)->c_str(),&back_menu_item_selected));                         
-          DEBUG_PRINT("\nEmpty menu bank");
+          DEBUG_WARN("Empty menu bank");
         }
       }
     }    

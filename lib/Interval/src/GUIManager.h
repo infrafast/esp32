@@ -119,7 +119,7 @@ class GUIManager : public GenericComponent {
       iconOfr.setDebugLevel( OFR_INFO | OFR_ERROR);*/
 
       if (labelOfr.loadFont(TTF_FONT, sizeof(TTF_FONT))) { // this consumes 20992 bytes and take ~2ms
-        DEBUG_PRINT("\nLabel Initialise error"); 
+        DEBUG_ERROR("\nLabel Initialise error"); 
       }
       
       /*
@@ -144,7 +144,7 @@ class GUIManager : public GenericComponent {
         //DEBUG_PRINT("\ndataSize: %i, sizeof(buffer):%i sizeof(TTF_ICON):%i",dataSize,sizeof(fontBuffer),sizeof(TTF_ICON));
         if (iconOfr.loadFont(fontBuffer.buffer, dataSize)) { // this consumes 20992 bytes and take ~2ms      
           //if (iconOfr.loadFont(TTF_ICON, sizeof(TTF_ICON))) {
-          DEBUG_PRINT("\nIcon Initialise error with compressed font"); 
+          DEBUG_ERROR("\nIcon Initialise error with compressed font"); 
         }
       }else{
         /*if (iconOfr.loadFont(TTF_FONT, sizeof(TTF_FONT))) { //  use the default font as icon
@@ -180,7 +180,7 @@ class GUIManager : public GenericComponent {
     void clearScreenBuffer(){
       clearBuffer = true;
       //screenBuffer.fillSprite(TFT_BGCOLOR); 
-      DEBUG_PRINT("\nclearScreenBuffer true");
+      DEBUG_INFO("clearScreenBuffer true");
     }
 
     bool refresh(bool force=false) {  

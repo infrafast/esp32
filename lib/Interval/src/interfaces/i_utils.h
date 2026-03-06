@@ -23,14 +23,14 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     }
   
       virtual void load() override{
-        DEBUG_PRINT("\n%s::load() default ignored => DISABLED", interfaceName.c_str()); 
+        DEBUG_INFO("%s::load() default ignored => DISABLED", interfaceName.c_str()); 
         // ignore the given parameter. Just enable the interface
         state.enabled = false;       
         hasStrip = true;             // textStrip...
       }
 
       virtual bool save() override{
-        DEBUG_PRINT("\n%s::save() IGNORED", interfaceName.c_str()); 
+        DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str()); 
         return true;
       } 
 
@@ -39,7 +39,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     virtual void* read(){return nullptr;}
     
     virtual bool begin(){
-      DEBUG_PRINT("\n%s::begin() => registered systemDS",interfaceName.c_str());          
+      DEBUG_INFO("%s::begin() => registered systemDS",interfaceName.c_str());          
       systemDS.registerDataSetAddress(dsText.address);      // register all ds             
 
       //dataProviderName = getProviderNameForData();      
@@ -66,7 +66,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
 
       }
      
-      DEBUG_PRINT("\n<%s>DataSet getSize(%s) is not implemented",dataProviderName.c_str(),addrr.c_str());
+      DEBUG_ERROR("<%s>DataSet getSize(%s) is not implemented",dataProviderName.c_str(),addrr.c_str());
       return 0;
 
     }    
@@ -92,7 +92,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
         }      
       }     
 
-      DEBUG_PRINT("\n<%s>DataSet getValuePtr(%s,%d) is not implemented",dataProviderName.c_str(),addrr.c_str(),index);
+      DEBUG_ERROR("<%s>DataSet getValuePtr(%s,%d) is not implemented",dataProviderName.c_str(),addrr.c_str(),index);
       return &voidStatic;      
     }
 
@@ -114,21 +114,21 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
 
       virtual void load() override{
-        DEBUG_PRINT("\n%s::load() default ignored => ENABLE", interfaceName.c_str()); 
+        DEBUG_INFO("%s::load() default ignored => ENABLE", interfaceName.c_str()); 
         // ignore the given parameter. 
         state.enabled = false;          // the interface is forced disabled at startup as we do not need to browse network until a request is sent (by startWebApp to publish DNS name or by appleMidi to advert)
         hasStrip = false;             
       }
 
       virtual bool begin(){     // called by init()
-        DEBUG_PRINT("\n%s::begin() registering serviceFoundWrapper and _instance",interfaceName.c_str());
+        DEBUG_INFO("%s::begin() registering serviceFoundWrapper and _instance",interfaceName.c_str());
         instance_ = this;  // enregistrer l’instance active       // we don't do that in the constructor as the instance has multiple heritage, hence we want to be sure the object is fully created
         EthernetBonjour.setServiceFoundCallback(&DirectoryInterface::serviceFoundWrapper);  
         return true;        
       }
 
       virtual bool save() override{
-        DEBUG_PRINT("\n%s::save() IGNORED", interfaceName.c_str()); 
+        DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str()); 
         return true;
       }      
 
@@ -151,7 +151,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
      
       virtual bool handleConnectService(){
-        DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
+        DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
         String baseName = *systemCfg.getString(S_AP_NAME);
 
         if (hwm.network->media == WIFI_MEDIA){
@@ -159,7 +159,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
             MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", APPLE_MIDI_PORT);
             MDNS.addService("http", "tcp", 80);                                
           }else{
-            DEBUG_PRINT("\nMDNS registration <%s> failed",baseName.c_str());
+            DEBUG_ERROR("MDNS registration <%s> failed",baseName.c_str());
           }
         }else if (hwm.network->media == CABLE_MEDIA){
           String midiName = concatStrings(baseName, "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
@@ -168,7 +168,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
             EthernetBonjour.addServiceRecord(midiName.c_str(), APPLE_MIDI_PORT,MDNSServiceUDP);
             EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
           }else{
-            DEBUG_PRINT("\nEthernetBonjour registration <%s> failed", baseName.c_str());
+            DEBUG_INFO("EthernetBonjour registration <%s> failed", baseName.c_str());
           } 
         }
 
@@ -180,7 +180,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
 
       void discoveryRequest(){
-        DEBUG_PRINT("\n%s::discoveryRequest()",interfaceName.c_str());   
+        DEBUG_INFO("%s::discoveryRequest()",interfaceName.c_str());   
         if (deviceInterface->state.enabled){       
           // drop the request if interface is up and running
           startDiscovery();
@@ -192,7 +192,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }      
       
       virtual bool handleDisconnectService(){
-        DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
+        DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
         if (hwm.network->lastActiveMedia == CABLE_MEDIA){
           // eth
           EthernetBonjour.stop();
@@ -272,10 +272,10 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
 
       void epDirectoryUpdated(){
-        DEBUG_PRINT("\n\n[RTP]\t\tScan terminé (timeout).");
-        DEBUG_PRINT("\n[RTP]\t\t%d endpoint(s) mémorisé(s):\n", rtpDir.epCount);      
+        DEBUG_INFO("[RTP]\t\tScan terminé (timeout).");
+        DEBUG_INFO("[RTP]\t\t%d endpoint(s) mémorisé(s):\n", rtpDir.epCount);      
         for (int i = 0; i < rtpDir.epCount; i++) {
-          DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
+          DEBUG_INFO("  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
         }
         // midi interface has to update its config and regenerate its state      
         evt.type = EVENT_DIRECTORY_SERVICE_REFRESHED;
@@ -284,7 +284,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
 
       void epDirectoryNotReady(){
-        DEBUG_PRINT("\n\n[RTP]\t\tDirectory not ready");
+        DEBUG_INFO("[RTP]\t\tDirectory not ready");
         evt.type = EVENT_DIRECTORY_NOT_READY;
         evt.data = &rtpDir;
         fireEvent(&evt);        
@@ -296,7 +296,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         if (hwm.network->media == CABLE_MEDIA){
           // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
           EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, EP_DISCOVERY_TIME_OUT); // :contentReference[oaicite:3]{index=3} 
-          DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
+          DEBUG_INFO("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
         }else{
           // Wifi = bloquant
           xTaskCreate(
@@ -311,7 +311,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
 
       void wiFiRTPDiscoveryTask(){
-        DEBUG_PRINT("\n\n[RTP-WiFi]\t\tScan RTP-MIDI lancé...\n");     
+        DEBUG_INFO("[RTP-WiFi]\t\tScan RTP-MIDI lancé...\n");     
         int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
         DEBUG_PRINT("\ntrouvé %d service(s) AppleMIDI\n", n);
         for (int i = 0; i < n; i++) {

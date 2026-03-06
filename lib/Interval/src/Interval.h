@@ -61,6 +61,13 @@ bool useUSBMidi = false;
   #define debugMon Serial  //  
   SemaphoreHandle_t serialMutex = xSemaphoreCreateMutex();
   #define DEBUG_PRINT(...) if (!useUSBMidi) if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(500))) { debugMon.printf(__VA_ARGS__); debugMon.flush(); xSemaphoreGive(serialMutex);} else (void)0
+  
+  // Macros publiques
+  #define DEBUG_INFO(...)  DEBUG_PRINT("\nℹ\t" __VA_ARGS__)    //✅
+  #define DEBUG_WARN(...)  DEBUG_PRINT("\n⚠️\t" __VA_ARGS__)
+  #define DEBUG_ERROR(...) DEBUG_PRINT("\n⛔\t" __VA_ARGS__)
+  
+
 #else
   #define DEBUG_PRINT(...) 
   #define debugMon 0
@@ -508,7 +515,7 @@ enum EventType : uint8_t {
   EVENT_NETWORK_CONNECTED,
   EVENT_NETWORK_CONNECTION_CHANGED,
   EVENT_INTERNET_PING,
-  EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE,
+  EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH,
   EVENT_DIRECTORY_SERVICE_REFRESHED,
   EVENT_DIRECTORY_NOT_READY,
   EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED,
@@ -525,7 +532,7 @@ static const char* const EVENT_NAMES[EVENT_COUNT] = {
   "EVENT_NETWORK_CONNECTED",
   "EVENT_NETWORK_CONNECTION_CHANGED",
   "EVENT_INTERNET_PING",
-  "EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE",
+  "EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH",
   "EVENT_DIRECTORY_SERVICE_REFRESHED",
   "EVENT_DIRECTORY_NOT_READY",
   "EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED",
@@ -585,9 +592,9 @@ class Event {
     static void dump(const char* direction,const char* caller, uint8_t id) {
       if (!isEventDumpEnabled(id)) return;
       const char* eventName = getEventName(id);
-      DEBUG_PRINT("\n+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
-      DEBUG_PRINT("\n| %s %s %s",caller,direction,eventName);
-      DEBUG_PRINT("\n+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
+      DEBUG_INFO("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
+      DEBUG_INFO("| %s %s %s",caller,direction,eventName);
+      DEBUG_INFO("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
     }  
 
     static uint32_t eventDumpMask;    
@@ -654,14 +661,16 @@ public:
   bool registerEventListener(EventListener* listener) {
     if (!listener) return false;
 
+    //1️⃣ Première boucle : vérifier si le listener est déjà enregistré
     for (uint8_t i = 0; i < maxHandlers; i++) {
       if (eventHandlers[i].context == listener &&
           eventHandlers[i].fn == EventListener::eventTrampoline) {
-        DEBUG_PRINT("\nEventDispatcher: listener already registered");
+        DEBUG_WARN("EventDispatcher: listener already registered");
         return false;
       }
     }
 
+    //2️⃣ Deuxième boucle : trouver une place libre
     for (uint8_t i = 0; i < maxHandlers; i++) {
       if (!eventHandlers[i].fn) {
         eventHandlers[i].context = listener;
@@ -670,7 +679,7 @@ public:
       }
     }
 
-    DEBUG_PRINT("\n\n\t\t\t\t\t !!! EventDispatcher IS FULL !!! \n\n");
+    DEBUG_ERROR("\t\t\t\t\t !!! EventDispatcher IS FULL !!! \n\n");
     return false;
   }
 
@@ -715,13 +724,13 @@ private:
 
 bool checkAndDeleteFile(const char* filename) {
     if (LittleFS.exists(filename)) {
-        DEBUG_PRINT("⚠️ Fichier trouvé: %s → suppression...\n", filename);
+        DEBUG_INFO("Fichier trouvé: %s → suppression...\n", filename);
 
         if (LittleFS.remove(filename)) {
-            DEBUG_PRINT("✅ Fichier supprimé avec succès");
+            DEBUG_INFO("Fichier supprimé avec succès");
             return true;
         } else {
-            DEBUG_PRINT("❌ Échec de la suppression");
+            DEBUG_ERROR("Échec de la suppression");
             return false;
         }
     }
@@ -1763,7 +1772,7 @@ void scanNetworksTaskWrapper(void * parameter){
 void ping(PingParameters* params) {
 
   // NB: host resolution doesnt work
-  DEBUG_PRINT("\n\n[ping] %s",params->echo->host.c_str());
+  DEBUG_INFO("[ping] %s",params->echo->host.c_str());
   if (WiFi.hostByName(params->echo->host.c_str(), params->echo->ip) == 1){
 
     //DEBUG_PRINT("\npingTask running...");  
@@ -1817,7 +1826,7 @@ void connectHTTPTask(void *parameter) {
   if (xSemaphoreTake(hwm.network->networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){ 
 
     AsyncHttpClient *clientObj = static_cast<AsyncHttpClient *>(parameter);
-    DEBUG_PRINT("\nconnectHTTPTask(%s,%s,%i,<%s>)",clientObj->host.toString().c_str(),clientObj->URL.c_str(),clientObj->port,clientObj->post.c_str());
+    DEBUG_INFO("connectHTTPTask(%s,%s,%i,<%s>)",clientObj->host.toString().c_str(),clientObj->URL.c_str(),clientObj->port,clientObj->post.c_str());
      
     Client* client = clientObj->client;  
 
@@ -1851,7 +1860,7 @@ void connectHTTPTask(void *parameter) {
         httpClient.endRequest();
 
         int httpStatusCode = httpClient.responseStatusCode();
-        DEBUG_PRINT("\nStatut HTTP : %d\n", httpStatusCode);
+        DEBUG_INFO("Statut HTTP : %d\n", httpStatusCode);
 
         if (httpStatusCode == 200) {
           httpClient.skipResponseHeaders();    // we want to read the body only
@@ -1907,7 +1916,7 @@ void connectHTTPTask(void *parameter) {
     xSemaphoreGive(hwm.network->networkBusy);
 
   }else{
-    DEBUG_PRINT("\nconnectHTTPTask: networkbusy");
+    DEBUG_WARN("connectHTTPTask: networkbusy");
   }
   vTaskDelay(1);
   vTaskDelete(NULL);
@@ -2005,7 +2014,7 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                String& outRemoteVersion,
                                String& outFileUrl)
 {
-  DEBUG_PRINT("\n\n[FWUPDATE]\t\t(v%s) Listing: %s", _V, baseUrl.c_str());
+  DEBUG_INFO("[FWUPDATE]\t\t(v%s) Listing: %s", _V, baseUrl.c_str());
 
   // 1) GET du listing
   UrlParts u = parseUrl(baseUrl);
@@ -2066,11 +2075,11 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
   }
 
   if (!foundNewer) {
-    DEBUG_PRINT("/!\\Aucune version valide trouvée");
+    DEBUG_INFO("/!\\Aucune version valide trouvée");
     return 0;
   }
   if (!(best > cur)) { // strictement supérieure
-    DEBUG_PRINT("Version distante %.2f <= locale %.2f", best, cur);
+    DEBUG_INFO("Version distante %.2f <= locale %.2f", best, cur);
     return 0;
   }
 
@@ -2180,13 +2189,13 @@ void removeFreezeNotification(){
 bool installGZBinaryFromStream(StreamParams* params){
   bool success = false;
   app.flashBinaryInprogress = true;
-  DEBUG_PRINT("\nPeforming binary update from stream");
+  DEBUG_INFO("Peforming binary update from stream");
 
   GzUnpacker GZUnpacker;
 
   lastFileProgress = 0;           // reset pour le nouveau fichier    
   proportionalSize = totalGzSize;  // we deal with a single file here
-  DEBUG_PRINT("\nTotalGZsize = %d\n", totalGzSize);  
+  DEBUG_INFO("TotalGZsize = %d\n", totalGzSize);  
   
   notifyWebappFlashing();
 
@@ -2219,7 +2228,7 @@ void checkAndInstallBinaryFromFile() {
   // then we have to clean /tmp
   
   if (LittleFS.exists(FIRMWARE_BIN_FILENAME)){
-    DEBUG_PRINT("\nfound %s",FIRMWARE_BIN_FILENAME);
+    DEBUG_INFO("found %s",FIRMWARE_BIN_FILENAME);
     File* fileStream = new File(LittleFS.open(FIRMWARE_BIN_FILENAME, FILE_READ));
     if (!fileStream) {
       app.singlePromptScreen("Firmware open error","Abort");      
@@ -2243,10 +2252,10 @@ void checkAndInstallBinaryFromFile() {
       2,                // Priorité
       nullptr
     );
-    DEBUG_PRINT("\ninstallGZBinaryFromStreamTask created");        
+    DEBUG_INFO("installGZBinaryFromStreamTask created");        
     return;
   }
-  DEBUG_PRINT("\nNo binary update found");
+  DEBUG_INFO("No binary update found");
   app.restoreScreen();
 }
 
@@ -2256,7 +2265,7 @@ bool expandTGZstreamToFS(StreamParams* params){
   
   Stream* httpStream = params ? params->stream : nullptr;
   bool ownsStream = params ? params->ownsStream : false;  
-  DEBUG_PRINT("\ntotalGzSize: %i",totalGzSize);
+  DEBUG_INFO("totalGzSize: %i",totalGzSize);
 
   bool success = false;   
   TarGzUnpacker *TARGZUnpacker = getTarGzUnpacker();
@@ -2278,11 +2287,11 @@ bool expandTGZstreamToFS(StreamParams* params){
   delete params;
 
   if (success){
-    DEBUG_PRINT("\nUntarGz successful, checking for binary to install");
+    DEBUG_INFO("UntarGz successful, checking for binary to install");
     screen.id = SCREEN_UTILS;
     screen.state = STATE_UTILS_CHECK_BINARY;    
   }else{
-    DEBUG_PRINT("\nUntarGz failed: %s",updateSWerrorString.c_str());
+    DEBUG_INFO("UntarGz failed: %s",updateSWerrorString.c_str());
     app.singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Abort");    
   }
   app.downloadSreamInprogress = false; 
@@ -2587,11 +2596,11 @@ void bankScreenBuilder(uint8_t subScreen){
       strip->focus(true);
                   
     }else{
-      DEBUG_PRINT("\nNO STRIP TO BUILD, EMPTY BANK");
+      DEBUG_WARN("NO STRIP TO BUILD, EMPTY BANK");
       gui.add(new TextArea(lang.getString("No Strip"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
     }
   }else{
-      DEBUG_PRINT("\nNO BANK");
+      DEBUG_WARN("NO BANK");
       gui.add(new TextArea(lang.getString("No Bank"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   }
   
@@ -2886,14 +2895,14 @@ void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, con
 }
 
 void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *reason, uint16_t length) {
-  DEBUG_PRINT("\n\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
+  DEBUG_INFO("\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
   //DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
   app.webAppConnected = false;  
 }
 
 
 void socketConnectionCallback(IWebSocket &ws) {
-  DEBUG_PRINT("\n\n[WSS]\t\tconnected!\n\n");
+  DEBUG_INFO("[WSS]\t\tconnected!\n\n");
   app.webAppConnected = true;
 
   const auto protocol = ws.getProtocol();
@@ -2905,7 +2914,7 @@ void socketConnectionCallback(IWebSocket &ws) {
   ws.onClose(socketCloseCallback);
 
   app.configClientIP = ws.getRemoteIP().toString();
-  DEBUG_PRINT("\n\n[WSS]\t\tNew websocket client IP: %s\n\n",app.configClientIP.c_str());
+  DEBUG_INFO("[WSS]\t\tNew websocket client IP: %s\n\n",app.configClientIP.c_str());
 
   // any message to be send straigth after connexion was established would be put here.
   // app.broadCast(app.parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well  

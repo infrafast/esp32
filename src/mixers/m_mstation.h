@@ -64,7 +64,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
     }
 
     virtual bool handleConnectService(){
-      DEBUG_PRINT("\n%s::handleConnectService()",interfaceName.c_str());
+      DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
       if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
         DEBUG_PRINT(":client already opened\n");
         return true;
@@ -74,7 +74,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
     }
 
     virtual bool handleDisconnectService(){
-      DEBUG_PRINT("\n%s::handleDisconnectService()",interfaceName.c_str());
+      DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
       destination->lastQueryTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
       hwm.network->clientSocketClose(); 
       return false;
@@ -151,7 +151,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       destination->lastQueryTime = millis(); 
     
       if (length + 1 > RX_MAX){
-        DEBUG_PRINT("%s::onTXTmessage(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
+        DEBUG_INFO("%s::onTXTmessage(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
       } 
 
       // -------- Pass 1 : parse HEADER ONLY (sans memcpy) --------
@@ -176,14 +176,14 @@ class MixingStation: public NetworkDevice, public MixerInterface{
         DeserializationOption::Filter(filter)
       );
       if (e){
-        DEBUG_PRINT("\n%s:onTXTmessage(): JSON error: %s", e.c_str());        
+        DEBUG_ERROR("%s:onTXTmessage(): JSON error: %s", e.c_str());        
         return;
       }
 
       const char* error = docHeader["error"] | nullptr;
       if (error && *error) {
         // processError(...) si tu veux
-        DEBUG_PRINT("%s::onTXTmessage() error:%s",interfaceName.c_str(),error);        
+        DEBUG_ERROR("%s::onTXTmessage() error:%s",interfaceName.c_str(),error);        
         return;
       }
 
@@ -227,7 +227,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       int progress         = body["progress"] | 0;
       const char* state    = body["state"]    | "";
       const char* topState = body["topState"] | "";
-      DEBUG_PRINT("%s::processState: msg:%s,progress:%i,state:%s,topState:%s",interfaceName.c_str(),msg,progress,state,topState);
+      DEBUG_INFO("%s::processState: msg:%s,progress:%i,state:%s,topState:%s",interfaceName.c_str(),msg,progress,state,topState);
 
       if (strcmp(topState, MS_IDLE) == 0) {
         // état IDLE
@@ -282,7 +282,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
         (void)id; (void)name; (void)mfg;
 
         for (const char* m : models) {
-            DEBUG_PRINT("model=%d name=%s manufacturer=%s canSearch=%d",id, name, mfg, m);
+            DEBUG_INFO("model=%d name=%s manufacturer=%s canSearch=%d",id, name, mfg, m);
         }        
 
       }
@@ -306,7 +306,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
     ///                      DEVICE STATES                    ///
     /////////////////////////////////////////////////////////////
     void setStateMSconnected(){
-      DEBUG_PRINT("\n%s: setStateMSconnected()",interfaceName.c_str());
+      DEBUG_INFO("%s: setStateMSconnected()",interfaceName.c_str());
       DeviceInterface::setStatePending();
       state.details = "Connected to MixingStation";
       state.progress = -1;     
