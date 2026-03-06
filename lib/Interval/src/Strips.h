@@ -249,187 +249,187 @@ class Strip {
     }    
 
     //////////// BUTTON MANAGEMENT
-enum class EasingType : uint8_t {
-  LINEAR,
-  EASE,
-  EASE_IN,
-  EASE_IN_OUT,
-  CUBIC
-};
+    enum class EasingType : uint8_t {
+      LINEAR,
+      EASE,
+      EASE_IN,
+      EASE_IN_OUT,
+      CUBIC
+    };
 
-struct EasingConfig {
-  EasingType type = EasingType::EASE_IN_OUT;
+    struct EasingConfig {
+      EasingType type = EasingType::EASE_IN_OUT;
 
-  // Time to reach target (min/max) while holding
-  uint16_t durationMs = 1500;
+      // Time to reach target (min/max) while holding
+      uint16_t durationMs = 1500;
 
-  // For CUBIC only
-  float x1 = 0.25f, y1 = 0.10f, x2 = 0.25f, y2 = 1.00f;
+      // For CUBIC only
+      float x1 = 0.25f, y1 = 0.10f, x2 = 0.25f, y2 = 1.00f;
 
-  // Optional quantization (0 = off)
-  uint8_t steps = 0;
+      // Optional quantization (0 = off)
+      uint8_t steps = 0;
 
-  // Step for SIMPLE_CLIC etc (ratio of amplitude)
-  float clickStepRatio = 0.05f;
+      // Step for SIMPLE_CLIC etc (ratio of amplitude)
+      float clickStepRatio = 0.05f;
 
-  // Throttle period for HOLD updates (ms)
-  // 16ms ~ 60Hz, 20ms ~ 50Hz, 33ms ~ 30Hz
-  uint16_t throttleMs = 50;
+      // Throttle period for HOLD updates (ms)
+      // 16ms ~ 60Hz, 20ms ~ 50Hz, 33ms ~ 30Hz
+      uint16_t throttleMs = 50;
 
-  // Optional: do not emit updates smaller than this (absolute value units)
-  float minDeltaToApply = 0.0f; // e.g. 0.001f
-};
+      // Optional: do not emit updates smaller than this (absolute value units)
+      float minDeltaToApply = 0.0f; // e.g. 0.001f
+    };
 
-EasingConfig cfg;
+    EasingConfig cfg;
 
-// HOLD state (remplace holdStart + time logic)
-  // état HOLD
-  bool holdArmed = false;
-  int8_t holdDir = 0;
-  float holdStartValue = 0.0f;
-  unsigned long holdStartMillis = 0;
+    // HOLD state (remplace holdStart + time logic)
+    // état HOLD
+    bool holdArmed = false;
+    int8_t holdDir = 0;
+    float holdStartValue = 0.0f;
+    unsigned long holdStartMillis = 0;
 
-  unsigned long lastHoldUpdate = 0; // for throttle
+    unsigned long lastHoldUpdate = 0; // for throttle
 
 
-float applyEasing(float p, const EasingConfig& c) {
-  p = clamp01(p);
+    float applyEasing(float p, const EasingConfig& c) {
+      p = clamp01(p);
 
-  if (c.steps > 0) {
-    float s = (float)c.steps;
-    p = clamp01(floorf(p * s) / s);
-  }
+      if (c.steps > 0) {
+        float s = (float)c.steps;
+        p = clamp01(floorf(p * s) / s);
+      }
 
-  switch (c.type) {
-    case EasingType::LINEAR:      return p;
-    case EasingType::EASE:        return bezYforX(p, 0.25f, 0.10f, 0.25f, 1.00f);
-    case EasingType::EASE_IN:     return bezYforX(p, 0.42f, 0.00f, 1.00f, 1.00f);
-    case EasingType::EASE_IN_OUT: return bezYforX(p, 0.42f, 0.00f, 0.58f, 1.00f);
-    case EasingType::CUBIC:
-    default:                      return bezYforX(p, c.x1, c.y1, c.x2, c.y2);
-  }
-}
-
-float computeHoldValue(unsigned long timeMs, float start, float target, const EasingConfig& c) {
-  if (c.durationMs == 0) return target;
-  float p = (float)timeMs / (float)c.durationMs;
-  float e = applyEasing(p, c);
-  return start + (target - start) * e;
-}
-
-   bool throttleHold(){
-    if (cfg.throttleMs == 0) return true;
-    unsigned long now = millis();
-    if (lastHoldUpdate == 0 || (now - lastHoldUpdate) >= cfg.throttleMs){
-      lastHoldUpdate = now;
-      return true;
+      switch (c.type) {
+        case EasingType::LINEAR:      return p;
+        case EasingType::EASE:        return bezYforX(p, 0.25f, 0.10f, 0.25f, 1.00f);
+        case EasingType::EASE_IN:     return bezYforX(p, 0.42f, 0.00f, 1.00f, 1.00f);
+        case EasingType::EASE_IN_OUT: return bezYforX(p, 0.42f, 0.00f, 0.58f, 1.00f);
+        case EasingType::CUBIC:
+        default:                      return bezYforX(p, c.x1, c.y1, c.x2, c.y2);
+      }
     }
-    return false;
-  }
 
-  float applyProgressive(int8_t dir, uint8_t trigger){
-    if (dir != 1 && dir != -1) return 0.0f;
+    float computeHoldValue(unsigned long timeMs, float start, float target, const EasingConfig& c) {
+      if (c.durationMs == 0) return target;
+      float p = (float)timeMs / (float)c.durationMs;
+      float e = applyEasing(p, c);
+      return start + (target - start) * e;
+    }
 
-    // CLIC (ou autre) => pas fixe
-    if (trigger != IntervalButton::BUTTON_HOLD){
-      float amp = (valueMax - valueMin);
-      if (amp <= 0.0f) return 0.0f;
+    bool throttleHold(){
+      if (cfg.throttleMs == 0) return true;
+      unsigned long now = millis();
+      if (lastHoldUpdate == 0 || (now - lastHoldUpdate) >= cfg.throttleMs){
+        lastHoldUpdate = now;
+        return true;
+      }
+      return false;
+    }
 
-      float step = amp * cfg.clickStepRatio;
-      if (step <= 0.0f) return 0.0f;
+    float applyProgressive(int8_t dir, uint8_t trigger){
+      if (dir != 1 && dir != -1) return 0.0f;
 
-      float newValue = value + (float)dir * step;
+      // CLIC (ou autre) => pas fixe
+      if (trigger != IntervalButton::BUTTON_HOLD){
+        float amp = (valueMax - valueMin);
+        if (amp <= 0.0f) return 0.0f;
+
+        float step = amp * cfg.clickStepRatio;
+        if (step <= 0.0f) return 0.0f;
+
+        float newValue = value + (float)dir * step;
+        if (newValue > valueMax) newValue = valueMax;
+        if (newValue < valueMin) newValue = valueMin;
+
+        float delta = newValue - value;
+        if (delta == 0.0f) return 0.0f;
+
+        value = newValue;
+        return fabsf(delta); // delta positif comme ton code
+      }
+
+      // HOLD : on arme au début (ou si changement de sens)
+      unsigned long now = millis();
+      if (!holdArmed || holdDir != dir){
+        holdArmed = true;
+        holdDir = dir;
+        holdStartValue = value;
+        holdStartMillis = now;
+        lastHoldUpdate = 0; // update immédiat
+      }
+
+      // anti “rebonds” : si tu veux ignorer les tout premiers ms
+      if ((now - holdStartMillis) < DEBOUCE_TIME) {
+        return 0.0f;
+      }
+
+      if (!throttleHold()) return 0.0f;
+
+      // elapsed = temps réel écoulé depuis début du HOLD
+      unsigned long elapsed = now - holdStartMillis;
+
+      float target = (dir > 0) ? valueMax : valueMin;
+
+      float p = (cfg.durationMs == 0) ? 1.0f : ((float)elapsed / (float)cfg.durationMs);
+      float e = applyEasing(p, cfg);
+      float newValue = holdStartValue + (target - holdStartValue) * e;
+
       if (newValue > valueMax) newValue = valueMax;
       if (newValue < valueMin) newValue = valueMin;
 
       float delta = newValue - value;
       if (delta == 0.0f) return 0.0f;
 
+      if (cfg.minDeltaToApply > 0.0f && fabsf(delta) < cfg.minDeltaToApply) {
+        return 0.0f;
+      }
+
       value = newValue;
-      return fabsf(delta); // delta positif comme ton code
+      return fabsf(delta);
     }
 
-    // HOLD : on arme au début (ou si changement de sens)
-    unsigned long now = millis();
-    if (!holdArmed || holdDir != dir){
-      holdArmed = true;
-      holdDir = dir;
-      holdStartValue = value;
-      holdStartMillis = now;
-      lastHoldUpdate = 0; // update immédiat
+    void onButtonReleased(){
+        holdArmed = false;
+        holdDir = 0;
+        lastHoldUpdate = 0;
     }
 
-    // anti “rebonds” : si tu veux ignorer les tout premiers ms
-    if ((now - holdStartMillis) < DEBOUCE_TIME) {
-      return 0.0f;
+      virtual float increaseCallback(unsigned long /*time*/, uint8_t trigger){
+        return applyProgressive(+1, trigger);
+      }
+
+      virtual float decreaseCallback(unsigned long /*time*/, uint8_t trigger){
+        return applyProgressive(-1, trigger);
+      }
+
+
+    virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
+      
+      uint16_t TIME_MAX_PROGRESSIVITY = 3000;
+      if (valueMax-valueMin<=20) TIME_MAX_PROGRESSIVITY = 5000;
+      else if (valueMax-valueMin>500) TIME_MAX_PROGRESSIVITY = 1000;
+
+      //we start counting the time between two calls when we have called the first time, means during debounce duration
+      if (time<DEBOUCE_TIME){
+        lastCall = 0;      
+        // first call we start timer
+
+      }
+      if (time>=TIME_MAX_PROGRESSIVITY) time = TIME_MAX_PROGRESSIVITY;
+
+      unsigned long waitBetween2update; 
+      
+      if (trigger == IntervalButton::BUTTON_HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
+      else waitBetween2update = 50 ; // 50ms 
+
+      unsigned long delaySoFar = millis() - lastCall;
+
+      if (delaySoFar < waitBetween2update) return false;  
+      lastCall = millis();
+
+      return true;    
     }
-
-    if (!throttleHold()) return 0.0f;
-
-    // elapsed = temps réel écoulé depuis début du HOLD
-    unsigned long elapsed = now - holdStartMillis;
-
-    float target = (dir > 0) ? valueMax : valueMin;
-
-    float p = (cfg.durationMs == 0) ? 1.0f : ((float)elapsed / (float)cfg.durationMs);
-    float e = applyEasing(p, cfg);
-    float newValue = holdStartValue + (target - holdStartValue) * e;
-
-    if (newValue > valueMax) newValue = valueMax;
-    if (newValue < valueMin) newValue = valueMin;
-
-    float delta = newValue - value;
-    if (delta == 0.0f) return 0.0f;
-
-    if (cfg.minDeltaToApply > 0.0f && fabsf(delta) < cfg.minDeltaToApply) {
-      return 0.0f;
-    }
-
-    value = newValue;
-    return fabsf(delta);
-  }
-
-void onButtonReleased(){
-    holdArmed = false;
-    holdDir = 0;
-    lastHoldUpdate = 0;
-}
-
-  virtual float increaseCallback(unsigned long /*time*/, uint8_t trigger){
-    return applyProgressive(+1, trigger);
-  }
-
-  virtual float decreaseCallback(unsigned long /*time*/, uint8_t trigger){
-    return applyProgressive(-1, trigger);
-  }
-
-
-virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
-  
-  uint16_t TIME_MAX_PROGRESSIVITY = 3000;
-  if (valueMax-valueMin<=20) TIME_MAX_PROGRESSIVITY = 5000;
-  else if (valueMax-valueMin>500) TIME_MAX_PROGRESSIVITY = 1000;
-
-  //we start counting the time between two calls when we have called the first time, means during debounce duration
-  if (time<DEBOUCE_TIME){
-    lastCall = 0;      
-    // first call we start timer
-
-  }
-  if (time>=TIME_MAX_PROGRESSIVITY) time = TIME_MAX_PROGRESSIVITY;
-
-  unsigned long waitBetween2update; 
-  
-  if (trigger == IntervalButton::BUTTON_HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
-  else waitBetween2update = 50 ; // 50ms 
-
-  unsigned long delaySoFar = millis() - lastCall;
-
-  if (delaySoFar < waitBetween2update) return false;  
-  lastCall = millis();
-
-  return true;    
-}
 
     virtual uint8_t getNumberOfProperties(){
       return skeleton->parameterAddresses.size();      

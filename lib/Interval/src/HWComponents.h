@@ -418,11 +418,6 @@ class Button : public HWComponent2State{
       push_reactivity = push;
       dClic_reactivity = dClic;
       evt.data = &btEvent;
-
-      registerEventHandler([this](Event* event) {
-          this->default_buttonCallBack(event);
-      });
-
     }
 
     virtual void init(){
@@ -430,11 +425,6 @@ class Button : public HWComponent2State{
       /*DEBUG_PRINT("\n\t%s.push_reactivity=%d",id.c_str(),push_reactivity);      
       DEBUG_PRINT("\n\t%s.dClic_reactivity=%d",id.c_str(),dClic_reactivity);      */
       refresh();
-    }
-
-    void default_buttonCallBack(Event* event) {
-        /*ButtonData* btnEvt = (ButtonData*) event->data;
-        DEBUG_PRINT("\ndefault_buttonCallBack - %d => %d: %dms\n", btnEvt->id, btnEvt->buttonId, btnEvt->time);*/
     }
 
     bool refresh(bool force=false) {

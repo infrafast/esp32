@@ -144,7 +144,7 @@ BLEMIDI_CREATE_INSTANCE(BLE_CONNECTION_NAME, bleMIDI);
 #define BLEMIDI_INTERFACE "BLEMIDI"
 class BLEMIDIInterface: public MIDIInterface{
 
-  public:
+  public:  
 
     BLEMIDIInterface(bool _configurable):MIDIInterface(BLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_BLEMIDI;
@@ -162,7 +162,6 @@ class BLEMIDIInterface: public MIDIInterface{
       if (state.label == IF_STATE_CONNECTED) 
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
-
 
     virtual bool begin(){
       DEBUG_PRINT("\n%s::begin()",interfaceName.c_str());          
@@ -361,7 +360,6 @@ class DINMIDIInterface: public MIDIInterface{
       return true;
     };        
 
-
     virtual void monitor() override{}
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override {return false;}
@@ -508,7 +506,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       requestDirectoryRefresh();
     }
 
-    void handleDirectoryEvent(Event* evt) {
+
+
+    void onEvent(Event* evt) {
       DEBUG_PRINT("\n%s::handleDirectoryEvent(%i)",interfaceName.c_str(),evt->type);
       switch(evt->type){
         case EVENT_DIRECTORY_SERVICE_REFRESHED:          
@@ -521,6 +521,19 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
         case EVENT_DIRECTORY_NOT_READY:
           setSetDirectoryServiceDown();
         break;
+        ///////////////// from NetworkDevice
+        case EventDispatcher::EVENT_NETWORK_DISCONNECTED:
+          disable();
+          break;
+        case EventDispatcher::EVENT_NETWORK_CONNECTED:
+          if (hwm.network->state == CONNECTED){
+            if (deviceInterface->state.enabled){
+              enable();
+            }else{
+              deviceInterface->setStateDisabled();
+            }
+          }
+        break;        
       }     
     }
 

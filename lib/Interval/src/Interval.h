@@ -68,6 +68,199 @@ bool useUSBMidi = false;
 
 #define DEFAULT_STORAGE_TYPE_ESP32 STORAGE_LITTLEFS
  
+
+// ============================================================================
+// Queue broadcast partagée
+// ----------------------------------------------------------------------------
+// - Une interface publie des événements
+// - Plusieurs strips peuvent les lire indépendamment
+// - Un lecteur ne consomme pas pour les autres
+//
+// IMPORTANT
+// Cette version est volontairement simple et lisible.
+// Elle est pensée pour 1 producteur logique (l'interface) et N lecteurs.
+// ============================================================================
+
+template<typename T, size_t CAPACITY, size_t MAX_READERS>
+class SharedEventQueue {
+public:
+  // --------------------------------------------------------------------------
+  // Token de lecture individuel
+  // Chaque strip possède son propre token.
+  // nextSeq = prochaine séquence que le strip doit lire.
+  // --------------------------------------------------------------------------
+  struct ReaderToken {
+    int8_t index = -1;
+    bool valid = false;
+  };
+
+  SharedEventQueue() {
+    clear();
+  }
+
+  // --------------------------------------------------------------------------
+  // Remise à zéro complète de la queue
+  // --------------------------------------------------------------------------
+  void clear() {
+    _headSeq = 0;
+    _publishCount = 0;
+    _publishFailCount = 0;
+
+    for (size_t i = 0; i < MAX_READERS; ++i) {
+      _readerActive[i] = false;
+      _readerNextSeq[i] = 1;
+    }
+
+    for (size_t i = 0; i < CAPACITY; ++i) {
+      _slotSeq[i] = 0;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Enregistrement d'un lecteur
+  // Le lecteur démarre à "maintenant" :
+  // il ne reçoit pas l'historique déjà publié avant son abonnement.
+  // --------------------------------------------------------------------------
+  bool registerReader(ReaderToken& token) {
+    if (token.valid) return true;
+
+    for (size_t i = 0; i < MAX_READERS; ++i) {
+      if (!_readerActive[i]) {
+        _readerActive[i] = true;
+        _readerNextSeq[i] = _headSeq + 1;
+        token.index = (int8_t)i;
+        token.valid = true;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // --------------------------------------------------------------------------
+  // Désenregistrement d'un lecteur
+  // --------------------------------------------------------------------------
+  void unregisterReader(ReaderToken& token) {
+    if (!token.valid) return;
+    const int8_t idx = token.index;
+    if (idx >= 0 && idx < (int8_t)MAX_READERS) {
+      _readerActive[idx] = false;
+      _readerNextSeq[idx] = 1;
+    }
+    token.index = -1;
+    token.valid = false;
+  }
+
+  // --------------------------------------------------------------------------
+  // Publication d'un événement
+  //
+  // GARANTIE :
+  // on n'écrase jamais une case encore nécessaire au lecteur le plus lent.
+  //
+  // Si la queue est pleine :
+  // - on renvoie false
+  // - on n'écrase rien
+  //
+  // Donc le "zéro perte" est possible si l'appelant respecte ce retour
+  // et ne jette pas l'événement de son côté.
+  // --------------------------------------------------------------------------
+  bool publish(const T& item) {
+    uint32_t minNext = computeMinNextSeq();
+    uint32_t used = 0;
+
+    if (_headSeq >= minNext) {
+      used = _headSeq - minNext + 1;
+    }
+
+    if (used >= CAPACITY) {
+      _publishFailCount++;
+      return false;
+    }
+
+    const uint32_t seq = _headSeq + 1;
+    const size_t slot = seqToIndex(seq);
+
+    _buffer[slot] = item;
+    _slotSeq[slot] = seq;
+    _headSeq = seq;
+    _publishCount++;
+    return true;
+  }
+
+  // --------------------------------------------------------------------------
+  // Indique si un lecteur a au moins un événement disponible
+  // --------------------------------------------------------------------------
+  bool hasData(const ReaderToken& token) const {
+    if (!token.valid) return false;
+    return _readerNextSeq[token.index] <= _headSeq;
+  }
+
+  // --------------------------------------------------------------------------
+  // Lit l'événement suivant pour CE lecteur
+  // --------------------------------------------------------------------------
+  bool readNext(const ReaderToken& token, T& out) {
+    if (!token.valid) return false;
+
+    const int8_t idx = token.index;
+    if (idx < 0 || idx >= (int8_t)MAX_READERS) return false;
+
+    uint32_t nextSeq = _readerNextSeq[idx];
+    if (nextSeq > _headSeq) return false;
+
+    const size_t slot = seqToIndex(nextSeq);
+
+    // sécurité : la séquence doit toujours correspondre
+    if (_slotSeq[slot] != nextSeq) {
+      return false;
+    }
+
+    out = _buffer[slot];
+    _readerNextSeq[idx] = nextSeq + 1;
+    return true;
+  }
+
+  uint32_t publishCount() const { return _publishCount; }
+  uint32_t publishFailCount() const { return _publishFailCount; }
+  uint32_t headSeq() const { return _headSeq; }
+
+private:
+  T _buffer[CAPACITY];
+  uint32_t _slotSeq[CAPACITY];
+
+  bool _readerActive[MAX_READERS];
+  uint32_t _readerNextSeq[MAX_READERS];
+
+  uint32_t _headSeq = 0;
+  uint32_t _publishCount = 0;
+  uint32_t _publishFailCount = 0;
+
+  size_t seqToIndex(uint32_t seq) const {
+    return (size_t)((seq - 1) % CAPACITY);
+  }
+
+  uint32_t computeMinNextSeq() const {
+    bool found = false;
+    uint32_t minNext = _headSeq + 1;
+
+    for (size_t i = 0; i < MAX_READERS; ++i) {
+      if (_readerActive[i]) {
+        if (!found || _readerNextSeq[i] < minNext) {
+          minNext = _readerNextSeq[i];
+          found = true;
+        }
+      }
+    }
+
+    // s'il n'y a aucun lecteur, tout est considéré consommé
+    if (!found) return _headSeq + 1;
+
+    return minNext;
+  }
+};
+// ============================================================================
+// FIN QUEUE
+// ----------------------------------------------------------------------------
+
+
 // le timeout des check Wifi doit etre superieur a celui du check ethernet cable de sorte de lui laisser la priorité en etant au minimum de 3000
 #define ETH_CABLE_CHECK_FREQUENCY 3000
 
@@ -284,18 +477,27 @@ struct Event {
   void* data;
 };
 
+class EventListener {
+public:
+  virtual ~EventListener() = default;
+
+  virtual void onEvent(struct Event* evt) = 0;
+
+  static void eventTrampoline(void* context, struct Event* evt) {
+    if (context) {
+      static_cast<EventListener*>(context)->onEvent(evt);
+    }
+  }
+};
+
 class EventDispatcher {
 public:
-  using EventHandler = std::function<void(Event*)>;
-
-  Event evt;
-
   enum EventType : uint8_t {
     EVENT_DIGITAL_BUTTON,
     EVENT_ANALOG_BUTTON,
     EVENT_NETWORK,
     EVENT_NETWORK_DISCONNECTED,
-    EVENT_NETWORK_CONNECTED,    
+    EVENT_NETWORK_CONNECTED,
     EVENT_NETWORK_CONNECTION_CHANGED,
     EVENT_INTERNET_PING,
     EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE,
@@ -304,37 +506,72 @@ public:
     EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED
   };
 
-  static constexpr uint8_t MAX_CALLBACKS = 8;
+  static constexpr uint8_t MAX_CALLBACKS = 10;
 
-  // Renvoie true si ajouté, false si plus de place ou cb vide
-  bool registerEventHandler(EventHandler cb) {
-    if (!cb) return false;
+  using CallbackFn = void (*)(void*, Event*);
+
+  struct HandlerSlot {
+    void* context = nullptr;
+    CallbackFn fn = nullptr;
+  };
+
+  Event evt = {};
+
+  bool registerEventListener(EventListener* listener) {
+    if (!listener) return false;
 
     for (uint8_t i = 0; i < MAX_CALLBACKS; i++) {
-      if (!eventHandlers[i]) {                 // slot libre
-        eventHandlers[i] = std::move(cb);
-        return true;                           // IMPORTANT
+      if (eventHandlers[i].context == listener &&
+          eventHandlers[i].fn == EventListener::eventTrampoline) {
+        DEBUG_PRINT("\nEventDispatcher: listener already registered");
+        return false;
       }
     }
+
+    for (uint8_t i = 0; i < MAX_CALLBACKS; i++) {
+      if (!eventHandlers[i].fn) {
+        eventHandlers[i].context = listener;
+        eventHandlers[i].fn = EventListener::eventTrampoline;
+        return true;
+      }
+    }
+
     DEBUG_PRINT("\n\n\t\t\t\t\t !!! EventDispatcher IS FULL !!! \n\n");
-    return false; // tableau plein
+    return false;
+  }
+
+  bool unregisterEventListener(EventListener* listener) {
+    if (!listener) return false;
+
+    for (uint8_t i = 0; i < MAX_CALLBACKS; i++) {
+      if (eventHandlers[i].context == listener &&
+          eventHandlers[i].fn == EventListener::eventTrampoline) {
+        eventHandlers[i].context = nullptr;
+        eventHandlers[i].fn = nullptr;
+        return true;
+      }
+    }
+    return false;
   }
 
   void fireEvent() {
-      for (uint8_t i = 0; i < MAX_CALLBACKS; ++i) {
-      if (eventHandlers[i]) eventHandlers[i](&evt);
+    for (uint8_t i = 0; i < MAX_CALLBACKS; ++i) {
+      if (eventHandlers[i].fn) {
+        eventHandlers[i].fn(eventHandlers[i].context, &evt);
+      }
     }
   }
 
-  /*void clearEventHandlers() {
-    for (uint8_t i = 0; i < MAX_CALLBACKS; ++i) {
-      eventHandlers[i] = nullptr;
-    }
-  }*/
+  void fireEvent(EventType type, void* data = nullptr) {
+    evt.type = type;
+    evt.data = data;
+    fireEvent();
+  }
 
 private:
-  EventHandler eventHandlers[MAX_CALLBACKS] = {}; // init à vide explicite
+  HandlerSlot eventHandlers[MAX_CALLBACKS] = {};
 };
+
 ///////////////////// API MANAGEMENT //////////////////////
 
 #define API_ORIGIN "origin"
@@ -2080,9 +2317,7 @@ void handleConfigConnection(){
       screen.state = STATE_UTILS_CONNECTCONFIGMEDIA;
       hwm.startAP(systemCfg.getString(S_AP_NAME));
       app.setAPIcon();
-      hwm.configMedia->registerEventHandler([](Event* e) {
-        app.handleAPevent(e);   // app global/static : pas besoin de capture
-      });
+      hwm.configMedia->registerEventListener((EventListener*)&app);
 
       //https://deepbluembedded.com/esp32-wifi-library-examples-tutorial-arduino/#esp32-wifi-modes
     }  

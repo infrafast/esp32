@@ -8,7 +8,7 @@
 
 #define ADDRESS_CHANGETOPARAMETERNAME "/config/%s"
 
-class DeviceInterface  : public SerializableParameters, public EventDispatcher{
+class DeviceInterface  : public SerializableParameters, public EventDispatcher, public EventListener{
   #define INTERFACE_STATE       "state"
   #define INTERFACE_PROGRESS    "progress"
   #define INTERFACE_EXPOSED     "exposed"
@@ -39,6 +39,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
   
     int dataAvailable;
     void* data;                 // MUST BE AFFECTED IN CONSTRUCTOR OF DERIVED CLASS AND THEN CASTED IN THE UPDATE() MEDTHOD OF STRIP (WHICH IS CALLED WHEN AVAILABLE RETURN > 0 in STRIP PROCESS())
+    // replace by the mecanism
+
 
     bool exposed = true;          // 
     bool hasStrip = true;      // if the interface is used by a strip (ex. Midi) or not (ex. Directory Service), by default yes, but some interface are more technical and not relevant for the user to create a strip with them, so we can hide them in the strip creation menu by setting this parameter to false
@@ -48,6 +50,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
 
     DeviceInterface(const String&, const String&, bool);
     ~DeviceInterface();
+
+    virtual void onEvent(struct Event* evt){}
 
     virtual bool begin(){     // called by init()
       DEBUG_PRINT("\n%s::begin() void",interfaceName.c_str());
@@ -117,12 +121,12 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher{
       return output;
     }  
 
-    bool init(EventHandler cb){
-      DEBUG_PRINT("\n\n----------------------------------  %s->init(...)  ---------------------------------- ",interfaceName.c_str());      
-      registerEventHandler(cb);
+    bool init(EventListener* listener) {
+      DEBUG_PRINT("\n\n----------------------------------  %s->init(...)  ---------------------------------- ", interfaceName.c_str());
+      registerEventListener(listener);
       load();
       bool success = begin();
-      DEBUG_PRINT("\n-----------------------------------------------------------------------------------------------------\n");      
+      DEBUG_PRINT("\n-----------------------------------------------------------------------------------------------------\n");
       return success;
     }
 
@@ -410,14 +414,7 @@ class NetWorkService{
     // ---- Global inventory of services (NetWorkService*) ----
     static std::vector<NetWorkService*> inventory;
     static int8_t enabledServicesWeightSum;
-
-    NetWorkService(){
-      hwm.network->registerEventHandler([this](Event* e) {
-        networkEventHandler(e);   // équivaut à this->networkEventHandler(e)
-      });
-    }
-
-    
+   
     virtual void monitorService()=0;
     virtual bool handleConnectService()=0;
     virtual bool handleDisconnectService()=0;
@@ -435,23 +432,6 @@ class NetWorkService{
 
     virtual uint8_t getServiceWeight(){
       return 1; // default
-    }
-
-    void networkEventHandler(Event* event){
-      switch(event->type){
-        case EventDispatcher::EVENT_NETWORK_DISCONNECTED:
-          disable();
-          break;
-        case EventDispatcher::EVENT_NETWORK_CONNECTED:
-          if (hwm.network->state == CONNECTED){
-            if (deviceInterface->state.enabled){
-              enable();
-            }else{
-              deviceInterface->setStateDisabled();
-            }
-          }
-        break;
-      }
     }
 
 
@@ -713,7 +693,7 @@ DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){
   return nullptr;
 }
 
-class NetworkDevice: public DeviceInterface, public NetWorkService{
+class NetworkDevice: public DeviceInterface, public NetWorkService, public EventListener{
 
   public:
 
@@ -736,6 +716,23 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     virtual void switchDevice(bool _enabled) override{
       switchNetworkService(_enabled); // we use our own
     }   
+
+    void onEvent(Event* event){
+      switch(event->type){
+        case EventDispatcher::EVENT_NETWORK_DISCONNECTED:
+          disable();
+          break;
+        case EventDispatcher::EVENT_NETWORK_CONNECTED:
+          if (hwm.network->state == CONNECTED){
+            if (deviceInterface->state.enabled){
+              enable();
+            }else{
+              deviceInterface->setStateDisabled();
+            }
+          }
+        break;
+      }
+    }    
 
     virtual void handlePropertyChange(){
       DEBUG_PRINT("\n%s::handlePropertyChange()",interfaceName.c_str());

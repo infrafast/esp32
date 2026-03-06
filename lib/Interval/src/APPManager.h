@@ -339,7 +339,7 @@ class Shortcuts: public DataProvider{
 
 ///////////////////// MAIN APPLICATION CLASS ////////////////////////
 
-class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher{
+class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, EventListener{
   //
   public:   
   #define maxConcurrentClients 3
@@ -782,9 +782,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       // RTPMIDI
       appleMIDIInterface = new AppleMIDIInterface(true);
       //we tell appleMIDIInterface to listen to event raised by directoryService
-      directoryService.registerEventHandler([this](Event* e) {
-        appleMIDIInterface->handleDirectoryEvent(e);
-      });
+      directoryService.registerEventListener(appleMIDIInterface);
 
       std::vector<String> groupesUniques;
       /* register the interface names in the dataset of their group, without duplating the groups 
@@ -793,9 +791,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       */
       for (const auto& interface : interfaceRepo.interfaces){
         
-        if (!interface->init([this](Event* event) {
-          this->interfaceEventHandler(event);
-        })){
+        if (!interface->init(this)){
           DEBUG_PRINT("\n%s->init() failed or is not fully implemented",interface->interfaceName.c_str());    
         }
         
@@ -844,18 +840,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
             
       for (uint8_t i=0;i<MAXB;i++){
-        hwm->buttons[i]->registerEventHandler([this](Event* event) {
-            this->handleSwitchEvent(event);
-        });
+        hwm->buttons[i]->registerEventListener(this);
       }
 
-      hwm->onOff.registerEventHandler([this](Event* event) {
-        this->handleOnOffEvent(event);
-      });
+      hwm->onOff.registerEventListener(this);
 
-      hwm->network->registerEventHandler([this](Event* event) {
-        this->handleNetworkEvent(event);
-      });
+      hwm->network->registerEventListener(this);
       
       back_menu_item = new MenuItem(quitMenuString, &back_menu_item_selected);
       info_menu_item = new MenuItem(infoMenuString, &info_item_selected);
@@ -974,9 +964,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // *********************************
     // EVENTS HANDLERS
     // *********************************
-    void handleNetworkEvent(Event* event){
+    void onEvent(Event* event){
       DEBUG_PRINT("\n+---------------------+");
-      DEBUG_PRINT("\n| Network event: %d   |",event->type);
+      DEBUG_PRINT("\n| onEvent: %d   |",event->type);
       DEBUG_PRINT("\n+---------------------+");
       switch(event->type){
         case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
@@ -1009,31 +999,17 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
         case EVENT_NETWORK_CONNECTION_CHANGED:
           setiFconnectivityColor();
-        break;         
-      }
-      // propagate the event
-      evt.type = event->type;
-      evt.data = event->data;      
-      fireEvent();      
-    }
-
-    void handleAPevent(Event* event){
-      switch(event->type){
-        case EVENT_NETWORK_CONNECTION_CHANGED:
           setAPIcon();
-        break;
-      }
-      // propagate the event
-      evt.type = event->type;
-      evt.data = event->data;      
-      fireEvent();       
-    }
-
-    void interfaceEventHandler(Event* event){
-      switch(event->type){
+        break;         
         case EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE:
           directoryService.discoveryRequest();
         break;
+        case EVENT_ANALOG_BUTTON:
+          handleSwitchEvent(event);
+        break;
+        case EVENT_DIGITAL_BUTTON:
+          handleOnOffEvent(event);
+        break;
       }
       // propagate the event
       evt.type = event->type;
@@ -1041,25 +1017,27 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       fireEvent();      
     }
 
+
+
     void handleSwitchEvent(Event* event) {
-      ButtonData* btnEvt = (ButtonData*) event->data;             
-      switch(btnEvt->id){
-        case IntervalButton::BUTTON_DOUBLE_CLIC:
-          doubleClicCallBack(btnEvt->buttonId,btnEvt->time);
-        break;
-        case IntervalButton::BUTTON_HOLD:
-          holdCallback(btnEvt->buttonId,btnEvt->time);
-        break;
-        case IntervalButton::BUTTON_LONG_CLIC:
-          longClicCallBack(btnEvt->buttonId,btnEvt->time);
-        break;
-        case IntervalButton::BUTTON_RELEASE_HOLD:
-          releaseHoldCallback(btnEvt->buttonId,btnEvt->time);
-        break;
-        case IntervalButton::BUTTON_SIMPLE_CLIC:
-          simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
-        break;
-      }
+        ButtonData* btnEvt = (ButtonData*) event->data;             
+        switch(btnEvt->id){
+          case IntervalButton::BUTTON_DOUBLE_CLIC:
+            doubleClicCallBack(btnEvt->buttonId,btnEvt->time);
+          break;
+          case IntervalButton::BUTTON_HOLD:
+            holdCallback(btnEvt->buttonId,btnEvt->time);
+          break;
+          case IntervalButton::BUTTON_LONG_CLIC:
+            longClicCallBack(btnEvt->buttonId,btnEvt->time);
+          break;
+          case IntervalButton::BUTTON_RELEASE_HOLD:
+            releaseHoldCallback(btnEvt->buttonId,btnEvt->time);
+          break;
+          case IntervalButton::BUTTON_SIMPLE_CLIC:
+            simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
+          break;
+        }
       // propagate the event
       evt.type = event->type;
       evt.data = event->data;      

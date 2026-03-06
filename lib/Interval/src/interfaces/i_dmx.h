@@ -54,7 +54,6 @@ class ThreePinDMXInterface: public DMXInterface{
 
     virtual void monitor(){
     } 
-
     
 };
 
