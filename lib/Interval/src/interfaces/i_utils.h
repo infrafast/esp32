@@ -280,14 +280,14 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         // midi interface has to update its config and regenerate its state      
         evt.type = EVENT_DIRECTORY_SERVICE_REFRESHED;
         evt.data = &rtpDir;
-        fireEvent();
+        fireEvent(&evt);
       }
 
       void epDirectoryNotReady(){
         DEBUG_PRINT("\n\n[RTP]\t\tDirectory not ready");
         evt.type = EVENT_DIRECTORY_NOT_READY;
         evt.data = &rtpDir;
-        fireEvent();        
+        fireEvent(&evt);        
       }      
 
       void epDirectoryRefresh(){

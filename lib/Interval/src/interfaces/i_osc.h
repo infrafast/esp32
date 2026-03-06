@@ -119,36 +119,16 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
               char addr[64];
               osc.getAddress(addr, 0);
               DEBUG_PRINT("\n<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),remotePort);
-              if ( ((OSCPing*)destination)->pingCommand == addr ){
-                /* we got a pingCommand echo, so we calculate the latency
-                Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
-                ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
-                */
-                unsigned long rawLatency = millis() - destination->lastQueryTime;
 
-                // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
-                if (rawLatency < 500){
-                  // α entre 0.1 (très lisse) et 0.3 (réactif)
-                  #define LAT_ALPHA 0.2f                                 
+              // NEW MECHANISM      
+              /*InterfaceEventFrame frame;
+              frame.kind = IE_MIDI_SYSEX;
+              frame.timestamp = millis();
+              memcpy(frame.payload, addr, strlen(addr)+1);  // /0 terminal
+              publishInterfaceEvent(frame);*/
 
-                  if (rawLatency < 500) {
-                      destination->latency =
-                          destination->latency * (1.0f - LAT_ALPHA) +
-                          rawLatency * LAT_ALPHA;
-
-                      destination->latency = (uint16_t)destination->latency;
-
-                      float delta = abs((int)rawLatency - (int)destination->latency);
-
-                      destination->jitter =
-                          destination->jitter * 0.75f +
-                          delta * 0.25f;                      
-                      }                  
-
-                }
-                determineQoS();
-                DEBUG_PRINT("\t latency: %i, jitter:%i",destination->latency,destination->jitter);
-              }
+              // see if it's a ping, we measure
+              if ( ((OSCPing*)destination)->pingCommand == addr ) determineQoS();
             }              
             // ✔ message valide
             // retour : au moins 1, même si aucun argument
@@ -232,7 +212,36 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       return sendOSCMessage(&msg);
     }
 
-    void determineQoS(){
+    void determineQoS(){      
+      /* we got a pingCommand echo, so we calculate the latency
+      Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
+      ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
+      */
+      unsigned long rawLatency = millis() - destination->lastQueryTime;
+
+      // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
+      if (rawLatency < 500){
+        // α entre 0.1 (très lisse) et 0.3 (réactif)
+        #define LAT_ALPHA 0.2f                                 
+
+        if (rawLatency < 500) {
+            destination->latency =
+                destination->latency * (1.0f - LAT_ALPHA) +
+                rawLatency * LAT_ALPHA;
+
+            destination->latency = (uint16_t)destination->latency;
+
+            float delta = abs((int)rawLatency - (int)destination->latency);
+
+            destination->jitter =
+                destination->jitter * 0.75f +
+                delta * 0.25f;                      
+            }                  
+
+      }
+
+      DEBUG_PRINT("\t latency: %i, jitter:%i",destination->latency,destination->jitter);      
+
       // Sécurité bornes
       if (destination->latency > 500) destination->latency = 500;
       

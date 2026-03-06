@@ -173,7 +173,7 @@ float bezYforX(float x, float x1, float y1, float x2, float y2) {
 
 float oneHundedFloat = 100.0;
 
-class Strip {  
+class Strip : public EventListener {  
   #define JSON_STRIP_PROPERTY_SIZE 100
   #define  JSON_STRIP_TEMPLATE_SIZE 300
   public:
@@ -241,14 +241,43 @@ class Strip {
     }    
 
     virtual ~Strip(){
-
       if (interface != nullptr){
         interface->stripCount -= 1;
         if (interface->stripCount<0) interface->stripCount = 0;
       }
+      detachFromInterfaceEventSystem();
     }    
 
-    //////////// BUTTON MANAGEMENT
+    // --------------------------------------------------------------------------
+    // Une donnée est disponible
+    // --------------------------------------------------------------------------    
+    // ----------------------------------------------------------------------
+    // Réception des notifications envoyées par l'interface
+    // ----------------------------------------------------------------------
+    // Ici, on ne lit PAS evt->data comme donnée métier.
+    // evt->data sert seulement à identifier l'interface source.
+    // La vraie donnée se trouve dans la queue de l'interface.
+    // ----------------------------------------------------------------------
+    virtual void onEvent(struct Event* evt) override {
+      if (!evt) return;      
+      // On ne s'intéresse qu'au nouveau type d'événement
+      if (evt->type != EVENT_INTERFACE_DATA_READY) return;
+
+      // Sécurité : on ne traite que les notifications de NOTRE interface
+      if (evt->data != interface) return;
+
+      // On consomme toutes les frames en attente pour ce strip
+      consumePendingInterfaceFrames();
+    }
+
+    virtual const char* getListenerName() override{
+      return interfaceName.c_str();
+    }
+
+
+    // --------------------------------------------------------------------------
+    // BUTTON MANAGEMENT
+    // -------------------------------------------------------------------------- 
     enum class EasingType : uint8_t {
       LINEAR,
       EASE,
@@ -443,16 +472,31 @@ class Strip {
     // is called from the focus() method so to force data to be updated in case some whre missed
     virtual const String* getTopLabel()=0;
     virtual const String* getBottomLabel()=0;
-    virtual void update() = 0;  // // this code is called by process() if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure
+    
+    // update is called by process() if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure    
     // it assign the GUI values the values that were acquired or processed in the process() method
     // basedon its internal state, it will set the redraw flag 
+    virtual void update() = 0;  
     
-    void process(){ // this code is requesting the strip to update its state (values, etc...) using data from the interface
+    // this code is requesting the strip to update its state (values, etc...) using data from the interface
     // process() is called from main app on all strip: the strip decide then if he has to do the query (for instance if it is focused) as       
     // some strip may do some backgroud tasks (like playing sample or executing a macro), other will only do this if they have focus         
+    void process(){ 
+      // --------------------------------------------------------------------
+      // Nouveau mécanisme :
+      // même si aucune notification n'a été reçue, on peut quand même vider
+      // d'éventuelles frames restées en attente.
+      // --------------------------------------------------------------------
+      if (interface && eventReaderRegistered) {
+        consumePendingInterfaceFrames();
+      }
+
+      // --------------------------------------------------------------------
+      // Ancien mécanisme conservé pour compatibilité temporaire
+      // --------------------------------------------------------------------
       if (!interface) return;
-      if (interface->available()>0) update();   //update is called if data are availabe and must therefore implement data casting to the right data structure
-    }; 
+      if (interface->available() > 0) update();
+    }  
 
 
     void focus(bool f=true){
@@ -482,7 +526,11 @@ class Strip {
       interface = interfaceRepo.retrieve(interfaceName);
       if (interface == nullptr) return false; // if it has no interface, no need to continue
 
-      interface->stripCount++;
+      // --------------------------------------------------------------------
+      // Nouveau mécanisme : le strip s'abonne à son interface
+      // --------------------------------------------------------------------
+      attachToInterfaceEventSystem();
+      interface->stripCount++;              // et signale qu'il utilise l'interface
 
       type = jsonStrip[C_STRIPTYPE].as<String>();
       // set index; 
@@ -528,83 +576,6 @@ class Strip {
 
       return data;
     }
-/*
-    virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
-      
-      uint16_t TIME_MAX_PROGRESSIVITY = 3000;
-      if (valueMax-valueMin<=20) TIME_MAX_PROGRESSIVITY = 5000;
-      else if (valueMax-valueMin>500) TIME_MAX_PROGRESSIVITY = 1000;
-
-      //we start counting the time between two calls when we have called the first time, means during debounce duration
-      if (time<DEBOUCE_TIME){
-        lastCall = 0;      
-        // first call we start timer
-
-      }
-      if (time>=TIME_MAX_PROGRESSIVITY) time = TIME_MAX_PROGRESSIVITY;
-
-      unsigned long waitBetween2update; 
-      
-      if (trigger == IntervalButton::BUTTON_HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
-      else waitBetween2update = 50 ; // 50ms 
-
-      unsigned long delaySoFar = millis() - lastCall;
-
-      if (delaySoFar < waitBetween2update) return false;  
-      lastCall = millis();
- 
-      return true;    
-    }
-
-
-    virtual float getIncrement(unsigned long time,uint8_t trigger){
-      float increment;
-
-      if (trigger == IntervalButton::BUTTON_HOLD){
-        //value = roundHalf(value);
-        if (time<2500){
-          increment = valueMax*scaleValue(time, 0, 2500, 0.007, 0.1);
-        }else{
-          float diff = valueMax - value;
-          float percentageToTarget = map(diff,0,valueMax-valueMin,100,1)/2000.0;  // 3000 seems to be a good compromise between delay and precision, 2000 react quicker but skip some decimal
-          increment = diff*percentageToTarget;          
-        }
-      } else increment = valueMax*0.05;
-
-      return increment;
-    }    
-
-    virtual float increaseCallback(unsigned long time,uint8_t trigger){  
-      // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC          
-      
-      if (!Strip::progressiveDelay(time,trigger)) return 0.0;
-      
-      float delta = getIncrement(time,trigger);
-
-      value += delta;
-
-      if (value > valueMax) value = valueMax;
-      //value = truncateToOneDecimal(value);
-      
-      return delta;      
-    }
-
-    virtual float decreaseCallback(unsigned long time,uint8_t trigger){
-      // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
-      if (!Strip::progressiveDelay(time,trigger)) return 0.0;
-
-      float delta = getIncrement(time,trigger); 
-
-      value -= delta;
-      
-      if (value < valueMin) value = valueMin;
-
-      //value = truncateToOneDecimal(value);
-
-      return delta;      
-    }
-  */  
-
 
     virtual void pushToGUI(uint8_t layout){
       
@@ -845,6 +816,92 @@ class Strip {
     unsigned long lastCall;     
     uint16_t frameColor = TFT_GOLD;
     //Label* defaultLabel = nullptr;
+   
+    // ----------------------------------------------------------------------
+    // Token de lecture propre à CE strip
+    // ----------------------------------------------------------------------
+    // Chaque strip lit indépendamment les événements de son interface.
+    // Un autre strip branché sur la même interface aura son propre token.
+    // ----------------------------------------------------------------------
+    DeviceInterface::EventQueue::ReaderToken eventReaderToken;
+
+    // Indique si le strip s'est bien enregistré comme lecteur de la queue
+    bool eventReaderRegistered = false;
+
+    // Indique si le strip s'est bien enregistré comme listener
+    bool eventListenerRegistered = false;
+
+    // ----------------------------------------------------------------------
+    // Hook virtuel du nouveau mécanisme
+    // ----------------------------------------------------------------------
+    // Les strips dérivés redéfiniront cette méthode quand ils seront migrés
+    // vers la nouvelle lecture par queue.
+    //
+    // Pour l'instant, la version par défaut ne fait rien, ce qui permet de
+    // ne rien casser tant que les strips concrets n'ont pas été migrés.
+    // ----------------------------------------------------------------------
+    virtual void onInterfaceEventFrame(const InterfaceEventFrame& frame) {
+      (void)frame;
+    }
+
+    // ----------------------------------------------------------------------
+    // Enregistre le strip auprès de son interface
+    // ----------------------------------------------------------------------
+    // 1) comme listener de notifications
+    // 2) comme lecteur de la queue de frames
+    //
+    // Cette méthode est idempotente : si tout est déjà enregistré, elle ne
+    // fait rien de plus et renvoie true.
+    // ----------------------------------------------------------------------
+    bool attachToInterfaceEventSystem() {
+      if (!interface) return false;
+
+      if (!eventListenerRegistered) {
+        eventListenerRegistered = interface->registerEventListener(this);
+      }
+
+      if (!eventReaderRegistered) {
+        eventReaderRegistered = interface->registerEventReader(eventReaderToken);
+      }
+
+      return eventListenerRegistered && eventReaderRegistered;
+    }
+
+    // ----------------------------------------------------------------------
+    // Désenregistre le strip
+    // ----------------------------------------------------------------------
+    void detachFromInterfaceEventSystem() {
+      if (!interface) return;
+
+      if (eventListenerRegistered) {
+        interface->unregisterEventListener(this);
+        eventListenerRegistered = false;
+      }
+
+      if (eventReaderRegistered) {
+        interface->unregisterEventReader(eventReaderToken);
+        eventReaderRegistered = false;
+      }
+    }
+
+    // ----------------------------------------------------------------------
+    // Lit toutes les frames en attente pour CE strip
+    // ----------------------------------------------------------------------
+    // Très important :
+    // on vide la queue personnelle de CE strip, mais cela ne consomme rien
+    // pour les autres strips.
+    // ----------------------------------------------------------------------
+    void consumePendingInterfaceFrames() {
+      if (!interface) return;
+      if (!eventReaderRegistered) return;
+
+      InterfaceEventFrame frame;
+      while (interface->readNextEvent(eventReaderToken, frame)) {
+        onInterfaceEventFrame(frame);
+      }
+    }
+    
+
 };
 
 class TwoSelectStrip : public Strip{
@@ -884,7 +941,7 @@ class TwoSelectStrip : public Strip{
     uint8_t select2ID=1; 
     const String *select2Content;
     String select2PropertyAddress; 
-    String label = "Gain";    
+    String label = "~";    
 };
 
 

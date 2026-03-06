@@ -294,14 +294,30 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
 
-    virtual void update(){
-      ////update is called if data are availabe and must therefore cast the data to the right data structure
-      MidiData* midiData = static_cast<MidiData*>(interface->data); // WARNING CAREFULLY TEST IF POLYMORPHISM WORKS
-      // check if the data is for me
-      if (midiData->type == MIDI_SYSEX){
+    virtual void update() override {
+      // --------------------------------------------------------------------
+      // Ancien mécanisme conservé temporairement pour compatibilité
+      // --------------------------------------------------------------------
+      if (!interface || !interface->data) return;
 
+      // On caste encore l'ancien buffer partagé tant que toute la migration
+      // n'est pas terminée.
+      MidiData* midiData = static_cast<MidiData*>(interface->data);
+
+      // On ne traite que les événements SysEx
+      if (midiData->type != MIDI_SYSEX) return;
+
+      // IMPORTANT :
+      // Dans l'ancien mécanisme, la longueur utile est encore portée par
+      // interface->available(), qui retourne dataAvailable.
+      const int availableBytes = interface->available();
+      if (availableBytes <= 0) {
+        value = 0;
+        return;
       }
-    }  
+
+      handleSysexBuffer(midiData->data, (size_t)availableBytes);
+    }
 
     virtual void queryInterface(){ // this code is called by focus() to send a command that will be executed, 
     //then its outcome will be read at the next process()
@@ -373,6 +389,46 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
     String sysexMessage="";
     String sysexKey ="";
     int16_t widgetX, widgetY;
+
+    // ----------------------------------------------------------------------
+    // Traite un message SysEx à partir d'un buffer stable
+    // ----------------------------------------------------------------------
+    // Cette méthode devient le point central de traitement.
+    // Ainsi, on peut l'appeler aussi bien depuis :
+    // - l'ancien mécanisme (update + interface->data)
+    // - le nouveau mécanisme (onInterfaceEventFrame + queue)
+    // ----------------------------------------------------------------------
+    void handleSysexBuffer(const uint8_t* dataPtr, size_t dataLen) {
+      if (!dataPtr || dataLen == 0) {
+        value = 0;
+        return;
+      }
+
+      // Pour ce premier pas, on se contente d'afficher / mémoriser la taille.
+      // C'est déjà suffisant pour valider que le strip reçoit bien les frames.
+      value = (int16_t)dataLen;
+
+      // Optionnel : si tu veux borner l'affichage à valueMax
+      if (value > valueMax) {
+        value = valueMax;
+      }
+
+      // Debug utile pendant la migration
+      DEBUG_PRINT("\nSysexStrip::handleSysexBuffer len=%u", (unsigned)dataLen);
+    }    
+
+    // ----------------------------------------------------------------------
+    // Nouveau mécanisme :
+    // traitement des frames publiées dans la queue de l'interface
+    // MIDIInterface publie  une InterfaceEventFrame de type IE_MIDI_SYSEX avec une copie bornée du message dans payload[].
+    // ----------------------------------------------------------------------
+    virtual void onInterfaceEventFrame(const InterfaceEventFrame& frame) override {
+      // On ne traite que les événements SysEx
+      if (frame.kind != IE_MIDI_SYSEX) return;
+
+      // Le payload de la frame est une copie stable du SysEx publié
+      handleSysexBuffer(frame.payload, frame.size);
+    }    
 
 };
 

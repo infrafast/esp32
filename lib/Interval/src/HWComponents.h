@@ -153,6 +153,12 @@ class HWComponent: public GenericComponent, public EventDispatcher{
   public:
     uint8_t CSPin;
 
+    Event evt;
+    
+    virtual const char* getDispatcherName() override{
+      return id.c_str();
+    }
+
     HWComponent(uint8_t pin, boolean d=true):GenericComponent(d){
       CSPin = pin;
     }
@@ -403,7 +409,7 @@ class Button : public HWComponent2State{
       BUTTON_RELEASE_HOLD,     
     };
 
-    //Event evt;
+    Event evt;
 
     unsigned long pushedTime = 0;
     bool doubleClic = false;
@@ -458,7 +464,7 @@ class Button : public HWComponent2State{
                 btEvent.time = pushedTime;
                 btEvent.id = BUTTON_SIMPLE_CLIC;
               }           
-              fireEvent();
+              fireEvent(&evt);
             }
           }
           
@@ -473,7 +479,7 @@ class Button : public HWComponent2State{
             doubleClic = true;
             btEvent.time = millis()-startTimeBetween2Clics;
             btEvent.id = BUTTON_DOUBLE_CLIC;
-            fireEvent(); 
+            fireEvent(&evt); 
             /*if (usesLed) {
               ledcWrite(0,0);   // if we want to light the double clic
             }*/           
@@ -485,7 +491,7 @@ class Button : public HWComponent2State{
           if (pushedTime>push_reactivity){
             btEvent.time = pushedTime-push_reactivity;
             btEvent.id = BUTTON_HOLD;
-            fireEvent();
+            fireEvent(&evt);
             if (usesLed){
               ledcWrite(0,255);
             }            
@@ -501,7 +507,7 @@ class Button : public HWComponent2State{
             if (!doubleClic){
               btEvent.time = pushedTime;
               btEvent.id = BUTTON_SIMPLE_CLIC;
-              fireEvent();
+              fireEvent(&evt);
             }         
           }  
         }      
@@ -785,8 +791,6 @@ class Network : public HWComponent2State{
     WebSocketClient<EthernetClient> *wsEthClient{ nullptr };
 
     float networkConnectAttemptProgress = 0.0;
-
-    //Event evt;
 
     String iFconnectivityIcon = ICON_MIXETHWIFI;
 
@@ -1537,7 +1541,7 @@ class WiFiEth : public Network{
         //ethernet has priority over wifi, hence if we are connected by WiFi but the cable is plugged, we disconnect WiFi
         if (media == WIFI_MEDIA && cable == LinkON){
           evt.type = EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED; // inform immediately the webapp to terminate
-          fireEvent();        
+          fireEvent(&evt);        
           disconnectWifi();
           state = DISCONNECTED; // cable will try reconnect at next refresh
           lastEthAttempt = 0; // with no delay
@@ -1616,7 +1620,7 @@ class WiFiEth : public Network{
 
           ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
           evt.type = EVENT_NETWORK_CONNECTED;
-          fireEvent();
+          fireEvent(&evt);
 
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
@@ -1652,7 +1656,7 @@ class WiFiEth : public Network{
 
             ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
             evt.type = EVENT_NETWORK_DISCONNECTED;
-            fireEvent();
+            fireEvent(&evt);
 
             xSemaphoreGive(networkBusy);              
           }else{
@@ -1662,7 +1666,7 @@ class WiFiEth : public Network{
         }
 
         evt.type = EVENT_NETWORK_CONNECTION_CHANGED;
-        fireEvent();        
+        fireEvent(&evt);        
 
       }
 
@@ -1957,12 +1961,12 @@ class AccessPoint : public Network{
           if (server == NULL) server = new WiFiServer(80,1);         
           server->begin();
           evt.type = EVENT_NETWORK_CONNECTED;
-          fireEvent();            
+          fireEvent(&evt);            
         }else{
           //if (debug) DEBUG_PRINT("\nCient disconnected from AP");
           if (server != NULL){if (debug) DEBUG_PRINT("\nDELETING SERVER");delete server; server  = NULL;} 
           evt.type = EVENT_NETWORK_DISCONNECTED;
-          fireEvent();
+          fireEvent(&evt);
         }                
       }
       return refreshed;

@@ -81,13 +81,28 @@ bool useUSBMidi = false;
 // Elle est pensée pour 1 producteur logique (l'interface) et N lecteurs.
 // ============================================================================
 
+// ============================================================================
+// SharedEventQueue
+// ----------------------------------------------------------------------------
+// Queue broadcast partagée :
+// - une interface publie des événements
+// - plusieurs lecteurs peuvent les lire indépendamment
+// - un lecteur ne consomme pas pour les autres
+//
+// Cette implémentation est volontairement simple et lisible.
+// Elle ne fait PAS d'écrasement silencieux.
+// Si la queue est pleine, publish() renvoie false.
+// ============================================================================
+
 template<typename T, size_t CAPACITY, size_t MAX_READERS>
 class SharedEventQueue {
 public:
   // --------------------------------------------------------------------------
-  // Token de lecture individuel
-  // Chaque strip possède son propre token.
-  // nextSeq = prochaine séquence que le strip doit lire.
+  // ReaderToken
+  // --------------------------------------------------------------------------
+  // Petit "handle" détenu par chaque lecteur.
+  // index = slot du lecteur dans la queue
+  // valid = indique si le lecteur est bien enregistré
   // --------------------------------------------------------------------------
   struct ReaderToken {
     int8_t index = -1;
@@ -99,7 +114,7 @@ public:
   }
 
   // --------------------------------------------------------------------------
-  // Remise à zéro complète de la queue
+  // Remise à zéro complète
   // --------------------------------------------------------------------------
   void clear() {
     _headSeq = 0;
@@ -117,9 +132,11 @@ public:
   }
 
   // --------------------------------------------------------------------------
-  // Enregistrement d'un lecteur
-  // Le lecteur démarre à "maintenant" :
-  // il ne reçoit pas l'historique déjà publié avant son abonnement.
+  // registerReader
+  // --------------------------------------------------------------------------
+  // Enregistre un lecteur.
+  // Le lecteur démarre "à maintenant" :
+  // il ne lit pas l'historique déjà publié avant son enregistrement.
   // --------------------------------------------------------------------------
   bool registerReader(ReaderToken& token) {
     if (token.valid) return true;
@@ -137,34 +154,32 @@ public:
   }
 
   // --------------------------------------------------------------------------
-  // Désenregistrement d'un lecteur
+  // unregisterReader
   // --------------------------------------------------------------------------
   void unregisterReader(ReaderToken& token) {
     if (!token.valid) return;
+
     const int8_t idx = token.index;
     if (idx >= 0 && idx < (int8_t)MAX_READERS) {
       _readerActive[idx] = false;
       _readerNextSeq[idx] = 1;
     }
+
     token.index = -1;
     token.valid = false;
   }
 
   // --------------------------------------------------------------------------
-  // Publication d'un événement
+  // publish
+  // --------------------------------------------------------------------------
+  // Publie un événement dans la queue.
   //
-  // GARANTIE :
-  // on n'écrase jamais une case encore nécessaire au lecteur le plus lent.
-  //
-  // Si la queue est pleine :
-  // - on renvoie false
-  // - on n'écrase rien
-  //
-  // Donc le "zéro perte" est possible si l'appelant respecte ce retour
-  // et ne jette pas l'événement de son côté.
+  // IMPORTANT :
+  // On n'écrase jamais les données encore nécessaires au lecteur le plus lent.
+  // Si la queue est pleine, on renvoie false.
   // --------------------------------------------------------------------------
   bool publish(const T& item) {
-    uint32_t minNext = computeMinNextSeq();
+    const uint32_t minNext = computeMinNextSeq();
     uint32_t used = 0;
 
     if (_headSeq >= minNext) {
@@ -176,26 +191,32 @@ public:
       return false;
     }
 
-    const uint32_t seq = _headSeq + 1;
-    const size_t slot = seqToIndex(seq);
+    const uint32_t newSeq = _headSeq + 1;
+    const size_t slot = seqToIndex(newSeq);
 
     _buffer[slot] = item;
-    _slotSeq[slot] = seq;
-    _headSeq = seq;
+    _slotSeq[slot] = newSeq;
+    _headSeq = newSeq;
     _publishCount++;
     return true;
   }
 
   // --------------------------------------------------------------------------
-  // Indique si un lecteur a au moins un événement disponible
+  // hasData
   // --------------------------------------------------------------------------
   bool hasData(const ReaderToken& token) const {
     if (!token.valid) return false;
-    return _readerNextSeq[token.index] <= _headSeq;
+
+    const int8_t idx = token.index;
+    if (idx < 0 || idx >= (int8_t)MAX_READERS) return false;
+
+    return _readerNextSeq[idx] <= _headSeq;
   }
 
   // --------------------------------------------------------------------------
-  // Lit l'événement suivant pour CE lecteur
+  // readNext
+  // --------------------------------------------------------------------------
+  // Lit le prochain événement pour CE lecteur.
   // --------------------------------------------------------------------------
   bool readNext(const ReaderToken& token, T& out) {
     if (!token.valid) return false;
@@ -203,12 +224,12 @@ public:
     const int8_t idx = token.index;
     if (idx < 0 || idx >= (int8_t)MAX_READERS) return false;
 
-    uint32_t nextSeq = _readerNextSeq[idx];
+    const uint32_t nextSeq = _readerNextSeq[idx];
     if (nextSeq > _headSeq) return false;
 
     const size_t slot = seqToIndex(nextSeq);
 
-    // sécurité : la séquence doit toujours correspondre
+    // Sécurité : la case doit bien contenir la séquence attendue.
     if (_slotSeq[slot] != nextSeq) {
       return false;
     }
@@ -233,10 +254,16 @@ private:
   uint32_t _publishCount = 0;
   uint32_t _publishFailCount = 0;
 
+  // --------------------------------------------------------------------------
+  // Convertit une séquence logique en index physique du buffer circulaire
+  // --------------------------------------------------------------------------
   size_t seqToIndex(uint32_t seq) const {
     return (size_t)((seq - 1) % CAPACITY);
   }
 
+  // --------------------------------------------------------------------------
+  // Retourne la plus petite séquence encore attendue par un lecteur actif
+  // --------------------------------------------------------------------------
   uint32_t computeMinNextSeq() const {
     bool found = false;
     uint32_t minNext = _headSeq + 1;
@@ -250,12 +277,13 @@ private:
       }
     }
 
-    // s'il n'y a aucun lecteur, tout est considéré consommé
+    // S'il n'y a aucun lecteur, tout est considéré consommé.
     if (!found) return _headSeq + 1;
 
     return minNext;
   }
 };
+
 // ============================================================================
 // FIN QUEUE
 // ----------------------------------------------------------------------------
@@ -472,41 +500,132 @@ class GenericComponent{
 
 };
 
-struct Event {
-  uint8_t type;
-  void* data;
+enum EventType : uint8_t {
+  EVENT_DIGITAL_BUTTON,
+  EVENT_ANALOG_BUTTON,
+  EVENT_NETWORK,
+  EVENT_NETWORK_DISCONNECTED,
+  EVENT_NETWORK_CONNECTED,
+  EVENT_NETWORK_CONNECTION_CHANGED,
+  EVENT_INTERNET_PING,
+  EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE,
+  EVENT_DIRECTORY_SERVICE_REFRESHED,
+  EVENT_DIRECTORY_NOT_READY,
+  EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED,
+  EVENT_INTERFACE_DATA_READY,
+  EVENT_COUNT
 };
 
-class EventListener {
+/* Table de noms des événements */
+static const char* const EVENT_NAMES[EVENT_COUNT] = {
+  "EVENT_DIGITAL_BUTTON",
+  "EVENT_ANALOG_BUTTON",
+  "EVENT_NETWORK",
+  "EVENT_NETWORK_DISCONNECTED",
+  "EVENT_NETWORK_CONNECTED",
+  "EVENT_NETWORK_CONNECTION_CHANGED",
+  "EVENT_INTERNET_PING",
+  "EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE",
+  "EVENT_DIRECTORY_SERVICE_REFRESHED",
+  "EVENT_DIRECTORY_NOT_READY",
+  "EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED",
+  "EVENT_INTERFACE_DATA_READY"
+};
+
+class Event {
+  public:
+
+    uint8_t type;
+    void* data;
+
+    static const char* getEventName(uint8_t id) {
+      if (id < EVENT_COUNT) {
+        return EVENT_NAMES[id];
+      }
+      return "UNKNOWN_EVENT";
+    }
+
+    static bool isEventDumpEnabled(uint8_t id) {
+      if (id >= EVENT_COUNT) return false;
+      return (eventDumpMask & (1UL << id)) != 0;
+    }
+
+    static void enableEventDump(uint8_t id) {
+      if (id < EVENT_COUNT) {
+        eventDumpMask |= (1UL << id);
+      }
+    }
+
+    static void disableEventDump(uint8_t id) {
+      if (id < EVENT_COUNT) {
+        eventDumpMask &= ~(1UL << id);
+      }
+    }
+
+    static void setEventDumpMask(uint32_t mask) {
+      eventDumpMask = mask;
+    }
+
+    static uint32_t getEventDumpMask() {
+      return eventDumpMask;
+    }
+
+    static void enableAllEventDumps() {
+      if (EVENT_COUNT >= 32) {
+        eventDumpMask = 0xFFFFFFFFUL;
+      } else {
+        eventDumpMask = (1UL << EVENT_COUNT) - 1;
+      }
+    }
+
+    static void disableAllEventDumps() {
+      eventDumpMask = 0;
+    }
+
+    static void dump(const char* direction,const char* caller, uint8_t id) {
+      if (!isEventDumpEnabled(id)) return;
+      const char* eventName = getEventName(id);
+      DEBUG_PRINT("\n+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
+      DEBUG_PRINT("\n| %s %s %s",caller,direction,eventName);
+      DEBUG_PRINT("\n+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
+    }  
+
+    static uint32_t eventDumpMask;    
+
+};
+/* Initialisation du membre statique */
+uint32_t Event::eventDumpMask = (EVENT_COUNT >= 32) ? 0xFFFFFFFFUL : ((1UL << EVENT_COUNT) - 1);
+
+
+class EventListener{
 public:
   virtual ~EventListener() = default;
 
   virtual void onEvent(struct Event* evt) = 0;
 
+  void _onEvent(struct Event* evt){
+    #ifdef DEBUG
+      evt->dump("listen",getListenerName(),evt->type);
+    #endif
+    onEvent(evt);
+  };
+
   static void eventTrampoline(void* context, struct Event* evt) {
     if (context) {
-      static_cast<EventListener*>(context)->onEvent(evt);
+      static_cast<EventListener*>(context)->_onEvent(evt);
     }
   }
+
+  virtual const char* getListenerName() = 0;
+
 };
 
 class EventDispatcher {
 public:
-  enum EventType : uint8_t {
-    EVENT_DIGITAL_BUTTON,
-    EVENT_ANALOG_BUTTON,
-    EVENT_NETWORK,
-    EVENT_NETWORK_DISCONNECTED,
-    EVENT_NETWORK_CONNECTED,
-    EVENT_NETWORK_CONNECTION_CHANGED,
-    EVENT_INTERNET_PING,
-    EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE,
-    EVENT_DIRECTORY_SERVICE_REFRESHED,
-    EVENT_DIRECTORY_NOT_READY,
-    EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED
-  };
+  static constexpr uint8_t DEFAULT_MAX_CALLBACKS = 10;
+  static constexpr uint8_t ABSOLUTE_MAX_CALLBACKS = 64;
 
-  static constexpr uint8_t MAX_CALLBACKS = 10;
+  virtual const char* getDispatcherName() = 0;
 
   using CallbackFn = void (*)(void*, Event*);
 
@@ -515,12 +634,27 @@ public:
     CallbackFn fn = nullptr;
   };
 
-  Event evt = {};
+  EventDispatcher(uint8_t maxCallbacks = DEFAULT_MAX_CALLBACKS) {
+
+    if (maxCallbacks == 0)
+      maxCallbacks = DEFAULT_MAX_CALLBACKS;
+
+    if (maxCallbacks > ABSOLUTE_MAX_CALLBACKS)
+      maxCallbacks = ABSOLUTE_MAX_CALLBACKS;
+
+    maxHandlers = maxCallbacks;
+
+    eventHandlers = new HandlerSlot[maxHandlers];
+  }
+
+  ~EventDispatcher() {
+    delete[] eventHandlers;
+  }
 
   bool registerEventListener(EventListener* listener) {
     if (!listener) return false;
 
-    for (uint8_t i = 0; i < MAX_CALLBACKS; i++) {
+    for (uint8_t i = 0; i < maxHandlers; i++) {
       if (eventHandlers[i].context == listener &&
           eventHandlers[i].fn == EventListener::eventTrampoline) {
         DEBUG_PRINT("\nEventDispatcher: listener already registered");
@@ -528,7 +662,7 @@ public:
       }
     }
 
-    for (uint8_t i = 0; i < MAX_CALLBACKS; i++) {
+    for (uint8_t i = 0; i < maxHandlers; i++) {
       if (!eventHandlers[i].fn) {
         eventHandlers[i].context = listener;
         eventHandlers[i].fn = EventListener::eventTrampoline;
@@ -543,7 +677,7 @@ public:
   bool unregisterEventListener(EventListener* listener) {
     if (!listener) return false;
 
-    for (uint8_t i = 0; i < MAX_CALLBACKS; i++) {
+    for (uint8_t i = 0; i < maxHandlers; i++) {
       if (eventHandlers[i].context == listener &&
           eventHandlers[i].fn == EventListener::eventTrampoline) {
         eventHandlers[i].context = nullptr;
@@ -554,22 +688,21 @@ public:
     return false;
   }
 
-  void fireEvent() {
-    for (uint8_t i = 0; i < MAX_CALLBACKS; ++i) {
+  void fireEvent(Event* event){
+    #ifdef DEBUG
+      event->dump("fire",getDispatcherName(),event->type);
+    #endif    
+
+    for (uint8_t i = 0; i < maxHandlers; ++i) {
       if (eventHandlers[i].fn) {
-        eventHandlers[i].fn(eventHandlers[i].context, &evt);
+        eventHandlers[i].fn(eventHandlers[i].context, event);
       }
     }
   }
 
-  void fireEvent(EventType type, void* data = nullptr) {
-    evt.type = type;
-    evt.data = data;
-    fireEvent();
-  }
-
 private:
-  HandlerSlot eventHandlers[MAX_CALLBACKS] = {};
+  HandlerSlot* eventHandlers = nullptr;
+  uint8_t maxHandlers = DEFAULT_MAX_CALLBACKS;
 };
 
 ///////////////////// API MANAGEMENT //////////////////////
@@ -2169,9 +2302,9 @@ WiFiEvent_t wiFiEvent;
 //////////////////////////////////////////////////////////////////////// 
 void OnWiFiEvent(WiFiEvent_t event){
   wiFiEvent = event;
-  app.evt.type = EventDispatcher::EVENT_NETWORK;
+  app.evt.type = EVENT_NETWORK;
   app.evt.data = &wiFiEvent;
-  app.fireEvent();
+  app.fireEvent(&app.evt);
   // below line is to avoid that a call to start wifi cut a pending connection DIRTY CODE
   if (event == ARDUINO_EVENT_WIFI_STA_CONNECTED){    
     hwm.network->wiFiTimeout = 10000; // we let 10s to get the IP and setup the wifi link

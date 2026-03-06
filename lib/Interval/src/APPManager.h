@@ -347,7 +347,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     std::queue<EthernetClient*> clientQueue;
 
-    Event evt; 
     std::vector<String> broadcastQueue;
 
     Application* webServer = nullptr;
@@ -496,8 +495,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     //////////////////                       //////////////////////    
     ///////////////////////////////////////////////////////////////
    
+    Event evt;
 
-    ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true): GenericComponent(debug){
+    virtual const char* getDispatcherName() override{
+      return id.c_str();
+    }
+
+    virtual const char* getListenerName() override{
+      return id.c_str();
+    }
+
+
+    ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true): GenericComponent(debug),EventDispatcher(12){
       hwm = h;
       gui = g;
       id = "ApplicationManager";
@@ -584,18 +593,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     }
 
-    void internetCallBack(TargetEcho* echo){
+    void internetCallBack(TargetEcho* internetEcho){
       ///////////////////////// do what application manager has to do when internet is connected/disconnected      
-      if (echo->alive){
-        DEBUG_PRINT("\n\n[ping]\t\t%s : internet connected\n\n",echo->host.c_str()); 
+      if (internetEcho->alive){
+        DEBUG_PRINT("\n\n[ping]\t\t%s : internet connected\n\n",internetEcho->host.c_str()); 
         checkRemoteVersion();               
       }else{
-        DEBUG_PRINT("\n\n[ping]\t\t%s : No internet connection, skipping remote version check\n\n",echo->host.c_str());          
+        DEBUG_PRINT("\n\n[ping]\t\t%s : No internet connection, skipping remote version check\n\n",internetEcho->host.c_str());          
       }       
       ///////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
-      evt.data = echo;
-      fireEvent();
+      evt.data = internetEcho;
+      fireEvent(&evt);
     }
 
     void setBatIcon(){
@@ -739,6 +748,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         ftp.begin();
       #endif
 
+      Event::disableEventDump(EVENT_ANALOG_BUTTON);
+      Event::disableEventDump(EVENT_DIGITAL_BUTTON);
+
 
       // *********************************
       // SKELETONS & DATA SETS
@@ -782,7 +794,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       // RTPMIDI
       appleMIDIInterface = new AppleMIDIInterface(true);
       //we tell appleMIDIInterface to listen to event raised by directoryService
-      directoryService.registerEventListener(appleMIDIInterface);
+      //directoryService.registerEventListener(appleMIDIInterface);
 
       std::vector<String> groupesUniques;
       /* register the interface names in the dataset of their group, without duplating the groups 
@@ -794,6 +806,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         if (!interface->init(this)){
           DEBUG_PRINT("\n%s->init() failed or is not fully implemented",interface->interfaceName.c_str());    
         }
+
+        registerEventListener(interface);   // propagate the event
         
         bool exists = false;
         for (const String& g : groupesUniques) {
@@ -943,7 +957,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
       }
 
-      disableUnusedInterface();      // optimize
+      //disableUnusedInterface();      // optimize
 
       checkAndDeleteFile(FIRMWARE_BIN_FILENAME);  // in case there is a .bin.gz file leftover from previous firmware update
       restoreScreen();       // restore the screen that persists 
@@ -965,14 +979,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // EVENTS HANDLERS
     // *********************************
     void onEvent(Event* event){
-      DEBUG_PRINT("\n+---------------------+");
-      DEBUG_PRINT("\n| onEvent: %d   |",event->type);
-      DEBUG_PRINT("\n+---------------------+");
       switch(event->type){
         case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
           sendTerminateMessageToWebApp("Network connection changed. Close this page");         // the browser becomes unavialble, so terminate the application
           shutdownWSS();      //
           stopInterfaces();
+        break;
+        case EVENT_NETWORK_DISCONNECTED:
+
         break;
         case EVENT_NETWORK_CONNECTED:
           // discover RTP services available on the network
@@ -998,8 +1012,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           }
         break;
         case EVENT_NETWORK_CONNECTION_CHANGED:
-          setiFconnectivityColor();
-          setAPIcon();
+          setIcons();
         break;         
         case EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE:
           directoryService.discoveryRequest();
@@ -1010,38 +1023,34 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         case EVENT_DIGITAL_BUTTON:
           handleOnOffEvent(event);
         break;
-      }
-      // propagate the event
-      evt.type = event->type;
-      evt.data = event->data;      
-      fireEvent();      
+      }   
+      fireEvent(event);   // propagate the event
     }
 
-
+    void setIcons(){
+      setiFconnectivityColor();
+      setAPIcon();
+    }
 
     void handleSwitchEvent(Event* event) {
-        ButtonData* btnEvt = (ButtonData*) event->data;             
-        switch(btnEvt->id){
-          case IntervalButton::BUTTON_DOUBLE_CLIC:
-            doubleClicCallBack(btnEvt->buttonId,btnEvt->time);
-          break;
-          case IntervalButton::BUTTON_HOLD:
-            holdCallback(btnEvt->buttonId,btnEvt->time);
-          break;
-          case IntervalButton::BUTTON_LONG_CLIC:
-            longClicCallBack(btnEvt->buttonId,btnEvt->time);
-          break;
-          case IntervalButton::BUTTON_RELEASE_HOLD:
-            releaseHoldCallback(btnEvt->buttonId,btnEvt->time);
-          break;
-          case IntervalButton::BUTTON_SIMPLE_CLIC:
-            simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
-          break;
-        }
-      // propagate the event
-      evt.type = event->type;
-      evt.data = event->data;      
-      fireEvent(); 
+      ButtonData* btnEvt = (ButtonData*) event->data;             
+      switch(btnEvt->id){
+        case IntervalButton::BUTTON_DOUBLE_CLIC:
+          doubleClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+        case IntervalButton::BUTTON_HOLD:
+          holdCallback(btnEvt->buttonId,btnEvt->time);
+        break;
+        case IntervalButton::BUTTON_LONG_CLIC:
+          longClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+        case IntervalButton::BUTTON_RELEASE_HOLD:
+          releaseHoldCallback(btnEvt->buttonId,btnEvt->time);
+        break;
+        case IntervalButton::BUTTON_SIMPLE_CLIC:
+          simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
+        break;
+      }
     }
 
 
@@ -1084,11 +1093,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           USBMIDI.sendNoteOn(123,62,1);*/                                                                                                                                                                         
         break;
       }
-
-      // propagate the event
-      evt.type = event->type;
-      evt.data = event->data;      
-      fireEvent();    
     }
 
     void promptScreen(){

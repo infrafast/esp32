@@ -86,37 +86,58 @@ class MIDIInterface: public DeviceInterface{
 
     virtual void handleChangeControl(byte channel, byte number, byte value){
       DEBUG_PRINT("\nhandleChangeControl channel:%i, number:%i value:%i",channel,number,value);
-      // FEED the midi data structure with data
+
+      // ------------------------------------------------------------------------
+      // Ancien mécanisme conservé pour compatibilité
+      // ------------------------------------------------------------------------
       midiData.type = MIDI_CC;
       midiData.channel = channel;
       midiData.number = number;
       midiData.value = value;
-      // and indicate how much is available
       dataAvailable = 1;
+
+      // ------------------------------------------------------------------------
+      // Nouveau mécanisme : publication d'un snapshot immuable dans la queue
+      // ------------------------------------------------------------------------
+      bool ok = publishMidiCCEvent(channel, number, value);
+
+      if (!ok) {
+        DEBUG_PRINT("\nMIDIInterface: queue pleine, impossible de publier le CC");
+      }
     }
 
     virtual void handleSysex(byte* sysexdata, unsigned length){
       DEBUG_PRINT("\nhandleSysex: %c, %i bytes: ",getSysExStatus(sysexdata, length),length);
       for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",sysexdata[i]);
-      // FEED the midi data structure with data
 
+      // ------------------------------------------------------------------------
+      // Ancien mécanisme conservé pour compatibilité
+      // ------------------------------------------------------------------------
       midiData.type = MIDI_SYSEX;
-      // Libère l'ancien buffer si nécessaire
+
       if (midiData.data != nullptr) {
-          delete[] midiData.data;
-          midiData.data = nullptr;
+        delete[] midiData.data;
+        midiData.data = nullptr;
       }
-      // Allocation du nouveau buffer
+
       if (length > 0) {
         midiData.data = new byte[length];
         if (midiData.data != nullptr) {
-            memcpy(midiData.data, sysexdata, length);
+          memcpy(midiData.data, sysexdata, length);
         }
       }
 
-      // and indicate how much is available
       dataAvailable = length;
-    }    
+
+      // ------------------------------------------------------------------------
+      // Nouveau mécanisme : copie bornée et publication dans la queue
+      // ------------------------------------------------------------------------
+      bool ok = publishMidiSysexEvent(sysexdata, length);
+
+      if (!ok) {
+        DEBUG_PRINT("\nMIDIInterface: queue pleine, impossible de publier le SysEx");
+      }
+    } 
 
 
     char getSysExStatus(const byte* data, uint16_t length){
@@ -134,6 +155,51 @@ class MIDIInterface: public DeviceInterface{
 
   protected:
       static inline MIDIInterface* baseInstancePtr = nullptr;
+      // --------------------------------------------------------------------------
+        // Taille max du SysEx copié dans une frame d'événement
+        // --------------------------------------------------------------------------
+        // On s'aligne sur la taille du payload générique défini dans Interfaces.h.
+        // Cela évite toute allocation dynamique dans la frame publiée.
+        // --------------------------------------------------------------------------
+        static constexpr size_t MIDI_EVENT_SYSEX_MAX = INTERFACE_EVENT_PAYLOAD_MAX;
+
+        // --------------------------------------------------------------------------
+        // Publie un événement MIDI de type Control Change
+        // --------------------------------------------------------------------------
+        bool publishMidiCCEvent(byte channel, byte number, byte value) {
+          InterfaceEventFrame frame;
+          frame.kind = IE_MIDI_CC;
+          frame.timestamp = millis();
+
+          // Champs simples rangés dans a/b/c
+          frame.a = channel;
+          frame.b = number;
+          frame.c = value;
+
+          return publishInterfaceEvent(frame);
+        }
+
+        // --------------------------------------------------------------------------
+        // Publie un événement MIDI de type SysEx
+        // --------------------------------------------------------------------------
+        bool publishMidiSysexEvent(const byte* sysexdata, size_t length) {
+          InterfaceEventFrame frame;
+          frame.kind = IE_MIDI_SYSEX;
+          frame.timestamp = millis();
+
+          size_t copyLen = length;
+          if (copyLen > MIDI_EVENT_SYSEX_MAX) {
+            copyLen = MIDI_EVENT_SYSEX_MAX;
+          }
+
+          frame.size = (uint16_t)copyLen;
+
+          if (copyLen > 0 && sysexdata != nullptr) {
+            memcpy(frame.payload, sysexdata, copyLen);
+          }
+
+          return publishInterfaceEvent(frame);
+        }      
 
 };
 
@@ -498,7 +564,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       lastInvite = millis();
       // ask the application to perform a service discovery    
       evt.type = EVENT_START_EP_DIRECTORY_DISCOVERY_SERVICE;
-      fireEvent();            
+      fireEvent(&evt);            
     }
 
     virtual void handleRequestRefreshState(){    
@@ -506,10 +572,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       requestDirectoryRefresh();
     }
 
-
-
     void onEvent(Event* evt) {
-      DEBUG_PRINT("\n%s::handleDirectoryEvent(%i)",interfaceName.c_str(),evt->type);
+      // recive the event propagated from Appmanager
       switch(evt->type){
         case EVENT_DIRECTORY_SERVICE_REFRESHED:          
           rtpDirectory = (RtpDirectory*)evt->data;
@@ -521,11 +585,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
         case EVENT_DIRECTORY_NOT_READY:
           setSetDirectoryServiceDown();
         break;
-        ///////////////// from NetworkDevice
-        case EventDispatcher::EVENT_NETWORK_DISCONNECTED:
+        ///////////////// from NetworkDevice => is needed because it will not be done via NetworkDevice
+        case EVENT_NETWORK_DISCONNECTED:
           disable();
           break;
-        case EventDispatcher::EVENT_NETWORK_CONNECTED:
+        case EVENT_NETWORK_CONNECTED:
           if (hwm.network->state == CONNECTED){
             if (deviceInterface->state.enabled){
               enable();
