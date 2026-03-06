@@ -1391,8 +1391,9 @@ void scanNetworksTaskWrapper(void * parameter){
 
 // Choix du socket ICMP (0–7 sur W5x00) + identifiant ICMP
 void ping(PingParameters* params) {
+
   // NB: host resolution doesnt work
-  DEBUG_PRINT("\n\n\[ping] %s",params->echo->host.c_str());
+  DEBUG_PRINT("\n\n[ping] %s",params->echo->host.c_str());
   if (WiFi.hostByName(params->echo->host.c_str(), params->echo->ip) == 1){
 
     //DEBUG_PRINT("\npingTask running...");  

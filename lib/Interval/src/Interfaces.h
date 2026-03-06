@@ -764,11 +764,11 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
         remotePort = _port;
         if (remotePort>65535 || remotePort<0) remotePort = 0;
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
+        if (destination->host != inputStr)  changed = true;
+        destination->host = inputStr;
         IPAddress ip;
         if (ip.fromString(inputStr)){
-          if (destination->ip != ip)  changed = true;
-          destination->ip = ip;    
-          destination->host = inputStr;  
+          destination->ip = ip;                
         }else{
           DEBUG_PRINT("\ninvalid IP address: %s",inputStr);
         }

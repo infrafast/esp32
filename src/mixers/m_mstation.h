@@ -175,7 +175,10 @@ class MixingStation: public NetworkDevice, public MixerInterface{
         length,
         DeserializationOption::Filter(filter)
       );
-      if (e) return;
+      if (e){
+        DEBUG_PRINT("\n%s:onTXTmessage(): JSON error: %s", e.c_str());        
+        return;
+      }
 
       const char* error = docHeader["error"] | nullptr;
       if (error && *error) {
@@ -237,7 +240,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
             setStateSyncing("Syncing software");
           }
         }else{
-          if (deviceInterface->state.subState != state){
+          if (deviceInterface->state.subState != String(state)){
             setStateConnecting(state,msg);
           }
         }
@@ -252,7 +255,8 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       else{
         setStateDisconnected();       // unknow state
         deviceInterface->state.label = topState;
-        deviceInterface->state.details = "UNHANDLED MS STATE";
+        deviceInterface->state.subState = state;
+        deviceInterface->state.details = concatStrings("UNHANDLED MS STATE:",deviceInterface->state.subState);
       }
 
     }
@@ -261,7 +265,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       // Exemple : parse filtré pour réduire RAM/CPU
       JsonDocument filter;
       filter["body"]["consoles"][0]["consoleId"]     = true;
-      filter["body"]["consoles"][0]["models"]        = true;
+      filter["body"]["consoles"][0]["models"][0]     = true; // notation pour un array complet
       filter["body"]["consoles"][0]["manufacturer"]  = true;
       filter["body"]["consoles"][0]["name"]          = true;
 
@@ -273,9 +277,14 @@ class MixingStation: public NetworkDevice, public MixerInterface{
         int id = c["consoleId"] | -1;
         const char* name = c["name"] | "";
         const char* mfg  = c["manufacturer"] | "";
-        bool canSearch   = c["canSearch"] | false;
+        JsonArray models = c["models"].as<JsonArray>();        
 
-        (void)id; (void)name; (void)mfg; (void)canSearch;
+        (void)id; (void)name; (void)mfg;
+
+        for (const char* m : models) {
+            DEBUG_PRINT("model=%d name=%s manufacturer=%s canSearch=%d",id, name, mfg, m);
+        }        
+
       }
     }    
 
