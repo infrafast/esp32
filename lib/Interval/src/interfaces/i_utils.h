@@ -179,6 +179,14 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         return true;
       }
 
+      void onEvent(Event* event){
+        switch(event->type){
+          case EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH:
+            discoveryRequest();
+          break;        
+        }
+      }
+
       void discoveryRequest(){
         DEBUG_INFO("%s::discoveryRequest()",interfaceName.c_str());   
         if (deviceInterface->state.enabled){       

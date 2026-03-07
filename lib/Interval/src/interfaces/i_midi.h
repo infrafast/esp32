@@ -65,7 +65,7 @@ class MIDIInterface: public DeviceInterface{
     MidiData midiData;
 
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
-      data = &midiData;       // this inertaface handle  MidiData
+      //data = &midiData;       // this inertaface handle  MidiData
     }
    
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
@@ -87,23 +87,12 @@ class MIDIInterface: public DeviceInterface{
     virtual void handleChangeControl(byte channel, byte number, byte value){
       DEBUG_INFO("handleChangeControl channel:%i, number:%i value:%i",channel,number,value);
 
-      // ------------------------------------------------------------------------
-      // Ancien mécanisme conservé pour compatibilité
-      // ------------------------------------------------------------------------
       midiData.type = MIDI_CC;
       midiData.channel = channel;
       midiData.number = number;
       midiData.value = value;
       dataAvailable = 1;
 
-      // ------------------------------------------------------------------------
-      // Nouveau mécanisme : publication d'un snapshot immuable dans la queue
-      // ------------------------------------------------------------------------
-      bool ok = publishMidiCCEvent(channel, number, value);
-
-      if (!ok) {
-        DEBUG_WARN("MIDIInterface: queue pleine, impossible de publier le CC");
-      }
     }
 
     virtual void handleSysex(byte* sysexdata, unsigned length){
@@ -128,15 +117,6 @@ class MIDIInterface: public DeviceInterface{
       }
 
       dataAvailable = length;
-
-      // ------------------------------------------------------------------------
-      // Nouveau mécanisme : copie bornée et publication dans la queue
-      // ------------------------------------------------------------------------
-      bool ok = publishMidiSysexEvent(sysexdata, length);
-
-      if (!ok) {
-        DEBUG_WARN("MIDIInterface: queue pleine, impossible de publier le SysEx");
-      }
     } 
 
 
@@ -155,52 +135,6 @@ class MIDIInterface: public DeviceInterface{
 
   protected:
       static inline MIDIInterface* baseInstancePtr = nullptr;
-      // --------------------------------------------------------------------------
-        // Taille max du SysEx copié dans une frame d'événement
-        // --------------------------------------------------------------------------
-        // On s'aligne sur la taille du payload générique défini dans Interfaces.h.
-        // Cela évite toute allocation dynamique dans la frame publiée.
-        // --------------------------------------------------------------------------
-        static constexpr size_t MIDI_EVENT_SYSEX_MAX = INTERFACE_EVENT_PAYLOAD_MAX;
-
-        // --------------------------------------------------------------------------
-        // Publie un événement MIDI de type Control Change
-        // --------------------------------------------------------------------------
-        bool publishMidiCCEvent(byte channel, byte number, byte value) {
-          InterfaceEventFrame frame;
-          frame.kind = IE_MIDI_CC;
-          frame.timestamp = millis();
-
-          // Champs simples rangés dans a/b/c
-          frame.a = channel;
-          frame.b = number;
-          frame.c = value;
-
-          return publishInterfaceEvent(frame);
-        }
-
-        // --------------------------------------------------------------------------
-        // Publie un événement MIDI de type SysEx
-        // --------------------------------------------------------------------------
-        bool publishMidiSysexEvent(const byte* sysexdata, size_t length) {
-          InterfaceEventFrame frame;
-          frame.kind = IE_MIDI_SYSEX;
-          frame.timestamp = millis();
-
-          size_t copyLen = length;
-          if (copyLen > MIDI_EVENT_SYSEX_MAX) {
-            copyLen = MIDI_EVENT_SYSEX_MAX;
-          }
-
-          frame.size = (uint16_t)copyLen;
-
-          if (copyLen > 0 && sysexdata != nullptr) {
-            memcpy(frame.payload, sysexdata, copyLen);
-          }
-
-          return publishInterfaceEvent(frame);
-        }      
-
 };
 
 
@@ -535,9 +469,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }    
 
     virtual bool begin() override{      
-      DEBUG_INFO("AppleMIDIInterface::begin()");
+      DEBUG_INFO("AppleMIDIInterface::begin() => self registering to network event + basePtr affectation");
       MIDIInterface::init();
       appleInstancePtr = this;   // do not forget otherwise callback function will crash
+      //appleMidi listen to network event
+      hwm.network->registerEventListener(this);
       return true;      
     }
 

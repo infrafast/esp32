@@ -793,8 +793,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       threePinDMXInterface = new ThreePinDMXInterface(true);     
       // RTPMIDI
       appleMIDIInterface = new AppleMIDIInterface(true);
-      //we tell appleMIDIInterface to listen to event raised by directoryService
-      //directoryService.registerEventListener(appleMIDIInterface);
+      
+      // EVENT REGISTRATION
+      //we tell appleMIDIInterface to listen to event raised by directoryService  and vice versa       
+      directoryService.registerEventListener(appleMIDIInterface);
+      appleMIDIInterface->registerEventListener(&directoryService);
 
       std::vector<String> groupesUniques;
       /* register the interface names in the dataset of their group, without duplating the groups 
@@ -806,12 +809,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         if (!interface->init(this)){
           DEBUG_WARN("%s->init() failed or is not fully implemented",interface->interfaceName.c_str());    
         }
-
-        if (!registerEventListener(interface)){
-          DEBUG_ERROR("\n⛔ ApplicationManager::init() registerEventListener(%s) failed (max reached?) ",interface->interfaceName.c_str());
-          while(1);
-        };// propagate the event   
-        
+       
         bool exists = false;
         for (const String& g : groupesUniques) {
           if (g == interface->group) {
@@ -856,14 +854,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
             
+      ////////////////////////////////////////////////////////////////////////
+      // REGSITER APPLICATION MANAGER AS AN EVENT LISTENER OF OTHERS COMPONENTS
+      ////////////////////////////////////////////////////////////////////////
       for (uint8_t i=0;i<MAXB;i++){
-        hwm->buttons[i]->registerEventListener(this);
-      }
-
-      hwm->onOff.registerEventListener(this);
-
-      hwm->network->registerEventListener(this);
+        hwm->buttons[i]->registerEventListener(this);   // ApplicationManager listen to switch event
+      }     
+      hwm->onOff.registerEventListener(this);           // ApplicationManager listen to onOff button event
+      hwm->network->registerEventListener(this);        // ApplicationManager listen to network event
       
+      ////////////////////////////////////////////////////////////////////////
+      // DESIGN MENU
+      ////////////////////////////////////////////////////////////////////////
       back_menu_item = new MenuItem(quitMenuString, &back_menu_item_selected);
       info_menu_item = new MenuItem(infoMenuString, &info_item_selected);
       config_menu_item = new MenuItem(configMenuString,&config_menu_item_selected);
@@ -988,9 +990,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           shutdownWSS();      //
           stopInterfaces();
         break;
-        case EVENT_NETWORK_DISCONNECTED:
-
-        break;
         case EVENT_NETWORK_CONNECTED:
           // discover RTP services available on the network
           //startDirectoryServiceDiscovery();
@@ -1015,11 +1014,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           }
         break;
         case EVENT_NETWORK_CONNECTION_CHANGED:
-          setIcons();
+          setiFconnectivityColor();
+          setAPIcon();
         break;         
-        case EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH:
-          directoryService.discoveryRequest();
-        break;
         case EVENT_ANALOG_BUTTON:
           handleSwitchEvent(event);
         break;
@@ -1028,11 +1025,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
       }   
       fireEvent(event);   // propagate the event
-    }
-
-    void setIcons(){
-      setiFconnectivityColor();
-      setAPIcon();
     }
 
     void handleSwitchEvent(Event* event) {

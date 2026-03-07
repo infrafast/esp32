@@ -173,7 +173,7 @@ float bezYforX(float x, float x1, float y1, float x2, float y2) {
 
 float oneHundedFloat = 100.0;
 
-class Strip : public EventListener {  
+class Strip {  
   #define JSON_STRIP_PROPERTY_SIZE 100
   #define  JSON_STRIP_TEMPLATE_SIZE 300
   public:
@@ -245,35 +245,7 @@ class Strip : public EventListener {
         interface->stripCount -= 1;
         if (interface->stripCount<0) interface->stripCount = 0;
       }
-      detachFromInterfaceEventSystem();
     }    
-
-    // --------------------------------------------------------------------------
-    // Une donnée est disponible
-    // --------------------------------------------------------------------------    
-    // ----------------------------------------------------------------------
-    // Réception des notifications envoyées par l'interface
-    // ----------------------------------------------------------------------
-    // Ici, on ne lit PAS evt->data comme donnée métier.
-    // evt->data sert seulement à identifier l'interface source.
-    // La vraie donnée se trouve dans la queue de l'interface.
-    // ----------------------------------------------------------------------
-    virtual void onEvent(struct Event* evt) override {
-      if (!evt) return;      
-      // On ne s'intéresse qu'au nouveau type d'événement
-      if (evt->type != EVENT_INTERFACE_DATA_READY) return;
-
-      // Sécurité : on ne traite que les notifications de NOTRE interface
-      if (evt->data != interface) return;
-
-      // On consomme toutes les frames en attente pour ce strip
-      consumePendingInterfaceFrames();
-    }
-
-    virtual const char* getListenerName() override{
-      return interfaceName.c_str();
-    }
-
 
     // --------------------------------------------------------------------------
     // BUTTON MANAGEMENT
@@ -477,26 +449,14 @@ class Strip : public EventListener {
     // it assign the GUI values the values that were acquired or processed in the process() method
     // basedon its internal state, it will set the redraw flag 
     virtual void update() = 0;  
-    
+      
     // this code is requesting the strip to update its state (values, etc...) using data from the interface
     // process() is called from main app on all strip: the strip decide then if he has to do the query (for instance if it is focused) as       
     // some strip may do some backgroud tasks (like playing sample or executing a macro), other will only do this if they have focus         
     void process(){ 
-      // --------------------------------------------------------------------
-      // Nouveau mécanisme :
-      // même si aucune notification n'a été reçue, on peut quand même vider
-      // d'éventuelles frames restées en attente.
-      // --------------------------------------------------------------------
-      if (interface && eventReaderRegistered) {
-        consumePendingInterfaceFrames();
-      }
-
-      // --------------------------------------------------------------------
-      // Ancien mécanisme conservé pour compatibilité temporaire
-      // --------------------------------------------------------------------
       if (!interface) return;
       if (interface->available() > 0) update();
-    }  
+    }
 
 
     void focus(bool f=true){
@@ -526,10 +486,6 @@ class Strip : public EventListener {
       interface = interfaceRepo.retrieve(interfaceName);
       if (interface == nullptr) return false; // if it has no interface, no need to continue
 
-      // --------------------------------------------------------------------
-      // Nouveau mécanisme : le strip s'abonne à son interface
-      // --------------------------------------------------------------------
-      attachToInterfaceEventSystem();
       interface->stripCount++;              // et signale qu'il utilise l'interface
 
       type = jsonStrip[C_STRIPTYPE].as<String>();
@@ -816,91 +772,6 @@ class Strip : public EventListener {
     unsigned long lastCall;     
     uint16_t frameColor = TFT_GOLD;
     //Label* defaultLabel = nullptr;
-   
-    // ----------------------------------------------------------------------
-    // Token de lecture propre à CE strip
-    // ----------------------------------------------------------------------
-    // Chaque strip lit indépendamment les événements de son interface.
-    // Un autre strip branché sur la même interface aura son propre token.
-    // ----------------------------------------------------------------------
-    DeviceInterface::EventQueue::ReaderToken eventReaderToken;
-
-    // Indique si le strip s'est bien enregistré comme lecteur de la queue
-    bool eventReaderRegistered = false;
-
-    // Indique si le strip s'est bien enregistré comme listener
-    bool eventListenerRegistered = false;
-
-    // ----------------------------------------------------------------------
-    // Hook virtuel du nouveau mécanisme
-    // ----------------------------------------------------------------------
-    // Les strips dérivés redéfiniront cette méthode quand ils seront migrés
-    // vers la nouvelle lecture par queue.
-    //
-    // Pour l'instant, la version par défaut ne fait rien, ce qui permet de
-    // ne rien casser tant que les strips concrets n'ont pas été migrés.
-    // ----------------------------------------------------------------------
-    virtual void onInterfaceEventFrame(const InterfaceEventFrame& frame) {
-      (void)frame;
-    }
-
-    // ----------------------------------------------------------------------
-    // Enregistre le strip auprès de son interface
-    // ----------------------------------------------------------------------
-    // 1) comme listener de notifications
-    // 2) comme lecteur de la queue de frames
-    //
-    // Cette méthode est idempotente : si tout est déjà enregistré, elle ne
-    // fait rien de plus et renvoie true.
-    // ----------------------------------------------------------------------
-    bool attachToInterfaceEventSystem() {
-      if (!interface) return false;
-
-      if (!eventListenerRegistered) {
-        eventListenerRegistered = interface->registerEventListener(this);
-      }
-
-      if (!eventReaderRegistered) {
-        eventReaderRegistered = interface->registerEventReader(eventReaderToken);
-      }
-
-      return eventListenerRegistered && eventReaderRegistered;
-    }
-
-    // ----------------------------------------------------------------------
-    // Désenregistre le strip
-    // ----------------------------------------------------------------------
-    void detachFromInterfaceEventSystem() {
-      if (!interface) return;
-
-      if (eventListenerRegistered) {
-        interface->unregisterEventListener(this);
-        eventListenerRegistered = false;
-      }
-
-      if (eventReaderRegistered) {
-        interface->unregisterEventReader(eventReaderToken);
-        eventReaderRegistered = false;
-      }
-    }
-
-    // ----------------------------------------------------------------------
-    // Lit toutes les frames en attente pour CE strip
-    // ----------------------------------------------------------------------
-    // Très important :
-    // on vide la queue personnelle de CE strip, mais cela ne consomme rien
-    // pour les autres strips.
-    // ----------------------------------------------------------------------
-    void consumePendingInterfaceFrames() {
-      if (!interface) return;
-      if (!eventReaderRegistered) return;
-
-      InterfaceEventFrame frame;
-      while (interface->readNextEvent(eventReaderToken, frame)) {
-        onInterfaceEventFrame(frame);
-      }
-    }
-    
 
 };
 

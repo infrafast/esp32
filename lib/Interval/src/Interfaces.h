@@ -7,57 +7,6 @@
 #include "interfaces/i_states.h"
 
 
-
-// ============================================================================
-// Types d'événements publiés par les interfaces
-// ----------------------------------------------------------------------------
-// Une interface concrète (MIDI, OSC, MixingStation, etc.) publie des frames
-// génériques de ce type.
-// ============================================================================
-
-enum InterfaceEventKind : uint8_t {
-  IE_NONE = 0,
-  IE_MIDI_CC,
-  IE_MIDI_SYSEX,
-  IE_OSC_MESSAGE,
-  IE_MS_APP_STATE,
-  IE_MS_MIXERS_AVAILABLE
-};
-
-// Taille maximum du payload copié dans une frame.
-// Cette borne évite l'usage de new/delete dans les événements publiés.
-static constexpr size_t INTERFACE_EVENT_PAYLOAD_MAX = 256;
-
-// ============================================================================
-// InterfaceEventFrame
-// ----------------------------------------------------------------------------
-// Enveloppe générique transportée dans la queue commune.
-// ----------------------------------------------------------------------------
-// kind      : type métier
-// size      : taille réellement utilisée dans payload[]
-// timestamp : moment de publication
-// a/b/c/d   : petits champs utilitaires pour les cas simples
-// payload   : buffer brut borné
-// ============================================================================
-struct InterfaceEventFrame {
-  uint8_t kind = IE_NONE;
-  uint16_t size = 0;
-  uint32_t timestamp = 0;
-
-  uint8_t a = 0;
-  uint8_t b = 0;
-  uint8_t c = 0;
-  uint8_t d = 0;
-
-  uint8_t payload[INTERFACE_EVENT_PAYLOAD_MAX] = {0};
-};
-
-
-
-
-
-
-
 #define ADDRESS_CHANGETOPARAMETERNAME "/config/%s"
 
 
@@ -93,18 +42,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     int dataAvailable;
     void* data;                 // will be replaced by EVENT QUEUE : MUST BE AFFECTED IN CONSTRUCTOR OF DERIVED CLASS AND THEN CASTED IN THE UPDATE() MEDTHOD OF STRIP (WHICH IS CALLED WHEN AVAILABLE RETURN > 0 in STRIP PROCESS())    
 
-    // ----------------------------------------------------------------------
-    // Paramètres par défaut de la queue d'événements partagée
-    // ----------------------------------------------------------------------
-    static constexpr size_t DEFAULT_EVENT_QUEUE_CAPACITY = 16;
-    static constexpr size_t DEFAULT_EVENT_QUEUE_READERS  = 10;
-
-    using EventQueue = SharedEventQueue<
-      InterfaceEventFrame,
-      DEFAULT_EVENT_QUEUE_CAPACITY,
-      DEFAULT_EVENT_QUEUE_READERS
-    >;   
-
     bool exposed = true;          // 
     bool hasStrip = true;      // if the interface is used by a strip (ex. Midi) or not (ex. Directory Service), by default yes, but some interface are more technical and not relevant for the user to create a strip with them, so we can hide them in the strip creation menu by setting this parameter to false
 
@@ -139,40 +76,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       return true;
     };           
 
-    // --------------------------------------------------------------------------
-    // EVENT BASED DATA MANAGEMENT
-    // --------------------------------------------------------------------------
-    // registerEventReader
-    // ----------------------------------------------------------------------
-    // Enregistre un lecteur sur la queue de cette interface.
-    // Plus tard, chaque Strip possèdera son propre ReaderToken.
-    // ----------------------------------------------------------------------
-    bool registerEventReader(EventQueue::ReaderToken& token) {
-      return eventQueue.registerReader(token);
-    }
-
-    // ----------------------------------------------------------------------
-    // unregisterEventReader
-    // ----------------------------------------------------------------------
-    void unregisterEventReader(EventQueue::ReaderToken& token) {
-      eventQueue.unregisterReader(token);
-    }
-
-    // ----------------------------------------------------------------------
-    // hasPendingEvent
-    // ----------------------------------------------------------------------
-    bool hasPendingEvent(const EventQueue::ReaderToken& token) const {
-      return eventQueue.hasData(token);
-    }
-
-    // ----------------------------------------------------------------------
-    // readNextEvent
-    // ----------------------------------------------------------------------
-    bool readNextEvent(const EventQueue::ReaderToken& token, InterfaceEventFrame& out) {
-      return eventQueue.readNext(token, out);
-    }  
-
-    // --------------------------------------------------------------------------
 
     virtual const String& getProviderNameForData(){ return group;}
 
@@ -511,28 +414,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
   protected:
     String icon = ICON_LINK;
-    EventQueue eventQueue;
-
-    // ----------------------------------------------------------------------
-    // publishInterfaceEvent
-    // ----------------------------------------------------------------------
-    // Publie une frame dans la queue puis notifie les listeners via
-    // EVENT_INTERFACE_DATA_READY.
-    //
-    // IMPORTANT :
-    // evt.data ne transporte pas la donnée métier elle-même.
-    // On y place simplement "this" pour identifier l'interface source.
-    // La vraie donnée doit être relue dans la queue.
-    // ----------------------------------------------------------------------
-    bool publishInterfaceEvent(const InterfaceEventFrame& frame) {
-      bool ok = eventQueue.publish(frame);
-      evt.type = EVENT_INTERFACE_DATA_READY;
-      evt.data = this;
-      if (ok) {
-        fireEvent(&evt);
-      }
-      return ok;
-    } 
 
 };
 
@@ -839,6 +720,15 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       registerDataSetAddress(&addressIP);           // global       
       
     }
+
+    // network devices listen to network event
+    virtual bool begin(){     // called by init()
+      DEBUG_INFO("%s::begin() => self registering to network event",interfaceName.c_str());
+      hwm.network->registerEventListener(this);
+      return true;
+    };        
+
+
 
     virtual void monitor(){           
       monitorNetwork();      
