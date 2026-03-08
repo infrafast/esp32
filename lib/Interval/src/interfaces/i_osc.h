@@ -10,6 +10,18 @@
   public:
 };*/
 
+
+class OscMessageEvent : public Event {
+public:
+  explicit OscMessageEvent(OSCMessage& msg) : _msg(msg) {}
+  EventType type() const override {return EVENT_OSC_MESSAGE;}
+  OSCMessage& message() const {return _msg;}
+  const char* serialize() const override {return _msg.getAddress();}
+private:
+  OSCMessage& _msg;
+};
+
+
 class OSCPing: public TargetEcho{
   public:
     OSCPing(String host, String _command):TargetEcho(host), pingCommand(_command){}
@@ -21,6 +33,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
     OSCMessage osc;
+    OscMessageEvent oscEvent{osc};        //Comme OscMessageEvent contient une référence, il est obligatoire de l’initialiser dans la liste d’initialisation du constructeur, CCCCC
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
@@ -33,7 +46,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
   
       registerDataSetAddress(&addressPing);         // global      
     
-      data = &osc;                                  // this interface manage OSCMessage as data 
+      //data = &osc;                                  // this interface manage OSCMessage as data 
 
     }
 
@@ -120,15 +133,13 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
               osc.getAddress(addr, 0);
               DEBUG_INFO("<<%s(%s,%i) ",addr,destination->ip.toString().c_str(),remotePort);
 
-              // NEW MECHANISM      
-              /*InterfaceEventFrame frame;
-              frame.kind = IE_MIDI_SYSEX;
-              frame.timestamp = millis();
-              memcpy(frame.payload, addr, strlen(addr)+1);  // /0 terminal
-              publishInterfaceEvent(frame);*/
-
               // see if it's a ping, we measure
               if ( ((OSCPing*)destination)->pingCommand == addr ) determineQoS();
+
+              // we now forward the event
+              // before that we may filter here some message (ex. the ping...)
+              fireEvent(oscEvent);
+
             }              
             // ✔ message valide
             // retour : au moins 1, même si aucun argument

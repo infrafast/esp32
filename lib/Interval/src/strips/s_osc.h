@@ -46,14 +46,20 @@ class OSCStrip : public Strip{  // should inherit from MidiStrip before so metho
       }else{
 
       }         
- 
     }
 
-    virtual void update(){
+    void onEvent(const Event& evt) override {
+      switch (evt.type()) {
+        /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
+        break;*/
+      }
+    }     
+
+    /*virtual void update(){
         ////update is called if data are availabe and must therefore cast the data to the right data structure
         OSCMessage* osc = static_cast<OSCMessage*>(interface->data); // WARNING CAREFULLY TEST IF POLYMORPHISM WORKS
 
-        /*
+        
         int numberOfValues = msg.size();
 
         for (int i = 0; i < numberOfValues; i++) {
@@ -93,10 +99,9 @@ class OSCStrip : public Strip{  // should inherit from MidiStrip before so metho
             }
         }
 
-        msg.getAddress(buffer);*/
+        msg.getAddress(buffer);
 
-
-    }  
+    }  */
 
     virtual void queryInterface(){ // this code is called by focus() to send a command that will be executed, 
     //then its outcome will be read at the next process()

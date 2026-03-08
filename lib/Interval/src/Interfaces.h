@@ -32,13 +32,13 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     State state;
 
-    int8_t stripCount = 0;      // indicate if an interface is not refered by any strip
+    //int8_t stripCount = 0;      // indicate if an interface is not refered by any strip
 
 
     String interfaceName; 
   
     int dataAvailable;
-    void* data;                 // will be replaced by EVENT QUEUE : MUST BE AFFECTED IN CONSTRUCTOR OF DERIVED CLASS AND THEN CASTED IN THE UPDATE() MEDTHOD OF STRIP (WHICH IS CALLED WHEN AVAILABLE RETURN > 0 in STRIP PROCESS())    
+    //void* data;                 // will be replaced by EVENT QUEUE : MUST BE AFFECTED IN CONSTRUCTOR OF DERIVED CLASS AND THEN CASTED IN THE UPDATE() MEDTHOD OF STRIP (WHICH IS CALLED WHEN AVAILABLE RETURN > 0 in STRIP PROCESS())    
 
     bool exposed = true;          // 
     bool hasStrip = true;      // if the interface is used by a strip (ex. Midi) or not (ex. Directory Service), by default yes, but some interface are more technical and not relevant for the user to create a strip with them, so we can hide them in the strip creation menu by setting this parameter to false
@@ -53,7 +53,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       return interfaceName.c_str();
     }
 
-    virtual const char* getListenerName() const override{
+    virtual const char* getListenerName()  override{
       return interfaceName.c_str();
     }
 
@@ -214,9 +214,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     }
 
-    int available(){ // called by strip 
+    /*int available(){ // called by strip 
       return dataAvailable; 
-    }
+    }*/
 
 
     virtual void update(){      // return a boolean indicatin if the interface has changed its state
@@ -224,7 +224,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.changed = false;
 
       // reset the flag so strips will not be updated and re-processed already consummed data
-      dataAvailable = 0;
+      //dataAvailable = 0;
 
       // report if state has changed
       if (state.label != state.previousStateLabel){

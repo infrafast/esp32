@@ -499,7 +499,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       return id.c_str();
     }
 
-    virtual const char* getListenerName() const override{
+    virtual const char* getListenerName()  override{
       return id.c_str();
     }
 
@@ -746,9 +746,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         ftp.begin();
       #endif
 
-      /*Event::disableEventDump(EVENT_ANALOG_BUTTON);
-      Event::disableEventDump(EVENT_DIGITAL_BUTTON);*/
-
+      Event::disableEventDump(EVENT_ANALOG_BUTTON);
+      Event::disableEventDump(EVENT_DIGITAL_BUTTON);
+      Event::disableEventDump(EVENT_BATTERY_REFRESHED);    
 
       // *********************************
       // SKELETONS & DATA SETS
@@ -853,7 +853,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
             
       ////////////////////////////////////////////////////////////////////////
-      // REGSITER APPLICATION MANAGER AS AN EVENT LISTENER OF OTHERS COMPONENTS
+      // REGISTER APPLICATION MANAGER AS AN EVENT LISTENER OF OTHERS COMPONENTS
       ////////////////////////////////////////////////////////////////////////
       for (uint8_t i=0;i<MAXB;i++){
         hwm->buttons[i]->registerEventListener(this);   // ApplicationManager listen to switch event
@@ -970,7 +970,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void disableUnusedInterface(){
       // unsused interfaces are the one which are not referred by any instanciated strips
       for (const auto& interface : interfaceRepo.interfaces){       
-        if (interface->stripCount <=0 && interface->hasStrip){ // only for interfaces that are exposed => means they can be configured by user
+        if (interface->countRegisteredListeners()==0 && interface->hasStrip){ // only for interfaces that are exposed => means they can be configured by user
           DEBUG_INFO("%s has no strip : DISABLED",interface->interfaceName.c_str());
           //interface->switchDevice(false);  // BE CAREFULL
           interface->state.enabled = false;
@@ -1016,10 +1016,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           setAPIcon();
         break;         
         case EVENT_ANALOG_BUTTON:
-          handleSwitchEvent(&evt);
+          handleSwitchEvent(evt);
         break;
         case EVENT_DIGITAL_BUTTON:
-          handleOnOffEvent(&evt);
+          handleOnOffEvent(evt);
         break;
         case EVENT_BATTERY_REFRESHED:
           setBatIcon();
@@ -1034,9 +1034,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       fireEvent(evt);   // propagate the event
     }
 
-    void handleSwitchEvent(const Event* event) {
-      const auto& e = static_cast<const EventButtonAnalog*>(event);
-      const ButtonData& d = e->data();   
+    void handleSwitchEvent(const Event& event) {
+      const auto& e = static_cast<const EventButtonAnalog&>(event);
+      const ButtonData& d = e.data();   
 
       switch(d.id){
         case BUTTON_DOUBLE_CLIC:
@@ -1058,9 +1058,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-    void handleOnOffEvent(const Event* event){
-      const auto& e = static_cast<const EventButtonDigital*>(event);
-      const ButtonData& d = e->data();
+    void handleOnOffEvent(const Event& event){
+      const auto& e = static_cast<const EventButtonDigital&>(event);
+      const ButtonData& d = e.data();
 
       switch(d.id){
         case BUTTON_DOUBLE_CLIC:

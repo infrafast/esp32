@@ -339,6 +339,8 @@ class BatteryMonitor : public HWComponent{
     float previousVBat = 0.0;
     BatteryState batteryState = BAT_CHECKING;
 
+    BatteryRefreshEvent evt;
+
 
     BatteryMonitor(uint8_t p, boolean d=true): HWComponent(p,d){
       pinMode(CSPin, INPUT);
@@ -402,7 +404,6 @@ class BatteryMonitor : public HWComponent{
       }
 
       if (refreshed){
-        BatteryRefreshEvent evt;
         fireEvent(evt);
       }
 

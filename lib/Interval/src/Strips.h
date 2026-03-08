@@ -173,11 +173,15 @@ float bezYforX(float x, float x1, float y1, float x2, float y2) {
 
 float oneHundedFloat = 100.0;
 
-class Strip {  
+class Strip: public EventListener{  
   #define JSON_STRIP_PROPERTY_SIZE 100
   #define  JSON_STRIP_TEMPLATE_SIZE 300
   public:
     TFT_eSprite* sprite = nullptr;
+
+    virtual const char* getListenerName()  override{
+      return getTopLabel()->c_str();
+    }    
 
     // flag to indicate if position is out of range
     bool renderError;
@@ -242,8 +246,9 @@ class Strip {
 
     virtual ~Strip(){
       if (interface != nullptr){
-        interface->stripCount -= 1;
-        if (interface->stripCount<0) interface->stripCount = 0;
+        /*interface->stripCount -= 1;
+        if (interface->stripCount<0) interface->stripCount = 0; */
+        interface->unregisterEventListener(this);
       }
     }    
 
@@ -448,14 +453,14 @@ class Strip {
     // update is called by process() if data are availabe and must therefore implement the code that uses what is returned by read() by casting it to the right data structure    
     // it assign the GUI values the values that were acquired or processed in the process() method
     // basedon its internal state, it will set the redraw flag 
-    virtual void update() = 0;  
+    //virtual void update() = 0;  
       
     // this code is requesting the strip to update its state (values, etc...) using data from the interface
     // process() is called from main app on all strip: the strip decide then if he has to do the query (for instance if it is focused) as       
     // some strip may do some backgroud tasks (like playing sample or executing a macro), other will only do this if they have focus         
     void process(){ 
       if (!interface) return;
-      if (interface->available() > 0) update();
+      //if (interface->available() > 0) update();
     }
 
 
@@ -486,7 +491,9 @@ class Strip {
       interface = interfaceRepo.retrieve(interfaceName);
       if (interface == nullptr) return false; // if it has no interface, no need to continue
 
-      interface->stripCount++;              // et signale qu'il utilise l'interface
+      //interface->stripCount++;              // et signale qu'il utilise l'interface
+      interface->registerEventListener(this); // cela permettra d'annuler le comptage des strips ci dessus
+
 
       type = jsonStrip[C_STRIPTYPE].as<String>();
       // set index; 

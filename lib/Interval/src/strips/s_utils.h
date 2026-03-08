@@ -47,9 +47,18 @@ class TextStrip : public Strip{
 
     }
 
-    virtual void update(){ // this code is called by process()
+    void onEvent(const Event& evt) override {
+      switch (evt.type()) {
+        /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
+        break;*/
+      }
+    }
 
-    }  
+    /*virtual void update(){ // this code is called by process()
+
+    } */
+   
+    
 
     virtual void queryInterface(){ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()

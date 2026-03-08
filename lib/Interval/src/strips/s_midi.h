@@ -226,10 +226,16 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
 
-    virtual void update(){ // this code is called by process()
-
+    /*virtual void update(){ // this code is called by process()
      
-    }  
+    }  */
+
+    void onEvent(const Event& evt) override {
+      switch (evt.type()) {
+        /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
+        break;*/
+      }
+    }
 
     virtual void queryInterface(){ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
@@ -287,14 +293,18 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       }else{
 
       }     
-
-
       //DEBUG_PRINT("\nchGainStrip topX: %d, topY: %d, w: %d, h: %d",topX,topY,w,h);
-
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
 
-    virtual void update() override {
+    void onEvent(const Event& evt) override {
+      switch (evt.type()) {
+        /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
+        break;*/
+      }
+    }    
+
+    /*virtual void update() override {
       // --------------------------------------------------------------------
       // Ancien mécanisme conservé temporairement pour compatibilité
       // --------------------------------------------------------------------
@@ -315,7 +325,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
         value = 0;
         return;
       }
-    }
+    }*/
 
     virtual void queryInterface(){ // this code is called by focus() to send a command that will be executed, 
     //then its outcome will be read at the next process()

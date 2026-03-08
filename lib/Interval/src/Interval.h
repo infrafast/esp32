@@ -422,7 +422,7 @@ public:
     }
   }
 
-  virtual const char* getListenerName() const = 0;
+  virtual const char* getListenerName()  = 0;
 };
 
 class EventDispatcher {
@@ -492,6 +492,18 @@ public:
     }
     return false;
   }
+
+  uint8_t countRegisteredListeners() const {
+    uint8_t count = 0;
+
+    for (uint8_t i = 0; i < maxHandlers; ++i) {
+      if (eventHandlers[i].fn != nullptr) {
+        count++;
+      }
+    }
+
+    return count;
+  }  
 
   void fireEvent(const Event& evt) {
 #ifdef DEBUG
