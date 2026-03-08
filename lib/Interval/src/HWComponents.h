@@ -25,6 +25,45 @@ using namespace net;
 using WiFiWebSocketClient = WebSocketClient<WiFiClient>;
 using EthernetWebSocketClient = WebSocketClient<EthernetClient>;
 
+/* DEFINITION DES EVENEMENTS */
+class NetworkConnectedEvent : public Event {
+public:
+  EventType type() const override { return EVENT_NETWORK_CONNECTED; }
+};
+
+class NetworkDisconnectedEvent : public Event {
+public:
+  EventType type() const override { return EVENT_NETWORK_DISCONNECTED; }
+};
+
+class NetworkPlugEthWhileWiFiConnected : public Event {
+public:
+  EventType type() const override { return EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED; }
+};
+
+class NetworkConnectionChangeEvent : public Event {
+public:
+  EventType type() const override { return EVENT_NETWORK_CONNECTION_CHANGED; }
+};
+
+class PingEvent : public Event {
+public:
+    TargetEcho* target;
+    EventType type() const override { return EVENT_INTERNET_PING; }
+
+    explicit PingEvent(TargetEcho* ev_target)
+    : target(ev_target) {}
+
+    TargetEcho* event() const {
+      return target;
+    }    
+
+    virtual const char* serialize() const override {
+      return target->host.c_str();
+    }    
+};
+
+
 // =========================================================
 // Generic callback containers: ctx + function pointer
 // =========================================================
@@ -152,10 +191,8 @@ void connectHTTPTask(void*);
 class HWComponent: public GenericComponent, public EventDispatcher{
   public:
     uint8_t CSPin;
-
-    Event evt;
-    
-    virtual const char* getDispatcherName() override{
+  
+    virtual const char* getDispatcherName() const override{
       return id.c_str();
     }
 
@@ -286,6 +323,12 @@ enum BatteryState {
     BAT_DISCHARGING,
 };
 
+class BatteryRefreshEvent : public Event {
+public:
+  EventType type() const override { return EVENT_BATTERY_REFRESHED; }
+};
+
+
 class BatteryMonitor : public HWComponent{
   // read https://forum.seeedstudio.com/t/xiao-ble-sense-mbed-2-7-2-battery-charge-and-voltage-monitor-analogread-p0-31-does-not-work/266438
 
@@ -358,6 +401,11 @@ class BatteryMonitor : public HWComponent{
         refreshed = true;
       }
 
+      if (refreshed){
+        BatteryRefreshEvent evt;
+        fireEvent(evt);
+      }
+
       return refreshed;
     }
 
@@ -380,240 +428,318 @@ class BatteryMonitor : public HWComponent{
 };
 
 
-#define DEBOUCE_TIME 25
-
-#define DCLIC_DETECTION_PUSHDOWNMAXTIME LONG_PUSH_DELAY-1       // pour detecter un double clic, le premier clic doit etre court   200
-
-// Structure pour les événements complexes
-struct ButtonData {
-    uint8_t id;
-    uint8_t buttonId;
-    unsigned long time; // en ms
-};
-
 #define MIN_PUSH_DELAY    350   // must correspond to webapp Reactivity range
 #define MAX_PUSH_DELAY    900   //
 
 #define DEFAULT_PUSH_DELAY 500
 #define DEFAULT_DCLIC_DELAY 250
 
-namespace Interval {
-class Button : public HWComponent2State{
-  public:
+#define DEBOUCE_TIME 25
 
-    enum EventID {
-      BUTTON_SIMPLE_CLIC=1,
-      BUTTON_DOUBLE_CLIC,
-      BUTTON_LONG_CLIC,
-      BUTTON_HOLD,
-      BUTTON_RELEASE_HOLD,     
-    };
+#define DCLIC_DETECTION_PUSHDOWNMAXTIME LONG_PUSH_DELAY-1       // pour detecter un double clic, le premier clic doit etre court   200
 
-    Event evt;
+// Structure pour les événements complexes
+struct ButtonData {
+  uint8_t id;         // type de clic : SIMPLE, DOUBLE, HOLD...
+  uint8_t buttonId;   // identifiant logique du bouton
+  unsigned long time; // durée / temps associé
+};
 
-    unsigned long pushedTime = 0;
-    bool doubleClic = false;
-    bool usesLed = true;    
-    uint16_t push_reactivity = DEFAULT_PUSH_DELAY, dClic_reactivity = DEFAULT_DCLIC_DELAY;    
+class ButtonEventNames {    // pour le debug
+public:
+  static const char* toString(uint8_t id) {
+    switch (id) {
+      case 1: return "BUTTON_SIMPLE_CLIC";
+      case 2: return "BUTTON_DOUBLE_CLIC";
+      case 3: return "BUTTON_LONG_CLIC";
+      case 4: return "BUTTON_HOLD";
+      case 5: return "BUTTON_RELEASE_HOLD";
+      default: return "BUTTON_UNKNOWN";
+    }
+  }
+};
 
-    ButtonData btEvent;
+class ButtonEventBase : public Event {
+public:
+  ButtonEventBase(EventType type, const ButtonData& data)
+    : _type(type), _data(data) {}
 
-    Button(uint8_t p, int e=LOW, boolean d=true, uint16_t push=DEFAULT_PUSH_DELAY, uint16_t dClic=DEFAULT_DCLIC_DELAY): HWComponent2State(p,!e,d){
-       // we set the initial state to the opposite of the state we want to detect so it doesnt trigger the event at startup
-      edge = e; //do we want to detect high or low
-      push_reactivity = push;
-      dClic_reactivity = dClic;
-      evt.data = &btEvent;
+  EventType type() const override {
+    return _type;
+  }
+
+  const ButtonData& data() const {
+    return _data;
+  }
+
+  const char* serialize() const override {
+    snprintf(_buffer, sizeof(_buffer),
+             "buttonType=%s(%u), buttonId=%u, time=%lu",
+             ButtonEventNames::toString(_data.id),
+             _data.id,
+             _data.buttonId,
+             _data.time);
+    return _buffer;
+  }
+
+private:
+  EventType _type;
+  const ButtonData& _data;
+  mutable char _buffer[96] = {0};
+};
+
+class EventButtonDigital : public ButtonEventBase {
+public:
+  explicit EventButtonDigital(const ButtonData& data)
+    : ButtonEventBase(EVENT_DIGITAL_BUTTON, data) {}
+};
+
+class EventButtonAnalog : public ButtonEventBase {
+public:
+  explicit EventButtonAnalog(const ButtonData& data)
+    : ButtonEventBase(EVENT_ANALOG_BUTTON, data) {}
+};
+
+enum EventID {
+  BUTTON_SIMPLE_CLIC = 1,
+  BUTTON_DOUBLE_CLIC,
+  BUTTON_LONG_CLIC,
+  BUTTON_HOLD,
+  BUTTON_RELEASE_HOLD,
+};
+
+class Button : public HWComponent2State {
+public:
+
+
+  unsigned long pushedTime = 0;
+  bool doubleClic = false;
+  bool usesLed = true;
+  uint16_t push_reactivity = DEFAULT_PUSH_DELAY;
+  uint16_t dClic_reactivity = DEFAULT_DCLIC_DELAY;
+
+  ButtonData btEvent = {};
+
+  Button(uint8_t p,
+         int e = LOW,
+         boolean d = true,
+         uint16_t push = DEFAULT_PUSH_DELAY,
+         uint16_t dClic = DEFAULT_DCLIC_DELAY)
+    : HWComponent2State(p, !e, d) {
+    edge = e;
+    push_reactivity = push;
+    dClic_reactivity = dClic;
+  }
+
+  virtual void init() {
+    HWComponent2State::init();
+    refresh();
+  }
+
+  bool refresh(bool force = false) {
+    refreshed = force;
+
+    if (millis() - startDebouceTime < DEBOUCE_TIME) {
+      return refreshed;
     }
 
-    virtual void init(){
-      HWComponent2State::init();
-      /*DEBUG_PRINT("\n\t%s.push_reactivity=%d",id.c_str(),push_reactivity);      
-      DEBUG_PRINT("\n\t%s.dClic_reactivity=%d",id.c_str(),dClic_reactivity);      */
-      refresh();
-    }
+    read();
+    HWComponent2State::refresh(force);
 
-    bool refresh(bool force=false) {
-      refreshed = force;
-      if(millis()-startDebouceTime<DEBOUCE_TIME){
-        //non blocking debouncer
-        //DEBUG_PRINT("."); 
-        return refreshed;
-      }
+    if (refreshed) {
+      btEvent.buttonId = getID();
+      startDebouceTime = millis();
 
-      read();
+      if (state != edge) { // released
+        if (pushedTime < dClic_reactivity && !pendingDoubleClicDetection) {
+          pendingDoubleClicDetection = true;
+          startTimeBetween2Clics = millis();
+        } else {
+          pendingDoubleClicDetection = false;
 
-      HWComponent2State::refresh(force);
-      if (refreshed){         
-        btEvent.buttonId = getID();                           
-        startDebouceTime = millis();
-        if (state != edge){ //released
-          if (pushedTime<dClic_reactivity && !pendingDoubleClicDetection){            
-            pendingDoubleClicDetection = true;    
-            startTimeBetween2Clics = millis();                                                       
-          }else{
-            pendingDoubleClicDetection = false;
-            if (!doubleClic){
-              if (pushedTime>push_reactivity){                
-                btEvent.time = pushedTime-push_reactivity;
-                btEvent.id = BUTTON_RELEASE_HOLD;
-              }else if (pushedTime>push_reactivity/3){
-                btEvent.time = pushedTime;
-                btEvent.id = BUTTON_LONG_CLIC;
-              }else{
-                btEvent.time = pushedTime;
-                btEvent.id = BUTTON_SIMPLE_CLIC;
-              }           
-              fireEvent(&evt);
+          if (!doubleClic) {
+            if (pushedTime > push_reactivity) {
+              emitButtonEvent(BUTTON_RELEASE_HOLD, pushedTime - push_reactivity);
+            } else if (pushedTime > push_reactivity / 3) {
+              emitButtonEvent(BUTTON_LONG_CLIC, pushedTime);
+            } else {
+              emitButtonEvent(BUTTON_SIMPLE_CLIC, pushedTime);
             }
           }
-          
+        }
+
+        if (usesLed) {
+          ledcWrite(0, 255);
+        }
+
+      } else { // pressed
+        doubleClic = false;
+        startPushTime = millis();
+
+        if (pendingDoubleClicDetection) {
+          doubleClic = true;
+          emitButtonEvent(BUTTON_DOUBLE_CLIC, millis() - startTimeBetween2Clics);
+          /*
           if (usesLed) {
-            ledcWrite(0,255);
+            ledcWrite(0, 0);
           }
-
-        }else { //pressed        
-          doubleClic = false;
-          startPushTime = millis();
-          if (pendingDoubleClicDetection){
-            doubleClic = true;
-            btEvent.time = millis()-startTimeBetween2Clics;
-            btEvent.id = BUTTON_DOUBLE_CLIC;
-            fireEvent(&evt); 
-            /*if (usesLed) {
-              ledcWrite(0,0);   // if we want to light the double clic
-            }*/           
-          }
-        }        
-      }else{
-        if (state == edge){
-          pushedTime = millis()-startPushTime;        
-          if (pushedTime>push_reactivity){
-            btEvent.time = pushedTime-push_reactivity;
-            btEvent.id = BUTTON_HOLD;
-            fireEvent(&evt);
-            if (usesLed){
-              ledcWrite(0,255);
-            }            
-          }else if (!pendingDoubleClicDetection && usesLed && pushedTime<push_reactivity){
-            uint8_t dutyCycle = map(pushedTime,0,push_reactivity,0,255);
-            // Attacher le canal LEDC à la broche LED
-            ledcWrite(0, dutyCycle);
-          }
-        }else{ 
-          pushedTime = 0;
-          if (millis()-startTimeBetween2Clics>dClic_reactivity && pendingDoubleClicDetection){
-            pendingDoubleClicDetection = false;          
-            if (!doubleClic){
-              btEvent.time = pushedTime;
-              btEvent.id = BUTTON_SIMPLE_CLIC;
-              fireEvent(&evt);
-            }         
-          }  
-        }      
+          */
+        }
       }
-      return refreshed;
-    }    
-  
 
+    } else {
+      if (state == edge) {
+        pushedTime = millis() - startPushTime;
 
-    virtual int getID() = 0;    
-    virtual void setID(uint8_t id) = 0;    
+        if (pushedTime > push_reactivity) {
+          emitButtonEvent(BUTTON_HOLD, pushedTime - push_reactivity);
 
-  private:
-    int edge; 
-    bool pendingDoubleClicDetection = false;
-    unsigned long startTimeBetween2Clics = 0,startPushTime = 0, startDebouceTime = 0;
-    virtual void read() = 0;    
-};
-}
+          if (usesLed) {
+            ledcWrite(0, 255);
+          }
 
-enum{
-  NO_MEDIA,
-  CABLE_MEDIA,
-  WIFI_MEDIA
-};
+        } else if (!pendingDoubleClicDetection && usesLed && pushedTime < push_reactivity) {
+          uint8_t dutyCycle = map(pushedTime, 0, push_reactivity, 0, 255);
+          ledcWrite(0, dutyCycle);
+        }
 
-enum{
-  DISCONNECTED = false,
-  CONNECTED = true,
-};
+      } else {
+        pushedTime = 0;
 
-class DigitalButton: public Interval::Button{
-  public:
-  
-    DigitalButton(uint8_t p, uint8_t mode=INPUT_PULLUP, int e=LOW, boolean d=false, uint16_t push = DEFAULT_PUSH_DELAY, uint16_t dClic = DEFAULT_DCLIC_DELAY):Button(p, e,d, push, dClic){      
-      pinMode(p, mode); //
-      id = concatStrings("DigitalButton~", getID());
-      evt.type = EVENT_DIGITAL_BUTTON;
+        if (millis() - startTimeBetween2Clics > dClic_reactivity && pendingDoubleClicDetection) {
+          pendingDoubleClicDetection = false;
+
+          if (!doubleClic) {
+            emitButtonEvent(BUTTON_SIMPLE_CLIC, pushedTime);
+          }
+        }
+      }
     }
 
-    virtual int getID(){
-      //DEBUG_PRINT("\ndigitalgetID(): %d",CSPin);
-      return CSPin;
-    }    
+    return refreshed;
+  }
 
-    void setID(uint8_t id){
-      CSPin = id;
-    }
+  virtual int getID() = 0;
+  virtual void setID(uint8_t id) = 0;
 
-  private:
+protected:
+  void prepareButtonEvent(uint8_t eventId, unsigned long eventTime) {
+    btEvent.id = eventId;
+    btEvent.buttonId = getID();
+    btEvent.time = eventTime;
+  }
 
-    virtual void read(){
-      //two consecutive reading to avoid false reading
-      boolean input1 = digitalRead(CSPin);
-      delay(1);
-      boolean input2 = digitalRead(CSPin);
-      if (input1 == input2) state = input1;      
-    }
+  virtual void emitButtonEvent(uint8_t eventId, unsigned long eventTime) = 0;
 
+private:
+  int edge;
+  bool pendingDoubleClicDetection = false;
+  unsigned long startTimeBetween2Clics = 0;
+  unsigned long startPushTime = 0;
+  unsigned long startDebouceTime = 0;
+
+  virtual void read() = 0;
 };
 
-class LadderButton: public Interval::Button{
-  public:
-    static uint8_t bCount;
-    uint8_t virtualID;
+class DigitalButton : public Button {
+public:
+  DigitalButton(uint8_t p,
+                uint8_t mode = INPUT_PULLUP,
+                int e = LOW,
+                boolean d = false,
+                uint16_t push = DEFAULT_PUSH_DELAY,
+                uint16_t dClic = DEFAULT_DCLIC_DELAY)
+    : Button(p, e, d, push, dClic),
+      evt(btEvent) {
+    pinMode(p, mode);
+    id = concatStrings("DigitalButton~", getID());
+  }
 
-    LadderButton(AnalogIn* i, int e=HIGH,boolean d=true, uint16_t push = DEFAULT_PUSH_DELAY, uint16_t dClic = DEFAULT_DCLIC_DELAY):Button(i->CSPin, e,d,push, dClic){      
-      input = i;
-      pinMode(input->CSPin, INPUT); //analog
-      virtualID = bCount;      
-      id = concatStrings("LadderButton~", getID());
-      bCount++;
-      evt.type = EVENT_ANALOG_BUTTON;
-      //input = new AnalogIn(p,d);
+  virtual int getID() override {
+    return CSPin;
+  }
+
+  void setID(uint8_t id) override {
+    CSPin = id;
+  }
+
+protected:
+  void emitButtonEvent(uint8_t eventId, unsigned long eventTime) override {
+    prepareButtonEvent(eventId, eventTime);
+    fireEvent(evt);   // remplace par fireEvent(&evt) si ton code n'a pas encore migré en référence
+  }
+
+private:
+  EventButtonDigital evt;
+
+  virtual void read() override {
+    bool input1 = digitalRead(CSPin);
+    delay(1);
+    bool input2 = digitalRead(CSPin);
+
+    if (input1 == input2) {
+      state = input1;
     }
+  }
+};
 
-    virtual int getID(){
-      //DEBUG_PRINT("\nladdergetID(): %d",virtualID);
-      return virtualID;
-    }    
+class LadderButton : public Button {
+public:
+  static uint8_t bCount;
+  uint8_t virtualID;
 
-    void setID(uint8_t id){
-      virtualID = id;
-    }
+  LadderButton(AnalogIn* i,
+               int e = HIGH,
+               boolean d = true,
+               uint16_t push = DEFAULT_PUSH_DELAY,
+               uint16_t dClic = DEFAULT_DCLIC_DELAY)
+    : Button(i->CSPin, e, d, push, dClic),
+      evt(btEvent) {
+    input = i;
+    pinMode(input->CSPin, INPUT);
+    virtualID = bCount;
+    id = concatStrings("LadderButton~", getID());
+    bCount++;
+  }
 
-  private:        
-    AnalogIn* input;
+  virtual int getID() override {
+    return virtualID;
+  }
 
-    #define RESOLUTION 4095
+  void setID(uint8_t id) override {
+    virtualID = id;
+  }
+
+protected:
+  void emitButtonEvent(uint8_t eventId, unsigned long eventTime) override {
+    prepareButtonEvent(eventId, eventTime);
+    fireEvent(evt);   // remplace par fireEvent(&evt) si besoin
+  }
+
+private:
+  AnalogIn* input = nullptr;
+  EventButtonAnalog evt;
+
+  #define RESOLUTION 4095
     //https://www.ignorantofthings.com/2018/07/the-perfect-multi-button-input-resistor.html
     // https://docs.google.com/spreadsheets/d/1G6wTsAxZDnVvzIDBkg5LrhhY1T7q4p_pDSZ6owvBCMA/edit?usp=sharing
-    // for 3 button with 1st resistor 47Kohm, other resistance should be: 24k, 68k
+    // for 3 button with 1st resistor 47Kohm, other resistance should be: 24k, 68k  
 
+  virtual void read() override {
+    float avg = RESOLUTION / float(bCount);
 
-    virtual void read() {
+    if (input->value > (bCount - 0.5f) * avg) {
+      state = LOW;
+    } else {
+      int lowLimit = 0;
+      int highLimit = 0;
 
-      //input->refresh();
-      float avg = RESOLUTION / float(bCount);
-      if ((input->value > (bCount - 0.5) * avg) ){
-        state = LOW;
-      }else{
-        //DEBUG_PRINT("\n%s val:%i",id.c_str(),input->value);
+      for (int i = 0; i < bCount; i++) {
+        if (i > 0) {
+          lowLimit = round(((i - 1) + 0.5f) * avg);
+        }
 
-        int lowLimit = 0;
-        int highLimit;
-
+        highLimit = round((i + 0.5f) * avg);
         /* measured values
           LEFT RANGE DETECTION: 0-683       ==> measured : 0
           CENTER RANGE DETECTION: 683-2048  ==> measured : 1326-1570
@@ -621,20 +747,15 @@ class LadderButton: public Interval::Button{
 
         */
 
-        for (int i = 0; i < bCount; i++) {          
-          if (i>0) lowLimit = round(((i-1) + 0.5) * avg);
-          highLimit = round((i + 0.5) * avg);
-          //DEBUG_PRINT("\t (%i,%i)",lowLimit,highLimit);
-          if (input->value >= lowLimit && input->value <highLimit) { 
-            if (i == virtualID){
-              //DEBUG_PRINT("X");
-              state = HIGH;
-            } 
+
+        if (input->value >= lowLimit && input->value < highLimit) {
+          if (i == virtualID) {
+            state = HIGH;
           }
         }
-      }           
-    }    
-
+      }
+    }
+  }
 };
 
 uint8_t LadderButton::bCount = 0;
@@ -646,6 +767,18 @@ uint8_t LadderButton::bCount = 0;
 #ifdef USE_HSPI_PORT
   #warning "USE_HSPI_PORT ACTIVATED"
 #endif
+
+
+enum{
+  NO_MEDIA,
+  CABLE_MEDIA,
+  WIFI_MEDIA
+};
+
+enum{
+  DISCONNECTED = false,
+  CONNECTED = true,
+};
 
 //typedef std::function<void()> StdFunctionCallbackVoid; 
 typedef std::function<void(const char*)> StdFunctionCallbackStringPointer;
@@ -1540,8 +1673,8 @@ class WiFiEth : public Network{
       }else if (state == CONNECTED) {
         //ethernet has priority over wifi, hence if we are connected by WiFi but the cable is plugged, we disconnect WiFi
         if (media == WIFI_MEDIA && cable == LinkON){
-          evt.type = EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED; // inform immediately the webapp to terminate
-          fireEvent(&evt);        
+          NetworkPlugEthWhileWiFiConnected evt;
+          fireEvent(evt);        
           disconnectWifi();
           state = DISCONNECTED; // cable will try reconnect at next refresh
           lastEthAttempt = 0; // with no delay
@@ -1619,8 +1752,8 @@ class WiFiEth : public Network{
           
 
           ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
-          evt.type = EVENT_NETWORK_CONNECTED;
-          fireEvent(&evt);
+          NetworkConnectedEvent evt;
+          fireEvent(evt);  
 
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
@@ -1655,8 +1788,8 @@ class WiFiEth : public Network{
             DEBUG_INFO("+----------------------------+");
 
             ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
-            evt.type = EVENT_NETWORK_DISCONNECTED;
-            fireEvent(&evt);
+            NetworkDisconnectedEvent evt;
+            fireEvent(evt);                         
 
             xSemaphoreGive(networkBusy);              
           }else{
@@ -1665,8 +1798,8 @@ class WiFiEth : public Network{
           restoreWiFiSSID();
         }
 
-        evt.type = EVENT_NETWORK_CONNECTION_CHANGED;
-        fireEvent(&evt);        
+        NetworkConnectionChangeEvent evt;
+        fireEvent(evt);       
 
       }
 
@@ -1960,13 +2093,13 @@ class AccessPoint : public Network{
           //if (debug) DEBUG_PRINT("\nCient connected to AP");
           if (server == NULL) server = new WiFiServer(80,1);         
           server->begin();
-          evt.type = EVENT_NETWORK_CONNECTED;
-          fireEvent(&evt);            
+          NetworkConnectedEvent evt;
+          fireEvent(evt);         
         }else{
           //if (debug) DEBUG_PRINT("\nCient disconnected from AP");
           if (server != NULL){if (debug) DEBUG_INFO("DELETING SERVER");delete server; server  = NULL;} 
-          evt.type = EVENT_NETWORK_DISCONNECTED;
-          fireEvent(&evt);
+          NetworkDisconnectedEvent evt;
+          fireEvent(evt);  
         }                
       }
       return refreshed;

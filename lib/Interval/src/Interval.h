@@ -289,6 +289,7 @@ class GenericComponent{
 };
 
 enum EventType : uint8_t {
+  EVENT_BATTERY_REFRESHED,
   EVENT_DIGITAL_BUTTON,
   EVENT_ANALOG_BUTTON,
   EVENT_NETWORK,
@@ -299,13 +300,18 @@ enum EventType : uint8_t {
   EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH,
   EVENT_DIRECTORY_SERVICE_REFRESHED,
   EVENT_DIRECTORY_NOT_READY,
-  EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED,
+  EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED,  
   EVENT_INTERFACE_DATA_READY,
+  EVENT_OSC_MESSAGE,
+  EVENT_WEBSOCKET_CLOSED,
+  EVENT_TEXT_MESSAGE,
   EVENT_COUNT
 };
 
 /* Table de noms des événements */
+#ifdef DEBUG
 static const char* const EVENT_NAMES[EVENT_COUNT] = {
+  "EVENT_BATTERY_REFRESHED",
   "EVENT_DIGITAL_BUTTON",
   "EVENT_ANALOG_BUTTON",
   "EVENT_NETWORK",
@@ -317,95 +323,106 @@ static const char* const EVENT_NAMES[EVENT_COUNT] = {
   "EVENT_DIRECTORY_SERVICE_REFRESHED",
   "EVENT_DIRECTORY_NOT_READY",
   "EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED",
-  "EVENT_INTERFACE_DATA_READY"
+  "EVENT_INTERFACE_DATA_READY",
+  "EVENT_OSC_MESSAGE",
+  "EVENT_WEBSOCKET_CLOSED",
+  "EVENT_TEXT_MESSAGE"
 };
+#endif
 
 class Event {
-  public:
+public:
+  virtual ~Event() = default;
 
-    uint8_t type;
-    void* data;
+  virtual EventType type() const = 0;
 
-    static const char* getEventName(uint8_t id) {
-      if (id < EVENT_COUNT) {
-        return EVENT_NAMES[id];
-      }
-      return "UNKNOWN_EVENT";
+  virtual const char* name() const {
+    return getEventName(type());
+  }
+
+  virtual const char* serialize() const {
+    return "";
+  }
+
+  static const char* getEventName(EventType id) {
+    if (id < EVENT_COUNT) {
+      return EVENT_NAMES[id];
     }
+    return "UNKNOWN_EVENT";
+  }
 
-    static bool isEventDumpEnabled(uint8_t id) {
-      if (id >= EVENT_COUNT) return false;
-      return (eventDumpMask & (1UL << id)) != 0;
+  static bool isEventDumpEnabled(EventType id) {
+    if (id >= EVENT_COUNT) return false;
+    return (eventDumpMask & (1UL << id)) != 0;
+  }
+
+  static void enableEventDump(EventType id) {
+    if (id < EVENT_COUNT) {
+      eventDumpMask |= (1UL << id);
     }
+  }
 
-    static void enableEventDump(uint8_t id) {
-      if (id < EVENT_COUNT) {
-        eventDumpMask |= (1UL << id);
-      }
+  static void disableEventDump(EventType id) {
+    if (id < EVENT_COUNT) {
+      eventDumpMask &= ~(1UL << id);
     }
+  }
 
-    static void disableEventDump(uint8_t id) {
-      if (id < EVENT_COUNT) {
-        eventDumpMask &= ~(1UL << id);
-      }
+  static void setEventDumpMask(uint32_t mask) {
+    eventDumpMask = mask;
+  }
+
+  static uint32_t getEventDumpMask() {
+    return eventDumpMask;
+  }
+
+  static void enableAllEventDumps() {
+    if (EVENT_COUNT >= 32) {
+      eventDumpMask = 0xFFFFFFFFUL;
+    } else {
+      eventDumpMask = (1UL << EVENT_COUNT) - 1;
     }
+  }
 
-    static void setEventDumpMask(uint32_t mask) {
-      eventDumpMask = mask;
-    }
+  static void disableAllEventDumps() {
+    eventDumpMask = 0;
+  }
 
-    static uint32_t getEventDumpMask() {
-      return eventDumpMask;
-    }
+  void dump(const char* direction, const char* caller) const {
+    if (!isEventDumpEnabled(type())) return;
 
-    static void enableAllEventDumps() {
-      if (EVENT_COUNT >= 32) {
-        eventDumpMask = 0xFFFFFFFFUL;
-      } else {
-        eventDumpMask = (1UL << EVENT_COUNT) - 1;
-      }
-    }
+    DEBUG_INFO("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
+    DEBUG_INFO("| %s %s %s %s", caller, direction, name(),serialize());
+    DEBUG_INFO("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
+  }
 
-    static void disableAllEventDumps() {
-      eventDumpMask = 0;
-    }
-
-    static void dump(const char* direction,const char* caller, uint8_t id) {
-      if (!isEventDumpEnabled(id)) return;
-      const char* eventName = getEventName(id);
-      DEBUG_INFO("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
-      DEBUG_INFO("| %s %s %s",caller,direction,eventName);
-      DEBUG_INFO("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
-    }  
-
-    static uint32_t eventDumpMask;    
-
+  static uint32_t eventDumpMask;
 };
-/* Initialisation du membre statique */
-uint32_t Event::eventDumpMask = (EVENT_COUNT >= 32) ? 0xFFFFFFFFUL : ((1UL << EVENT_COUNT) - 1);
+
+uint32_t Event::eventDumpMask =
+  (EVENT_COUNT >= 32) ? 0xFFFFFFFFUL : ((1UL << EVENT_COUNT) - 1);
 
 
-class EventListener{
+class EventListener {
 public:
   virtual ~EventListener() = default;
 
-  virtual void onEvent(struct Event* evt) = 0;
+  virtual void onEvent(const Event& evt) = 0;
 
-  void _onEvent(struct Event* evt){
-    #ifdef DEBUG
-      evt->dump("listen",getListenerName(),evt->type);
-    #endif
+  void _onEvent(const Event& evt) {
+#ifdef DEBUG
+    evt.dump("listen", getListenerName());
+#endif
     onEvent(evt);
-  };
+  }
 
-  static void eventTrampoline(void* context, struct Event* evt) {
+  static void eventTrampoline(void* context, const Event& evt) {
     if (context) {
       static_cast<EventListener*>(context)->_onEvent(evt);
     }
   }
 
-  virtual const char* getListenerName() = 0;
-
+  virtual const char* getListenerName() const = 0;
 };
 
 class EventDispatcher {
@@ -413,9 +430,9 @@ public:
   static constexpr uint8_t DEFAULT_MAX_CALLBACKS = 10;
   static constexpr uint8_t ABSOLUTE_MAX_CALLBACKS = 64;
 
-  virtual const char* getDispatcherName() = 0;
+  virtual const char* getDispatcherName() const = 0;
 
-  using CallbackFn = void (*)(void*, Event*);
+  using CallbackFn = void (*)(void*, const Event&);
 
   struct HandlerSlot {
     void* context = nullptr;
@@ -423,7 +440,6 @@ public:
   };
 
   EventDispatcher(uint8_t maxCallbacks = DEFAULT_MAX_CALLBACKS) {
-
     if (maxCallbacks == 0)
       maxCallbacks = DEFAULT_MAX_CALLBACKS;
 
@@ -431,18 +447,17 @@ public:
       maxCallbacks = ABSOLUTE_MAX_CALLBACKS;
 
     maxHandlers = maxCallbacks;
-
     eventHandlers = new HandlerSlot[maxHandlers];
   }
 
-  ~EventDispatcher() {
+  virtual ~EventDispatcher() {
     delete[] eventHandlers;
   }
 
   bool registerEventListener(EventListener* listener) {
     if (!listener) return false;
-
-    //1️⃣ Première boucle : vérifier si le listener est déjà enregistré
+    
+    // duplicate?
     for (uint8_t i = 0; i < maxHandlers; i++) {
       if (eventHandlers[i].context == listener &&
           eventHandlers[i].fn == EventListener::eventTrampoline) {
@@ -451,7 +466,7 @@ public:
       }
     }
 
-    //2️⃣ Deuxième boucle : trouver une place libre
+    // place libre ?
     for (uint8_t i = 0; i < maxHandlers; i++) {
       if (!eventHandlers[i].fn) {
         eventHandlers[i].context = listener;
@@ -460,7 +475,7 @@ public:
       }
     }
 
-    DEBUG_ERROR("\t\t\t\t\t !!! EventDispatcher IS FULL !!! \n\n");
+    DEBUG_ERROR("!!! EventDispatcher IS FULL !!!");
     return false;
   }
 
@@ -478,14 +493,14 @@ public:
     return false;
   }
 
-  void fireEvent(Event* event){
-    #ifdef DEBUG
-      event->dump("fire",getDispatcherName(),event->type);
-    #endif    
+  void fireEvent(const Event& evt) {
+#ifdef DEBUG
+    evt.dump("fire", getDispatcherName());
+#endif
 
     for (uint8_t i = 0; i < maxHandlers; ++i) {
       if (eventHandlers[i].fn) {
-        eventHandlers[i].fn(eventHandlers[i].context, event);
+        eventHandlers[i].fn(eventHandlers[i].context, evt);
       }
     }
   }
@@ -2090,13 +2105,75 @@ WiFiEvent_t wiFiEvent;
 ///////////////////////  EVENTS HANDLERS             ///////////////////
 ///////////////////////                              ///////////////////
 //////////////////////////////////////////////////////////////////////// 
-void OnWiFiEvent(WiFiEvent_t event){
-  wiFiEvent = event;
-  app.evt.type = EVENT_NETWORK;
-  app.evt.data = &wiFiEvent;
-  app.fireEvent(&app.evt);
+class NetworkEvent : public Event {
+public:
+
+  explicit NetworkEvent(WiFiEvent_t evt)
+  : _event(evt) {}
+
+  EventType type() const override {return EVENT_NETWORK;}
+
+  WiFiEvent_t event() const {
+    return _event;
+  }
+
+  const char* serialize() const override {
+
+    switch (_event) {
+
+      case ARDUINO_EVENT_WIFI_READY:
+        return("|   WIFI_READY");
+        break;
+
+      case ARDUINO_EVENT_WIFI_STA_START:
+        return("|   STA_START");
+        break;
+
+      case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+        return("|   STA_CONNECTED");
+        break;
+
+      case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
+        return("|   STA_DISCONNECTED");
+        break;
+
+      case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+        return("|   STA_GOT_IP");
+        break;
+
+      case ARDUINO_EVENT_WIFI_STA_LOST_IP:
+        return("|   STA_LOST_IP");
+        break;
+
+      case ARDUINO_EVENT_WIFI_AP_START:
+        return("|   AP_START");
+        break;
+
+      case ARDUINO_EVENT_WIFI_AP_STOP:
+        return("|   AP_STOP");
+        break;
+
+      default:
+        return("|   UNKNOWN WIFI EVENT");
+        break;
+    }
+  }
+
+private:
+
+  WiFiEvent_t _event;
+
+};
+
+
+
+
+
+void OnWiFiEvent(WiFiEvent_t wifiEvent){
+  NetworkEvent evt(wifiEvent);
+  app.fireEvent(evt);
   // below line is to avoid that a call to start wifi cut a pending connection DIRTY CODE
-  if (event == ARDUINO_EVENT_WIFI_STA_CONNECTED){    
+  if (wifiEvent == ARDUINO_EVENT_WIFI_STA_CONNECTED){    
     hwm.network->wiFiTimeout = 10000; // we let 10s to get the IP and setup the wifi link
   }
 }

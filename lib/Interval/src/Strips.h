@@ -5,7 +5,7 @@
 #include "GUIComponents.h"
 #include <vector>
 
-using IntervalButton = Interval::Button;
+//using IntervalButton = Interval::Button;
 
 //-------------------------
 
@@ -332,7 +332,7 @@ class Strip {
       if (dir != 1 && dir != -1) return 0.0f;
 
       // CLIC (ou autre) => pas fixe
-      if (trigger != IntervalButton::BUTTON_HOLD){
+      if (trigger != BUTTON_HOLD){
         float amp = (valueMax - valueMin);
         if (amp <= 0.0f) return 0.0f;
 
@@ -421,7 +421,7 @@ class Strip {
 
       unsigned long waitBetween2update; 
       
-      if (trigger == IntervalButton::BUTTON_HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
+      if (trigger == BUTTON_HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
       else waitBetween2update = 50 ; // 50ms 
 
       unsigned long delaySoFar = millis() - lastCall;

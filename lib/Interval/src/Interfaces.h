@@ -32,8 +32,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     State state;
 
-    Event evt;
-
     int8_t stripCount = 0;      // indicate if an interface is not refered by any strip
 
 
@@ -51,16 +49,16 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     DeviceInterface(const String&, const String&, bool);
     ~DeviceInterface();
 
-    virtual const char* getDispatcherName() override{
+    virtual const char* getDispatcherName() const override{
       return interfaceName.c_str();
     }
 
-    virtual const char* getListenerName() override{
+    virtual const char* getListenerName() const override{
       return interfaceName.c_str();
     }
 
 
-    virtual void onEvent(struct Event* event){}
+    void onEvent(const Event& evt) override {}
 
     virtual bool begin(){     // called by init()
       DEBUG_INFO("%s::begin() void",interfaceName.c_str());
@@ -738,9 +736,9 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       switchNetworkService(_enabled); // we use our own
     }   
 
-    void onEvent(Event* event){
+    void onEvent(const Event& evt) override {
       // recive the event propagated from Appmanager
-      switch(event->type){
+      switch(evt.type()){
         case EVENT_NETWORK_DISCONNECTED:
           disable();
           break;

@@ -495,13 +495,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     //////////////////                       //////////////////////    
     ///////////////////////////////////////////////////////////////
    
-    Event evt;
-
-    virtual const char* getDispatcherName() override{
+    virtual const char* getDispatcherName() const override{
       return id.c_str();
     }
 
-    virtual const char* getListenerName() override{
+    virtual const char* getListenerName() const override{
       return id.c_str();
     }
 
@@ -593,6 +591,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     }
 
+    
     void internetCallBack(TargetEcho* internetEcho){
       ///////////////////////// do what application manager has to do when internet is connected/disconnected      
       if (internetEcho->alive){
@@ -602,9 +601,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         DEBUG_INFO("[ping]\t\t%s : No internet connection, skipping remote version check\n\n",internetEcho->host.c_str());          
       }       
       ///////////////////////// then propagate the event
-      evt.type = EVENT_INTERNET_PING;
-      evt.data = internetEcho;
-      fireEvent(&evt);
+      PingEvent internetEvent(internetEcho);
+      fireEvent(internetEvent);
     }
 
     void setBatIcon(){
@@ -748,8 +746,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         ftp.begin();
       #endif
 
-      Event::disableEventDump(EVENT_ANALOG_BUTTON);
-      Event::disableEventDump(EVENT_DIGITAL_BUTTON);
+      /*Event::disableEventDump(EVENT_ANALOG_BUTTON);
+      Event::disableEventDump(EVENT_DIGITAL_BUTTON);*/
 
 
       // *********************************
@@ -983,8 +981,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // *********************************
     // EVENTS HANDLERS
     // *********************************
-    void onEvent(Event* event){
-      switch(event->type){
+   void onEvent(const Event& evt) override {
+      switch (evt.type()) {
         case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
           sendTerminateMessageToWebApp("Network connection changed. Close this page");         // the browser becomes unavialble, so terminate the application
           shutdownWSS();      //
@@ -1018,41 +1016,56 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           setAPIcon();
         break;         
         case EVENT_ANALOG_BUTTON:
-          handleSwitchEvent(event);
+          handleSwitchEvent(&evt);
         break;
         case EVENT_DIGITAL_BUTTON:
-          handleOnOffEvent(event);
+          handleOnOffEvent(&evt);
+        break;
+        case EVENT_BATTERY_REFRESHED:
+
+          setBatIcon();
+          if (hwm->battery.vBat<VBAT_CRIT && hwm->battery.batteryState != BAT_USB_PLUGGED){
+            menuTopText = *lang.getString("Low Battery");
+            menuBottomLabel = emptyString;
+            goSleepCountdownStart = millis();
+            goToBigBatteryIconScreenAndSleep();
+          }  
+
         break;
       }   
-      fireEvent(event);   // propagate the event
+      fireEvent(evt);   // propagate the event
     }
 
-    void handleSwitchEvent(Event* event) {
-      ButtonData* btnEvt = (ButtonData*) event->data;             
-      switch(btnEvt->id){
-        case IntervalButton::BUTTON_DOUBLE_CLIC:
-          doubleClicCallBack(btnEvt->buttonId,btnEvt->time);
+    void handleSwitchEvent(const Event* event) {
+      const auto& e = static_cast<const EventButtonAnalog*>(event);
+      const ButtonData& d = e->data();   
+
+      switch(d.id){
+        case BUTTON_DOUBLE_CLIC:
+          doubleClicCallBack(d.buttonId,d.time);
         break;
-        case IntervalButton::BUTTON_HOLD:
-          holdCallback(btnEvt->buttonId,btnEvt->time);
+        case BUTTON_HOLD:
+          holdCallback(d.buttonId,d.time);
         break;
-        case IntervalButton::BUTTON_LONG_CLIC:
-          longClicCallBack(btnEvt->buttonId,btnEvt->time);
+        case BUTTON_LONG_CLIC:
+          longClicCallBack(d.buttonId,d.time);
         break;
-        case IntervalButton::BUTTON_RELEASE_HOLD:
-          releaseHoldCallback(btnEvt->buttonId,btnEvt->time);
+        case BUTTON_RELEASE_HOLD:
+          releaseHoldCallback(d.buttonId,d.time);
         break;
-        case IntervalButton::BUTTON_SIMPLE_CLIC:
-          simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
+        case BUTTON_SIMPLE_CLIC:
+          simpleClicCallBack(d.buttonId,d.time);
         break;
       }
     }
 
 
-    void handleOnOffEvent(Event* event){
-      ButtonData* btnEvt = (ButtonData*) event->data;
-      switch(btnEvt->id){
-        case IntervalButton::BUTTON_DOUBLE_CLIC:
+    void handleOnOffEvent(const Event* event){
+      const auto& e = static_cast<const EventButtonDigital*>(event);
+      const ButtonData& d = e->data();
+
+      switch(d.id){
+        case BUTTON_DOUBLE_CLIC:
 
           if (screen.id == SCREEN_BANK){
             // toggle interface on / off
@@ -1071,18 +1084,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           }        
 
         break;
-        case IntervalButton::BUTTON_HOLD:
+        case BUTTON_HOLD:
 
         break;
-        case IntervalButton::BUTTON_LONG_CLIC:
+        case BUTTON_LONG_CLIC:
           //DEBUG_PRINT("\nmenuSwitchCallback");
-          menuSwitchCallback(btnEvt->buttonId,btnEvt->time);
+          menuSwitchCallback(d.buttonId,d.time);
         break;
-        case IntervalButton::BUTTON_RELEASE_HOLD:
+        case BUTTON_RELEASE_HOLD:
      
         break;
-        case IntervalButton::BUTTON_SIMPLE_CLIC:
-          simpleClicCallBack(btnEvt->buttonId,btnEvt->time);
+        case BUTTON_SIMPLE_CLIC:
+          simpleClicCallBack(d.buttonId,d.time);
           /*char* msg = "helloworld";
           USBMIDI.sendSysEx(strlen(msg),(const byte*)msg);
           USBMIDI.sendNoteOn(123,62,1);*/                                                                                                                                                                         
@@ -1427,7 +1440,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // perform the behaviour defined in the config file
     // at the moment, this is hard coded
     if (buttonID == hwm->buttons[MIDDLEB]->getID()){
-      if (!stripAction(IntervalButton::BUTTON_SIMPLE_CLIC)){
+      if (!stripAction(BUTTON_SIMPLE_CLIC)){
         DEBUG_WARN("stripAction failed");
         // code if execution fails: example: popup a message with the error
       }
@@ -1452,11 +1465,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   void moduleHoldClic(uint8_t buttonID, unsigned long time){
     // perform the behaviour defined in the config file
     // at the moment, this is hard coded
-    stripChangeValue(buttonID, time, IntervalButton::BUTTON_HOLD);
+    stripChangeValue(buttonID, time, BUTTON_HOLD);
   }
 
   void moduleReleaseClic(uint8_t buttonID, unsigned long time){    
-    stripReleaseHold(buttonID, time, IntervalButton::BUTTON_HOLD);
+    stripReleaseHold(buttonID, time, BUTTON_HOLD);
   }
 
   void moduleLongClic(uint8_t buttonID){
@@ -1847,23 +1860,6 @@ void setup() {
       } 
 
       handleWeb();     
-
-      //------------------
-      //
-      // MANAGE UTILITIES
-      //
-      //------------------
-
-      // BATTERY LEVEL CHECK
-      if (hwm->battery.refreshed){        
-        setBatIcon();
-        if (hwm->battery.vBat<VBAT_CRIT && hwm->battery.batteryState != BAT_USB_PLUGGED){
-          menuTopText = *lang.getString("Low Battery");
-          menuBottomLabel = emptyString;
-          goSleepCountdownStart = millis();
-          goToBigBatteryIconScreenAndSleep();
-        }          
-      }
 
       //------------------
       //

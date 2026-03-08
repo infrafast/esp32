@@ -33,6 +33,31 @@ typedef struct MidiData{
   byte* data = nullptr;
 };
 
+
+class RequestDirectroyServiceRefreshEvent : public Event {
+public:
+  EventType type() const override { return EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH; }
+};
+
+class DirectoryServiceNotREady : public Event {
+public:
+  EventType type() const override { return EVENT_DIRECTORY_NOT_READY; }
+};
+
+class DirectoryServiceRefreshedEvent : public Event {
+public:
+  RtpDirectory* directory;
+
+  EventType type() const override { return EVENT_DIRECTORY_SERVICE_REFRESHED; }
+
+  explicit DirectoryServiceRefreshedEvent(RtpDirectory* _directory)
+  : directory(_directory) {}  
+
+  RtpDirectory* getDirectory() const {
+    return directory;
+  }   
+};
+
 #ifdef DEBUG
   class USBMIDISimul{
     public:
@@ -499,8 +524,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       // reset the timer so we are not interrupted by a startSession()
       lastInvite = millis();
       // ask the application to perform a service discovery    
-      evt.type = EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH;
-      fireEvent(&evt);            
+      RequestDirectroyServiceRefreshEvent evt;
+      fireEvent(evt);            
     }
 
     virtual void handleRequestRefreshState(){    
@@ -508,15 +533,17 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       requestDirectoryRefresh();
     }
 
-    void onEvent(Event* evt) {
+    void onEvent(const Event& evt) override {
       // recive the event propagated from Appmanager
-      switch(evt->type){
-        case EVENT_DIRECTORY_SERVICE_REFRESHED:          
-          rtpDirectory = (RtpDirectory*)evt->data;
+      switch(evt.type()){
+        case EVENT_DIRECTORY_SERVICE_REFRESHED:{       
+          const auto& e = static_cast<const DirectoryServiceRefreshedEvent&>(evt);
+          rtpDirectory = e.getDirectory();        
           populateSessionOptions();     // regenerate the config data set
           if (!serviceLocked) recallState();        // recall the state we had before refresh request, except if current state is locked          
           state.broadcastState = true; // communicate the new state
           state.broadcastConfig = true; // the new populatedSessions have to be communicated to the web app dropdown
+        }
         break;
         case EVENT_DIRECTORY_NOT_READY:
           setSetDirectoryServiceDown();

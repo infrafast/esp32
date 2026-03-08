@@ -179,8 +179,8 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
         return true;
       }
 
-      void onEvent(Event* event){
-        switch(event->type){
+      void onEvent(const Event& evt) override {
+        switch(evt.type()){
           case EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH:
             discoveryRequest();
           break;        
@@ -286,16 +286,14 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           DEBUG_INFO("  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
         }
         // midi interface has to update its config and regenerate its state      
-        evt.type = EVENT_DIRECTORY_SERVICE_REFRESHED;
-        evt.data = &rtpDir;
-        fireEvent(&evt);
+        DirectoryServiceRefreshedEvent evt(&rtpDir);
+        fireEvent(evt);
       }
 
       void epDirectoryNotReady(){
         DEBUG_INFO("[RTP]\t\tDirectory not ready");
-        evt.type = EVENT_DIRECTORY_NOT_READY;
-        evt.data = &rtpDir;
-        fireEvent(&evt);        
+        DirectoryServiceNotREady evt;
+        fireEvent(evt);        
       }      
 
       void epDirectoryRefresh(){
