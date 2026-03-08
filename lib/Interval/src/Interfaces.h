@@ -129,9 +129,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       return output;
     }  
 
-    bool init(EventListener* listener) {
+    bool init(/*EventListener* listener*/) {
       DEBUG_INFO("----------------------------------  %s->init(...)  ---------------------------------- ", interfaceName.c_str());
-      registerEventListener(listener);
+      //registerEventListener(listener);
       load();
       bool success = begin();
       DEBUG_INFO("-----------------------------------------------------------------------------------------------------\n");

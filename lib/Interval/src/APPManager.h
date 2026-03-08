@@ -804,7 +804,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       */
       for (const auto& interface : interfaceRepo.interfaces){
         
-        if (!interface->init(this)){
+        if (!interface->init(/*this*/)){
           DEBUG_WARN("%s->init() failed or is not fully implemented",interface->interfaceName.c_str());    
         }
        
