@@ -1022,7 +1022,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           handleOnOffEvent(&evt);
         break;
         case EVENT_BATTERY_REFRESHED:
-
           setBatIcon();
           if (hwm->battery.vBat<VBAT_CRIT && hwm->battery.batteryState != BAT_USB_PLUGGED){
             menuTopText = *lang.getString("Low Battery");
@@ -1030,7 +1029,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             goSleepCountdownStart = millis();
             goToBigBatteryIconScreenAndSleep();
           }  
-
         break;
       }   
       fireEvent(evt);   // propagate the event
