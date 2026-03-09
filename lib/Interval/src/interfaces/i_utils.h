@@ -103,7 +103,6 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     
 }systemInterface(false);      // not exposed
 
-
 class RequestDirectroyServiceRefreshEvent : public Event {
 public:
   EventType type() const override { return EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH; }
@@ -127,6 +126,7 @@ public:
     return directory;
   }   
 };
+
 
 class DirectoryInterface: public DeviceInterface, public NetWorkService{
     #define DIRECTORY_INTERFACE "Directory"

@@ -8,10 +8,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/stream_buffer.h"
 
+#include "interfaces/i_utils.h"
 #include "interfaces/i_midi.h"
 #include "interfaces/i_dmx.h"
 #include "interfaces/i_osc.h"
-#include "interfaces/i_utils.h"
+
 
 ///////////////////// WIDGET LOCATION & SIZE ////////////////////////
 #define OVERLAY_ICON_SIZE TFT_HEIGHT/15

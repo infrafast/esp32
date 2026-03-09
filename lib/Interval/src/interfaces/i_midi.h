@@ -20,7 +20,8 @@
 enum{
   MIDI_CC,
   MIDI_NOTE,
-  MIDI_PITCH
+  MIDI_PITCH,
+  MIDI_SYSEX
   //...
 };
 
@@ -29,12 +30,10 @@ struct MidiData{
   byte channel = 0;
   byte number = 0;
   byte value = 0;
+  byte* sysexdata;
+  unsigned length;  
 };
 
-struct SysexData{
-  byte* sysexdata;
-  unsigned length;
-};
 
 class MidiEvent : public Event {
 public:
@@ -116,15 +115,15 @@ class MIDIInterface: public DeviceInterface{
       // ------------------------------------------------------------------------
       midiData.type = MIDI_SYSEX;
 
-      if (midiData.data != nullptr) {
-        delete[] midiData.data;
-        midiData.data = nullptr;
+      if (midiData.sysexdata != nullptr) {
+        delete[] midiData.sysexdata;
+        midiData.sysexdata = nullptr;
       }
 
       if (length > 0) {
-        midiData.data = new byte[length];
-        if (midiData.data != nullptr) {
-          memcpy(midiData.data, sysexdata, length);
+        midiData.sysexdata = new byte[length];
+        if (midiData.sysexdata != nullptr) {
+          memcpy(midiData.sysexdata, sysexdata, length);
         }
       }
 
