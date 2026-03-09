@@ -480,9 +480,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       attachDeviceInterface(this);
 
       registerDataSetAddress(dsAppleMidiSessions.address);
-      
-      destination = new TargetEcho("0.0.0.0");
-
+  
       //jsonInputRepo.add(this); 
 
       populateSessionOptions();      
@@ -490,7 +488,6 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
     ~AppleMIDIInterface(){
-      delete destination;
     }    
 
     virtual bool begin() override{      
@@ -593,7 +590,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       // or
       // /sessions/passive
       if (sessionType == APPLEMIDI_PASSIVE) return PASSIVE_SESSION_NAME;
-      else return concatStrings(midiSessionName, " (", destination->ip.toString(), ":", rtpPort, ")");  
+      else return concatStrings(midiSessionName, " (", destination.ip.toString(), ":", rtpPort, ")");  
     }
 
     virtual void serializeProperties(JsonArray& properties) override{   
@@ -740,12 +737,12 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
           midiSessionName = String(sessionName);
 
-          if (destination->host != String(ipAddress))   changed = true;
-          destination->host = String(ipAddress);
-          destination->ip.fromString(ipAddress);            
+          if (destination.host != String(ipAddress))   changed = true;
+          destination.host = String(ipAddress);
+          destination.ip.fromString(ipAddress);            
 
           // the session description is added to the list of end point so it appears on the drop down even if it was not detected (as a recall from saved interface parameter)
-          uint8_t ipBytes[4] = {destination->ip[0], destination->ip[1], destination->ip[2], destination->ip[3]};                              
+          uint8_t ipBytes[4] = {destination.ip[0], destination.ip[1], destination.ip[2], destination.ip[3]};                              
              
         }
         savedSession = forgeSessionOptionFromProperties() ;
@@ -918,11 +915,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
     void setStateActiveSession(){
-      DEBUG_INFO("%s::setStateActiveSession() to %s:%d",destination->host.c_str(),interfaceName.c_str(), rtpPort);  
+      DEBUG_INFO("%s::setStateActiveSession() to %s:%d",destination.host.c_str(),interfaceName.c_str(), rtpPort);  
 
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;
 
-      appleMidiClient->sendInvite(destination->ip, rtpPort);
+      appleMidiClient->sendInvite(destination.ip, rtpPort);
 
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_INVITING;
@@ -930,9 +927,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       state.led = "green slow";
       state.progress = -1;
     
-      state.subState = destination->host;      
+      state.subState = destination.host;      
       state.details = concatStrings(
-        destination->host,
+        destination.host,
         "/",
         rtpPort
       );
@@ -946,7 +943,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
     void setStateDisconnected() override{
       DeviceInterface::setStateDisconnected();       
-      state.subState = destination->host;      
+      state.subState = destination.host;      
       if (exception == UNDEF_EXCEPTION){
         // no exception were raised, hence it is a normal disconnect
         state.label = IF_STATE_DISCONNECTED;

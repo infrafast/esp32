@@ -1,82 +1,27 @@
 #ifndef _MSTATION_h
 #define _MSTATION_h
 
+#include "interfaces/i_socket.h"
 #include "mixer.h"
 
+#define MS_APP_STATE "/app/state"
+
 #define INTERFACE_MIXINGSTATION "MixingStation"
-class MixingStation: public NetworkDevice, public MixerInterface{
+class MixingStation: public NetworkSocket, public MixerInterface{
   public:
   
-    MixingStation():NetworkDevice(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,8887,8088,true){
-      //destination->host = "192.168.99.99";
-      destination = new TargetEcho("192.168.0.1");    
-      
+    MixingStation():NetworkSocket(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_APP_STATE,8887,8088,true){
+      //destination.host = "192.168.99.99";
     }
 
-    virtual void monitorService(){
-      
-      // check if we have a data socket in the queue
-      // ...
-      //
+    virtual void process() override{
 
-      #define PULSE_CHECK_DELAY 5000
-      // delay expired, we didn't receive any incoming socket message...
-      // time to ping the device to see if it's still alive or if we have to attempt reconnecting      
-      if (millis()-destination->lastQueryTime > PULSE_CHECK_DELAY){                
-        destination->lastQueryTime = millis(); // reset timer
-        if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
-          // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
-          hwm.network->clientSocketSend(get("/app/state"));
-        }else{
-          // if we have no socket connection or we loose it, we try to esbalish one
-          handleConnectService();
-        }        
-      }                                                                   
     }
-
-    void onEvent(const Event& evt) override {
-      NetworkDevice::onEvent(evt);
-     
-      switch(evt.type()){
-        case EVENT_SOCKET_OPEN:
-          // connexion has just been made to MixingStation
-          setStateMSconnected();
-          destination->lastQueryTime = 0;   // request an immediate /app/state to get state        
-        break;
-        case EVENT_SOCKET_CLOSE:
-          // this is called when closing socket => so could be by handleDisconnectService or because we lost the connection
-          deviceInterface->setStatePending();
-        break;
-        case EVENT_SOCKET_ERROR:
-          deviceInterface->setStateDisconnected(*lang.getString("MixingStation unreachable"));
-        break;
-        case EVENT_SOCKET_MESSAGE:
-          const auto& e = static_cast<const SockeMessageEvent&>(evt);
-          const SocketData* d = e.data();    
-
-          // create a copy and push it to the queue
-          // ...
-          //
-        break;                
-      }
-    }    
-
-    virtual bool handleConnectService(){
-      DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
-      if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
-        DEBUG_PRINT(":client already opened\n");
-        return true;
-      }else{
-        return hwm.network->clientSocketOpen(destination->host.c_str(), remotePort, "/"); 
-      }
+ 
+    virtual bool ping() override{
+      hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));  // forge a MS get json query with echoCommand as the path
+      return true;
     }
-
-    virtual bool handleDisconnectService(){
-      DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
-      destination->lastQueryTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
-      hwm.network->clientSocketClose(); 
-      return false;
-    }    
  
   protected:
     //////////////////////////////////////////////
@@ -146,7 +91,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
     ///////////////////////////////////////    
     void onTXTmessage(const char *message, uint16_t length) {
       // we received a message so we reset the lastQuery timer
-      destination->lastQueryTime = millis(); 
+      destination.lastQueryTime = millis(); 
     
       if (length + 1 > RX_MAX){
         DEBUG_INFO("%s::onTXTmessage(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
@@ -289,7 +234,7 @@ class MixingStation: public NetworkDevice, public MixerInterface{
     //////////////////////////////////////////////////////////////
     ///                      DEVICE STATES                    ///
     /////////////////////////////////////////////////////////////
-    void setStateMSconnected(){
+    void setStateConnected(){
       DEBUG_INFO("%s: setStateMSconnected()",interfaceName.c_str());
       DeviceInterface::setStatePending();
       state.details = "Connected to MixingStation";

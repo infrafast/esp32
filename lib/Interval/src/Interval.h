@@ -93,6 +93,7 @@ class TargetEcho{
     String host;
     IPAddress ip;  
     TargetEcho(String h):host(h){} 
+    String echoCommand = "";
 };
 
 typedef std::function<void(TargetEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité

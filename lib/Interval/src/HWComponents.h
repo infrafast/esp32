@@ -94,7 +94,7 @@ class SocketErrorEvent : public SocketEvent {
 public:
     EventType type() const override { return EVENT_SOCKET_ERROR; }
     explicit SocketErrorEvent(int errcode){
-      data.code = errcode;
+      _data.code = errcode;
     }     
 };
 
@@ -102,9 +102,9 @@ class SockeCloseEvent : public SocketEvent {
 public:
     EventType type() const override { return EVENT_SOCKET_CLOSE; }
     explicit SockeCloseEvent(int code,const char* reason, uint16_t len){
-      data.code = code;
-      data.message = reason;
-      data.length = len;
+      _data.code = code;
+      _data.message = reason;
+      _data.length = len;
     }     
 };
 
@@ -112,8 +112,8 @@ class SockeMessageEvent : public SocketEvent {
 public:
     EventType type() const override { return EVENT_SOCKET_MESSAGE; }
     explicit SockeMessageEvent(const char* message, uint16_t len){
-      data.message = message;
-      data.length = len;
+      _data.message = message;
+      _data.length = len;
     }     
 };
 

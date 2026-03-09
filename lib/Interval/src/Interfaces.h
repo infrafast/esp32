@@ -417,7 +417,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
 class NetWorkService{
   public:
-    TargetEcho* destination;
+    TargetEcho destination = TargetEcho("0.0.0.0");
 
     // ---- Global inventory of services (NetWorkService*) ----
     static std::vector<NetWorkService*> inventory;
@@ -710,14 +710,22 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     int remotePort = 0;
     int localPort = 0;  
 
-    NetworkDevice(String name, String group, int lport, int rport, bool _configurable=false):DeviceInterface(name, group,_configurable), localPort(lport), remotePort(rport){
+    NetworkDevice(String name, String group, int lport, int rport, String echoCommand, bool _configurable=false):DeviceInterface(name, group,_configurable){
       
       attachDeviceInterface(this);
       
+      destination.echoCommand = echoCommand;
+
       registerDataSetAddress(addressPort);          // global
       registerDataSetAddress(&addressIP);           // global       
+
+      remotePort = rport;
+      localPort = lport;
+
       
     }
+
+    virtual bool ping() = 0;
 
     // network devices listen to network event
     virtual bool begin(){     // called by init()
@@ -765,8 +773,8 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       properties.add(String(buf)); 
       free(buf);
 
-      buf = (char*)malloc((strlen(ADDRESS_IP)+destination->ip.toString().length())*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_IP,destination->ip.toString());
+      buf = (char*)malloc((strlen(ADDRESS_IP)+destination.ip.toString().length())*sizeof(char*)+1);
+      sprintf(buf,ADDRESS_IP,destination.ip.toString());
       properties.add(String(buf)); 
       free(buf);                
     }
@@ -781,11 +789,11 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
         remotePort = _port;
         if (remotePort>65535 || remotePort<0) remotePort = 0;
       }else if (sscanf(property, ADDRESS_IP, &inputStr)) {
-        if (destination->host != inputStr)  changed = true;
-        destination->host = inputStr;
+        if (destination.host != inputStr)  changed = true;
+        destination.host = inputStr;
         IPAddress ip;
         if (ip.fromString(inputStr)){
-          destination->ip = ip;                
+          destination.ip = ip;                
         }else{
           DEBUG_ERROR("\ninvalid IP address: %s",inputStr);
         }
@@ -794,7 +802,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     }       
 
     virtual void setStateReady(){            
-      DeviceInterface::setStateReady("green", *lang.getString(IF_STATE_CONNECTED), destination->ip.toString(),destination->ip.toString());
+      DeviceInterface::setStateReady("green", *lang.getString(IF_STATE_CONNECTED), destination.ip.toString(),destination.ip.toString());
     }
 
     virtual void setStateDisconnected() override{
@@ -803,6 +811,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     }       
 
 };
+
 
 //DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable)
 #endif
