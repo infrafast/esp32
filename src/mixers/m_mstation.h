@@ -15,7 +15,7 @@ class MixingStation: public NetworkSocket, public MixerInterface{
     }
 
     virtual void process() override{
-
+      // SocketDataCopy data has been updated, we use it :-)
     }
  
     virtual bool ping() override{

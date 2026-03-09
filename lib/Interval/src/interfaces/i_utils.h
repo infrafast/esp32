@@ -103,6 +103,31 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     
 }systemInterface(false);      // not exposed
 
+
+class RequestDirectroyServiceRefreshEvent : public Event {
+public:
+  EventType type() const override { return EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH; }
+};
+
+class DirectoryServiceNotREady : public Event {
+public:
+  EventType type() const override { return EVENT_DIRECTORY_NOT_READY; }
+};
+
+class DirectoryServiceRefreshedEvent : public Event {
+public:
+  RtpDirectory* directory;
+
+  EventType type() const override { return EVENT_DIRECTORY_SERVICE_REFRESHED; }
+
+  explicit DirectoryServiceRefreshedEvent(RtpDirectory* _directory)
+  : directory(_directory) {}  
+
+  RtpDirectory* getDirectory() const {
+    return directory;
+  }   
+};
+
 class DirectoryInterface: public DeviceInterface, public NetWorkService{
     #define DIRECTORY_INTERFACE "Directory"
     public:    

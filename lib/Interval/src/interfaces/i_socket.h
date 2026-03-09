@@ -13,8 +13,18 @@ un stockage statique
 un buffer texte fixe par élément
 si la FIFO est pleine : on écrase l’élément le plus ancien
 */
+// Paramètres FIFO
+static constexpr size_t FIFO_SIZE = 5;
+static constexpr size_t MAX_MESSAGE_LEN = kBufferMaxSize;   // from mWebscoket library
 
-/*
+// Structure interne avec copie réelle du message
+struct SocketDataCopy {
+  uint16_t length;
+  char message[MAX_MESSAGE_LEN];
+  int code;
+};
+
+
 class SocketDataFifo {
 public:
   SocketDataFifo() : head(0), tail(0), count(0) {}
@@ -93,11 +103,6 @@ private:
 };
 
 
-
-*/
-
-
-
 #define INTERFACE_SOCKET "NetworkSocket"
 class NetworkSocket: public NetworkDevice{
   public:
@@ -106,30 +111,36 @@ class NetworkSocket: public NetworkDevice{
       //destination.host = "192.168.99.99"; 
     }
 
-        virtual void monitorService(){
+    virtual void monitorService(){
       
-      // check if we have a data socket in the queue
-      // ...
-      //
-      //if (socket.available()) process();
+        // check if we have a data socket in the queue
+        // ...
+        //
+        //if (socket.available()) process();
 
-      #define PULSE_CHECK_DELAY 5000
-      // delay expired, we didn't receive any incoming socket message...
-      // time to ping the device to see if it's still alive or if we have to attempt reconnecting      
-      if (millis()-destination.lastQueryTime > PULSE_CHECK_DELAY){                
-        destination.lastQueryTime = millis(); // reset timer
-        if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
-          // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
-          ping();
-        }else{
-          // if we have no socket connection or we loose it, we try to esbalish one
-          handleConnectService();
-        }        
-      }                                                                   
+        if (gSocketFifo.available()) {                                      //can be a while...
+            if (gSocketFifo.pop(data)) {
+                process();
+            }
+        }      
+
+        #define PULSE_CHECK_DELAY 5000
+        // delay expired, we didn't receive any incoming socket message...
+        // time to ping the device to see if it's still alive or if we have to attempt reconnecting      
+        if (millis()-destination.lastQueryTime > PULSE_CHECK_DELAY){                
+            destination.lastQueryTime = millis(); // reset timer
+            if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
+                // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
+                ping();
+            }else{
+                // if we have no socket connection or we loose it, we try to esbalish one
+                handleConnectService();
+            }        
+        }                                                                   
     }
   
 
-    virtual void process() = 0;
+    virtual void process() = 0;  // called when socketData are available
 
     void virtual setStateConnected() = 0;
 
@@ -150,12 +161,12 @@ class NetworkSocket: public NetworkDevice{
           deviceInterface->setStateDisconnected(*lang.getString("NetworkSocket unreachable"));
         break;
         case EVENT_SOCKET_MESSAGE:
-          const auto& e = static_cast<const SockeMessageEvent&>(evt);
-          const SocketData* d = e.data();    
+            const auto& e = static_cast<const SockeMessageEvent&>(evt);
+            const SocketData* d = e.data();    
 
-          // create a copy and push it to the queue
-          // ...
-          //
+            // push it to the queue (creates a copy)
+            gSocketFifo.push(d);
+        
         break;                
       }
     }    
@@ -178,7 +189,8 @@ class NetworkSocket: public NetworkDevice{
     }    
  
   protected:
-  
+    SocketDataFifo gSocketFifo;
+    SocketDataCopy data;
   
 };
 

@@ -19,44 +19,31 @@
 
 enum{
   MIDI_CC,
-  MIDI_SYSEX,
   MIDI_NOTE,
   MIDI_PITCH
   //...
 };
 
-typedef struct MidiData{
+struct MidiData{
   uint8_t type = MIDI_CC;
   byte channel = 0;
   byte number = 0;
   byte value = 0;
-  byte* data = nullptr;
 };
 
+struct SysexData{
+  byte* sysexdata;
+  unsigned length;
+};
 
-class RequestDirectroyServiceRefreshEvent : public Event {
+class MidiEvent : public Event {
 public:
-  EventType type() const override { return EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH; }
+  const MidiData& midiData;
+  EventType type() const override { return EVENT_SOCKET_MESSAGE; }
+  explicit MidiEvent(const MidiData& _midiData):midiData(_midiData){}
+  const MidiData& data() const{return midiData;}
 };
 
-class DirectoryServiceNotREady : public Event {
-public:
-  EventType type() const override { return EVENT_DIRECTORY_NOT_READY; }
-};
-
-class DirectoryServiceRefreshedEvent : public Event {
-public:
-  RtpDirectory* directory;
-
-  EventType type() const override { return EVENT_DIRECTORY_SERVICE_REFRESHED; }
-
-  explicit DirectoryServiceRefreshedEvent(RtpDirectory* _directory)
-  : directory(_directory) {}  
-
-  RtpDirectory* getDirectory() const {
-    return directory;
-  }   
-};
 
 #ifdef DEBUG
   class USBMIDISimul{
