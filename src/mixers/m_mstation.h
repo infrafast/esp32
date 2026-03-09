@@ -11,42 +11,13 @@ class MixingStation: public NetworkDevice, public MixerInterface{
       //destination->host = "192.168.99.99";
       destination = new TargetEcho("192.168.0.1");    
       
-      // prepare websocket callback      
-      wsClientOnTXTmessage().set(this,
-        [](void* ctx, const char* message, uint16_t length) {
-          static_cast<MixingStation*>(ctx)->onTXTmessage(message, length);
-        }
-      );    
-
-      wsClientOnOpen().set(this,
-        [](void* ctx) {
-          static_cast<MixingStation*>(ctx)->onSocketOpen();
-        }
-      );     
-
-      wsClientOnClose().set(
-        this,
-        [](void* ctx, WebSocketCloseCode code, const char* reason, uint16_t length) {
-          static_cast<MixingStation*>(ctx)->onSocketClose(code, reason, length);
-        }
-      );
-
     }
 
-    /*
-
-      wsClientOnError().set(
-        this,
-        [](void* ctx, WebSocketError error) {
-          static_cast<MixingStation*>(ctx)->onWsError(error);
-        }
-      );
-    
-    */
-
-     virtual void monitorService(){
+    virtual void monitorService(){
       
-      //...nothing to interogate here, all is done via socket event...
+      // check if we have a data socket in the queue
+      // ...
+      //
 
       #define PULSE_CHECK_DELAY 5000
       // delay expired, we didn't receive any incoming socket message...
@@ -62,6 +33,33 @@ class MixingStation: public NetworkDevice, public MixerInterface{
         }        
       }                                                                   
     }
+
+    void onEvent(const Event& evt) override {
+      NetworkDevice::onEvent(evt);
+     
+      switch(evt.type()){
+        case EVENT_SOCKET_OPEN:
+          // connexion has just been made to MixingStation
+          setStateMSconnected();
+          destination->lastQueryTime = 0;   // request an immediate /app/state to get state        
+        break;
+        case EVENT_SOCKET_CLOSE:
+          // this is called when closing socket => so could be by handleDisconnectService or because we lost the connection
+          deviceInterface->setStatePending();
+        break;
+        case EVENT_SOCKET_ERROR:
+          deviceInterface->setStateDisconnected(*lang.getString("MixingStation unreachable"));
+        break;
+        case EVENT_SOCKET_MESSAGE:
+          const auto& e = static_cast<const SockeMessageEvent&>(evt);
+          const SocketData* d = e.data();    
+
+          // create a copy and push it to the queue
+          // ...
+          //
+        break;                
+      }
+    }    
 
     virtual bool handleConnectService(){
       DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
@@ -287,20 +285,6 @@ class MixingStation: public NetworkDevice, public MixerInterface{
 
       }
     }    
-
-    ////////////////////////////////////////
-    //           SOCKET CALLBACK        ///
-    ///////////////////////////////////////    
-    void onSocketOpen(){
-      // connexion has just been made to MixingStation
-      setStateMSconnected();
-      destination->lastQueryTime = 0;   // request an immediate /app/state to get state
-    }
-
-    void onSocketClose(WebSocketCloseCode code, const char *reason,uint16_t length){
-      // this is called when closing socket => so could be by handleDisconnectService or because we lost the connection
-      deviceInterface->setStateDisconnected(*lang.getString("MixingStation unreachable"));
-    }
 
     //////////////////////////////////////////////////////////////
     ///                      DEVICE STATES                    ///

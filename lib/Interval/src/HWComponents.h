@@ -63,103 +63,59 @@ public:
     }    
 };
 
-
-// =========================================================
-// Generic callback containers: ctx + function pointer
-// =========================================================
-
-struct Cb0 {
-  using Fn = void(*)(void* ctx);
-  void* ctx = nullptr;
-  Fn fn = nullptr;
-  void set(void* c, Fn f) { ctx = c; fn = f; }
-  inline void call() const { if (fn) fn(ctx); }
-  inline bool isSet() const { return fn != nullptr; }
+struct SocketData{
+  uint16_t length;
+  const char* message="";
+  int code;
 };
 
-template<typename A1>
-struct Cb1 {
-  using Fn = void(*)(void* ctx, A1);
-  void* ctx = nullptr;
-  Fn fn = nullptr;
-  void set(void* c, Fn f) { ctx = c; fn = f; }
-  inline void call(A1 a1) const { if (fn) fn(ctx, a1); }
-  inline bool isSet() const { return fn != nullptr; }
+class SocketEvent: public Event{
+
+  public:
+    
+    virtual const char* serialize() const {
+      return _data.message;
+    }
+    
+    const SocketData* data() const{
+      return &_data;
+    } 
+
+  protected:
+    SocketData _data;
 };
 
-template<typename A1, typename A2>
-struct Cb2 {
-  using Fn = void(*)(void* ctx, A1, A2);
-  void* ctx = nullptr;
-  Fn fn = nullptr;
-  void set(void* c, Fn f) { ctx = c; fn = f; }
-  inline void call(A1 a1, A2 a2) const { if (fn) fn(ctx, a1, a2); }
-  inline bool isSet() const { return fn != nullptr; }
+class SocketOpenEvent : public SocketEvent {
+public:
+    EventType type() const override { return EVENT_SOCKET_OPEN; }  
 };
 
-template<typename A1, typename A2, typename A3>
-struct Cb3 {
-  using Fn = void(*)(void* ctx, A1, A2, A3);
-  void* ctx = nullptr;
-  Fn fn = nullptr;
-  void set(void* c, Fn f) { ctx = c; fn = f; }
-  inline void call(A1 a1, A2 a2, A3 a3) const { if (fn) fn(ctx, a1, a2, a3); }
-  inline bool isSet() const { return fn != nullptr; }
+class SocketErrorEvent : public SocketEvent {
+public:
+    EventType type() const override { return EVENT_SOCKET_ERROR; }
+    explicit SocketErrorEvent(int errcode){
+      data.code = errcode;
+    }     
 };
 
-// =========================================================
-// "Events" as singleton references (no extern, no .cpp needed)
-// =========================================================
+class SockeCloseEvent : public SocketEvent {
+public:
+    EventType type() const override { return EVENT_SOCKET_CLOSE; }
+    explicit SockeCloseEvent(int code,const char* reason, uint16_t len){
+      data.code = code;
+      data.message = reason;
+      data.length = len;
+    }     
+};
 
-inline Cb0& wsClientOnOpen() {
-  static Cb0 cb;
-  return cb;
-}
-
-inline Cb2<const char*, uint16_t>& wsClientOnTXTmessage() {
-  static Cb2<const char*, uint16_t> cb;
-  return cb;
-}
-
-inline Cb1<WebSocketError>& wsClientOnError() {
-  static Cb1<WebSocketError> cb;
-  return cb;
-}
-
-inline Cb3<WebSocketCloseCode, const char*, uint16_t>& wsClientOnClose() {
-  static Cb3<WebSocketCloseCode, const char*, uint16_t> cb;
-  return cb;
-}
-
-////////////////////////////////////////////////////////////////////
-///                CLIENT SOCKET CALLBACKS                  ///////
-////////////////////////////////////////////////////////////////////
-void socketClientOnOpenCallback(IWebSocket &ws) {
-  //DEBUG_PRINT("\nConnecté au serveur WebSocket !");
-  /*const char message[]{ "Hello from Arduino client!" };
-  ws.send(WebSocketDataType::TEXT, message, strlen(message));  */
-  (void)ws;                // not forwarded, by design (matches your wsClientOnOpen())
-  wsClientOnOpen().call();  
-}
-
-void socketClientOnMessageCallback(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length){
-  switch (dataType) {
-    case net::WebSocketDataType::TEXT:
-       wsClientOnTXTmessage().call(message, length);
-    break;
-    case net::WebSocketDataType::BINARY:
-      //DEBUG_PRINT("\nDonnées binaires reçues");
-    break;
-  }                     
-}
-
-void socketClientOnErrorCallback(WebSocketError error) {
-  wsClientOnError().call(error);
-}
-
-void socketClientOnClose(IWebSocket &ws, WebSocketCloseCode code, const char *reason,uint16_t length){
-  wsClientOnClose().call(code, reason, length);
-}
+class SockeMessageEvent : public SocketEvent {
+public:
+    EventType type() const override { return EVENT_SOCKET_MESSAGE; }
+    explicit SockeMessageEvent(const char* message, uint16_t len){
+      data.message = message;
+      data.length = len;
+    }     
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 void onEthernetBonjourServiceFoundCallback(const char* serviceType,
@@ -1108,6 +1064,9 @@ class WiFiEth : public Network{
 
     virtual void init(){
       Network::init();
+
+      instance = this; //for sockets and other callbacks
+
       //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
       tcpipInit();  // so ethernet can benefit from getting mac address and other low level function even if WiFi is not up      
       // if enabled is true it means wde want to use the ethernet shield, so we try to initialize if
@@ -1529,6 +1488,57 @@ class WiFiEth : public Network{
       stopEthernet();
     }
 
+    ///////////////////// Static callback methods /////////////////////////////////////
+
+    void static socketClientOnErrorCallbackStatic(WebSocketError error) {
+      if (instance) instance->socketClientOnErrorCallback(error);
+    }
+
+    void static socketClientOnCloseStatic(IWebSocket &ws, WebSocketCloseCode code, const char *reason,uint16_t length){
+      if (instance) instance->socketClientOnClose(code,reason,length);
+    }     
+
+    void static socketClientOnOpenCallbackStatic(IWebSocket &ws) {
+      if (instance) instance->socketClientOnOpenCallback();
+    }
+
+    void static socketClientOnMessageCallbackStatic(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length){
+      if (instance) instance->socketClientOnMessageCallback(dataType,message,length);               
+    }
+
+    ///////////////////// Instance callback methods /////////////////////////////////////
+
+    void socketClientOnErrorCallback(WebSocketError error) {
+      SocketErrorEvent evt((int)error);
+      fireEvent(evt);
+    }
+
+    void socketClientOnClose(WebSocketCloseCode code, const char *reason,uint16_t length){
+      SockeCloseEvent evt(code,reason,length);
+      fireEvent(evt);      
+    }    
+
+    void socketClientOnOpenCallback() {
+      SocketOpenEvent evt;
+      fireEvent(evt);       
+    }
+
+    void socketClientOnMessageCallback(const WebSocketDataType dataType,const char *message, uint16_t length){
+      switch (dataType) {
+        case net::WebSocketDataType::TEXT:{
+          SockeMessageEvent evt(message,length);
+          fireEvent(evt); 
+        }
+        break;
+        case net::WebSocketDataType::BINARY:
+          //ignored
+        break;
+      }                     
+    }
+    
+    /////////////////////////////////////////////////////////
+
+
     bool refresh(bool force=false) {
     
       if (millis()-checkEthCableTime > ETH_CABLE_CHECK_FREQUENCY && ethEnabled){   // only if we use the full network stack and not only AP mode
@@ -1573,11 +1583,11 @@ class WiFiEth : public Network{
                 if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
                 //if (udp == NULL) udp = new EthernetUDP;
                 if (wsEthClient == nullptr){
-                  wsEthClient = new EthernetWebSocketClient{}; 
-                  wsEthClient->onOpen(socketClientOnOpenCallback);
-                  wsEthClient->onMessage(socketClientOnMessageCallback);
-                  wsEthClient->onError(socketClientOnErrorCallback);
-                  wsEthClient->onClose(socketClientOnClose);                        
+                  wsEthClient = new EthernetWebSocketClient{};   
+                  wsEthClient->onOpen(WiFiEth::socketClientOnOpenCallbackStatic);
+                  wsEthClient->onMessage(WiFiEth::socketClientOnMessageCallbackStatic);
+                  wsEthClient->onError(WiFiEth::socketClientOnErrorCallbackStatic);
+                  wsEthClient->onClose(WiFiEth::socketClientOnCloseStatic);                      
                 }
                 if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);
 
@@ -1648,10 +1658,10 @@ class WiFiEth : public Network{
               //if (udp == NULL) udp = new WiFiUDP; 
               if (wsWiFiClient == nullptr){
                 wsWiFiClient = new WiFiWebSocketClient{};
-                wsWiFiClient->onOpen(socketClientOnOpenCallback);
-                wsWiFiClient->onMessage(socketClientOnMessageCallback);
-                wsWiFiClient->onError(socketClientOnErrorCallback);
-                wsWiFiClient->onClose(socketClientOnClose);
+                wsWiFiClient->onOpen(WiFiEth::socketClientOnOpenCallbackStatic);
+                wsWiFiClient->onMessage(WiFiEth::socketClientOnMessageCallbackStatic);
+                wsWiFiClient->onError(WiFiEth::socketClientOnErrorCallbackStatic);
+                wsWiFiClient->onClose(WiFiEth::socketClientOnCloseStatic);                  
               }
               if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);                     
               
@@ -1735,6 +1745,7 @@ class WiFiEth : public Network{
           // reset the progress indicator
           networkConnectAttemptProgress = -1;
           // initialiser of common object to both Wifi and Ethernet goes here      
+
           if (media == WIFI_MEDIA){
             SSID = WiFi.SSID();
             gateway = WiFi.gatewayIP();
@@ -1971,7 +1982,10 @@ class WiFiEth : public Network{
     bool  webAppOn = false;
     unsigned long lastWiFiAttempt = 0, lastEthAttempt = 0;
     uint8_t rstPin;
+    static WiFiEth* instance ;
 };
+
+WiFiEth* WiFiEth::instance = nullptr;
 
 class  NoNetwork: public Network{
     
