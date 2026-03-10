@@ -62,7 +62,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       dataAvailable = readOSC();
 
       if (dataAvailable > 0){                                     // data has come
-        if (state.code != IF_READY) setStateReady();          // set the device to connected
+        if (state.code != IF_READY) setStateConnected();          // set the device to connected
         destination.lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
         connectAttemptCount = 0;                                  // reset attempt counter                
         return;                                                   

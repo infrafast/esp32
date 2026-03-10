@@ -164,7 +164,9 @@ class MixingStation: public NetworkSocket, public MixerInterface{
         deviceInterface->state.progress = progress;         
       }
       else if (strcmp(topState, MS_CONNECTED) == 0) {
-        setStateConnected();
+        if (deviceInterface->state.label != IF_STATE_CONNECTED){
+          setStateConnected();
+        }
       }
       else if (strcmp(topState, MS_RECONNECTING) == 0) {
         setStatePending("green medium",concatStrings(state));  
