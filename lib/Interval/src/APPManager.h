@@ -1,7 +1,7 @@
 #ifndef APPManager_h
 #define APPManager_h
 
-#include "nvs_flash.h" 
+#include "nvs_flash.h"
 #include <LinkedList.h>
 #include <ArduinoJson.h>
 #include <LittleFS.h>
@@ -30,22 +30,20 @@
 
 #include <aWOT.h>                 // awOT lasselukkari/aWOT@^3.5.0 wifi+eth server
                                   // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
-#include <MenuSystem.h>           // https://github.com/jonblack/arduino-menusystem                        
+#include <MenuSystem.h>           // https://github.com/jonblack/arduino-menusystem
 #include <LittleFS.h>
 
 #include <WebSocketServer.hpp>    // https://github.com/skaarj1989/mWebSockets#meta     // use a local repository with SOCKETBUFFER SIZE CHANGED one because of https://github.com/skaarj1989/mWebSockets/issues/72
 using namespace net;
-using WiFiWebSocketServer = WebSocketServer<WiFiServer, WiFiClient, 1>;
-using EthernetWebSocketServer = WebSocketServer<EthernetServer, EthernetClient, 1>;
 
 void socketConnectionCallback(IWebSocket &ws);
- 
+
 
 ///////////////////// VOLATILE PARAMETERS ///////////////////////
 //#define V_USE_NETWORK       "myNetworkIP"
 
 // C to C++ class function wrapper
-void commonFileServerWrapper(Request &req, Response &res);  
+void commonFileServerWrapper(Request &req, Response &res);
 void handleWebTaskWrapper(void * parameter);
 //void gzFileServer(Request &req, Response &res);
 void scanNetworksTaskWrapper(void * parameter);         // parrallel task
@@ -87,7 +85,7 @@ enum{
   SCREEN_MAX
 };
 
-//sub screen (state) 
+//sub screen (state)
 enum{
   STATE_WIZARD_LANG_STEP1,
   STATE_WIZARD_CONNECT_CONFIG_STEP2,
@@ -112,7 +110,7 @@ enum{
   STATE_UTILS_CHECK_BINARY,
   STATE_UTILS_INSTALLING_BINARY,
   STATE_UTILS_SHOW_PROGRESS_MULTIPLE,
-  STATE_UTILS_BLINK_ICON_TEXT  
+  STATE_UTILS_BLINK_ICON_TEXT
 };
 
 
@@ -135,7 +133,7 @@ screenBuilder screens[SCREEN_MAX]={
   {SCREEN_MENU,menuScreenBuilder,baseOverLayBuilder},
   {SCREEN_BANK_SWITCH,bankSwitchScreenBuilder,baseOverLayBuilder},
   {SCREEN_PROMPT,promptScreenBuiler,baseOverLayBuilder},
-  {SCREEN_UTILS,utilsScreenBuilder,baseOverLayBuilder},  
+  {SCREEN_UTILS,utilsScreenBuilder,baseOverLayBuilder},
   {SCREEN_BYE,byeScreenBuilder,voidOverlay},
   {SCREEN_BANK,bankScreenBuilder,bankOverlayBuilder},
 };
@@ -181,13 +179,13 @@ void menu_selected(MenuComponent* p_menu_component);
 void brightness_menu_item_selected(MenuComponent* p_menu_component);
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component);
 
-void handleConfigConnection();  // 
+void handleConfigConnection();  //
 
 
 #include "DataManagement.h"
 
 class StripHeaderWidget: public Top2Toggles{
-  public:    
+  public:
     Strip* strip = nullptr;
     StripHeaderWidget(Strip* s, bool debug=false): strip(s),
         /*Top2Toggles(s->getTopLabel(),s->getBottomLabel(),&s->toggle1,&s->toggle2,&s->frontColor,&s->backColor,
@@ -199,11 +197,11 @@ class StripHeaderWidget: public Top2Toggles{
       //if (strip) setValues();
     }
 
-    
-    virtual bool refresh(bool force=false){    
-      
+
+    virtual bool refresh(bool force=false){
+
       //if (strip == nullptr) return false;
-      
+
       refreshed = force;
 
       if (oldStrip != strip || /*strip->updated*/ force){
@@ -237,11 +235,11 @@ class StripHeaderWidget: public Top2Toggles{
       //DEBUG_PRINT("%p)",strip);
     }
 
-  private:    
-    Strip* oldStrip = nullptr; 
+  private:
+    Strip* oldStrip = nullptr;
 
     String NoStrip = "No Strip";
-  
+
 
 
 };
@@ -265,68 +263,68 @@ class Shortcuts: public DataProvider{
 
 
     DynamicDataSet dsStripIDs = DynamicDataSet(new DropDownAddress(ADDRESS_STIPID),this);
-    DynamicDataSet dsDropDownActions = DynamicDataSet(new DropDownAddress(ADDRESS_ACTION),this);        
-    DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this);     
-    DynamicDataSet dsCommand = DynamicDataSet(new FreeTextAddress(ADDRESS_COMMAND, "command", REGEX_STRING) ,this);  
+    DynamicDataSet dsDropDownActions = DynamicDataSet(new DropDownAddress(ADDRESS_ACTION),this);
+    DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this);
+    DynamicDataSet dsCommand = DynamicDataSet(new FreeTextAddress(ADDRESS_COMMAND, "command", REGEX_STRING) ,this);
 
     Shortcuts(String name):DataProvider(name){
       // *********************************
       // SHORTCUTS
       // *********************************
-      //*buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":[\"freetext\"]}]}]";          
-    
+      //*buffer = "[{\"jump\":\"shortcut\",\"properties\":[{\"/strip/id/%s\":[\"dropdown\"]}]},{\"macro\":\"shortcut\",\"properties\":[{\"/action/%s\":[\"dropdown\"]},{\"/macro/name/%s\":[\"dropdown\"]}]},{\"advanced\":\"shortcut\",\"properties\":[{\"/command/%s\":[\"freetext\"]}]}]";
+
       jumpToSD.registerDataSetAddress(dsStripIDs.address);
       macroSD.registerDataSetAddress(dsMacroNames.address);
       macroSD.registerDataSetAddress(dsDropDownActions.address);
 
       advancedSD.registerDataSetAddress(dsCommand.address);
-      
-      jsonInputRepo.add(&jumpToSD);     
-      jsonInputRepo.add(&macroSD);     
-      jsonInputRepo.add(&advancedSD);    
+
+      jsonInputRepo.add(&jumpToSD);
+      jsonInputRepo.add(&macroSD);
+      jsonInputRepo.add(&advancedSD);
     }
 
       // *********************************
       // DATASETS
       // *********************************
 
-    virtual uint16_t getSize(String addrr){   
+    virtual uint16_t getSize(String addrr){
       if (addrr == ADDRESS_STIPID) return 0;       // 0 => means this is not an array of data but a javascript callback name
       else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
       else if (addrr == ADDRESS_MACRONAME) return MACRO_NUMBER_MAX;
       DEBUG_WARN("<%s>:DataSet getSize(%s) is not implemented",dataProviderName.c_str(),addrr.c_str());
       return 0;
 
-    }    
-    
+    }
+
     virtual const String* getValuePtr(String addrr, uint16_t index){
       if (addrr == ADDRESS_STIPID){
         return &getStripID;         //javascript local function callback
       }else if (addrr == ADDRESS_ACTION){
-        return &dsDropDownActionsValues[index];   
+        return &dsDropDownActionsValues[index];
       }else if (addrr == ADDRESS_MACRONAME){
-        return &dsMacroNamesValues[index];      
-      }      
+        return &dsMacroNamesValues[index];
+      }
       DEBUG_WARN("<%s>:DataSet getValuePtr(%s,%d) is not implemented",dataProviderName.c_str(),addrr.c_str(),index);
-      return &voidStatic;      
-    }    
+      return &voidStatic;
+    }
 
     private:
       // javascript function that generates the data locally
       String getStripID = "getStripID";
-          
+
       String dsDropDownActionsValues[ADDRESS_ACTION_SIZE] = {
         "play",
         "pause",
         "stop",
         "FF",
-        "RW"      
-      };   
-      
+        "RW"
+      };
+
       String dsMacroNamesValues[MACRO_NUMBER_MAX] = {
         "macro1",
         "macro2",
-        "macro3",      
+        "macro3",
         "macro4",
         "macro5",
         "macro6",
@@ -334,7 +332,7 @@ class Shortcuts: public DataProvider{
         "macro8",
         "macro9",
         "macro10"
-      };  
+      };
 };
 
 
@@ -342,7 +340,7 @@ class Shortcuts: public DataProvider{
 
 class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, EventListener{
   //
-  public:   
+  public:
   #define maxConcurrentClients 3
   int activeClients = 0;
 
@@ -352,63 +350,62 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     Event evt;
 
-    Application* webServer = nullptr;
     ///////////////////// USER CALLBACKS ////////////////////////////////////////////////////
-    ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;    
+    ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;
     ReturnStringCallback userJsonPongCallback = defaultStringReturn;
     VoidCallback userWizardstepFlow = defaultWizardStepFlow;
     VoidDoubleIntCallback userScreenBuilder = defaultVoidDoubleInt;
 
     ///////////////////// STRIPS & BANKS CONTAINERS AND DEFINITION ////////////////////////
-    //LinkedList<IntervalBank*> banks = LinkedList<IntervalBank*>(); 
+    //LinkedList<IntervalBank*> banks = LinkedList<IntervalBank*>();
     std::vector<IntervalBank*> banks; // Vecteur de strips
-                   
+
     ///////////////////// OVERLAY ICONS ////////////////////////
     String apIcon;
-    uint16_t iFconnectivityIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor, blinkColorBlue = TFT_BLUE;   
+    uint16_t iFconnectivityIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor, blinkColorBlue = TFT_BLUE;
 
     String batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3};
     String batIcon = ICON_WAIT; // by default we display a timeelapser while battery level is undetermined
-    String* byeIcon = &iconForbid; const uint16_t* byeIconColor = &GUI::defaultFcolor; 
+    String* byeIcon = &iconForbid; const uint16_t* byeIconColor = &GUI::defaultFcolor;
     String iconReset = ICON_RESET;
     String iconForbid = ICON_FORBID;
-    String powerIcon = ICON_POWER; 
-    String iconX = "X"; 
+    String powerIcon = ICON_POWER;
+    String iconX = "X";
     String footSwitchIcon = ICON_FOOTSWITCH;
     String intervalIcon = ICON_INTERVAL;
 
-    String utilsBlinkLabel = "", utilsBlinkIcon = ""; 
+    String utilsBlinkLabel = "", utilsBlinkIcon = "";
 
     AlteredColor iFconnectivityIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor apIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor configIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor blinkColor = AlteredColor{.baseColor = GUI::blue, .value =  &GUI::unUsedColor};
-    
+
     int16_t overlayIconY = TFT_HEIGHT-OVERLAY_ICON_SIZE, apIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE*2;
     int16_t batIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE;
 
     float pendingBarWidth = TFT_WIDTH;
 
     uint16_t rainbowC;
-    AlteredColor rainbowColor = AlteredColor{.baseColor = TFT_WHITE, .value = &rainbowC};    
+    AlteredColor rainbowColor = AlteredColor{.baseColor = TFT_WHITE, .value = &rainbowC};
 
     String leftIcon,rightIcon, brightIcon = ICON_BRIGHTNESS;
 
     bool disabledBankRendering = false;   // this is to stop rendering the bank
-  
+
     //Strip* getSelectedStrip() = nullptr;
     StripHeaderWidget* stripHeader = nullptr;
 
     int16_t rightScreen = TFT_WIDTH;
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
-    
+
     MenuSystem ms = MenuSystem(*this);
     MenuSystem* bankMenu = nullptr;
     MenuSystem* wizardMenu = nullptr;
 
     Menu* langMenu = nullptr;
-    Menu* confMenu = nullptr;  
+    Menu* confMenu = nullptr;
     String menuTopText=" ", vBatLabel; //menuTitle
 
     struct MenuItems{
@@ -438,7 +435,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     #define NO_BANK_MENU_ITEM "No bank"
 
-    // Serialization 
+    // Serialization
     #define ifdatasets    "ifdatasets"
     #define stripdatasets "stripdatasets"
     #define bulkconfig  "bulkConfig"
@@ -462,21 +459,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     String newSWversion = "";
 
-    String heapSize;    
+    String heapSize;
     String iconProgress = "";
     bool downloadSreamInprogress = false;
     bool flashBinaryInprogress = false;
-    
+
      String FSstat = "";
 
     ///////////////// INTERFACES ///////////////////
     //OSCInterface osc;
     NetworkOSC* networkOSCinterface;
-    
+
     AppleMIDIInterface* appleMIDIInterface;
     USBMIDIInterface* usbMIDIInterface;
     BLEMIDIInterface* bleMIDIInterface;
-    DINMIDIInterface*  dinMIDIInterface; 
+    DINMIDIInterface*  dinMIDIInterface;
 
     ArtnetDMXInterface* artnetDMXInterface;
     ThreePinDMXInterface* threePinDMXInterface;
@@ -485,19 +482,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     bool webAppConnected;
 
-    String configClientIP; // ip of the client connect to the AP during configuration    
+    WebApplicationService* webAppService = nullptr;
+
+    String configClientIP; // ip of the client connect to the AP during configuration
 
     String firmwareUpdateFilename="";       // from fileStream
     String fwUpdateURL="";                   // from internet
 
-    Shortcuts shortcuts = Shortcuts(SHORTCUT_GROUP); 
-    
+    Shortcuts shortcuts = Shortcuts(SHORTCUT_GROUP);
+
     ///////////////////////////////////////////////////////////////
     //////////////////                        /////////////////////
     //////////////////    MAIN CLASS START   //////////////////////
-    //////////////////                       //////////////////////    
+    //////////////////                       //////////////////////
     ///////////////////////////////////////////////////////////////
-   
+
     virtual const char* getDispatcherName() const override{
       return id.c_str();
     }
@@ -514,7 +513,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       Log::init(this);
 
-      wss = nullptr;      // this is to make sure the template is correctly void
 
       promptParams.message = "";
       promptParams.labels[0] = "";
@@ -526,26 +524,26 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       promptParams.timeoutMs = 0;
       promptTimeoutMax = 1;
       promptRemainingTime = 0;
-       
+
       hwm->network->internetCallback = [this](TargetEcho* internet) {
           this->internetCallBack(internet);
-      };         
+      };
 
       /*callback = [this](Event* event) {
           this->defaultEventHandling(event);
-      };*/         
+      };*/
     }
 
     bool getButtonState(uint8_t B){
       return hwm->buttons[B]->refreshed;
     }
 
-    /*void defaultEventHandling(EventDispatcher::Event* event){  
+    /*void defaultEventHandling(EventDispatcher::Event* event){
       switch(event->type){
         case EventDispatcher::EVENT_APPLICATION:{
-        
+
         }break;
-      } 
+      }
     }*/
 
     Strip* getSelectedStrip(){
@@ -561,8 +559,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //  check is only done once to avoid slowing down workflow when network disconnect and reconnect (when called by ping callback)
       if (!alreadyChecked){
         alreadyChecked = true;
-        HttpClient httpClient(*hwm->network->client);          
-        String serverRoot = *systemCfg.getString(S_HOSTNAME,INTERVAL_DEFAULT_HOSTNAME);      
+        HttpClient httpClient(*hwm->network->client);
+        String serverRoot = *systemCfg.getString(S_HOSTNAME,INTERVAL_DEFAULT_HOSTNAME);
         int8_t retCode = findNewerRemoteFWUpdate(
           concatStrings("http://",serverRoot,SERVER_SW_UPDATE_PATH),
           _V,
@@ -570,39 +568,39 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           newSWversion,
           fwUpdateURL
         );
-        // enable or disable the firmware update menu item accordingly          
+        // enable or disable the firmware update menu item accordingly
         fmw_update_menu_item->setEnabled(retCode == 1 ? true:false); // if retcode = 1, there is a newer version available
-        //DEBUG_PRINT("\n================> fmw_update_menu_item(%s", retCode == 1 ? "enable)":"disable)");          
-        // BRANCH TO SCREEN PROMPT IF CONFIG ALLOWS IT          
+        //DEBUG_PRINT("\n================> fmw_update_menu_item(%s", retCode == 1 ? "enable)":"disable)");
+        // BRANCH TO SCREEN PROMPT IF CONFIG ALLOWS IT
         if (retCode == 1){
-          if (systemCfg.getBool(S_SWUPDATE_PROMPT)){            
+          if (systemCfg.getBool(S_SWUPDATE_PROMPT)){
             screen.id = SCREEN_UTILS;
             screen.state = STATE_UTILS_TRIGGER_FWUPDATE_PROMPT;
             broadCast(concatStrings("{\""FW_UPDATE_URL"\":\"",fwUpdateURL,"\"}"));
           }else{
-            if (screen.id == SCREEN_MENU) triggerRedraw();  // this s to update firmware menu item to be actif or disabled uppon internet check                      
-            //DEBUG_PRINT("\nStartup update disabled in config");                
+            if (screen.id == SCREEN_MENU) triggerRedraw();  // this s to update firmware menu item to be actif or disabled uppon internet check
+            //DEBUG_PRINT("\nStartup update disabled in config");
           }
         }else if(retCode  == 0) {
-          //DEBUG_PRINT("\n*** No firmware update ***");          
+          //DEBUG_PRINT("\n*** No firmware update ***");
         }else{
           //DEBUG_PRINT("\n*** Firmware update check error :%i ***",retCode);
-        }      
+        }
       }else{
         //DEBUG_PRINT("\n SW update check already done at startup");
       }
 
     }
 
-    
+
     void internetCallBack(TargetEcho* internetEcho){
-      ///////////////////////// do what application manager has to do when internet is connected/disconnected      
+      ///////////////////////// do what application manager has to do when internet is connected/disconnected
       if (internetEcho->alive){
-        DEBUG_INFO("[ping]\t\t%s : internet connected\n\n",internetEcho->host.c_str()); 
-        checkRemoteVersion();               
+        DEBUG_INFO("[ping]\t\t%s : internet connected\n\n",internetEcho->host.c_str());
+        checkRemoteVersion();
       }else{
-        DEBUG_INFO("[ping]\t\t%s : No internet connection, skipping remote version check\n\n",internetEcho->host.c_str());          
-      }       
+        DEBUG_INFO("[ping]\t\t%s : No internet connection, skipping remote version check\n\n",internetEcho->host.c_str());
+      }
       ///////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
       evt.data = internetEcho;
@@ -612,20 +610,20 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void setBatIcon(){
       batIconColor = TFT_GREEN;
       switch(hwm->battery.batteryState){
-        case BAT_USB_PLUGGED:          
-          batIcon = ICON_PLUG; 
+        case BAT_USB_PLUGGED:
+          batIcon = ICON_PLUG;
         break;
         case BAT_DISCHARGING:
         {
           uint8_t vBatIconIndex = hwm->battery.indicator;
-          batIcon = batteryIcons[vBatIconIndex];      
+          batIcon = batteryIcons[vBatIconIndex];
 
-          if (vBatIconIndex == 0 && hwm->battery.vBat < VBAT_WARNING) batIconColor = TFT_RED; 
+          if (vBatIconIndex == 0 && hwm->battery.vBat < VBAT_WARNING) batIconColor = TFT_RED;
         }break;
         case BAT_CHECKING:
         default:
           batIcon = ICON_WAIT;
-        break;  
+        break;
       }
       vBatLabel = concatStrings(*lang.getString("Battery"), ": ", hwm->battery.vBat, "v");
     }
@@ -654,7 +652,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    void setiFconnectivityColor(){            
+    void setiFconnectivityColor(){
       if (hwm->network->state == CONNECTED){
         iFconnectivityIconGlowingRedColor.value = &GUI::unUsedColor;
         iFconnectivityIconColorIdle = GUI::green;
@@ -668,27 +666,27 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       menuTopText = *lang.getString(message);
       menuBottomLabel = emptyString;
       byeIcon = &iconReset; byeIconColor = &GUI::red;
-      goSleepCountdownStart = millis();          
-      screen.id = SCREEN_BYE; screen.state = STATE_BYE_GOSLEEP_MESSAGE;         //we could create a screen dedicated for reset         
+      goSleepCountdownStart = millis();
+      screen.id = SCREEN_BYE; screen.state = STATE_BYE_GOSLEEP_MESSAGE;         //we could create a screen dedicated for reset
     }
 
     void goToBigBatteryIconScreenAndSleep(){
       byeIcon = &batIcon; byeIconColor = &batIconColor;
       screen.id = SCREEN_BYE;
-      screen.state = STATE_BYE_GOSLEEP_MESSAGE;       
+      screen.state = STATE_BYE_GOSLEEP_MESSAGE;
     }
 
     IntervalBank* deserializeBanks(const String* bankJsonString){
-      IntervalBank* bank = nullptr;     
-       
+      IntervalBank* bank = nullptr;
+
       JsonDocument jsonBanks;
-      
+
       DeserializationError error = deserializeJson(jsonBanks, *bankJsonString);
       if (error){
         DEBUG_INFO("deserializeBanks()::%s",error.c_str());
         return nullptr;
-      }else{              
-        JsonObject root = jsonBanks.as<JsonObject>();      
+      }else{
+        JsonObject root = jsonBanks.as<JsonObject>();
         for (JsonPair kv : root) {
           bank = new IntervalBank(kv.key().c_str(),kv.value().as<String>());
           //DEBUG_PRINT("\nIntervalBank(%s,%s)",kv.key().c_str(),kv.value().as<String>().c_str());
@@ -707,13 +705,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       wiFiList.deserialize(*systemCfg.getString(S_SSID));
       hwm->setWiFi(&wiFiList,*systemCfg.getString(S_LAST_USED_SSID));
 
-      hwm->setButtonReactivity(systemCfg.getInt(S_PUSHDELAY),systemCfg.getInt(S_DCLICREACTIVITY));     
+      hwm->setButtonReactivity(systemCfg.getInt(S_PUSHDELAY),systemCfg.getInt(S_DCLICREACTIVITY));
 
       String langFile = concatStrings("/", *systemCfg.getString(S_LANG, "ENGLISH"));
       langFile.toUpperCase();
 
-      lang.load(langFile+".lang"); 
-      userLang.load(langFile+".i18n"); 
+      lang.load(langFile+".lang");
+      userLang.load(langFile+".i18n");
 
 
     }
@@ -731,28 +729,28 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       // delete systemCfg settings
       LittleFS.remove(SYSTEM_FILE_NAME);
       hwm->persistants.clear();
-      hwm->persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);      
-      hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    //default brightness 
+      hwm->persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);
+      hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    //default brightness
     }
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
- 
 
-    void init(String _defaultUserConf="{}"){               
+
+    void init(String _defaultUserConf="{}"){
       defaultUserConf = _defaultUserConf;
       GenericComponent::init();
 
-      hwm->init();  
+      hwm->init();
 
       #if defined(USE_FTP) && defined(USE_NETWORK)
-        ftp.addUser("ftp", "ftp");  
+        ftp.addUser("ftp", "ftp");
         ftp.addFilesystem("LITTLEFS", &LittleFS);
         ftp.begin();
       #endif
 
       Event::disableEventDump(EVENT_ANALOG_BUTTON);
       Event::disableEventDump(EVENT_DIGITAL_BUTTON);
-      Event::disableEventDump(EVENT_BATTERY_REFRESHED);    
+      Event::disableEventDump(EVENT_BATTERY_REFRESHED);
 
       // *********************************
       // SKELETONS & DATA SETS
@@ -760,58 +758,61 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //
       // general purposes / test skeletons
       //
-      stripTextSkel = new StripSkeleton(STRIP_TEXT,GROUP_INTERFACE_UTILS,textStripConstructorCallback,'*');        
+      stripTextSkel = new StripSkeleton(STRIP_TEXT,GROUP_INTERFACE_UTILS,textStripConstructorCallback,'*');
         stripTextSkel->registerDataSetAddress(systemInterface.dsText.address);
 
       //
       // midi skeletons
       //
-      midiNoteSkel = new StripSkeleton(STRIP_MIDINOTE,GROUP_INTERFACE_MIDI,midiNoteStripConstructorCallback,'*');             
+      midiNoteSkel = new StripSkeleton(STRIP_MIDINOTE,GROUP_INTERFACE_MIDI,midiNoteStripConstructorCallback,'*');
         midiNoteSkel->registerDataSetAddress(dsMidiChannels.address);
         midiNoteSkel->registerDataSetAddress(dsNotesOnOff.address);
         midiNoteSkel->registerDataSetAddress(dsMidiValue1.address);
-        midiNoteSkel->registerDataSetAddress(dsMidiValue2.address);      
+        midiNoteSkel->registerDataSetAddress(dsMidiValue2.address);
 
-      sysexSkel = new StripSkeleton(STRIP_SYSEX,GROUP_INTERFACE_MIDI,sysexStripConstructorCallback,'*');             
-        dsSysexMessages = new SysexLib(new DropDownAddress(ADDRESS_SYSEX));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved      
+      sysexSkel = new StripSkeleton(STRIP_SYSEX,GROUP_INTERFACE_MIDI,sysexStripConstructorCallback,'*');
+        dsSysexMessages = new SysexLib(new DropDownAddress(ADDRESS_SYSEX));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved
         sysexSkel->registerDataSetAddress(dsSysexMessages->address);
 
       //
       // OSC skeletons
       //
-      oscSkel = new StripSkeleton(STRIP_OSC,GROUP_INTERFACE_OSC,oscStripConstructorCallback,'*');             
+      oscSkel = new StripSkeleton(STRIP_OSC,GROUP_INTERFACE_OSC,oscStripConstructorCallback,'*');
         dsOSCMessages = new OSCLib(new DropDownAddress(ADDRESS_OSCMSG));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved
         oscSkel->registerDataSetAddress(dsOSCMessages->address);
 
 
       // interfaces that do not need the network have to be started manually
-      usbMIDIInterface = new USBMIDIInterface(true); 
-      bleMIDIInterface = new BLEMIDIInterface(true); 
-      dinMIDIInterface = new DINMIDIInterface(true); 
+      usbMIDIInterface = new USBMIDIInterface(true);
+      bleMIDIInterface = new BLEMIDIInterface(true);
+      dinMIDIInterface = new DINMIDIInterface(true);
       // interfaces that need the network will be started and stopped by app refresh when network change state
       networkOSCinterface = new NetworkOSC("sysOSC",7777,"1.1.1.1",5000,"/info",true); // true = configurable
       // DMX
       artnetDMXInterface = new ArtnetDMXInterface(true);
-      threePinDMXInterface = new ThreePinDMXInterface(true);     
+      threePinDMXInterface = new ThreePinDMXInterface(true);
       // RTPMIDI
       appleMIDIInterface = new AppleMIDIInterface(true);
-      
+      webAppService = &gWebApplicationService;
+      webAppService->setWebServerHandler(commonFileServerWrapper);
+      webAppService->setWebSocketHandler(socketConnectionCallback);
+
       // EVENT REGISTRATION
-      //we tell appleMIDIInterface to listen to event raised by directoryService  and vice versa       
+      //we tell appleMIDIInterface to listen to event raised by directoryService  and vice versa
       directoryService.registerEventListener(appleMIDIInterface);
       appleMIDIInterface->registerEventListener(&directoryService);
 
       std::vector<String> groupesUniques;
-      /* register the interface names in the dataset of their group, without duplating the groups 
+      /* register the interface names in the dataset of their group, without duplating the groups
           {"provider":"systemCfg","address":"/provider/Mixer/%s","values":["X+Mseries-Network(OSC)","MixingStation"]},
-          this is used by the webapp to populate the available interface for a defined strip 
+          this is used by the webapp to populate the available interface for a defined strip
       */
       for (const auto& interface : interfaceRepo.interfaces){
-        
+
         if (!interface->init(/*this*/)){
-          DEBUG_WARN("%s->init() failed or is not fully implemented",interface->interfaceName.c_str());    
+          DEBUG_WARN("%s->init() failed or is not fully implemented",interface->interfaceName.c_str());
         }
-       
+
         bool exists = false;
         for (const String& g : groupesUniques) {
           if (g == interface->group) {
@@ -826,10 +827,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       }
 
-      systemCfg.load(SYSTEM_FILE_NAME,defaultSysConf);  
+      systemCfg.load(SYSTEM_FILE_NAME,defaultSysConf);
       applySystemSettings();
 
-      userCfg.load(concatStrings(concatStrings("/", *systemCfg.getString(S_PROFILE, DEFAULT_PROFILE)), ".user"),defaultUserConf);            
+      userCfg.load(concatStrings(concatStrings("/", *systemCfg.getString(S_PROFILE, DEFAULT_PROFILE)), ".user"),defaultUserConf);
 
       #ifdef DEBUG_Z
         String s;
@@ -837,34 +838,34 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         DEBUG_PRINT("\n\n systemCfg:\t%s [...]",s.substring(0,300).c_str());
         s="";
         userCfg.serialize(&s);
-        DEBUG_PRINT("\n\n userCfg:\t%s [...]",s.substring(0,300).c_str());        
+        DEBUG_PRINT("\n\n userCfg:\t%s [...]",s.substring(0,300).c_str());
         s="";
         lang.serialize(&s);
-        DEBUG_PRINT("\n\n langfile:\t%s [...]",s.substring(0,300).c_str());        
-        DEBUG_PRINT("\nexample of langfile token: Connect:<%s>",lang.getString("Connect")->c_str());        
+        DEBUG_PRINT("\n\n langfile:\t%s [...]",s.substring(0,300).c_str());
+        DEBUG_PRINT("\nexample of langfile token: Connect:<%s>",lang.getString("Connect")->c_str());
         s="";
         userLang.serialize(&s);
-        DEBUG_PRINT("\n\n userLang:\t%s [...]",s.substring(0,300).c_str());                
+        DEBUG_PRINT("\n\n userLang:\t%s [...]",s.substring(0,300).c_str());
       #endif
 
-     
+
       GUI::screenBrightness = hwm->persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
       if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
-      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;      
+      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;
 
-      gui->init();              
+      gui->init();
 
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
-            
+
       ////////////////////////////////////////////////////////////////////////
       // REGISTER APPLICATION MANAGER AS AN EVENT LISTENER OF OTHERS COMPONENTS
       ////////////////////////////////////////////////////////////////////////
       for (uint8_t i=0;i<MAXB;i++){
         hwm->buttons[i]->registerEventListener(this);   // ApplicationManager listen to switch event
-      }     
+      }
       hwm->onOff.registerEventListener(this);           // ApplicationManager listen to onOff button event
       hwm->network->registerEventListener(this);        // ApplicationManager listen to network event
-      
+
       ////////////////////////////////////////////////////////////////////////
       // DESIGN MENU
       ////////////////////////////////////////////////////////////////////////
@@ -879,12 +880,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       brightness_menu_item = new MenuItem(brightnessMenuString, &brightness_menu_item_selected);
       fmw_update_menu_item = new MenuItem(fmwUpdateMenuString, &fmwUpdate_menu_item_selected);
       fmw_update_menu_item->setEnabled(false); // disabled by default, enabled when internet is available
-      
+
       ms.get_root_menu().add_item(back_menu_item);
       ms.get_root_menu().add_item(info_menu_item);
-      ms.get_root_menu().add_item(config_menu_item);       
-      ms.get_root_menu().add_item(tft_rotation_menu_item);       
-      ms.get_root_menu().add_item(reset_menu_item);       
+      ms.get_root_menu().add_item(config_menu_item);
+      ms.get_root_menu().add_item(tft_rotation_menu_item);
+      ms.get_root_menu().add_item(reset_menu_item);
       ms.get_root_menu().add_menu(profile_menu_item);
       ms.get_root_menu().add_item(shutdown_menu_item);
       ms.get_root_menu().add_item(brightness_menu_item);
@@ -893,16 +894,16 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       profile_menu_item->add_item(save_profile_menu_item);
 
       hookLangToMenu();
-      
-      //quarter1xPos = 
+
+      //quarter1xPos =
 
       // glowing colors declarations
       //gui->glowingColors.add(&glowingGoldColor);
       GUI::glowingGoldColor.value = &menuActiveIconColor;
-      gui->alphaColors.add(&GUI::glowingGoldColor);      
-            
-      blinkColor.value = &blinkColorBlue;      
-      gui->alphaColors.add(&blinkColor);      
+      gui->alphaColors.add(&GUI::glowingGoldColor);
+
+      blinkColor.value = &blinkColorBlue;
+      gui->alphaColors.add(&blinkColor);
       gui->alphaColors.add(&iFconnectivityIconGlowingRedColor);
       gui->alphaColors.add(&apIconGlowingRedColor);
       gui->alphaColors.add(&configIconGlowingRedColor);
@@ -914,9 +915,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       // BY DEFAULT, WE DO NOT STARTUP, ONLY DISPLAY BATTERY LEVEL AND SWITCH OFF, SO WE HET THE ICON READY
       setAPIcon();
-      setBatIcon();     
+      setBatIcon();
 
-                
+
       bool wizard = false;
 
       switch(hwm->startupState){
@@ -927,7 +928,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         case BATTERY_STARTUP:
           menuTopText = *lang.getString("Press >1s to startup"); menuBottomLabel = emptyString;
           goSleepCountdownStart = hwm->bootTime;
-          goToBigBatteryIconScreenAndSleep();         
+          goToBigBatteryIconScreenAndSleep();
         break;
         case NO_FS_STARTUP:
           menuTopText = *lang.getString("File System");
@@ -936,25 +937,25 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           // as the FS is not ready, there is no icon to display and no fonts as well so it will be display by default font
           screen.id = SCREEN_BYE; screen.state = STATE_BYE_MODAL_MESSAGE;
         break;
-        case WIZARD_STARTUP:          
+        case WIZARD_STARTUP:
           hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_LANG_STEP1);
           startup(SCREEN_WIZARD);
         break;
         case NORMAL_STARTUP:
-        case USB_CDC_AND_FWUPDATE_STARTUP:          
+        case USB_CDC_AND_FWUPDATE_STARTUP:
           startup(SCREEN_BANK);
         break;
       }
-    
+
       DEBUG_INFO("[APP] ***************************************************");
       DEBUG_INFO("[APP] ******************* INIT FINISHED *****************");
-      DEBUG_INFO("[APP] ***************************************************\n\n");     
+      DEBUG_INFO("[APP] ***************************************************\n\n");
     }
 
-    void startup(uint8_t startupScreen){          
+    void startup(uint8_t startupScreen){
       DEBUG_INFO("[APP] ******************* startup *****************");
       // save the screen to be called (wiuard or bank)
-      hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);            
+      hwm->persistants.putUChar(PERSISTANT_SCREEN_ID,startupScreen);
       // we init banks and then go to banks or fail screen
       String bankFilename = concatStrings(concatStrings("/", *systemCfg.getString(S_PROFILE, DEFAULT_PROFILE)), ".bank");
       if (!loadBanks(bankFilename)){
@@ -967,19 +968,19 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //disableUnusedInterface();      // optimize
 
       checkAndDeleteFile(FIRMWARE_BIN_FILENAME);  // in case there is a .bin.gz file leftover from previous firmware update
-      restoreScreen();       // restore the screen that persists 
-      DEBUG_INFO("[APP] ******************* startup.end *****************\n\n");      
+      restoreScreen();       // restore the screen that persists
+      DEBUG_INFO("[APP] ******************* startup.end *****************\n\n");
     }
 
     void disableUnusedInterface(){
       // unsused interfaces are the one which are not referred by any instanciated strips
-      for (const auto& interface : interfaceRepo.interfaces){       
+      for (const auto& interface : interfaceRepo.interfaces){
         if (interface->countRegisteredListeners()==0 && interface->hasStrip){ // only for interfaces that are exposed => means they can be configured by user
           DEBUG_INFO("%s has no strip : DISABLED",interface->interfaceName.c_str());
           //interface->switchDevice(false);  // BE CAREFULL
           interface->state.enabled = false;
         }
-      }      
+      }
     }
 
     // *********************************
@@ -987,28 +988,28 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // *********************************
    void onEvent(const Event& evt) override {
       switch (evt.type) {
-        case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
+        case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:
           sendTerminateMessageToWebApp("Network connection changed. Close this page");         // the browser becomes unavialble, so terminate the application
-          shutdownWSS();      //
+          if (webAppService != nullptr) webAppService->stopWebApp();
           stopInterfaces();
         break;
         case EVENT_NETWORK_CONNECTED:
           // discover RTP services available on the network
           //startDirectoryServiceDiscovery();
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
-          if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well                           
+          if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well
           // network has refreshed so we shift to appropriate configMedia
           if (hwm->network->media == WIFI_MEDIA){
             //we set last used Wifi SSID (id) and save config, hence keep WIFI_MEDIA credential
             //DEBUG_PRINT("\n------> SAVING SSID");
             systemCfg.setValue(S_LAST_USED_SSID,hwm->network->SSID);
-            systemCfg.save(); 
+            systemCfg.save();
             /* add this to the possible SSID "ssid": {
             "intervalmix": "intervalpop74",
             "infrafast": "Mf9k8iie2",
             "ssid3": "pass3"
             */
-          }          
+          }
           if (!webAppConnected){
             // there is no connection to any application, therefore, we prefer to use the network as the one to configure the application
             //if (debug) DEBUG_PRINT("\n\tsetting the configMedia to WiFiEth");
@@ -1018,7 +1019,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         case EVENT_NETWORK_CONNECTION_CHANGED:
           setiFconnectivityColor();
           setAPIcon();
-        break;         
+        break;
         case EVENT_ANALOG_BUTTON:
           handleSwitchEvent(evt);
         break;
@@ -1032,15 +1033,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             menuBottomLabel = emptyString;
             goSleepCountdownStart = millis();
             goToBigBatteryIconScreenAndSleep();
-          }  
+          }
         break;
-      }   
+      }
       fireEvent(evt);   // propagate the event
     }
 
     void handleSwitchEvent(const Event& event) {
-      ButtonData* btData = (ButtonData*) event.data;             
-      switch(btData->id){  
+      ButtonData* btData = (ButtonData*) event.data;
+      switch(btData->id){
         case BUTTON_DOUBLE_CLIC:
           doubleClicCallBack(btData->buttonId,btData->time);
         break;
@@ -1061,8 +1062,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
 
     void handleOnOffEvent(const Event& event){
-      ButtonData* btData = (ButtonData*) event.data;             
-      switch(btData->id){  
+      ButtonData* btData = (ButtonData*) event.data;
+      switch(btData->id){
         case BUTTON_DOUBLE_CLIC:
 
           if (screen.id == SCREEN_BANK){
@@ -1079,7 +1080,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
                 DEBUG_INFO("[DCLIC]\t\tInterface %s is not switchable",interface->interfaceName.c_str());
               }
             }
-          }        
+          }
 
         break;
         case BUTTON_HOLD:
@@ -1090,13 +1091,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           menuSwitchCallback(btData->buttonId,btData->time);
         break;
         case BUTTON_RELEASE_HOLD:
-     
+
         break;
         case BUTTON_SIMPLE_CLIC:
           simpleClicCallBack(btData->buttonId,btData->time);
           /*char* msg = "helloworld";
           USBMIDI.sendSysEx(strlen(msg),(const byte*)msg);
-          USBMIDI.sendNoteOn(123,62,1);*/                                                                                                                                                                         
+          USBMIDI.sendNoteOn(123,62,1);*/
         break;
       }
     }
@@ -1108,18 +1109,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     void singlePromptScreen(String message,String label, uint8_t targetState = STATE_UTILS_RESTORE_SCREEN){
       promptParams.message = *lang.getString(message);
-      
-      promptParams.labels[0] = "";
-      
-      promptParams.labels[1] = *lang.getString(label);              
-      promptParams.targetScreens[1] = SCREEN_UTILS;   
-      promptParams.targetState[1] = targetState;        // back to caller      
 
-      promptParams.labels[2] = "";              
-      
-      promptParams.timeoutMs = 0;             
-      
-      promptScreen();     // branch to prompt screen      
+      promptParams.labels[0] = "";
+
+      promptParams.labels[1] = *lang.getString(label);
+      promptParams.targetScreens[1] = SCREEN_UTILS;
+      promptParams.targetState[1] = targetState;        // back to caller
+
+      promptParams.labels[2] = "";
+
+      promptParams.timeoutMs = 0;
+
+      promptScreen();     // branch to prompt screen
     }
 
     void SWupdatePromptScreen(uint16_t timeoutMs = 5000){
@@ -1128,27 +1129,27 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         setCloudDownloadProgressScreen(); // if an update is already in progress, we go directly to the progress screen
       }else if (flashBinaryInprogress){
         screen.id = SCREEN_UTILS;
-        screen.state = STATE_UTILS_SHOW_PROGRESS_SINGLE;           
+        screen.state = STATE_UTILS_SHOW_PROGRESS_SINGLE;
         setBinaryFlashScreen();
       }else{
         DEBUG_INFO("Preparing SW update prompt screen for v%s",newSWversion.c_str());
         // prepare software update promnpt screen
-        promptParams.message = concatStrings(*lang.getString("Update to firmware")," v",newSWversion,"?");              
-        
+        promptParams.message = concatStrings(*lang.getString("Update to firmware")," v",newSWversion,"?");
+
         promptParams.labels[0] = *lang.getString("Yes");
         promptParams.targetScreens[0] = SCREEN_UTILS;  // go to utils screen to perform the update
         promptParams.targetState[0] = STATE_UTILS_DOWNLOAD_FROM_URL;
-        
-        promptParams.labels[1] = *lang.getString("No");              
-        promptParams.targetScreens[1] = SCREEN_UTILS;   // back to caller
-        promptParams.targetState[1] = STATE_UTILS_RESTORE_SCREEN;              
 
-        promptParams.labels[2] = *lang.getString("No, never ask");              
+        promptParams.labels[1] = *lang.getString("No");
+        promptParams.targetScreens[1] = SCREEN_UTILS;   // back to caller
+        promptParams.targetState[1] = STATE_UTILS_RESTORE_SCREEN;
+
+        promptParams.labels[2] = *lang.getString("No, never ask");
         promptParams.targetScreens[2] = SCREEN_UTILS;  // diable auto update prompt in utils screen
         promptParams.targetState[2] = STATE_UTILS_DISABLE_SWUPDATE_PROMPT;
-        
+
         promptParams.timeoutMs = timeoutMs;                // 5s timeout
-        
+
         promptScreen();
       }
     }
@@ -1200,7 +1201,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         restoreScreen();
       }else{
         restoreMenu();
-      } 
+      }
     }
 
     void simpleClicCallBack(uint8_t buttonID, unsigned long time){
@@ -1209,7 +1210,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
         break;
         case SCREEN_WIZARD:
-          
+
         break;
         case SCREEN_MENU:
           handleMenuButton(buttonID);
@@ -1232,13 +1233,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
               restoreScreen();
             break;
             case STATE_UTILS_BRIGHTNESS:
-              handleClicBrightnessButton(buttonID);    
-            break;            
+              handleClicBrightnessButton(buttonID);
+            break;
           }
         break;
         case SCREEN_BANK:
           //DEBUG_PRINT("\nsimpleClicCallBack: %i",buttonID);
-          moduleSimpleClic(buttonID);      
+          moduleSimpleClic(buttonID);
         break;
       }
     }
@@ -1259,7 +1260,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
         case SCREEN_BANK_SWITCH:
           handleSwitchScreen(buttonID);
-        break;    
+        break;
         case SCREEN_UTILS:
           switch(screen.state){
             case STATE_UTILS_SEARCHING_CONNECTION:
@@ -1272,15 +1273,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
               restoreScreen();
             break;
             case STATE_UTILS_BRIGHTNESS:
-              handleClicBrightnessButton(buttonID);    
-            break;            
+              handleClicBrightnessButton(buttonID);
+            break;
           }
         break;
         case SCREEN_BANK:
-          //DEBUG_PRINT("\nlongClicCallBack: %i",buttonID);    
-          moduleLongClic(buttonID);      
+          //DEBUG_PRINT("\nlongClicCallBack: %i",buttonID);
+          moduleLongClic(buttonID);
         break;
-      }  
+      }
     }
 
     void doubleClicCallBack(uint8_t buttonID, unsigned long time){
@@ -1292,7 +1293,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
         break;
         case SCREEN_MENU:
-        
+
         break;
         case SCREEN_PROMPT:
 
@@ -1311,7 +1312,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           //DEBUG_PRINT("\ndoubleClicCallBack: %i",buttonID);
           broadCast("{\"mixerIP\":\"192.168.199.199\"}");
         break;
-      }  
+      }
     }
 
     void releaseHoldCallback(uint8_t buttonID, unsigned long time){
@@ -1341,8 +1342,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             break;
             case STATE_UTILS_BRIGHTNESS:
               // the screen is not refreshed during the HOLD workflow to avoid flickering, so we do it when we release the button
-              //saveBrightness();    // uncomment this one and comment the next line in case you want to manage hold            
-              handleClicBrightnessButton(buttonID);  
+              //saveBrightness();    // uncomment this one and comment the next line in case you want to manage hold
+              handleClicBrightnessButton(buttonID);
             break;
           }
         break;
@@ -1350,7 +1351,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           if (buttonID == hwm->buttons[MIDDLEB]->getID()) switchBankLayout();
           else moduleReleaseClic(buttonID, time);
         break;
-      }  
+      }
     }
 
     void holdCallback(uint8_t buttonID, unsigned long time){
@@ -1362,7 +1363,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
         break;
         case SCREEN_MENU:
-        
+
         break;
         case SCREEN_PROMPT:
 
@@ -1376,9 +1377,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           }
         break;
         case SCREEN_BANK:
-          moduleHoldClic(buttonID, time);  
+          moduleHoldClic(buttonID, time);
         break;
-      }  
+      }
     }
 
 
@@ -1387,19 +1388,19 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   //////////////////////////////////////////////////////////////
   void handleSwitchScreen(uint8_t buttonID){
     //DEBUG_PRINT("\nhandleSwitchScreen");
-    if (buttonID == hwm->buttons[MIDDLEB]->getID() ){    
-      bankMenu->select();    
+    if (buttonID == hwm->buttons[MIDDLEB]->getID() ){
+      bankMenu->select();
       setBankMenuItems();
     }else{
       if (buttonID == hwm->buttons[RIGHTB]->getID()) bankMenu->next(true);
       else bankMenu->prev(true);
       menuSwitchBankFullRefresh();
-    }   
+    }
   }
 
   void saveBrightness(){
     triggerRedraw();
-    hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    
+    hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);
   }
 
   void handleClicBrightnessButton(uint8_t buttonID){
@@ -1410,7 +1411,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       changeBrightness(buttonID,STEP_BRIGHTNESS_INCREMENT);
       // we refresh screen and save after each single press
       saveBrightness();
-    }      
+    }
   }
 
   void changeBrightness(uint8_t buttonID, float increment){
@@ -1420,7 +1421,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }else if (buttonID == hwm->buttons[RIGHTB]->getID()){
       if (GUI::screenBrightness < BRIGHTNESS_MAX) GUI::screenBrightness += increment;
       if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;
-    }    
+    }
   }
 
   void handleMenuButton(uint8_t buttonID){
@@ -1431,7 +1432,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       if (buttonID == hwm->buttons[LEFTB]->getID()) ms.prev(true);
       else ms.next(true);
       menuSystemFullRefresh();
-    }      
+    }
   }
 
   void moduleSimpleClic(uint8_t buttonID){
@@ -1456,7 +1457,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         if (bank->layout == LAYOUT_DETAILS) bank->layout = LAYOUT_ZOOM;
         else bank->layout = LAYOUT_DETAILS;
       }
-    }      
+    }
     triggerRedraw();
   }
 
@@ -1466,7 +1467,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     stripChangeValue(buttonID, time, BUTTON_HOLD);
   }
 
-  void moduleReleaseClic(uint8_t buttonID, unsigned long time){    
+  void moduleReleaseClic(uint8_t buttonID, unsigned long time){
     stripReleaseHold(buttonID, time, BUTTON_HOLD);
   }
 
@@ -1474,7 +1475,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     if (buttonID == hwm->buttons[MIDDLEB]->getID()){
       switchBank();
       //LogUDP::sendLog("moduleLongClic",hwm->network->udp);
-    }else if(buttonID == hwm->buttons[LEFTB]->getID()){    
+    }else if(buttonID == hwm->buttons[LEFTB]->getID()){
       //LogUDP::sendLog("testOSC",hwm->network->udp);
     }else{
       //testHttpRequest();
@@ -1487,19 +1488,19 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // Ouvrir le fichier en écriture
     File file = LittleFS.open(bankFileName, "w");
     if (!file) {
-      DEBUG_ERROR("\nError creation:%s",bankFileName.c_str());          
+      DEBUG_ERROR("\nError creation:%s",bankFileName.c_str());
     }else{
       if (file.print(serializeBanks()) == 0){
         DEBUG_ERROR("\nError writting to:%s",bankFileName.c_str());
         success = false;
       }
       file.close();
-    }        
+    }
     return success;
   }
 
   bool loadBanks(const String& bankFileName){
-   
+
     String bankDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";
 
     if (LittleFS.exists(bankFileName)){
@@ -1507,11 +1508,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       if (file) {
         bankDefinition = file.readString();  // lit tout le contenu
       }else{
-        DEBUG_WARN("%s open failed, using default bank definition",bankFileName.c_str());          
-      }        
+        DEBUG_WARN("%s open failed, using default bank definition",bankFileName.c_str());
+      }
       file.close();
     }else{
-      DEBUG_WARN("%s doesnt exists, using default bank definition",bankFileName.c_str()); 
+      DEBUG_WARN("%s doesnt exists, using default bank definition",bankFileName.c_str());
     }
 
     return deserializeBanks(&bankDefinition) != nullptr ? true:false;
@@ -1521,22 +1522,22 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
   String serializeBanks(){
     JsonDocument bankDoc;
-    
+
     if (banks.size() ==0 ) return "{}";
 
     for (uint8_t i=0; i<banks.size(); i++){
       JsonDocument jsonBank;
       IntervalBank* bank = banks[i];
-      if (bank == nullptr) continue;      
+      if (bank == nullptr) continue;
       String stringBank = bank->serialize();
       DeserializationError error = deserializeJson(jsonBank, stringBank);
       jsonBank.shrinkToFit();
-      if (error){        
+      if (error){
         return "{}";
       }else{
         bankDoc[bank->name] = jsonBank;
-      }       
-    }      
+      }
+    }
     return bankDoc.as<String>();
   }
 
@@ -1576,32 +1577,32 @@ void setup() {
 */
 
     #define MAX_POST_COMMAND_SIZE 4096 // Limite maximale pour éviter un abus de mémoire, utilisé par la fonction httpPost
-  
+
     void getJsonStartup(String* returnedJsonStringData){
-      JsonDocument doc;      
+      JsonDocument doc;
       String tempJsonString="";
 
-      doc["langs"][0] = "francais"; 
+      doc["langs"][0] = "francais";
       doc["langs"][1] = "english";       // change to "dir *.lang"
       doc["maxPOSTsize"] = MAX_POST_COMMAND_SIZE;
       doc["safeScanfSpace"] = String(SAFE_SCANF_SPACE);
       doc["sysexLibFile"] = SYSEXLIB_FILENAME;
       doc["oscLibFile"] = OSCLIB_FILENAME;
       doc["wizard"] = (hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK) == SCREEN_WIZARD)?true:false;
-      doc["lang"] = *systemCfg.getString(S_LANG,"francais"); 
+      doc["lang"] = *systemCfg.getString(S_LANG,"francais");
       doc[S_SWUPDATE_PROMPT] = systemCfg.getBool(S_SWUPDATE_PROMPT);
       JsonArray configs = doc.createNestedArray("configNames");
       configs.add("default"); // parse the file list and add all entries found, at the moment it's empty
-      
-      serializeJson(doc, *returnedJsonStringData);  
-      removeJsonQuote(returnedJsonStringData);      
+
+      serializeJson(doc, *returnedJsonStringData);
+      removeJsonQuote(returnedJsonStringData);
 
     }
 
     void serialize(String* returnedJsonStringData){
       // this build the full serialization of the application
-      
-      JsonDocument doc;      
+
+      JsonDocument doc;
       String tempJsonString="";
 
       //DEBUG_PRINT("\nserializing dataRepo");
@@ -1618,8 +1619,8 @@ void setup() {
       jsonInputRepo.serialize(&ji);
 
       //DEBUG_PRINT("\nserializing interfaces");
-      JsonArray interfaces = doc["interfaces"].to<JsonArray>();  
-      interfaceRepo.serialize(&interfaces);   
+      JsonArray interfaces = doc["interfaces"].to<JsonArray>();
+      interfaceRepo.serialize(&interfaces);
 
       doc["connectivity"] = getConnectivityState();
 
@@ -1627,31 +1628,31 @@ void setup() {
 
       //DEBUG_PRINT("\nserializing skeletons");
       JsonArray skel = doc["skeletons"].to<JsonArray>();
-      stripFactory.serialize(&skel);  
+      stripFactory.serialize(&skel);
 
       //DEBUG_PRINT("\nserializing system");
       tempJsonString="";
-      systemCfg.serialize(&tempJsonString);  
+      systemCfg.serialize(&tempJsonString);
       doc["system"]=tempJsonString;
 
       //DEBUG_PRINT("\nserializing bankCfg");
-      tempJsonString = serializeBanks();      
+      tempJsonString = serializeBanks();
       doc["banks"]=tempJsonString;
-          
-      serializeJson(doc, *returnedJsonStringData);  
+
+      serializeJson(doc, *returnedJsonStringData);
       removeJsonQuote(returnedJsonStringData);
     }
 
     void restoreScreen(){
       //DEBUG_PRINT("\nrestoreScreen():");
       screen.id = hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
-      screen.state = hwm->persistants.getUChar(PERSISTANT_SCREEN_STATE,0);  
+      screen.state = hwm->persistants.getUChar(PERSISTANT_SCREEN_STATE,0);
       //DEBUG_PRINT("\t read: id=%d / state:%d",screen.id,screen.state);
       // prevents wrong branching
-      if (screen.id == SCREEN_BANK && screen.state > banks.size()-1) screen.state = 0; 
-      if (screen.id == SCREEN_WIZARD && screen.state > STATE_WIZARD_USER_STEP4) screen.state = STATE_WIZARD_LANG_STEP1;       
+      if (screen.id == SCREEN_BANK && screen.state > banks.size()-1) screen.state = 0;
+      if (screen.id == SCREEN_WIZARD && screen.state > STATE_WIZARD_USER_STEP4) screen.state = STATE_WIZARD_LANG_STEP1;
       //DEBUG_PRINT("\t => id=%d / state:%d",screen.id,screen.state);
-      // branch the first available strip 
+      // branch the first available strip
       //DEBUG_PRINT("\tgetFocusedStrip():%s, id:%i",getSelectedStrip() == nullptr?"null":getSelectedStrip()->getTopLabel()->c_str(),getSelectedStrip() == nullptr?0:getSelectedStrip()->index);
     }
 
@@ -1666,28 +1667,28 @@ void setup() {
 
     String getNameFromString(const char* item){
       return String(item).substring(2);
-    } 
+    }
 
     void buildLangMenu(){
       if (langMenu != nullptr) delete langMenu;
-      langMenu = new Menu(langMenuString,menu_selected); 
+      langMenu = new Menu(langMenuString,menu_selected);
 
       populateFileList("lang","/",&countryList,concatStrings(String(ICON_LANG), "-"),false);     // this populate the list of countries with the icon (prefix = k-) and without extension
 
-      // populate the menu with all language found      
+      // populate the menu with all language found
       for(int i = 0; i < countryList.size(); i++){
         const char* countryIconAndName = countryList.get(i)->c_str();
-        langMenu->add_item(new MenuItem(countryIconAndName, loadLangFromMenu_item_selected));                
+        langMenu->add_item(new MenuItem(countryIconAndName, loadLangFromMenu_item_selected));
         if (debug){
-          //DEBUG_PRINT("\nadded menu entry: %s",countryList.get(i)->c_str());           
+          //DEBUG_PRINT("\nadded menu entry: %s",countryList.get(i)->c_str());
         }
-      }      
+      }
     }
 
     void hookLangToMenu(){
       buildLangMenu();
       langMenu->add_item(back_menu_item);
-      ms.get_root_menu().add_menu(langMenu);              
+      ms.get_root_menu().add_menu(langMenu);
     }
 
     void cleanFolder(String path, String fType) {
@@ -1696,7 +1697,7 @@ void setup() {
         ////DEBUG_PRINT("\nInvalid directory: %s", path.c_str());
         return;
       }
-    
+
       File file = root.openNextFile();
       while (file) {
         if (!file.isDirectory()) {
@@ -1707,7 +1708,7 @@ void setup() {
             shortName = filename.substring(path.length());
             if (shortName.startsWith("/")) shortName = shortName.substring(1);
           }
-    
+
           if (shortName.endsWith(fType) || fType == "*") {
             String fullPath = concatStrings(path, "/", shortName);
             if (LittleFS.remove(fullPath)) {
@@ -1720,79 +1721,47 @@ void setup() {
         file = root.openNextFile();
       }
     }
-       
-   
+
+
     //------------------
     //
     // MANAGE WEB APPLICATION
     //
-    //------------------     
+    //------------------
     void handleWeb(){
-
-      //unsigned long lastActivity = millis();
-
-      Network* configMedia = hwm->configMedia;
-   
-      if (configMedia->state == CONNECTED){    
-        if(webServer != nullptr){                       
-          // then webserver
-          if (configMedia->media == CABLE_MEDIA){
-  
-            EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();                                                              
-            if (newEthClient) {
-              //DEBUG_PRINT("\nDump before serving %s",hwm->network->dumpW5500Sockets().c_str());
-              webServer->process(&newEthClient);
-              newEthClient.stop();  
-              //DEBUG_PRINT(" STOP");
-              //DEBUG_PRINT("\nDump after serving %s",hwm->network->dumpW5500Sockets().c_str());
-            }
-                          
-          }else{
-            WiFiClient newWiFiClient = ((WiFiServer *)configMedia->server)->available();
-            if (newWiFiClient.connected()) {
-              //taskYIELD();
-              //ets_printf("\n\tWiFi ---> ");
-              webServer->process(&newWiFiClient);
-              newWiFiClient.stop();              
-              //ets_printf(" STOP");
-            }   
-          }
-        }
-        if (wss != nullptr) wss->listen();          
-      }
-        
-    }    
+      if (webAppService != nullptr) webAppService->handleWeb();
+    }
 
     void jumpToMenu(const char* menuTitle){
       // we branch to the lang menu
-      ms.reset();             
+      ms.reset();
       for (int i = 0; i < ms.get_root_menu().get_num_components(); ++i) {
         const MenuComponent* m = ms.get_current_menu()->get_current_component();
         if (strcmp(menuTitle,m->get_name())!=0) ms.next();
         else{ms.select();break;}
-      }                       
-      restoreMenu();         
+      }
+      restoreMenu();
     }
 
     void triggerRedraw(){
       // this forces the GUI to be rebuild at next refresh
       //DEBUG_PRINT("\ntriggerRedraw()");
-      screen.focus = screen.focus - 1;      
+      screen.focus = screen.focus - 1;
     }
 
     void setCloudDownloadProgressScreen(){
       iconProgress = ICON_CLOUD_DOWNLOAD;
       screen.id = SCREEN_UTILS;
-      screen.state = STATE_UTILS_SHOW_PROGRESS_MULTIPLE;      
+      screen.state = STATE_UTILS_SHOW_PROGRESS_MULTIPLE;
     }
 
     void setBinaryFlashScreen(){
-      iconProgress = ICON_FWUPDATE; 
-      updateProgressLabel = *lang.getString("Flashing firmware in progress, do not interrupt!");       
+      iconProgress = ICON_FWUPDATE;
+      updateProgressLabel = *lang.getString("Flashing firmware in progress, do not interrupt!");
     }
 
     void buildGUI(uint8_t id, uint8_t state){
-      // then retrive the screen builder and its overlay by ID           
+      // then retrive the screen builder and its overlay by ID
       for(int i = 0; i < screenBuilders.size(); i++){
         screenBuilder* builder = screenBuilders.get(i);
         if (builder->id == id){
@@ -1804,60 +1773,58 @@ void setup() {
       //DEBUG_PRINT("\nScreen rebuild done");
       #ifdef DEBUG
         // DEBUG INDICATORS OVERLAY
-        gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::three,16,5,&GUI::defaultFcolor,&GUI::defaultBcolor));    
-        gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::three,16,24,&GUI::defaultFcolor,&GUI::defaultBcolor));              
+        gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::three,16,5,&GUI::defaultFcolor,&GUI::defaultBcolor));
+        gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::three,16,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
       #endif
       //DEBUG_PRINT("\nDEBUG DONE");
       //DEBUG_PRINT("\nnew screen widget size: %i",gui->screenGUIs.size());
-      if (gui->transparency) gui->clearScreenBuffer();      
+      if (gui->transparency) gui->clearScreenBuffer();
     }
 
     bool shutdownDone = false;
     void shutdownInterfaces(){
       // called when system stops
-      DEBUG_INFO("shuting down interfaces");     
-      shutdownDone = true;           
-      for (const auto& interface : interfaceRepo.interfaces){       
+      DEBUG_INFO("shuting down interfaces");
+      shutdownDone = true;
+      for (const auto& interface : interfaceRepo.interfaces){
         interface->end();
       }
-      sendTerminateMessageToWebApp(); // tell the webapp to close      
-    }  
+      sendTerminateMessageToWebApp(); // tell the webapp to close
+    }
 
     void stopInterfaces(){
       // called when network change its media and we need to correcly close all connection
-      DEBUG_INFO("stoping down interfaces");     
-      shutdownDone = true;           
-      for (const auto& interface : interfaceRepo.interfaces){       
-        interface->stop();    
+      DEBUG_INFO("stoping down interfaces");
+      shutdownDone = true;
+      for (const auto& interface : interfaceRepo.interfaces){
+        interface->stop();
       }
-      sendTerminateMessageToWebApp(); // tell the webapp to close      
-    }     
-    
+      sendTerminateMessageToWebApp(); // tell the webapp to close
+    }
+
     bool refresh(bool force=false){
 
-      yield();   
+      yield();
 
       refreshed = force;
 
       // ********************************
       // PERFORM ALL REFRESH AND UPDATES
       // ********************************
-      hwm->refresh();         
-                         
+      hwm->refresh();
+
       //------------------
       //
       // MANAGE NETWORK
       //
       //------------------
-      if (hwm->configMedia->refreshed){        
-        if (hwm->configMedia->state == CONNECTED){            
-          setWSServer();   // the network has refreshed (could be media, IP...) hence we rebuild the WSS
+      if (hwm->configMedia->refreshed){
+        if (hwm->configMedia->state == CONNECTED){
+          if (webAppService != nullptr) webAppService->setWSServer();
         }else{
-          webAppConnected = false;            
+          webAppConnected = false;
         }
-      } 
-
-      handleWeb();     
+      }
 
       //------------------
       //
@@ -1866,29 +1833,29 @@ void setup() {
       //------------------
       bool interfaceChangedState = false;
 
-      for (const auto& interface : interfaceRepo.interfaces){       
+      for (const auto& interface : interfaceRepo.interfaces){
 
         #ifdef PROD
         if (interface->stripCount == 0){
-          //continue;                           
+          //continue;
           // // optimization  WARNING: to activate that you need to implement the feature of greying out the interface panel as they will not
           // be updated unless a strip is dropped in a bank
         }
         #endif
 
-        //DEBUG_PRINT("\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t%s...",interface->interfaceName.c_str());      
+        //DEBUG_PRINT("\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t%s...",interface->interfaceName.c_str());
 
         interface->update();
         if (interface->state.broadcastState){
           broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
           interface->state.broadcastState = false; // acknowledged
         }
-        if (interface->state.broadcastConfig){            
+        if (interface->state.broadcastConfig){
           broadcastIFconfig(interface);
           interface->state.broadcastConfig = false; // acknowledged
-        }        
+        }
       }
-      
+
 
       processBroadcastQueue();
 
@@ -1896,31 +1863,31 @@ void setup() {
       //
       // MANAGE BANKS STRIPS
       //
-      //------------------      
+      //------------------
       for (const auto& bank : banks) {
         if (bank != nullptr && bank->update() && screen.id == SCREEN_BANK) triggerRedraw();
       }
 
       //------------------
       //
-      // MANAGE GUI 
+      // MANAGE GUI
       //
       //------------------
       if (screen.value != oldScreen.value){
         refreshed = true;
         // we changed the screen, therefore we rebuild the screen
         // first we acknowledge the update so it is not done te next round
-        //if (debug) DEBUG_PRINT("\n%s changed from screen.id:%i.state:%i.focus:%i to screen.id:%i.state:%i.focus:%i",id.c_str(),oldScreen.id,oldScreen.state,oldScreen.focus, screen.id,screen.state,screen.focus);        
+        //if (debug) DEBUG_PRINT("\n%s changed from screen.id:%i.state:%i.focus:%i to screen.id:%i.state:%i.focus:%i",id.c_str(),oldScreen.id,oldScreen.state,oldScreen.focus, screen.id,screen.state,screen.focus);
         // first clean up all component of the screen
         gui->purge();
-        
+
         buildGUI(screen.id, screen.state);
 
         oldScreen.value = screen.value;
         // save the bank to restore in case of restoreScreen
         if (screen.id == SCREEN_BANK){
           hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_BANK);
-          hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state);         
+          hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,screen.state);
         }
       }
       gui->refresh(force);
@@ -1937,18 +1904,18 @@ void setup() {
             case STATE_WIZARD_LANG_STEP1:{
               jumpToMenu(langMenuString);   // jump to the lang menu
               screen.state = STATE_WIZARD_CONNECT_CONFIG_STEP2;
-              hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);    
-              hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_CONFIG_STEP2);    
+              hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);
+              hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_CONFIG_STEP2);
             }break;
             case STATE_WIZARD_CONNECT_CONFIG_STEP2:
               handleConfigConnection();
-              hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);    
-              hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_NETWORK_STEP3); 
+              hwm->persistants.putUChar(PERSISTANT_SCREEN_ID, SCREEN_WIZARD);
+              hwm->persistants.putUChar(PERSISTANT_SCREEN_STATE,STATE_WIZARD_CONNECT_NETWORK_STEP3);
             break;
             case STATE_WIZARD_CONNECT_NETWORK_STEP3:
               if (!webAppConnected) screen.state = STATE_WIZARD_CONNECT_CONFIG_STEP2;
               if (hwm->network->state == CONNECTED) screen.state = STATE_WIZARD_USER_STEP4;
-            break;  
+            break;
             case STATE_WIZARD_USER_STEP4:
               if (!webAppConnected) screen.state = STATE_WIZARD_CONNECT_CONFIG_STEP2;
               if (hwm->network->state == DISCONNECTED) screen.state = STATE_WIZARD_CONNECT_NETWORK_STEP3;
@@ -1961,9 +1928,9 @@ void setup() {
             case STATE_UTILS_CONNECTCONFIGMEDIA:
               if (hwm->configMedia->refreshed){
                 handleConfigConnection();
-              } 
+              }
             break;
-            case STATE_UTILS_CONNECTWEBAPP:              
+            case STATE_UTILS_CONNECTWEBAPP:
               if (hwm->configMedia->refreshed){
                 handleConfigConnection();
               }
@@ -1977,7 +1944,7 @@ void setup() {
               }
               if (webAppConnected == false){
                 screen.id = SCREEN_UTILS;
-                screen.state = STATE_UTILS_CONNECTWEBAPP;  
+                screen.state = STATE_UTILS_CONNECTWEBAPP;
               }  // when web app connect we go back to normal scree
             break;
             case STATE_UTILS_TRIGGER_FWUPDATE_PROMPT:
@@ -1993,20 +1960,20 @@ void setup() {
             break;
             case STATE_UTILS_RESTART_DEVICE  :
               checkAndDeleteFile(FIRMWARE_BIN_FILENAME);
-              hwm->persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);    
+              hwm->persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_RESTART);
               shutdownInterfaces();
               ESP.restart();
             break;
             case STATE_UTILS_DOWNLOAD_FROM_URL:{
-              
+
               #define NO_ERROR "ok"
 
               HttpClient* httpStream = nullptr;
-              updateProgressLabel = "...";   
+              updateProgressLabel = "...";
               updateSWerrorString = NO_ERROR;
               UrlParts f = parseUrl(fwUpdateURL);
 
-              if (f.ok){   
+              if (f.ok){
                 httpStream = new HttpClient(*hwm->network->client);
                 int err = httpStream->startRequest(f.host.c_str(), f.port, f.path.c_str(), "GET", "ESP32HttpClient/1.0");
                 if (err != 0) {
@@ -2019,11 +1986,11 @@ void setup() {
                   }else{
                     err = httpStream->skipResponseHeaders();
                     if (err >= 0){
-                                                     
+
                       totalGzSize = httpStream->contentLength();
-                      
+
                       setCloudDownloadProgressScreen();
-                      
+
                       StreamParams* params = new StreamParams(httpStream,true); // the task owns the httpStream and will take care of deleting it after it is used
 
                       BaseType_t taskCreated = xTaskCreate(
@@ -2050,10 +2017,10 @@ void setup() {
               }
 
               if (updateSWerrorString != NO_ERROR){
-                singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Ok");    
+                singlePromptScreen(concatStrings(*lang.getString("Update failed: "),updateSWerrorString),"Ok");
                 if (httpStream != nullptr) delete httpStream; // task was unsuccsessul so so we delete the stream ourselves ourselve
               }
-            
+
             }break;
             case STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD:
               // do nothing
@@ -2072,7 +2039,7 @@ void setup() {
                 // refresh file size every 500 ms
                 LittleFSInfo fsInfo;
                 getLittleFSInfo(fsInfo);
-                FSstat = concatStrings(("FS: "),String(fsInfo.used/1024),"/",String(fsInfo.total/1024),"KB"," Free Space: ",String(fsInfo.freeSpace/1024),"KB");                 
+                FSstat = concatStrings(("FS: "),String(fsInfo.used/1024),"/",String(fsInfo.total/1024),"KB"," Free Space: ",String(fsInfo.freeSpace/1024),"KB");
               }
 
             break;
@@ -2088,11 +2055,11 @@ void setup() {
           if (refreshed) menuSwitchBankFullRefresh();
         break;
         case SCREEN_BYE:
-          switch(screen.state){ 
+          switch(screen.state){
             case STATE_BYE_GOSLEEP_MESSAGE:
               if (millis()-goSleepCountdownStart>BAT_REFRESH_RATE*BAT_NUM_READINGS*2) goDeepSleep(); // we bootSprite two full cycle of battery voltage acquisition before shuting down
             break;
-            case STATE_BYE_MODAL_MESSAGE: 
+            case STATE_BYE_MODAL_MESSAGE:
               // perform some action like update or ftp and shutting down properly (like interfaces...)
               if (!shutdownDone) shutdownInterfaces();
             break;
@@ -2101,7 +2068,7 @@ void setup() {
       }
       //------------------
       //
-      // MANAGE DEBUGGING 
+      // MANAGE DEBUGGING
       //
       //------------------
       uint32_t mem = ESP.getFreeHeap();
@@ -2112,11 +2079,11 @@ void setup() {
       return refreshed;
     }
 
-    
+
     void broadCast(String msg, bool immediate=false){
       if (webAppConnected){
         if (immediate) _wssBrodcast(msg);
-        else broadcastQueue.push_back(msg);      
+        else broadcastQueue.push_back(msg);
       }
     }
 
@@ -2131,16 +2098,16 @@ void setup() {
     void _wssBrodcast(String& msg){
       if (hwm->configMedia != nullptr){
         if (webAppConnected && hwm->configMedia->state == CONNECTED){
-          wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());  
+          if (webAppService != nullptr && webAppService->wss != nullptr) webAppService->wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());
           DEBUG_INFO("[BROADCAST]\t\t(%s)\n\n",msg.c_str());
         }
-      }     
+      }
     }
 
-    void reset(){      
+    void reset(){
       nvs_flash_erase(); // erase the NVS partition and...
-      nvs_flash_init(); // initialize the NVS partition.        
-      // next: delete conf file   
+      nvs_flash_init(); // initialize the NVS partition.
+      // next: delete conf file
     }
 
     bool streamToFile(Stream* stream, String filename){
@@ -2154,20 +2121,20 @@ void setup() {
       File f = LittleFS.open(fullPath, FILE_WRITE);
       if (!f){
         singlePromptScreen("Can't create file","Abort");
-        return false;        
-      } 
+        return false;
+      }
 
       LittleFSInfo fsInfo;
-      getLittleFSInfo(fsInfo);     
-      
+      getLittleFSInfo(fsInfo);
+
       DEBUG_INFO("Free: %i, totalGBsize: %i,  fsInfo.freeSpace - totalGzSize: %i", fsInfo.freeSpace, totalGzSize, fsInfo.freeSpace - totalGzSize);
 
-      if ( (int)((int)fsInfo.freeSpace - (int)totalGzSize) < 1024*8){  
+      if ( (int)((int)fsInfo.freeSpace - (int)totalGzSize) < 1024*8){
         singlePromptScreen("file is too big","Abort");
         return false;
       }
 
-      DEBUG_INFO("streamToFile(%s) %i bytes",fullPath.c_str(),totalGzSize);            
+      DEBUG_INFO("streamToFile(%s) %i bytes",fullPath.c_str(),totalGzSize);
       size_t totalWritten = 0;
       uint8_t buf[512];   // 256–1024 selon ta RAM
       while (true) {
@@ -2186,114 +2153,17 @@ void setup() {
     }
 
     void sendTerminateMessageToWebApp(String message = "Finished") {
-      // inform web interface immediately without queuing the message for next loop      
-      broadCast("{\"terminate\":\"" + message + "\"}", IMMEDIATE);  
+      // inform web interface immediately without queuing the message for next loop
+      broadCast("{\"terminate\":\"" + message + "\"}", IMMEDIATE);
       delay(100);      // let time for the message to flow
     }
 
-    #define WEB_STOP false
-    #define WEB_START true
 
-    void shutdownWSS(){
-      if (wss != nullptr){
-        wss->shutdown();  // need the patch here: https://github.com/skaarj1989/mWebSockets/discussions/67#       
-        DEBUG_INFO("delete wss");
-        delete wss; 
-        wss = nullptr;
-      }      
-    }
-
-    void setWSServer(){
-
-      if (webServer == nullptr) return; // no need to define websocket server if webserver has not been instanciated
-    
-      // when you are connected to Eth, if you unplug the cable, the wifi connection goes back 
-      // but sometime the program freeze betweeen the delete wss below and the new WifiWebSocketServer creation
-      // so we create thread that will take care of displaying a waiting message
-      // Lance l’animation pendant que la tache principale travaille
-
-      shutdownWSS();
-   
-      if (hwm->configMedia->media == CABLE_MEDIA){
-        DEBUG_INFO("[WSS]\t\tinstanciated\n\n");
-        wss = new EthernetWebSocketServer{};
-      }else if (hwm->configMedia->media == WIFI_MEDIA){ 
-        DEBUG_INFO("new WiFiWebSocketServer{}");
-        wss = new WiFiWebSocketServer{};                
-      }else{
-        DEBUG_ERROR("\n[WSS]\t\tinstanciation failed, no media\n\n");
-        return;
-      }
-      
-      wss->onConnection(socketConnectionCallback);    
-      wss->begin();
-
-    }
-
-    // Buffers pour headers aWOT (doivent rester valides en RAM)
-    char hdrContentType[120];   // "multipart/form-data; boundary=...."
-    char hdrContentLength[20];  // optionnel    
-
-    bool startWebApp(){
-      if (hwm->configMedia != nullptr){
-        if (hwm->configMedia->state == CONNECTED){
-          if (webServer == nullptr){          
-            //start webserver     
-            //DEBUG_PRINT("\nDump before webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
-            DEBUG_INFO("[WEBAPP]\t\tstart\n\n");       
-            
-            webServer = new Application();
-            webServer->setTimeout(3000);
-
-            // Déclarer les headers qu’on veut pouvoir lire avec req.get(...)
-            webServer->header("Content-Type", hdrContentType, sizeof(hdrContentType));
-            webServer->header("Content-Length", hdrContentLength, sizeof(hdrContentLength)); // optionnel
-
-            webServer->use(commonFileServerWrapper);              
-
-            setWSServer();   // ==> websocket server is created and then changed by application refresh() in case the network medium is changed
-
-            /*xTaskCreate(
-              handleWebTaskWrapper,  // Function to implement the task
-              "handleWebTaskWrapper",     // Name of the task
-              4096*2,              // Stack size in words
-              NULL,               // Task input parameter
-              1,                  // Priority of the task
-              NULL                // Task handle
-            );*/
-                     
-          }
-
-          String ipURL = concatStrings("http://",hwm->configMedia->IP.toString());
-          
-          // if MDNS is up and running, we provide the name as URL, otherwise, just IP address
-          //if (directoryService.state.code == IF_READY) hwm->configURL = concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local"); //concatStrings("http://", *systemCfg.getString(S_AP_NAME), ".local (",ipURL,")");
-          //else 
-          hwm->configURL = ipURL;     // experience shows that if we use MDNS to connect, request is more slow and lead to some UDP packet conflict, so we prefer only exposing the IP to connect
-
-          DEBUG_INFO("[WEBAPP]\t\tserving on %s",hwm->configURL.c_str() );
-          //DEBUG_PRINT("\nDump after webAppstart %s",hwm->network->dumpW5500Sockets().c_str());            
-          return true;
-        }
-        return false;
-      }
-      return false;
-    }
-
-    void stopWebApp(){
-      shutdownWSS();
-      if (webServer != nullptr){
-        delete webServer;
-        webServer = nullptr;
-      }
-      DEBUG_INFO("WebAppservices down");        
-    }
-    
     #define MIME_TYPES_MAX 15
     /*void commonFileServer2(Request &req, Response &res){
-      
+
       const char * path = req.path();
-    
+
       String mimeTypes[MIME_TYPES_MAX][2] ={
         {"html",  "text/html"},
         {"js",    "application/javascript"},
@@ -2301,12 +2171,12 @@ void setup() {
         {"jpeg",  "image/jpeg"},
         {"jpg",   "image/jpeg"},
         {"gif",   "image/gif"},
-        {"png",   "image/png"},  
-        {"txt",   "text/plain"},  
+        {"png",   "image/png"},
+        {"txt",   "text/plain"},
         {"htm",   "text/html"},
-        {"xml",   "application/xml"},  
-        {"css",   "text/css"},  
-        {"gz",    "application/gzip"},  
+        {"xml",   "application/xml"},
+        {"css",   "text/css"},
+        {"gz",    "application/gzip"},
         {"zip",   "application/zip"},
         {"ttf",   "font/ttf"},
         {"svg",   "image/svg+xml"}
@@ -2318,15 +2188,15 @@ void setup() {
       res.set("Content-Type", mimeType.c_str());
 
       Serial.printf("\n\tserving: %s <%s>",path, mimeType.c_str());
- 
+
       File file;
 
       if (strcmp(path, "/") == 0) file = LittleFS.open("/webapp/indexnozip.html");
       else file = LittleFS.open(concatStrings("/webapp", path));
-      
-      while (file.available()) res.write(file.read());      
 
-      res.end();           
+      while (file.available()) res.write(file.read());
+
+      res.end();
       file.close();
     }*/
 
@@ -2337,12 +2207,12 @@ void setup() {
           {"jpeg",  "image/jpeg"},
           {"jpg",   "image/jpeg"},
           {"gif",   "image/gif"},
-          {"png",   "image/png"},  
-          {"txt",   "text/plain"},  
+          {"png",   "image/png"},
+          {"txt",   "text/plain"},
           {"htm",   "text/html"},
-          {"xml",   "application/xml"},  
-          {"css",   "text/css"},  
-          {"gz",    "application/gzip"},  
+          {"xml",   "application/xml"},
+          {"css",   "text/css"},
+          {"gz",    "application/gzip"},
           {"zip",   "application/zip"},
           {"ttf",   "font/ttf"},
           {"svg",   "image/svg+xml"}
@@ -2481,23 +2351,23 @@ void setup() {
       totalGzSize = req.left();
       StreamParams* params = new StreamParams(&req,false);         // we don't own the req stream (it is from the web server AWOT), so we will not delete it ourselves
 
-      // we are in a thread so blocking, calling the normal workflow would have no effect 
+      // we are in a thread so blocking, calling the normal workflow would have no effect
       // therefore, we use a separate animation thread which do not alter the screen id and screen state that are restored when thread stops
-      if (dest == UPLOAD_DEST_TGZUPDATE) { 
+      if (dest == UPLOAD_DEST_TGZUPDATE) {
         iconProgress = ICON_CLOUD_DOWNLOAD;
-        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_MULTIPLE);           
-        processed = expandTGZstreamToFS(params);     // we call it as a normal task as we are already in a thread from aWot        
+        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_MULTIPLE);
+        processed = expandTGZstreamToFS(params);     // we call it as a normal task as we are already in a thread from aWot
       }
       else if (dest == UPLOAD_DEST_FWUPDATE){
         setBinaryFlashScreen(); // set label and icon
-        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);              
+        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);
         processed = installGZBinaryFromStream(params);
       }else{
-        iconProgress = ICON_CLOUD_DOWNLOAD;        
-        updateProgressLabel = filename;   
-        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);             
+        iconProgress = ICON_CLOUD_DOWNLOAD;
+        updateProgressLabel = filename;
+        startGUIThread(SCREEN_UTILS,STATE_UTILS_SHOW_PROGRESS_SINGLE);
         processed = streamToFile((Stream*)(&req),filename);
-      }        
+      }
 
       stopGUIThread();      // back to screen ID
 
@@ -2536,7 +2406,7 @@ void setup() {
           if (c == '\r') continue;
           if (c == '\n') return true;
           out += c;
-          if (out.length() >= maxLen) return true;   
+          if (out.length() >= maxLen) return true;
           delay(1);
         }
         yield();
@@ -2575,17 +2445,17 @@ void setup() {
       if (slash >= 0) v = v.substring(slash + 1);
       return v;
     }
-        
 
-    void sendFileInChunks(File* file, Response* res) {      
+
+    void sendFileInChunks(File* file, Response* res) {
       size_t chunkedDataSize = 64; // for ethernet: 64 is the good value, 128/256/512 = throw ERR_CONNECTION_REFUSED, file.size() = throw DECODE_ERROR
-            
+
       if (hwm->configMedia->media == WIFI_MEDIA)
-      { // for WiFi we try to send it at once        
-        chunkedDataSize = file->size();  
+      { // for WiFi we try to send it at once
+        chunkedDataSize = file->size();
         if (chunkedDataSize>TCP_SND_BUF) chunkedDataSize = TCP_SND_BUF;   // provided it doesnt exceed the size  of the TCP buffer
       }
-      
+
       byte *buffer = nullptr; // Pointeur pour la mémoire allouée dynamiquement
       // Allouer dynamiquement de la mémoire pour stocker les données
       buffer = new (std::nothrow) byte[chunkedDataSize]; // +1 pour le caractère null
@@ -2593,24 +2463,24 @@ void setup() {
       int bytesRead;
       // Lire et envoyer des paquets jusqu'à ce que tout le fichier soit envoyé
       while ((bytesRead = file->read(buffer, chunkedDataSize)) > 0) {
-        res->write(buffer, bytesRead);  // Écrire le tampon complet dans le client        
-        //DEBUG_PRINT( ".");  
-        //taskYIELD(); // ONLY IN A TASK        
+        res->write(buffer, bytesRead);  // Écrire le tampon complet dans le client
+        //DEBUG_PRINT( ".");
+        //taskYIELD(); // ONLY IN A TASK
         //yield();     // ==> when this yield is on, it create CONNECTION_REFUSED on iMac chrome as it slows down the sending of the data
       }
 
       free(buffer);
 
       file->close();
-    }    
+    }
 
     void render(Menu const& menu) const {}
     void render_menu_item(MenuItem const& menu_item) const {}
     void render_back_menu_item(BackMenuItem const& menu_item) const {}
     void render_numeric_menu_item(NumericMenuItem const& menu_item) const {}
-    void render_menu(Menu const& menu) const {}  
+    void render_menu(Menu const& menu) const {}
 
-    void menuSystemFullRefresh(){  
+    void menuSystemFullRefresh(){
       //DEBUG_PRINT("\nmenuSystemFullRefresh");
       setRootMenuItems(&ms);
       menuTopText = *lang.getString(" "); // empty message
@@ -2619,27 +2489,27 @@ void setup() {
     void setRootMenuItems(MenuSystem* m){
       //ms.get_current_menu()->get_current_component(
       Menu const* menu = m->get_current_menu();
-      uint8_t numItem = menu->get_num_components();  
+      uint8_t numItem = menu->get_num_components();
 
       MenuComponent const* cp_m_comp;
       uint8_t selection = 0;
 
       cp_m_comp = menu->get_current_component();
       const char* menuString = cp_m_comp->get_name();
-      menuItems[1].icon = getIconFromString(menuString);  
-           
+      menuItems[1].icon = getIconFromString(menuString);
+
       if (cp_m_comp->isEnabled()){
         // if menu item is enabled, we use the glowing color
         GUI::glowingGoldColor.value = &menuActiveIconColor;
         // then based on its internal state (means utcome of the select action which sets the success), we either display it red to indicate an error happens or old
         if (cp_m_comp->success) GUI::glowingGoldColor.baseColor = TFT_GOLD;
-        else GUI::glowingGoldColor.baseColor = TFT_RED;        
+        else GUI::glowingGoldColor.baseColor = TFT_RED;
       }else{
         menuActiveIconColor = GUI::menuGreydoutColor;
         GUI::glowingGoldColor.value = &GUI::unUsedColor;
       }
 
-      selection = menu->get_current_component_num();    
+      selection = menu->get_current_component_num();
 
       //DEBUG_PRINT("\nsetRootMenuItems name:%s numItem:%i currentComponentName: %s, menuIcon:[%s]",menu->get_name(),numItem,menuString, menuItemIcon[1]);
 
@@ -2648,20 +2518,20 @@ void setup() {
           menuItems[0].icon = " ";
           menuItems[2].icon = " ";
       }else if (numItem == 2){
-        if (selection == numItem-1){ 
+        if (selection == numItem-1){
           // left = right = first item
           menuItems[0].icon = getIconFromString(menu->get_menu_component(0)->get_name());
           menuItems[2].icon = getIconFromString(menu->get_menu_component(0)->get_name());
-          
+
           menuItems[0].color = menu->get_menu_component(0)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;
-          menuItems[2].color = menu->get_menu_component(0)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;          
+          menuItems[2].color = menu->get_menu_component(0)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;
         }else{
           // left = right = second ite,
           menuItems[0].icon = getIconFromString(menu->get_menu_component(1)->get_name());
           menuItems[2].icon = getIconFromString(menu->get_menu_component(1)->get_name());
-          
+
           menuItems[0].color = menu->get_menu_component(1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
-          menuItems[2].color = menu->get_menu_component(1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;          
+          menuItems[2].color = menu->get_menu_component(1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
         }
       }else if (numItem > 2){
         if (selection == numItem-1){ // last item
@@ -2670,31 +2540,31 @@ void setup() {
           menuItems[2].icon = getIconFromString(menu->get_menu_component(0)->get_name());
 
           menuItems[0].color = menu->get_menu_component(selection-1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
-          menuItems[2].color = menu->get_menu_component(0)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;          
+          menuItems[2].color = menu->get_menu_component(0)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
         }else if (selection == 0){ // first item
           // left icon = last item, right icon = +1
           menuItems[0].icon = getIconFromString(menu->get_menu_component(numItem-1)->get_name());
           menuItems[2].icon = getIconFromString(menu->get_menu_component(selection+1)->get_name());
 
           menuItems[0].color = menu->get_menu_component(numItem-1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
-          menuItems[2].color = menu->get_menu_component(selection+1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;          
+          menuItems[2].color = menu->get_menu_component(selection+1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
         }else{ // any item in between
           // normal case, we take the -1 and +1 item
           menuItems[0].icon = getIconFromString(menu->get_menu_component(selection-1)->get_name());
           menuItems[2].icon = getIconFromString(menu->get_menu_component(selection+1)->get_name());
 
           menuItems[0].color = menu->get_menu_component(selection-1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
-          menuItems[2].color = menu->get_menu_component(selection+1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;          
-        }  
+          menuItems[2].color = menu->get_menu_component(selection+1)->isEnabled()?GUI::menuInactiveIconColor:GUI::menuGreydoutColor;;
+        }
       }
     }
 
     void setBankMenuItems(){
       Menu const* menu = bankMenu->get_current_menu();
-      uint8_t numItem = menu->get_num_components();  
+      uint8_t numItem = menu->get_num_components();
 
       uint8_t selection = menu->get_current_component_num();
-      IntervalBank* bank = (selection < banks.size()) ? banks[selection] : nullptr;      
+      IntervalBank* bank = (selection < banks.size()) ? banks[selection] : nullptr;
 
       if (bank != nullptr){
         menuBottomLabel = bank->name;
@@ -2719,20 +2589,20 @@ void setup() {
         }else{ // any item in between
           // normal case, we take the -1 and +1 item
           menuItems[0].icon = iconOrEmpty(selection-1);
-          menuItems[2].icon = iconOrEmpty(selection+1);          
-        }  
+          menuItems[2].icon = iconOrEmpty(selection+1);
+        }
       }else{
         menuBottomLabel = *lang.getString(NO_BANK_MENU_ITEM);
         menuItems[0].icon = " ";
         menuItems[1].icon = ICON_QUIT;
-        menuItems[2].icon = " ";       
+        menuItems[2].icon = " ";
       }
       menuItems[0].color = GUI::menuInactiveIconColor;
       menuItems[1].color = GUI::menuInactiveIconColor;
       menuItems[2].color = GUI::menuInactiveIconColor;
     }
 
-    void menuSwitchBankFullRefresh(){  
+    void menuSwitchBankFullRefresh(){
       //DEBUG_PRINT("\nmenuSystemFullRefresh");
       setBankMenuItems();
       //widgets[MENU_ICON_MIDDLE].widget->setFcolor(glowingGoldColor.value); // restore color
@@ -2741,10 +2611,10 @@ void setup() {
     }
 
     void switchBank(){
-      // if we have one bank or two we shift directly      
+      // if we have one bank or two we shift directly
       if (banks.size() == 2) screen.state = (screen.state + 1) % banks.size(); // <=2
       // otherwise we call the menu
-      else if (banks.size()>2) screen.id = SCREEN_BANK_SWITCH;      
+      else if (banks.size()>2) screen.id = SCREEN_BANK_SWITCH;
       //else banks are empty, we do nothing
     }
 
@@ -2754,13 +2624,13 @@ void setup() {
 
     ///////////////////////////////////////////////////////////////////////
     bool stripScroll(uint8_t direction) {
-        
-      if (screen.state >= banks.size()) return false;      
-      
+
+      if (screen.state >= banks.size()) return false;
+
       IntervalBank* bank = banks[screen.state];
-      
+
       if (bank == nullptr) return false;
-      if (bank->strips.size()<=1) return false; 
+      if (bank->strips.size()<=1) return false;
 
       uint8_t stripID = bank->selector;
 
@@ -2771,18 +2641,18 @@ void setup() {
         if (stripID == 1) stripID = bank->strips.size();
         else stripID--;
       }
-      
+
       //DEBUG_PRINT("\t scroll(%i/%i):",stripID,bank->nav.window);
 
       Strip* targetStrip = bank->getStrip(stripID);
       if ( targetStrip == nullptr) return false;
-      
+
       Strip* currentStrip = getSelectedStrip();
       if (currentStrip != nullptr) {
         currentStrip->focus(false);
       }
-  
-      bank->selector = stripID;      
+
+      bank->selector = stripID;
       targetStrip->focus(true);
 
       // drop command to query strip state
@@ -2797,7 +2667,7 @@ void setup() {
           targetStrip->size == SHAPE4X4 ||
           bank->layout == LAYOUT_ZOOM
       ){
-        triggerRedraw(); // force refresh 
+        triggerRedraw(); // force refresh
       }
       return true;
 
@@ -2820,7 +2690,7 @@ void setup() {
           }
         } else if (direction == hwm->buttons[LEFTB]->getID()){
           if (bank->selector == 0) {
-            if (bank->window == 0) bank->window = bank->getMaxWindow() - 1; 
+            if (bank->window == 0) bank->window = bank->getMaxWindow() - 1;
             else bank->window--;
             bank->selector = STRIP_PER_WINDOW-1;
             changedWindow = true;
@@ -2847,22 +2717,22 @@ void setup() {
 
       DEBUG_PRINT("\nbank->stripIndex:%i changedwindow:%i",bank->stripIndex, changedWindow);*/
 
-    bool stripAction(uint8_t trigger) {    
+    bool stripAction(uint8_t trigger) {
       if (screen.state >= banks.size()) return false;
       IntervalBank* bank = banks[screen.state];
       if (bank != nullptr){
         Strip* strip = bank->getStrip(bank->selector);
-        if (strip != nullptr) return strip->actionCallback(trigger);      
+        if (strip != nullptr) return strip->actionCallback(trigger);
       }
       return false;
     }
 
     void stripChangeValue(uint8_t direction, unsigned long time, uint8_t trigger){
-      
-      if (screen.state >= banks.size()) return;           
-      IntervalBank* bank = banks[screen.state];    
+
+      if (screen.state >= banks.size()) return;
+      IntervalBank* bank = banks[screen.state];
       if (bank == nullptr) return;
-      
+
       Strip* strip = bank->getStrip(bank->selector);
       if (strip == nullptr) return;
 
@@ -2876,16 +2746,16 @@ void setup() {
       IntervalBank* bank = banks[screen.state];
       if (bank != nullptr){
         Strip* strip = bank->getStrip(bank->selector);
-        if (strip != nullptr) return strip->onButtonReleased();      
-      }      
+        if (strip != nullptr) return strip->onButtonReleased();
+      }
     }
 
-   
+
 
     bool updatePositions(IntervalBank* bank, JsonArray positions){
       bool success = false;
-      //"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":1,"id":1},{"x":0,"y":2,"id":2}]}}        
-      //uint8_t window = jsonInput["param"]["win"].as<int>();         
+      //"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":1,"id":1},{"x":0,"y":2,"id":2}]}}
+      //uint8_t window = jsonInput["param"]["win"].as<int>();
       // extract "positions"
       // Parcourir chaque objet dans le tableau
       //DEBUG_PRINT("\n Now updating selectors");
@@ -2898,17 +2768,17 @@ void setup() {
           //DEBUG_PRINT("\n\t updateStrip index #%i",strip->index);
           strip->index = position[C_INDEX]; // extraire la valeur de selector
           //DEBUG_PRINT(" to #%i",strip->index);
-          success = true; 
+          success = true;
         }
-      }   
-      // in case of reschuffle, GUI may try to render a strip which is not existing anymore or that has changed      
-      if (bank->getStrip(bank->selector) == nullptr) bank->init();      
+      }
+      // in case of reschuffle, GUI may try to render a strip which is not existing anymore or that has changed
+      if (bank->getStrip(bank->selector) == nullptr) bank->init();
       return success;
     }
 
     void restart(){
       screen.id = SCREEN_UTILS;
-      screen.state = STATE_UTILS_RESTART_DEVICE;            
+      screen.state = STATE_UTILS_RESTART_DEVICE;
     }
 
     /////////////////////////////////////////////////////////////////////////////////////
@@ -2921,7 +2791,7 @@ void setup() {
     #define RET_SAVEBUTTON          "setSaveButton"
     #define RET_COMMANDERROR        "commandError"
     #define RET_POPUP               "commandPopup"
-    
+
     void log(const char* originator, const char* message) {
         const char* logLinePattern = "{\"logWebConsole\":{\"originator\":\"%s\",\"message\":\"%s\"}}";
 
@@ -2933,7 +2803,7 @@ void setup() {
 
         snprintf(sendLine, needed, logLinePattern, originator, message);
 
-        broadCast(sendLine); 
+        broadCast(sendLine);
         free(sendLine);
     }
 
@@ -2951,11 +2821,11 @@ void setup() {
       jsonAnswer.value = jsonInput.as<String>();
 
       //DEBUG_PRINT("\nparseJsonInput(%s)",input.c_str());
-      
+
       String command = jsonInput["command"];
 
-      if (command == "ping"){        
-        // socket heartbeat            
+      if (command == "ping"){
+        // socket heartbeat
         jsonAnswer.callback="pong";
         jsonAnswer.value=userJsonPongCallback();
       }else if (command == "retrieve"){
@@ -2963,12 +2833,12 @@ void setup() {
         String param = jsonInput["param"];
         jsonAnswer.callback = param;
 
-        if (param == "startup"){         
+        if (param == "startup"){
           getJsonStartup(&jsonAnswer.value);
         }else if (param == "connectivity"){
           jsonAnswer.value = getConnectivityState();
         }else if(param == "fullConfig"){
-          jsonAnswer.callback = bulkconfig;          
+          jsonAnswer.callback = bulkconfig;
           serialize(&jsonAnswer.value);
         }
       }else if (command == "set"){
@@ -2984,7 +2854,7 @@ void setup() {
           jsonAnswer.value ="0";      // auto saved
         }else{
           jsonAnswer.callback = RET_COMMANDERROR;
-          jsonAnswer.value = jsonInput.as<String>();            
+          jsonAnswer.value = jsonInput.as<String>();
         }
       }else if (command == "scanWifi"){        // Create the parrallel scan task
         DEBUG_INFO("[WiFi Scan]\t\tstart\n\n");
@@ -2997,7 +2867,7 @@ void setup() {
           NULL                // Task handle
         );
         jsonAnswer.callback = "wifiScanStart";
-        jsonAnswer.value = "";        
+        jsonAnswer.value = "";
       }else if (command == "stopWifi"){
         hwm->network->stopWiFi();
         jsonAnswer.callback = RET_SAVEBUTTON;
@@ -3006,8 +2876,8 @@ void setup() {
         String ssid = jsonInput["param"]["ssid"].as<String>();
         String pwd = jsonInput["param"]["password"].as<String>();
         // indicate which WiFi to connect next
-        // the appmanager refresh will take care of adding it to the valid json wifi ssid list  if it connects        
-        hwm->network->setSSID(ssid,pwd);        
+        // the appmanager refresh will take care of adding it to the valid json wifi ssid list  if it connects
+        hwm->network->setSSID(ssid,pwd);
         if (hwm->network->media != CABLE_MEDIA){
           jsonAnswer.callback = "wifiConnectTimeout"; // we give a try to connect wifi by setting up the timeout
           jsonAnswer.value = hwm->network->wiFiTimeout;
@@ -3018,28 +2888,28 @@ void setup() {
           jsonAnswer.value ="wifiSaved";
         }
 
-      }else if (command == "setStrip"){          
+      }else if (command == "setStrip"){
         //{"command":"setStrip","param":{"bank":"Test","strip":{"type":"chGain","size":"4x1","color":4,"icon":"6","properties":["/ch/3/config/name"],"position":{"win":0,"x":"0","y":"0"}},"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":1,"id":1},{"x":0,"y":2,"id":2}]}}
         //get the bank that need to be modified
         jsonAnswer.callback=RET_COMMANDERROR;
-        //DEBUG_PRINT("\nsetStrip bankName:%s, strip:%s",jsonInput["param"]["bank"].as<String>().c_str(),jsonInput["param"].as<String>().c_str());        
+        //DEBUG_PRINT("\nsetStrip bankName:%s, strip:%s",jsonInput["param"]["bank"].as<String>().c_str(),jsonInput["param"].as<String>().c_str());
         uint8_t bankIndex;
         IntervalBank* bank = getBank(jsonInput["param"]["bank"],&bankIndex);  // get the bank and its index
-        if (bank != nullptr){          
-          uint8_t window = jsonInput["param"]["strip"]["position"]["win"];            
-          uint8_t x = jsonInput["param"]["strip"]["position"]["x"];     
+        if (bank != nullptr){
+          uint8_t window = jsonInput["param"]["strip"]["position"]["win"];
+          uint8_t x = jsonInput["param"]["strip"]["position"]["x"];
           uint8_t y = jsonInput["param"]["strip"]["position"]["y"];
-          //DEBUG_PRINT("\nChecking if strip is existing: ");     
+          //DEBUG_PRINT("\nChecking if strip is existing: ");
           Strip* strip = bank->getStrip(x,y,window);
           bool success = true;
           if (strip != nullptr){
             //DEBUG_PRINT(" YES, deleting it");
             success = bank->trash(strip); // if strip is existing we first delete it
-          }  
+          }
           if (success){
-            JsonObject jData = jsonInput["param"]["strip"];            
+            JsonObject jData = jsonInput["param"]["strip"];
             strip = bank->addStrip(jData);
-        
+
           }else strip = nullptr;
           if (strip != nullptr){
             updatePositions(bank,jsonInput["param"][C_POSITIONS]);
@@ -3049,48 +2919,48 @@ void setup() {
             // and put the focus on the new strip
             bank->selector = strip->index;
             getBank(bank->name,&screen.state);
-            screen.id = SCREEN_BANK;            
-            triggerRedraw();   
+            screen.id = SCREEN_BANK;
+            triggerRedraw();
             jsonAnswer.callback = RET_SAVEBUTTON;
-            jsonAnswer.value = "1";  
+            jsonAnswer.value = "1";
           }else{
             jsonAnswer.value=*lang.getString("Strip setup error");
           }
         }else{
             jsonAnswer.value=*lang.getString(BAD_BANK_MSG);
-        }                
-      }else if (command == "trashStrip"){        
+        }
+      }else if (command == "trashStrip"){
         //{"command":"trashStrip","param":{"bank":"Test","position":{"win":0,"x":"0","y":"1"},"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":2,"id":1}]}}
         uint8_t bankIndex;
         IntervalBank* bank = getBank(jsonInput["param"]["bank"],&bankIndex);
         jsonAnswer.callback = RET_COMMANDERROR;
-        if (bank != nullptr){                     
-          uint8_t window = jsonInput["param"]["position"]["win"];           
-          uint8_t x = jsonInput["param"]["position"]["x"];     
-          uint8_t y = jsonInput["param"]["position"]["y"];     
+        if (bank != nullptr){
+          uint8_t window = jsonInput["param"]["position"]["win"];
+          uint8_t x = jsonInput["param"]["position"]["x"];
+          uint8_t y = jsonInput["param"]["position"]["y"];
           Strip* stripToDelete = bank->getStrip(x,y,window);
-          if (stripToDelete != nullptr){                    
+          if (stripToDelete != nullptr){
             uint8_t indexToDelete = stripToDelete->index;
-            Strip* currentStrip = getSelectedStrip();         
+            Strip* currentStrip = getSelectedStrip();
             if (currentStrip !=nullptr){
-              if (bank->trash(stripToDelete)){   
+              if (bank->trash(stripToDelete)){
 
-                  updatePositions(bank,jsonInput["param"][C_POSITIONS]);              
+                  updatePositions(bank,jsonInput["param"][C_POSITIONS]);
                   jsonAnswer.callback = RET_SAVEBUTTON;
-                  jsonAnswer.value = "1";   
+                  jsonAnswer.value = "1";
                   // we check if we delete the strip which is currently focused
-                  if (indexToDelete == currentStrip->index){                   
+                  if (indexToDelete == currentStrip->index){
                     DEBUG_INFO("DELETED FOCUSED STRIP");
                     restoreScreen();
                   }else{
                     // since updatePositions has shifted the index, the selector points to a strip that is not the one which was preivously displayed, we restore it
-                    bank->selector = currentStrip->index;                 
+                    bank->selector = currentStrip->index;
                     //bank->nav.window = currentStrip->win;
                   }
 
-                triggerRedraw(); // force refresh 
+                triggerRedraw(); // force refresh
               }else{
-                jsonAnswer.value=*lang.getString(ERRDEL_STRIP_MSG); 
+                jsonAnswer.value=*lang.getString(ERRDEL_STRIP_MSG);
               }
             }else{
               jsonAnswer.value=*lang.getString(BAD_STRIP_MSG);
@@ -3100,37 +2970,37 @@ void setup() {
           }
         }else{
           jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
-        }  
+        }
         //DEBUG_PRINT("\n<TrashStrip end>");
       }else if (command =="moveStrip"){
         //{"command":"moveStrip","param":{"bank":"Test2","x1":0,"y1":1,"x2":0,"y2":2,"win":0,"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":2,"id":1}]}}
-        // use position here instead of x1, y1 
+        // use position here instead of x1, y1
         uint8_t bankIndex;
         IntervalBank* bank = getBank(jsonInput["param"]["bank"],&bankIndex);
         jsonAnswer.callback = RET_COMMANDERROR;
-        if (bank != nullptr){                                         
+        if (bank != nullptr){
           /*uint8_t x = jsonInput["param"]["x1"];
-          uint8_t y = jsonInput["param"]["y1"]; 
+          uint8_t y = jsonInput["param"]["y1"];
           uint8_t window = jsonInput["param"][C_WIN];
           Strip* strip = bank->getStrip(x,y,window);*/
 
           uint8_t id = jsonInput["param"][C_INDEX];
           Strip* strip = bank->getStrip(id);
 
-          if (strip != nullptr){      
-            ///WARNING THIS IS THE DESTINATION POSITION!!!!!! 
-            strip->x = jsonInput["param"]["x2"];      
-            strip->y = jsonInput["param"]["y2"];  
-            updatePositions(bank,jsonInput["param"][C_POSITIONS]);  
+          if (strip != nullptr){
+            ///WARNING THIS IS THE DESTINATION POSITION!!!!!!
+            strip->x = jsonInput["param"]["x2"];
+            strip->y = jsonInput["param"]["y2"];
+            updatePositions(bank,jsonInput["param"][C_POSITIONS]);
             jsonAnswer.callback = RET_SAVEBUTTON;
-            jsonAnswer.value = "1";              
-            triggerRedraw(); // force refresh            
+            jsonAnswer.value = "1";
+            triggerRedraw(); // force refresh
           }else{
             jsonAnswer.value=*lang.getString(BAD_STRIP_MSG);
           }
         }else{
           jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
-        }           
+        }
       }else if (command =="trashBank"){
         //{"command":"trashBank","param":{"name":"BANK j2"}}
         String bankName = jsonInput["param"]["name"];
@@ -3175,7 +3045,7 @@ void setup() {
           getBank(bank->name,&screen.state);
           triggerRedraw();
           jsonAnswer.callback = RET_SAVEBUTTON;
-          jsonAnswer.value = "1";            
+          jsonAnswer.value = "1";
         }else jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
       }else if (command == "renameBank"){
         //{"command":"renameBank","param":{"oldname":"BANK 1","newname":"BANK 2"}}
@@ -3190,22 +3060,22 @@ void setup() {
           triggerRedraw(); // force refresh the bank screen or the bank switch
           refreshBankMenu();
         }else jsonAnswer.value = *lang.getString(BAD_BANK_MSG);
-      }else if (command == "save"){     
-        
+      }else if (command == "save"){
+
         String bankFileName = concatStrings(concatStrings("/", *systemCfg.getString(S_PROFILE, DEFAULT_PROFILE)), ".bank");
         bool ret = saveBanks(bankFileName);
-        ret = systemCfg.save();   
-        ret &= userCfg.save();   
+        ret = systemCfg.save();
+        ret &= userCfg.save();
         if (ret){
           jsonAnswer.callback = RET_SAVEBUTTON;
-          jsonAnswer.value = "0";  
+          jsonAnswer.value = "0";
         }else{
-          jsonAnswer.callback=RET_COMMANDERROR;          
+          jsonAnswer.callback=RET_COMMANDERROR;
         }
       }else if (command == "restart"){
         restart();
         jsonAnswer.callback = RET_SAVEBUTTON;
-        jsonAnswer.value = "0";         
+        jsonAnswer.value = "0";
       }else if (command == "flash"){
         screen.id = SCREEN_UTILS;  // go to utils screen to perform the update
         screen.state = STATE_UTILS_DOWNLOAD_FROM_URL;
@@ -3218,11 +3088,11 @@ void setup() {
         // Récupération du premier élément de "param"
         JsonPair first = *param.begin();
         // Nom de la clé
-        const char* interfaceName = first.key().c_str();    
+        const char* interfaceName = first.key().c_str();
         DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);
-        
+
         if (interface && interface->interfaceName == interfaceName){
-          // we found the right interface 
+          // we found the right interface
           // Valeur = parameters
           JsonObject values = first.value().as<JsonObject>();
           if (interface->restore(values)){
@@ -3231,13 +3101,13 @@ void setup() {
               jsonAnswer.value ="0";
             }else{
               jsonAnswer.callback=RET_COMMANDERROR;
-              jsonAnswer.value = "interface save error";                
+              jsonAnswer.value = "interface save error";
             }
           }else{
             DEBUG_INFO("Interface no change");
-            interface->handleRequestRefreshState(); // to call for specific things like refreshing the exposed params list            
+            interface->handleRequestRefreshState(); // to call for specific things like refreshing the exposed params list
             jsonAnswer.callback=RET_SAVEBUTTON;
-            jsonAnswer.value ="0";            
+            jsonAnswer.value ="0";
           }
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;
@@ -3246,7 +3116,7 @@ void setup() {
       /*
       if (config.containsKey(INTERFACE_ENABLED)){
         bool enabled = config[INTERFACE_ENABLED];
-        switchDevice(state.enabled);                        
+        switchDevice(state.enabled);
       }*/
       }else if (command == "deviceEnable"){
         // {"command":"deviceEnable","param":{"MixingStation":true}}
@@ -3255,8 +3125,8 @@ void setup() {
         // Récupération du premier élément de "param"
         JsonPair first = *param.begin();
         // Nom de la clé
-        const char* interfaceName = first.key().c_str();    
-        DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);        
+        const char* interfaceName = first.key().c_str();
+        DeviceInterface* interface = interfaceRepo.retrieve(interfaceName);
         if (interface && interface->interfaceName == interfaceName){
           bool enabled = first.value();
           interface->switchDevice(enabled);
@@ -3266,16 +3136,16 @@ void setup() {
             jsonAnswer.value ="0";
           }else{
             jsonAnswer.callback=RET_COMMANDERROR;
-            jsonAnswer.value = "interface save error";                
+            jsonAnswer.value = "interface save error";
           }
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;
-          jsonAnswer.value = "interface not found";             
+          jsonAnswer.value = "interface not found";
         }
       }else if (command == "saveLibrary"){
         // {"command":"saveLibrary","param":{"file":"sysexlib.json","entries":{"abc":"aa bb","key2":"01bb","key3":"1ef0","ghijk":"12 34 56"}}}}
         String fileName = jsonInput["param"]["file"];
-        String entries = jsonInput["param"]["entries"];       
+        String entries = jsonInput["param"]["entries"];
 
         //write the data with compression
         if (writeBufferToGzFile(concatStrings(WEBAPP_PATH, "/", fileName, ".gz"), entries.c_str()) != 0){
@@ -3288,31 +3158,31 @@ void setup() {
             }else{
               // then resend the banks with updated datasets
 
-              JsonDocument doc;      
+              JsonDocument doc;
 
-              /*JsonArray ds = doc[stripdatasets].to<JsonArray>();  
+              /*JsonArray ds = doc[stripdatasets].to<JsonArray>();
               dataRepo.serialize(&ds); */
               JsonObject ds = doc.createNestedObject(stripdatasets);
               dataRepo.serialize(ds);
 
 
-              String banksString = serializeBanks();      
+              String banksString = serializeBanks();
               doc["banks"]=banksString;
-                  
-              //{bulkConfig:{$datasets,$banks}}';
-              jsonAnswer.callback = bulkconfig;          
 
-              serializeJson(doc, jsonAnswer.value);  
-              removeJsonQuote(&jsonAnswer.value);              
-              
+              //{bulkConfig:{$datasets,$banks}}';
+              jsonAnswer.callback = bulkconfig;
+
+              serializeJson(doc, jsonAnswer.value);
+              removeJsonQuote(&jsonAnswer.value);
+
             }
-          } 
+          }
           //do the same for osc messages here
 
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;
           jsonAnswer.value = "File Error";
-        }                
+        }
       }else{
         //DEBUG_PRINT("\n\t\t\t\t\tCalling userParseJsonInputCallback...");
         JsonObject j = jsonInput.as<JsonObject>();
@@ -3344,7 +3214,7 @@ void setup() {
       jsonOutput.shrinkToFit();
       return jsonString;
 
-    }    
+    }
 
     bool writeStringtoFile(const String &filename, String& entries) {
       File file = LittleFS.open(filename, "w");
@@ -3352,16 +3222,16 @@ void setup() {
       file.print(entries);
       file.close();
       return true;
-    }    
-    
+    }
+
     void scanNetworksTask(void * parameter) {
-      #define MAX_NUMBER_OF_NETWORK_TO_REPORT 10     
+      #define MAX_NUMBER_OF_NETWORK_TO_REPORT 10
       //DynamicJsonDocument doc(60+50*MAX_NUMBER_OF_NETWORK_TO_REPORT);
       JsonDocument doc;
       //JsonArray scannedWifi = doc.createNestedArray();
-      JsonArray scannedWifi = doc["scannedWifi"].to<JsonArray>();           
+      JsonArray scannedWifi = doc["scannedWifi"].to<JsonArray>();
       //DEBUG_PRINT("\nScanning for WiFi networks...");
-/*      WiFi.mode(WIFI_STA); // dixit chatgpt mais d'apres mes tests ce n'est pas necessaire 
+/*      WiFi.mode(WIFI_STA); // dixit chatgpt mais d'apres mes tests ce n'est pas necessaire
       vTaskDelay(500);*/
       int numberOfNetworks = WiFi.scanNetworks();
       DEBUG_INFO("[WiFi Scan]\t\tcomplete\n\n");
@@ -3373,7 +3243,7 @@ void setup() {
         int32_t rssi = WiFi.RSSI(i);        // Puissance du signal (RSSI)
         int32_t channel = WiFi.channel(i);  // Canal utilisé
         bool isEncrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
-  
+
         // Affichage des infos du réseau
         /*DEBUG_PRINT("\nRéseau #%d :", i + 1);
         DEBUG_PRINT("\n\tSSID\t\t\t\t: %s", ssid.c_str());
@@ -3382,7 +3252,7 @@ void setup() {
         DEBUG_PRINT("\n\tSécurisé\t\t\t: %s\n", isEncrypted ? "Oui" : "Non");
         */
 
-      }     
+      }
       String data;
       WiFi.scanDelete();
       serializeJson(doc,data);
@@ -3407,8 +3277,8 @@ void setup() {
     }
 
     void httpPost(Request &req, Response &res){
-      
-      //char name[MAX_POST_COMMAND_SIZE]; // 
+
+      //char name[MAX_POST_COMMAND_SIZE]; //
       char* name = (char*) malloc(MAX_POST_COMMAND_SIZE);
 
       #define OPTION_SIZE 128
@@ -3420,53 +3290,53 @@ void setup() {
       unsigned long t0 = millis();
       #define POST_TIME_OUT 5000
 
-      while (req.left() && millis()-t0<POST_TIME_OUT) {        
+      while (req.left() && millis()-t0<POST_TIME_OUT) {
         if (!req.form(name, MAX_POST_COMMAND_SIZE, options, OPTION_SIZE)){
             res.sendStatus(400); // Internal Server Error
             String err = "{\"error\": \"value-pair oversize or missing\"}";
             DEBUG_WARN("\t%s",err.c_str());
             res.print(err.c_str());
             continue; // Ignorer cette itération
-            //return;          
+            //return;
         }
-        
+
         // Vérification de débordement et de validité
-        if (strlen(name) >= MAX_POST_COMMAND_SIZE || strlen(options) >= OPTION_SIZE) {            
+        if (strlen(name) >= MAX_POST_COMMAND_SIZE || strlen(options) >= OPTION_SIZE) {
             res.sendStatus(500); // Internal Server Error
             String err = "{\"error\": \"Parameters too long\"}";
             DEBUG_WARN("\t%s",err.c_str());
             res.print(err.c_str());
             continue; // Ignorer cette itération
-        }        
-        
+        }
+
         DEBUG_INFO("[HTTP-POST]\t\treceived <%s><%s>\n\n",name,options);
-        String jsonAnswer = parseJsonInput(name);        
+        String jsonAnswer = parseJsonInput(name);
 
         // version compressée
         ByteBuffer compressedBuffer;
         size_t chunkedDataSize = bufferToGz(&jsonAnswer,&compressedBuffer);
         res.set("Content-Encoding", "gzip"); // Indique que la réponse est en gzip
         #define PACKET_SIZE 64 // Taille d'un paquet (64 octets)
-        uint8_t packet[PACKET_SIZE];             // Crée un buffer temporaire de 64 octets               
+        uint8_t packet[PACKET_SIZE];             // Crée un buffer temporaire de 64 octets
         //DEBUG_PRINT("\tsending compressed data:");
         while (compressedBuffer.available()) {
           size_t bytesToRead = min(PACKET_SIZE, compressedBuffer.available()); // Détermine le nombre d'octets à lire
           compressedBuffer.readBytes((char*)packet, bytesToRead);
           res.write(packet, bytesToRead);
           //DEBUG_PRINT("%dx...",bytesToRead);
-          yield(); // 
+          yield(); //
         }
 
         /*
-        // avoid using the ByteBuffer class => 
+        // avoid using the ByteBuffer class =>
           uint8_t* dstBuf = NULL;
           size_t dstBufLen = LZPacker::compress( srcBuf, srcBufLen, &dstBuf );
           // do something with dstBuf
-          free(dstBuf);        
+          free(dstBuf);
         */
 
         // version non  compressée
-        /*        
+        /*
         size_t chunkSize = 64;
         size_t totalSize = jsonAnswer.length();
         size_t sentSize = 0;
@@ -3476,21 +3346,21 @@ void setup() {
             res.write((uint8_t*)(jsonAnswer.c_str() + sentSize), currentChunkSize);
             sentSize += currentChunkSize;
             yield();
-        }*/          
+        }*/
 
       }
       free(name);
       res.end();
-      //DEBUG_PRINT("\tend()");      
-    }     
+      //DEBUG_PRINT("\tend()");
+    }
 
     /*void startDirectoryServiceDiscovery(){
       // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
       rtpDir.clear();
       if (hwm->network->media == CABLE_MEDIA){
         // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
-        EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3} 
-        DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");  
+        EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, 5000); // :contentReference[oaicite:3]{index=3}
+        DEBUG_PRINT("\n\n[RTP-bonjour]\t\tScan RTP-MIDI lancé...\n");
       }else{
         // Wifi = bloquant
         xTaskCreate(
@@ -3500,31 +3370,31 @@ void setup() {
           NULL,               // Task input parameter
           1,                  // Priority of the task
           NULL                // Task handle
-        );          
+        );
       }
     }*/
 
 /*    void epDirectoryUpdated(){
       DEBUG_PRINT("\n\n[RTP]\t\tScan terminé (timeout).");
-      DEBUG_PRINT("\n[RTP]\t\t%d endpoint(s) mémorisé(s):\n", rtpDir.epCount);      
+      DEBUG_PRINT("\n[RTP]\t\t%d endpoint(s) mémorisé(s):\n", rtpDir.epCount);
       for (int i = 0; i < rtpDir.epCount; i++) {
         DEBUG_PRINT("\n  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
       }
-      // midi interface has to update its config and regenerate its state      
-      appleMIDIInterface->handleRefresh();     
+      // midi interface has to update its config and regenerate its state
+      appleMIDIInterface->handleRefresh();
     }
 */
 
   private:
     HardwareManager* hwm;
     GUIManager* gui;
-    LinkedList<screenBuilder*> screenBuilders = LinkedList<screenBuilder*>();      
+    LinkedList<screenBuilder*> screenBuilders = LinkedList<screenBuilder*>();
 
     JsonAnswer jsonAnswer;
 
-    JsonList wiFiList;    
+    JsonList wiFiList;
 
-    
+
     String defaultSysConf =
        "{\"" S_PUSHDELAY "\":\"" +String(DEFAULT_PUSH_DELAY)+ "\","
         "\"" S_DCLICREACTIVITY "\":\"250\","
@@ -3541,16 +3411,15 @@ void setup() {
                              "\"shortcut2\":{\"type\":\"macro\",\"properties\":[\"/action/FF\",\"/macro/name/colors\"]},"
                              "\"shortcut3\":{\"type\":\"advanced\",\"properties\":[\"/command//ch/level/03\"]}}"
         "}";
-    
+
     String defaultUserConf = "{}";
 
-    ScreenUnion oldScreen;    
+    ScreenUnion oldScreen;
 
-    LinkedList<String*> countryList = LinkedList<String*>();   
-    //LinkedList<String*> webGZFiles = LinkedList<String*>();   
-    //LinkedList<String*> webFiles = LinkedList<String*>();   
+    LinkedList<String*> countryList = LinkedList<String*>();
+    //LinkedList<String*> webGZFiles = LinkedList<String*>();
+    //LinkedList<String*> webFiles = LinkedList<String*>();
 
-    IWebSocketServer *wss{ nullptr };        
 
     uint32_t minHeapSize,maxHeapSize;
 
@@ -3571,10 +3440,10 @@ void setup() {
       // copie du contenu dans "device"
       device.set(ifJson.as<JsonObject>());
 
-      jsonAnswer.callback = bulkconfig;       
+      jsonAnswer.callback = bulkconfig;
 
-      serializeJson(doc, jsonAnswer.value);  
-      removeJsonQuote(&jsonAnswer.value);       
+      serializeJson(doc, jsonAnswer.value);
+      removeJsonQuote(&jsonAnswer.value);
 
       JsonDocument jsonOutput;
       jsonOutput[jsonAnswer.callback] = jsonAnswer.value;
@@ -3584,7 +3453,7 @@ void setup() {
       removeJsonQuote(&jsonString);
 
       jsonOutput.shrinkToFit();
-      broadCast(jsonString);      
+      broadCast(jsonString);
     }
 
     void populateFileList(String extension, String folder, LinkedList<String*> *list, String prefix="", bool withExtension=true) {
@@ -3603,11 +3472,11 @@ void setup() {
           String fullFileName = file.name();
           if (fullFileName.endsWith(extension) || extension == "*") {
             String* filename = new String(prefix);
-            // if we don't want the extension, we remmove it          
+            // if we don't want the extension, we remmove it
             if (!withExtension) *filename += fullFileName.substring(0, fullFileName.lastIndexOf('.'));
             else *filename += fullFileName; // k is the icon ID
             list->add(filename);
-            //DEBUG_PRINT("\n\t %s",filename->c_str());          
+            //DEBUG_PRINT("\n\t %s",filename->c_str());
           }
         }
         file = root.openNextFile();
@@ -3621,34 +3490,34 @@ void setup() {
     Menu* profile_menu_item;
     MenuItem* save_profile_menu_item;
     MenuItem* tft_rotation_menu_item;
-    MenuItem* reset_menu_item;   
-    MenuItem* shutdown_menu_item; 
-    MenuItem* brightness_menu_item; 
-    MenuItem* fmw_update_menu_item; 
+    MenuItem* reset_menu_item;
+    MenuItem* shutdown_menu_item;
+    MenuItem* brightness_menu_item;
+    MenuItem* fmw_update_menu_item;
 
     void refreshBankMenu(){
       if (bankMenu != nullptr) delete bankMenu;
-      bankMenu = new MenuSystem(*this); 
+      bankMenu = new MenuSystem(*this);
 
-      if (banks.size()>1){                      
+      if (banks.size()>1){
         // populate the menu with all banks
         for(int i = 0; i < banks.size(); i++){
           const char* bankName = banks[i]->name.c_str();
-          bankMenu->get_root_menu().add_item(new MenuItem(bankName, &switchToBank_item_selected));                
+          bankMenu->get_root_menu().add_item(new MenuItem(bankName, &switchToBank_item_selected));
           if (debug){
-            //DEBUG_PRINT("\nadded bank switch item entry: %s",bankName);           
+            //DEBUG_PRINT("\nadded bank switch item entry: %s",bankName);
           }
         }
-      }else{        
+      }else{
         if (banks.size() == 1){
-          bankMenu->get_root_menu().add_item(new MenuItem(banks[0]->name.c_str(), &switchToBank_item_selected));               
-          DEBUG_INFO("Menu bank one item: %s",banks[0]->name.c_str());  
+          bankMenu->get_root_menu().add_item(new MenuItem(banks[0]->name.c_str(), &switchToBank_item_selected));
+          DEBUG_INFO("Menu bank one item: %s",banks[0]->name.c_str());
         }else{
-          bankMenu->get_root_menu().add_item(new MenuItem(lang.getString(NO_BANK_MENU_ITEM)->c_str(),&back_menu_item_selected));                         
+          bankMenu->get_root_menu().add_item(new MenuItem(lang.getString(NO_BANK_MENU_ITEM)->c_str(),&back_menu_item_selected));
           DEBUG_WARN("Empty menu bank");
         }
       }
-    }    
+    }
 
 };
 

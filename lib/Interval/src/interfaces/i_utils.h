@@ -460,21 +460,6 @@ class WebApplicationService: public NetworkDevice{
       DEBUG_INFO("WebAppservices down");
     }
 
-  protected:
-    WebServerHandler webServerHandler = nullptr;
-    WebSocketHandler webSocketHandler = nullptr;
-
-    char hdrContentType[120];
-    char hdrContentLength[20];
-
-    void shutdownWSS(){
-      if (wss != nullptr){
-        wss->shutdown();
-        delete wss;
-        wss = nullptr;
-      }
-    }
-
     void setWSServer(){
       if (webServer == nullptr) return;
 
@@ -492,7 +477,24 @@ class WebApplicationService: public NetworkDevice{
       if (webSocketHandler != nullptr) wss->onConnection(webSocketHandler);
       wss->begin();
     }
+
+  protected:
+    WebServerHandler webServerHandler = nullptr;
+    WebSocketHandler webSocketHandler = nullptr;
+
+    char hdrContentType[120];
+    char hdrContentLength[20];
+
+    void shutdownWSS(){
+      if (wss != nullptr){
+        wss->shutdown();
+        delete wss;
+        wss = nullptr;
+      }
+    }
 };
+
+WebApplicationService gWebApplicationService(false);    // internal web app lifecycle service
 
 
 #endif

@@ -2272,7 +2272,10 @@ void handleConfigConnection(){
       screen.state = STATE_UTILS_WEBAPPCONNECTED;    
   }else{
   // socket is not connected so we launch the webapp
-    if (app.startWebApp()){
+    if (app.webAppService != nullptr){
+      app.webAppService->switchDevice(true);
+    }
+    if (app.webAppService != nullptr && app.webAppService->state.code == IF_READY){
       screen.id = SCREEN_UTILS;
       screen.state = STATE_UTILS_CONNECTWEBAPP;    
     }else{
@@ -2719,7 +2722,8 @@ void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, con
 void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *reason, uint16_t length) {
   DEBUG_INFO("\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
   //DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
-  app.webAppConnected = false;  
+  app.webAppConnected = false;
+  if (app.webAppService != nullptr) app.webAppService->switchDevice(false);
 }
 
 
