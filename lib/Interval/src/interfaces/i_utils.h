@@ -2,6 +2,10 @@
 #define _IUTILS_h  
 
 #include "Interfaces.h"
+#include <aWOT.h>
+#include <WebSocketServer.hpp>
+
+using namespace net;
 
  
 #define ADDRESS_PROVIDER      "/provider/"
@@ -346,6 +350,149 @@ class DirectoryInterface: public NetworkDevice{
 
 }directoryService(true);    // exposed
 DirectoryInterface* DirectoryInterface::instance_ = nullptr;
+
+
+class WebApplicationService: public NetworkDevice{
+  #define WEBAPP_INTERFACE "WebApplication"
+
+  public:
+    using WebServerHandler = void (*)(Request&, Response&);
+    using WebSocketHandler = void (*)(IWebSocket&);
+
+    Application* webServer = nullptr;
+    IWebSocketServer* wss = nullptr;
+
+    WebApplicationService(bool _configurable = false):NetworkDevice(WEBAPP_INTERFACE,GROUP_INTERFACE_UTILS,80,80,"",_configurable){}
+
+    virtual void load() override{
+      DEBUG_INFO("%s::load() default ignored => DISABLED", interfaceName.c_str());
+      state.enabled = false;
+      hasStrip = false;
+    }
+
+    virtual bool begin() override{
+      DEBUG_INFO("%s::begin()", interfaceName.c_str());
+      return NetworkDevice::begin();
+    }
+
+    virtual bool save() override{
+      DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str());
+      return true;
+    }
+
+    virtual void monitorService() override{
+      handleWeb();
+    }
+
+    virtual bool ping() override{return true;}
+
+    virtual bool handleConnectService() override{
+      bool started = startWebApp();
+      if (started) setStateReady();
+      return started;
+    }
+
+    virtual bool handleDisconnectService() override{
+      stopWebApp();
+      setStateDisconnected();
+      return true;
+    }
+
+    void setWebServerHandler(WebServerHandler callback){
+      webServerHandler = callback;
+    }
+
+    void setWebSocketHandler(WebSocketHandler callback){
+      webSocketHandler = callback;
+    }
+
+    void handleWeb(){
+      Network* configMedia = hwm.configMedia;
+
+      if (configMedia != nullptr && configMedia->state == CONNECTED){
+        if(webServer != nullptr){
+          if (configMedia->media == CABLE_MEDIA){
+            EthernetClient newEthClient = ((EthernetServer*)configMedia->server)->available();
+            if (newEthClient) {
+              webServer->process(&newEthClient);
+              newEthClient.stop();
+            }
+          }else if (configMedia->media == WIFI_MEDIA){
+            WiFiClient newWiFiClient = ((WiFiServer*)configMedia->server)->available();
+            if (newWiFiClient.connected()) {
+              webServer->process(&newWiFiClient);
+              newWiFiClient.stop();
+            }
+          }
+        }
+        if (wss != nullptr) wss->listen();
+      }
+    }
+
+    bool startWebApp(){
+      if (hwm.configMedia == nullptr) return false;
+      if (hwm.configMedia->state != CONNECTED) return false;
+
+      if (webServer == nullptr){
+        DEBUG_INFO("[WEBAPP]\t\tstart");
+
+        webServer = new Application();
+        webServer->setTimeout(3000);
+        webServer->header("Content-Type", hdrContentType, sizeof(hdrContentType));
+        webServer->header("Content-Length", hdrContentLength, sizeof(hdrContentLength));
+
+        if (webServerHandler != nullptr) webServer->use(webServerHandler);
+
+        setWSServer();
+      }
+
+      hwm.configURL = concatStrings("http://", hwm.configMedia->IP.toString());
+      DEBUG_INFO("[WEBAPP]\t\tserving on %s", hwm.configURL.c_str());
+      return true;
+    }
+
+    void stopWebApp(){
+      shutdownWSS();
+      if (webServer != nullptr){
+        delete webServer;
+        webServer = nullptr;
+      }
+      DEBUG_INFO("WebAppservices down");
+    }
+
+  protected:
+    WebServerHandler webServerHandler = nullptr;
+    WebSocketHandler webSocketHandler = nullptr;
+
+    char hdrContentType[120];
+    char hdrContentLength[20];
+
+    void shutdownWSS(){
+      if (wss != nullptr){
+        wss->shutdown();
+        delete wss;
+        wss = nullptr;
+      }
+    }
+
+    void setWSServer(){
+      if (webServer == nullptr) return;
+
+      shutdownWSS();
+
+      if (hwm.configMedia->media == CABLE_MEDIA){
+        wss = new WebSocketServer<EthernetServer, EthernetClient, 1>{};
+      }else if (hwm.configMedia->media == WIFI_MEDIA){
+        wss = new WebSocketServer<WiFiServer, WiFiClient, 1>{};
+      }else{
+        DEBUG_ERROR("[WSS]\t\tinstanciation failed, no media");
+        return;
+      }
+
+      if (webSocketHandler != nullptr) wss->onConnection(webSocketHandler);
+      wss->begin();
+    }
+};
 
 
 #endif
