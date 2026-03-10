@@ -111,13 +111,17 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
             }else{
               char addr[64];
               osc.getAddress(addr, 0);
-              DEBUG_INFO("<<%s(%s,%i) ",addr,destination.ip.toString().c_str(),remotePort);
 
               // see if it's a ping, we measure
-              if ( destination.echoCommand == addr ) determineQoS();
+              if ( destination.echoCommand == addr ){
+                destination.ip = udp->remoteIP();           
+                determineQoS();             
+              }
 
               // we now forward the event
               // before that we may filter here some message (ex. the ping...)
+              DEBUG_INFO("<<%s(%s,%i) ",addr,destination.ip.toString().c_str(),remotePort);              
+
               fireEvent(evtOSC);
 
             }              

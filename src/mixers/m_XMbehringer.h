@@ -53,6 +53,7 @@ class BehringerXM: public NetworkOSC, public MixerInterface{
       sprintf(buf,ADDRESS_CONNECT_METHOD,connectMethod);
       properties.add(String(buf));
       free(buf); 
+
     }
 
     virtual bool restoreProperty(const char* property) override{     
