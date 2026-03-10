@@ -9,6 +9,7 @@
 0.20 - compatibility with code server
 0.21 - udp connectivity hardening
 0.22 - interfaces refactor + better state management
+0.xx - event and data handing
 */
 
 
