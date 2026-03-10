@@ -344,10 +344,14 @@ class Event {
 public:
   virtual ~Event() = default;
 
-  virtual EventType type() const = 0;
+  Event(void* _data=nullptr):data(_data){};
+
+  EventType type;
+
+  void* data;
 
   virtual const char* name() const {
-    return getEventName(type());
+    return getEventName(type);
   }
 
   virtual const char* serialize() const {
@@ -399,7 +403,7 @@ public:
   }
 
   void dump(const char* direction, const char* caller) const {
-    if (!isEventDumpEnabled(type())) return;
+    if (!isEventDumpEnabled(type)) return;
 
     DEBUG_INFO("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
     DEBUG_INFO("| %s %s %s %s", caller, direction, name(),serialize());
@@ -2122,78 +2126,16 @@ void expandTGZstreamToFSTask(void* parameter){
 }                              
 
 WiFiEvent_t wiFiEvent;
+Event evtWiFi(&wiFiEvent);
 ////////////////////////////////////////////////////////////////////////
 ///////////////////////                              ///////////////////
 ///////////////////////  EVENTS HANDLERS             ///////////////////
 ///////////////////////                              ///////////////////
 //////////////////////////////////////////////////////////////////////// 
-class NetworkEvent : public Event {
-public:
-
-  explicit NetworkEvent(WiFiEvent_t evt)
-  : _event(evt) {}
-
-  EventType type() const override {return EVENT_NETWORK;}
-
-  WiFiEvent_t event() const {
-    return _event;
-  }
-
-  const char* serialize() const override {
-
-    switch (_event) {
-
-      case ARDUINO_EVENT_WIFI_READY:
-        return("|   WIFI_READY");
-        break;
-
-      case ARDUINO_EVENT_WIFI_STA_START:
-        return("|   STA_START");
-        break;
-
-      case ARDUINO_EVENT_WIFI_STA_CONNECTED:
-        return("|   STA_CONNECTED");
-        break;
-
-      case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
-        return("|   STA_DISCONNECTED");
-        break;
-
-      case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-        return("|   STA_GOT_IP");
-        break;
-
-      case ARDUINO_EVENT_WIFI_STA_LOST_IP:
-        return("|   STA_LOST_IP");
-        break;
-
-      case ARDUINO_EVENT_WIFI_AP_START:
-        return("|   AP_START");
-        break;
-
-      case ARDUINO_EVENT_WIFI_AP_STOP:
-        return("|   AP_STOP");
-        break;
-
-      default:
-        return("|   UNKNOWN WIFI EVENT");
-        break;
-    }
-  }
-
-private:
-
-  WiFiEvent_t _event;
-
-};
-
-
-
-
 
 void OnWiFiEvent(WiFiEvent_t wifiEvent){
-  NetworkEvent evt(wifiEvent);
-  app.fireEvent(evt);
+  evtWiFi.type = EVENT_NETWORK;
+  app.fireEvent(evtWiFi);
   // below line is to avoid that a call to start wifi cut a pending connection DIRTY CODE
   if (wifiEvent == ARDUINO_EVENT_WIFI_STA_CONNECTED){    
     hwm.network->wiFiTimeout = 10000; // we let 10s to get the IP and setup the wifi link

@@ -25,96 +25,10 @@ using namespace net;
 using WiFiWebSocketClient = WebSocketClient<WiFiClient>;
 using EthernetWebSocketClient = WebSocketClient<EthernetClient>;
 
-/* DEFINITION DES EVENEMENTS */
-class NetworkConnectedEvent : public Event {
-public:
-  EventType type() const override { return EVENT_NETWORK_CONNECTED; }
-};
-
-class NetworkDisconnectedEvent : public Event {
-public:
-  EventType type() const override { return EVENT_NETWORK_DISCONNECTED; }
-};
-
-class NetworkPlugEthWhileWiFiConnected : public Event {
-public:
-  EventType type() const override { return EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED; }
-};
-
-class NetworkConnectionChangeEvent : public Event {
-public:
-  EventType type() const override { return EVENT_NETWORK_CONNECTION_CHANGED; }
-};
-
-class PingEvent : public Event {
-public:
-    TargetEcho* target;
-    EventType type() const override { return EVENT_INTERNET_PING; }
-
-    explicit PingEvent(TargetEcho* ev_target)
-    : target(ev_target) {}
-
-    TargetEcho* event() const {
-      return target;
-    }    
-
-    virtual const char* serialize() const override {
-      return target->host.c_str();
-    }    
-};
-
 struct SocketData{
   uint16_t length;
   const char* message="";
   int code;
-};
-
-class SocketEvent: public Event{
-
-  public:
-    
-    virtual const char* serialize() const {
-      return _data.message;
-    }
-    
-    const SocketData* data() const{
-      return &_data;
-    } 
-
-  protected:
-    SocketData _data;
-};
-
-class SocketOpenEvent : public SocketEvent {
-public:
-    EventType type() const override { return EVENT_SOCKET_OPEN; }  
-};
-
-class SocketErrorEvent : public SocketEvent {
-public:
-    EventType type() const override { return EVENT_SOCKET_ERROR; }
-    explicit SocketErrorEvent(int errcode){
-      _data.code = errcode;
-    }     
-};
-
-class SockeCloseEvent : public SocketEvent {
-public:
-    EventType type() const override { return EVENT_SOCKET_CLOSE; }
-    explicit SockeCloseEvent(int code,const char* reason, uint16_t len){
-      _data.code = code;
-      _data.message = reason;
-      _data.length = len;
-    }     
-};
-
-class SockeMessageEvent : public SocketEvent {
-public:
-    EventType type() const override { return EVENT_SOCKET_MESSAGE; }
-    explicit SockeMessageEvent(const char* message, uint16_t len){
-      _data.message = message;
-      _data.length = len;
-    }     
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -279,28 +193,22 @@ enum BatteryState {
     BAT_DISCHARGING,
 };
 
-class BatteryRefreshEvent : public Event {
-public:
-  EventType type() const override { return EVENT_BATTERY_REFRESHED; }
-};
-
-
 class BatteryMonitor : public HWComponent{
   // read https://forum.seeedstudio.com/t/xiao-ble-sense-mbed-2-7-2-battery-charge-and-voltage-monitor-analogread-p0-31-does-not-work/266438
 
   public:
+    Event evt;
+
     uint8_t indicator = BAT_FULL_LEVEL;
     float vBat = VBAT_MAX;
     // Global variables for tracking battery state
     float previousVBat = 0.0;
     BatteryState batteryState = BAT_CHECKING;
 
-    BatteryRefreshEvent evt;
-
-
     BatteryMonitor(uint8_t p, boolean d=true): HWComponent(p,d){
       pinMode(CSPin, INPUT);
       id = concatStrings("BatteryMonitor~", p);
+      evt.type = EVENT_BATTERY_REFRESHED;
     };
 
     virtual void init(){
@@ -416,45 +324,22 @@ public:
   }
 };
 
-class ButtonEventBase : public Event {
+class ButtonEvent : public Event {
 public:
-  ButtonEventBase(EventType type, const ButtonData& data)
-    : _type(type), _data(data) {}
-
-  EventType type() const override {
-    return _type;
-  }
-
-  const ButtonData& data() const {
-    return _data;
-  }
 
   const char* serialize() const override {
     snprintf(_buffer, sizeof(_buffer),
              "buttonType=%s(%u), buttonId=%u, time=%lu",
-             ButtonEventNames::toString(_data.id),
-             _data.id,
-             _data.buttonId,
-             _data.time);
+             ButtonEventNames::toString(((ButtonData*)data)->id),
+             ((ButtonData*)data)->id,
+             ((ButtonData*)data)->buttonId,
+             ((ButtonData*)data)->time);
     return _buffer;
   }
 
 private:
-  EventType _type;
-  const ButtonData& _data;
+
   mutable char _buffer[96] = {0};
-};
-
-class EventButtonDigital : public ButtonEventBase {
-public:
-  explicit EventButtonDigital(const ButtonData& data)
-    : ButtonEventBase(EVENT_DIGITAL_BUTTON, data) {}
-};
-
-class EventButtonAnalog : public ButtonEventBase {
-public:
-  explicit EventButtonAnalog(const ButtonData& data)
-    : ButtonEventBase(EVENT_ANALOG_BUTTON, data) {}
 };
 
 enum EventID {
@@ -467,7 +352,7 @@ enum EventID {
 
 class Button : public HWComponent2State {
 public:
-
+  ButtonEvent evtBtn;
 
   unsigned long pushedTime = 0;
   bool doubleClic = false;
@@ -475,7 +360,7 @@ public:
   uint16_t push_reactivity = DEFAULT_PUSH_DELAY;
   uint16_t dClic_reactivity = DEFAULT_DCLIC_DELAY;
 
-  ButtonData btEvent = {};
+  ButtonData btData = {};
 
   Button(uint8_t p,
          int e = LOW,
@@ -486,6 +371,7 @@ public:
     edge = e;
     push_reactivity = push;
     dClic_reactivity = dClic;
+    evtBtn.data = &btData;
   }
 
   virtual void init() {
@@ -504,7 +390,7 @@ public:
     HWComponent2State::refresh(force);
 
     if (refreshed) {
-      btEvent.buttonId = getID();
+      btData.buttonId = getID();
       startDebouceTime = millis();
 
       if (state != edge) { // released
@@ -580,13 +466,13 @@ public:
   virtual void setID(uint8_t id) = 0;
 
 protected:
-  void prepareButtonEvent(uint8_t eventId, unsigned long eventTime) {
-    btEvent.id = eventId;
-    btEvent.buttonId = getID();
-    btEvent.time = eventTime;
-  }
 
-  virtual void emitButtonEvent(uint8_t eventId, unsigned long eventTime) = 0;
+  void emitButtonEvent(uint8_t eventId, unsigned long eventTime) {
+    btData.id = eventId;
+    btData.buttonId = getID();
+    btData.time = eventTime;
+    fireEvent(evtBtn);   // remplace par fireEvent(&evt) si ton code n'a pas encore migré en référence
+  }
 
 private:
   int edge;
@@ -606,9 +492,10 @@ public:
                 boolean d = false,
                 uint16_t push = DEFAULT_PUSH_DELAY,
                 uint16_t dClic = DEFAULT_DCLIC_DELAY)
-    : Button(p, e, d, push, dClic),
-      evt(btEvent) {
+    : Button(p, e, d, push, dClic)
+      {
     pinMode(p, mode);
+    evtBtn.type = EVENT_DIGITAL_BUTTON;
     id = concatStrings("DigitalButton~", getID());
   }
 
@@ -620,14 +507,8 @@ public:
     CSPin = id;
   }
 
-protected:
-  void emitButtonEvent(uint8_t eventId, unsigned long eventTime) override {
-    prepareButtonEvent(eventId, eventTime);
-    fireEvent(evt);   // remplace par fireEvent(&evt) si ton code n'a pas encore migré en référence
-  }
 
 private:
-  EventButtonDigital evt;
 
   virtual void read() override {
     bool input1 = digitalRead(CSPin);
@@ -650,9 +531,10 @@ public:
                boolean d = true,
                uint16_t push = DEFAULT_PUSH_DELAY,
                uint16_t dClic = DEFAULT_DCLIC_DELAY)
-    : Button(i->CSPin, e, d, push, dClic),
-      evt(btEvent) {
+    : Button(i->CSPin, e, d, push, dClic)
+      {
     input = i;
+    evtBtn.type = EVENT_ANALOG_BUTTON;
     pinMode(input->CSPin, INPUT);
     virtualID = bCount;
     id = concatStrings("LadderButton~", getID());
@@ -667,15 +549,8 @@ public:
     virtualID = id;
   }
 
-protected:
-  void emitButtonEvent(uint8_t eventId, unsigned long eventTime) override {
-    prepareButtonEvent(eventId, eventTime);
-    fireEvent(evt);   // remplace par fireEvent(&evt) si besoin
-  }
-
 private:
   AnalogIn* input = nullptr;
-  EventButtonAnalog evt;
 
   #define RESOLUTION 4095
     //https://www.ignorantofthings.com/2018/07/the-perfect-multi-button-input-resistor.html
@@ -880,6 +755,12 @@ class Network : public HWComponent2State{
     WebSocketClient<WiFiClient> *wsWiFiClient{ nullptr };
     WebSocketClient<EthernetClient> *wsEthClient{ nullptr };
 
+    SocketData socketData;
+    Event evtSock = Event(&socketData);    
+    
+    Event evtNet;
+
+    
     float networkConnectAttemptProgress = 0.0;
 
     String iFconnectivityIcon = ICON_MIXETHWIFI;
@@ -1509,25 +1390,31 @@ class WiFiEth : public Network{
     ///////////////////// Instance callback methods /////////////////////////////////////
 
     void socketClientOnErrorCallback(WebSocketError error) {
-      SocketErrorEvent evt((int)error);
-      fireEvent(evt);
+      evtSock.type = EVENT_SOCKET_ERROR;
+      socketData.code = (int)error;
+      fireEvent(evtSock);
     }
 
     void socketClientOnClose(WebSocketCloseCode code, const char *reason,uint16_t length){
-      SockeCloseEvent evt(code,reason,length);
-      fireEvent(evt);      
+      evtSock.type = EVENT_SOCKET_CLOSE;
+      socketData.code = (int)code;
+      socketData.message = reason;
+      socketData.length = length;
+      fireEvent(evtSock);
     }    
 
     void socketClientOnOpenCallback() {
-      SocketOpenEvent evt;
-      fireEvent(evt);       
+      evtSock.type = EVENT_SOCKET_OPEN;
+      fireEvent(evtSock);
     }
 
     void socketClientOnMessageCallback(const WebSocketDataType dataType,const char *message, uint16_t length){
       switch (dataType) {
         case net::WebSocketDataType::TEXT:{
-          SockeMessageEvent evt(message,length);
-          fireEvent(evt); 
+          evtSock.type = EVENT_SOCKET_MESSAGE;
+          socketData.message = message;
+          socketData.length = length;
+          fireEvent(evtSock);
         }
         break;
         case net::WebSocketDataType::BINARY:
@@ -1684,8 +1571,8 @@ class WiFiEth : public Network{
       }else if (state == CONNECTED) {
         //ethernet has priority over wifi, hence if we are connected by WiFi but the cable is plugged, we disconnect WiFi
         if (media == WIFI_MEDIA && cable == LinkON){
-          NetworkPlugEthWhileWiFiConnected evt;
-          fireEvent(evt);        
+          evtNet.type = EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED;
+          fireEvent(evtNet);        
           disconnectWifi();
           state = DISCONNECTED; // cable will try reconnect at next refresh
           lastEthAttempt = 0; // with no delay
@@ -1764,8 +1651,8 @@ class WiFiEth : public Network{
           
 
           ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
-          NetworkConnectedEvent evt;
-          fireEvent(evt);  
+          evtNet.type = EVENT_NETWORK_CONNECTED;
+          fireEvent(evtNet);  
 
         }else if (state == DISCONNECTED){
           if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){          
@@ -1800,8 +1687,8 @@ class WiFiEth : public Network{
             DEBUG_INFO("+----------------------------+");
 
             ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
-            NetworkDisconnectedEvent evt;
-            fireEvent(evt);                         
+            evtNet.type = EVENT_NETWORK_DISCONNECTED;
+            fireEvent(evtNet);  
 
             xSemaphoreGive(networkBusy);              
           }else{
@@ -1810,8 +1697,8 @@ class WiFiEth : public Network{
           restoreWiFiSSID();
         }
 
-        NetworkConnectionChangeEvent evt;
-        fireEvent(evt);       
+        evtNet.type = EVENT_NETWORK_CONNECTION_CHANGED;
+        fireEvent(evtNet);    
 
       }
 
@@ -2108,13 +1995,13 @@ class AccessPoint : public Network{
           //if (debug) DEBUG_PRINT("\nCient connected to AP");
           if (server == NULL) server = new WiFiServer(80,1);         
           server->begin();
-          NetworkConnectedEvent evt;
-          fireEvent(evt);         
+          evtNet.type = EVENT_NETWORK_CONNECTED;
+          fireEvent(evtNet);          
         }else{
           //if (debug) DEBUG_PRINT("\nCient disconnected from AP");
           if (server != NULL){if (debug) DEBUG_INFO("DELETING SERVER");delete server; server  = NULL;} 
-          NetworkDisconnectedEvent evt;
-          fireEvent(evt);  
+          evtNet.type = EVENT_NETWORK_DISCONNECTED;
+          fireEvent(evtNet);    
         }                
       }
       return refreshed;

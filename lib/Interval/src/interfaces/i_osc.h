@@ -11,22 +11,12 @@
 };*/
 
 
-class OscMessageEvent : public Event {
-public:
-  explicit OscMessageEvent(OSCMessage& msg) : _msg(msg) {}
-  EventType type() const override {return EVENT_OSC_MESSAGE;}
-  OSCMessage& message() const {return _msg;}
-  const char* serialize() const override {return _msg.getAddress();}
-private:
-  OSCMessage& _msg;
-};
-
 class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
     OSCMessage osc;
-    OscMessageEvent oscEvent{osc};        //Comme OscMessageEvent contient une référence, il est obligatoire de l’initialiser dans la liste d’initialisation du constructeur, CCCCC
+    Event evtOSC = Event(&osc);
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
@@ -128,7 +118,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
               // we now forward the event
               // before that we may filter here some message (ex. the ping...)
-              fireEvent(oscEvent);
+              fireEvent(evtOSC);
 
             }              
             // ✔ message valide
@@ -241,7 +231,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
       }
 
-      DEBUG_INFO("\t latency: %i, jitter:%i",destination.latency,destination.jitter);      
+      DEBUG_PRINT("\t latency: %i, jitter:%i",destination.latency,destination.jitter);      
 
       // Sécurité bornes
       if (destination.latency > 500) destination.latency = 500;

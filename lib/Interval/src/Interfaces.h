@@ -37,7 +37,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     String interfaceName; 
   
-    int dataAvailable;
+    bool dataAvailable;
     //void* data;                 // will be replaced by EVENT QUEUE : MUST BE AFFECTED IN CONSTRUCTOR OF DERIVED CLASS AND THEN CASTED IN THE UPDATE() MEDTHOD OF STRIP (WHICH IS CALLED WHEN AVAILABLE RETURN > 0 in STRIP PROCESS())    
 
     bool exposed = true;          // 
@@ -746,7 +746,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
     void onEvent(const Event& evt) override {
       // recive the event propagated from Appmanager
-      switch(evt.type()){
+      switch(evt.type){
         case EVENT_NETWORK_DISCONNECTED:
           disable();
           break;

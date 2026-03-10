@@ -34,16 +34,6 @@ struct MidiData{
   unsigned length;  
 };
 
-
-class MidiEvent : public Event {
-public:
-  const MidiData& midiData;
-  EventType type() const override { return EVENT_SOCKET_MESSAGE; }
-  explicit MidiEvent(const MidiData& _midiData):midiData(_midiData){}
-  const MidiData& data() const{return midiData;}
-};
-
-
 #ifdef DEBUG
   class USBMIDISimul{
     public:
@@ -74,11 +64,14 @@ class MIDIInterface: public DeviceInterface{
   public:
 
     MidiData midiData;
+    Event evtMidi = Event(&midiData);
 
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
       //data = &midiData;       // this inertaface handle  MidiData
     }
    
+    
+
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
@@ -95,9 +88,18 @@ class MIDIInterface: public DeviceInterface{
         }      
     }
 
+    virtual void monitor(){  
+      if (dataAvailable){
+        fireEvent(evtMidi);
+        dataAvailable = false;
+      }
+    }
+
     virtual void handleChangeControl(byte channel, byte number, byte value){
       DEBUG_INFO("handleChangeControl channel:%i, number:%i value:%i",channel,number,value);
 
+      if (dataAvailable) return; // previous data has not been ocnsummed yet so we ignore it (we could make a queue)
+      
       midiData.type = MIDI_CC;
       midiData.channel = channel;
       midiData.number = number;
@@ -108,6 +110,9 @@ class MIDIInterface: public DeviceInterface{
 
     virtual void handleSysex(byte* sysexdata, unsigned length){
       DEBUG_INFO("handleSysex: %c, %i bytes: ",getSysExStatus(sysexdata, length),length);
+
+      if (dataAvailable) return; // previous data has not been ocnsummed yet so we ignore it (we could make a queue)
+
       for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",sysexdata[i]);
 
       // ------------------------------------------------------------------------
@@ -127,7 +132,7 @@ class MIDIInterface: public DeviceInterface{
         }
       }
 
-      dataAvailable = length;
+      dataAvailable = 1;
     } 
 
 
@@ -170,6 +175,7 @@ class BLEMIDIInterface: public MIDIInterface{
     }
 
     virtual void monitor(){     
+      MIDIInterface::monitor();
       if (state.label == IF_STATE_CONNECTED) 
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
@@ -293,6 +299,7 @@ class USBMIDIInterface: public MIDIInterface{
     }
 
     virtual void monitor() override{
+      MIDIInterface::monitor();
       if (useUSBMidi){  // only if USB is active
         #define USB_POLL_DELAY  1000
         if (millis()-lastPoll > USB_POLL_DELAY){  
@@ -371,7 +378,9 @@ class DINMIDIInterface: public MIDIInterface{
       return true;
     };        
 
-    virtual void monitor() override{}
+    virtual void monitor() override{
+      MIDIInterface::monitor();      
+    }
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override {return false;}
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) override {return false;}
@@ -443,6 +452,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     
     String savedSession="";
 
+    Event evt;
+
     AppleMidiSessionType dsAppleMidiSessions = AppleMidiSessionType(new DropDownAddress(ADDRESS_APPLEMIDISESSION));
     RtpDirectory* rtpDirectory = nullptr;     // directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
     
@@ -507,7 +518,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       // reset the timer so we are not interrupted by a startSession()
       lastInvite = millis();
       // ask the application to perform a service discovery    
-      RequestDirectroyServiceRefreshEvent evt;
+      evt.type = EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH;
       fireEvent(evt);            
     }
 
@@ -518,10 +529,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
     void onEvent(const Event& evt) override {
       // recive the event propagated from Appmanager
-      switch(evt.type()){
+      switch(evt.type){
         case EVENT_DIRECTORY_SERVICE_REFRESHED:{       
-          const auto& e = static_cast<const DirectoryServiceRefreshedEvent&>(evt);
-          rtpDirectory = e.getDirectory();        
+          rtpDirectory = (RtpDirectory*)evt.data;
           populateSessionOptions();     // regenerate the config data set
           if (!serviceLocked) recallState();        // recall the state we had before refresh request, except if current state is locked          
           state.broadcastState = true; // communicate the new state
@@ -737,6 +747,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }      
 
     virtual void monitor() override{     
+      MIDIInterface::monitor();      
       monitorNetwork();      
     }
 

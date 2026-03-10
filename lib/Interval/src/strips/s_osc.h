@@ -49,7 +49,7 @@ class OSCStrip : public Strip{  // should inherit from MidiStrip before so metho
     }
 
     void onEvent(const Event& evt) override {
-      switch (evt.type()) {
+      switch (evt.type) {
         /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
         break;*/
       }

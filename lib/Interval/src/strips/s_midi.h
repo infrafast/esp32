@@ -231,7 +231,7 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
     }  */
 
     void onEvent(const Event& evt) override {
-      switch (evt.type()) {
+      switch (evt.type) {
         /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
         break;*/
       }
@@ -298,7 +298,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
     }
 
     void onEvent(const Event& evt) override {
-      switch (evt.type()) {
+      switch (evt.type) {
         /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
         break;*/
       }

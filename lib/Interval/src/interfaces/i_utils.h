@@ -103,36 +103,13 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     
 }systemInterface(false);      // not exposed
 
-class RequestDirectroyServiceRefreshEvent : public Event {
-public:
-  EventType type() const override { return EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH; }
-};
-
-class DirectoryServiceNotREady : public Event {
-public:
-  EventType type() const override { return EVENT_DIRECTORY_NOT_READY; }
-};
-
-class DirectoryServiceRefreshedEvent : public Event {
-public:
-  RtpDirectory* directory;
-
-  EventType type() const override { return EVENT_DIRECTORY_SERVICE_REFRESHED; }
-
-  explicit DirectoryServiceRefreshedEvent(RtpDirectory* _directory)
-  : directory(_directory) {}  
-
-  RtpDirectory* getDirectory() const {
-    return directory;
-  }   
-};
-
 
 class DirectoryInterface: public DeviceInterface, public NetWorkService{
     #define DIRECTORY_INTERFACE "Directory"
     public:    
 
       RtpDirectory rtpDir;
+      Event evtDir = Event(&rtpDir);
 
       DirectoryInterface(bool _configurable = false):DeviceInterface(DIRECTORY_INTERFACE,GROUP_INTERFACE_UTILS,_configurable),NetWorkService(){
         attachDeviceInterface(this);
@@ -205,7 +182,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
       }
 
       void onEvent(const Event& evt) override {
-        switch(evt.type()){
+        switch(evt.type){
           case EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH:
             discoveryRequest();
           break;        
@@ -311,14 +288,14 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           DEBUG_INFO("  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
         }
         // midi interface has to update its config and regenerate its state      
-        DirectoryServiceRefreshedEvent evt(&rtpDir);
-        fireEvent(evt);
+        evtDir.type = EVENT_DIRECTORY_SERVICE_REFRESHED;
+        fireEvent(evtDir);
       }
 
       void epDirectoryNotReady(){
         DEBUG_INFO("[RTP]\t\tDirectory not ready");
-        DirectoryServiceNotREady evt;
-        fireEvent(evt);        
+        evtDir.type = EVENT_DIRECTORY_NOT_READY;
+        fireEvent(evtDir);        
       }      
 
       void epDirectoryRefresh(){

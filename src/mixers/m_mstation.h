@@ -14,10 +14,6 @@ class MixingStation: public NetworkSocket, public MixerInterface{
       //destination.host = "192.168.99.99";
     }
 
-    virtual void process() override{
-      // SocketDataCopy data has been updated, we use it :-)
-    }
- 
     virtual bool ping() override{
       hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));  // forge a MS get json query with echoCommand as the path
       return true;
@@ -87,9 +83,9 @@ class MixingStation: public NetworkSocket, public MixerInterface{
     }
   
     ////////////////////////////////////////
-    // JSON PATH ROUTER
+    // Main processor : JSON PATH ROUTER
     ///////////////////////////////////////    
-    void onTXTmessage(const char *message, uint16_t length) {
+    void process(const char *message, uint16_t length) {
       // we received a message so we reset the lastQuery timer
       destination.lastQueryTime = millis(); 
     

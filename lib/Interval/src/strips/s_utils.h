@@ -48,7 +48,7 @@ class TextStrip : public Strip{
     }
 
     void onEvent(const Event& evt) override {
-      switch (evt.type()) {
+      switch (evt.type) {
         /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
         break;*/
       }

@@ -350,6 +350,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     std::vector<String> broadcastQueue;
 
+    Event evt;
+
     Application* webServer = nullptr;
     ///////////////////// USER CALLBACKS ////////////////////////////////////////////////////
     ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;    
@@ -602,8 +604,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         DEBUG_INFO("[ping]\t\t%s : No internet connection, skipping remote version check\n\n",internetEcho->host.c_str());          
       }       
       ///////////////////////// then propagate the event
-      PingEvent internetEvent(internetEcho);
-      fireEvent(internetEvent);
+      evt.type = EVENT_INTERNET_PING;
+      evt.data = internetEcho;
+      fireEvent(evt);
     }
 
     void setBatIcon(){
@@ -983,7 +986,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // EVENTS HANDLERS
     // *********************************
    void onEvent(const Event& evt) override {
-      switch (evt.type()) {
+      switch (evt.type) {
         case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
           sendTerminateMessageToWebApp("Network connection changed. Close this page");         // the browser becomes unavialble, so terminate the application
           shutdownWSS();      //
@@ -1036,34 +1039,30 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     void handleSwitchEvent(const Event& event) {
-      const auto& e = static_cast<const EventButtonAnalog&>(event);
-      const ButtonData& d = e.data();   
-
-      switch(d.id){
+      ButtonData* btData = (ButtonData*) event.data;             
+      switch(btData->id){  
         case BUTTON_DOUBLE_CLIC:
-          doubleClicCallBack(d.buttonId,d.time);
+          doubleClicCallBack(btData->buttonId,btData->time);
         break;
         case BUTTON_HOLD:
-          holdCallback(d.buttonId,d.time);
+          holdCallback(btData->buttonId,btData->time);
         break;
         case BUTTON_LONG_CLIC:
-          longClicCallBack(d.buttonId,d.time);
+          longClicCallBack(btData->buttonId,btData->time);
         break;
         case BUTTON_RELEASE_HOLD:
-          releaseHoldCallback(d.buttonId,d.time);
+          releaseHoldCallback(btData->buttonId,btData->time);
         break;
         case BUTTON_SIMPLE_CLIC:
-          simpleClicCallBack(d.buttonId,d.time);
+          simpleClicCallBack(btData->buttonId,btData->time);
         break;
       }
     }
 
 
     void handleOnOffEvent(const Event& event){
-      const auto& e = static_cast<const EventButtonDigital&>(event);
-      const ButtonData& d = e.data();
-
-      switch(d.id){
+      ButtonData* btData = (ButtonData*) event.data;             
+      switch(btData->id){  
         case BUTTON_DOUBLE_CLIC:
 
           if (screen.id == SCREEN_BANK){
@@ -1088,13 +1087,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
         case BUTTON_LONG_CLIC:
           //DEBUG_PRINT("\nmenuSwitchCallback");
-          menuSwitchCallback(d.buttonId,d.time);
+          menuSwitchCallback(btData->buttonId,btData->time);
         break;
         case BUTTON_RELEASE_HOLD:
      
         break;
         case BUTTON_SIMPLE_CLIC:
-          simpleClicCallBack(d.buttonId,d.time);
+          simpleClicCallBack(btData->buttonId,btData->time);
           /*char* msg = "helloworld";
           USBMIDI.sendSysEx(strlen(msg),(const byte*)msg);
           USBMIDI.sendNoteOn(123,62,1);*/                                                                                                                                                                         
