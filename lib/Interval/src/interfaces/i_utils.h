@@ -104,14 +104,14 @@ class SystemInterface: public DeviceInterface, public DataProvider{
 }systemInterface(false);      // not exposed
 
 
-class DirectoryInterface: public DeviceInterface, public NetWorkService{
+class DirectoryInterface: public NetworkDevice{
     #define DIRECTORY_INTERFACE "Directory"
     public:    
 
       RtpDirectory rtpDir;
       Event evtDir = Event(&rtpDir);
 
-      DirectoryInterface(bool _configurable = false):DeviceInterface(DIRECTORY_INTERFACE,GROUP_INTERFACE_UTILS,_configurable),NetWorkService(){
+      DirectoryInterface(bool _configurable = false):NetworkDevice(DIRECTORY_INTERFACE,GROUP_INTERFACE_UTILS,APPLE_MIDI_PORT,0,"",_configurable){
         attachDeviceInterface(this);
       }
 
@@ -158,8 +158,8 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
 
         if (hwm.network->media == WIFI_MEDIA){
           if (MDNS.begin(baseName.c_str())){
-            MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", APPLE_MIDI_PORT);
-            MDNS.addService("http", "tcp", 80);                                
+            MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", localPort);
+            //MDNS.addService("http", "tcp", 80);                                
           }else{
             DEBUG_ERROR("MDNS registration <%s> failed",baseName.c_str());
           }
@@ -167,8 +167,8 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           String midiName = concatStrings(baseName, "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
           String httpName = concatStrings(baseName, "._http");
           if (EthernetBonjour.begin(baseName.c_str())){
-            EthernetBonjour.addServiceRecord(midiName.c_str(), APPLE_MIDI_PORT,MDNSServiceUDP);
-            EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
+            EthernetBonjour.addServiceRecord(midiName.c_str(), localPort,MDNSServiceUDP);
+            //EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);           // NOT USED ....
           }else{
             DEBUG_INFO("EthernetBonjour registration <%s> failed", baseName.c_str());
           } 
@@ -176,7 +176,7 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
 
         //discoveryRequest();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
 
-        setStateReady("green",*lang.getString("online"),"",*systemCfg.getString(S_AP_NAME));
+        DeviceInterface::setStateReady("green",*lang.getString("online"),"",*systemCfg.getString(S_AP_NAME));
 
         return true;
       }
@@ -200,6 +200,8 @@ class DirectoryInterface: public DeviceInterface, public NetWorkService{
           startDiscovery();
         }
       }      
+
+      virtual bool ping(){return true;}
       
       virtual bool handleDisconnectService(){
         DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
