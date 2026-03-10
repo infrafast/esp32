@@ -136,17 +136,7 @@ class DirectoryInterface: public NetworkDevice{
       virtual bool save() override{
         DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str()); 
         return true;
-      }      
-
-      virtual void monitor(){
-          monitorNetwork();
-      }
-
-      virtual void switchDevice(bool _enabled) override{
-        switchNetworkService(_enabled);
-      }         
-
-      virtual void* read(){return nullptr;}
+      }           
 
       virtual void monitorService(){
         if (hwm.network->media == CABLE_MEDIA){
@@ -364,9 +354,15 @@ class WebApplicationService: public NetworkDevice{
 
     WebApplicationService(bool _configurable = false):NetworkDevice(WEBAPP_INTERFACE,GROUP_INTERFACE_UTILS,80,80,"",_configurable){}
 
+    virtual uint8_t getServiceWeight(){
+      return 0;                               // in reality it consume 3 but we book 8-3 = 5 as SERVICES_WEIGHT_LIMIT so it can always start (priority)
+    }
+
+
     virtual void load() override{
       DEBUG_INFO("%s::load() default ignored => DISABLED", interfaceName.c_str());
       state.enabled = false;
+      state.switchable = false;
       hasStrip = false;
     }
 

@@ -27,7 +27,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
   
       registerDataSetAddress(&addressPing);         // global      
     
-      //data = &osc;                                  // this interface manage OSCMessage as data 
+      evtOSC.type = EVENT_OSC_MESSAGE;
 
     }
 
@@ -186,6 +186,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       destination.lastQueryTime = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
       //setStateDisconnected();
+      
       return true;
     }    
   

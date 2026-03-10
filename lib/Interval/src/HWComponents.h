@@ -749,6 +749,19 @@ struct UdpSlot {
   }  
 };
 
+class SocketEvent : public Event {
+public:
+
+  SocketEvent(void* data):Event(data){}
+  const char* serialize() const override {
+    return ((SocketData*)data)->message;
+  }
+
+private:
+
+  mutable char _buffer[96] = {0};
+};
+
 class Network : public HWComponent2State{
 
   public:
@@ -756,7 +769,7 @@ class Network : public HWComponent2State{
     WebSocketClient<EthernetClient> *wsEthClient{ nullptr };
 
     SocketData socketData;
-    Event evtSock = Event(&socketData);    
+    SocketEvent evtSock = SocketEvent(&socketData);    
     
     Event evtNet;
 
@@ -1244,30 +1257,76 @@ class WiFiEth : public Network{
       }
     }
 
-    virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){
-      DEBUG_INFO("%s::clientSocketOpen(%s,%d,%s)",id.c_str(),host,port,path);
-      return false;
-     
-      if (state != CONNECTED){
-        DEBUG_WARN("\t failed, network not connected!");
+    /*
+
+    SOCKETS MANAGEMENT
+    
+    */
+
+    enum SocketOpenJobState : uint8_t {
+      SOCKET_JOB_IDLE,
+      SOCKET_JOB_RUNNING,
+      SOCKET_JOB_FAILED
+    };
+
+    volatile SocketOpenJobState socketOpenJobState = SOCKET_JOB_IDLE;
+
+    TaskHandle_t socketOpenTaskHandle = nullptr;
+
+    // Paramètres copiés pour la task
+    String pendingHost;
+    String pendingPath;
+    uint16_t pendingPort = 0;    
+
+
+    virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path) {
+      DEBUG_INFO("%s::clientSocketOpen(%s,%d,%s)", id.c_str(), host, port, path);
+
+      if (state != CONNECTED) {
+        DEBUG_PRINT("\t❗failed, network not connected!");
         return false;
-      } 
-      if (media == CABLE_MEDIA){
-        if (wsEthClient!= nullptr){
-          if (!wsEthClient->open(host, port, path)){
-            DEBUG_WARN("\t open wsEthClient failed!");
-            return false;
-          }
-        }
-      }else{
-        if (wsWiFiClient!= nullptr){
-          if (!wsWiFiClient->open(host, port, path)){
-            DEBUG_WARN("\t open wsWiFiClient failed!");
-            return false;
-          }
-        }
       }
-      //DEBUG_PRINT("\t success");
+
+      if (socketOpenJobState == SOCKET_JOB_RUNNING) {
+        DEBUG_PRINT("\t❗already opening");
+        return true;
+      }
+
+      WebSocketReadyState wsState = clientSocketState();
+      if (wsState == WebSocketReadyState::OPEN) {
+        DEBUG_PRINT("\t❗already opened");
+        return true;
+      }
+
+      if (wsState == WebSocketReadyState::CONNECTING) {
+        DEBUG_PRINT("\t❗already connecting");
+        return true;
+      }
+
+      pendingHost = host ? host : "";
+      pendingPath = path ? path : "";
+      pendingPort = port;
+
+      socketOpenJobState = SOCKET_JOB_RUNNING;
+
+      BaseType_t ok = xTaskCreatePinnedToCore(
+        &WiFiEth::socketOpenTaskEntry,
+        "wsOpenTask",
+        6144,
+        this,
+        1,
+        &socketOpenTaskHandle,
+        1
+      );
+
+      if (ok != pdPASS) {
+        DEBUG_ERROR("\t task creation failed!");
+        socketOpenJobState = SOCKET_JOB_FAILED;
+        socketOpenTaskHandle = nullptr;
+        return false;
+      }
+
+      DEBUG_PRINT("\t opening started asynchronously");
       return true;
     }
 
@@ -1287,30 +1346,36 @@ class WiFiEth : public Network{
       }      
     }
 
-    virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){
-      DEBUG_INFO("%s::clientSocketClose()",id.c_str());      
-      const char reason[]={"application close"};
-      if (media == CABLE_MEDIA){
-        if (wsEthClient != nullptr){
-          wsEthClient->close(code,true,reason,strlen(reason));
+    virtual void clientSocketClose(WebSocketCloseCode code = WebSocketCloseCode::NORMAL_CLOSURE) {
+      DEBUG_INFO("%s::clientSocketClose()", id.c_str());
+      const char reason[] = {"application close"};
+
+      if (media == CABLE_MEDIA) {
+        if (wsEthClient != nullptr) {
+          wsEthClient->close(code, true, reason, strlen(reason));
         }
-      }else{
-        if (wsWiFiClient != nullptr){
-          wsWiFiClient->close(code,true,reason,strlen(reason));
-        }        
+      } else {
+        if (wsWiFiClient != nullptr) {
+          wsWiFiClient->close(code, true, reason, strlen(reason));
+        }
       }
+
+      socketOpenJobState = SOCKET_JOB_IDLE;
     }
     
     
-    virtual WebSocketReadyState clientSocketState(){
-      //DEBUG_PRINT("\nWebSocketReadyState()");
-      if (media == CABLE_MEDIA){
-        if (wsEthClient!= nullptr) return wsEthClient->getReadyState();
-      }else{
-        if (wsWiFiClient!= nullptr) return wsWiFiClient->getReadyState();
+    virtual WebSocketReadyState clientSocketState() {
+      if (socketOpenJobState == SOCKET_JOB_RUNNING) {
+        return WebSocketReadyState::CONNECTING;
       }
-      //DEBUG_PRINT(": CLOSED");
-      return WebSocketReadyState::CLOSED;      
+
+      if (media == CABLE_MEDIA) {
+        if (wsEthClient != nullptr) return wsEthClient->getReadyState();
+      } else {
+        if (wsWiFiClient != nullptr) return wsWiFiClient->getReadyState();
+      }
+
+      return WebSocketReadyState::CLOSED;
     }
 
 
@@ -1424,6 +1489,13 @@ class WiFiEth : public Network{
     }
     
     /////////////////////////////////////////////////////////
+    void resetWSstate(){
+      socketOpenJobState = SOCKET_JOB_IDLE;
+      socketOpenTaskHandle = nullptr;
+      pendingHost = "";
+      pendingPath = "";
+      pendingPort = 0;      
+    }
 
 
     bool refresh(bool force=false) {
@@ -1666,8 +1738,8 @@ class WiFiEth : public Network{
             //if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
             if (client != NULL){client->stop(); delete client; client = NULL;} 
             if (server != NULL){delete server; server  = NULL;} 
-            if (wsWiFiClient != nullptr){delete wsWiFiClient; wsWiFiClient = nullptr;}
-            if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr;}
+            if (wsWiFiClient != nullptr){delete wsWiFiClient; wsWiFiClient = nullptr; resetWSstate();}
+            if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr; resetWSstate();}
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
             
             // specific destruction to WIFI or ETH
@@ -1870,6 +1942,49 @@ class WiFiEth : public Network{
     unsigned long lastWiFiAttempt = 0, lastEthAttempt = 0;
     uint8_t rstPin;
     static WiFiEth* instance ;
+
+    /* 
+      THREAD MANAGING SOCKET CONNECTION
+    */
+    static void socketOpenTaskEntry(void *param) {
+      WiFiEth *self = static_cast<WiFiEth*>(param);
+      if (self) {
+        self->socketOpenTask();
+      }
+      vTaskDelete(nullptr);
+    }
+
+    void socketOpenTask() {
+      DEBUG_INFO("%s::socketOpenTask()", id.c_str());
+
+      bool success = false;
+
+      if (media == CABLE_MEDIA) {
+        if (wsEthClient != nullptr) {
+          success = wsEthClient->open(
+            pendingHost.c_str(),
+            pendingPort,
+            pendingPath.c_str()
+          );
+        }
+      } else {
+        if (wsWiFiClient != nullptr) {
+          success = wsWiFiClient->open(
+            pendingHost.c_str(),
+            pendingPort,
+            pendingPath.c_str()
+          );
+        }
+      }
+
+      if (!success) {
+        socketOpenJobState = SOCKET_JOB_FAILED;
+      } else {
+        socketOpenJobState = SOCKET_JOB_IDLE;
+      }
+
+      socketOpenTaskHandle = nullptr;
+    }
 };
 
 WiFiEth* WiFiEth::instance = nullptr;

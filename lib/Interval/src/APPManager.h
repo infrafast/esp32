@@ -748,9 +748,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         ftp.begin();
       #endif
 
-      Event::disableEventDump(EVENT_ANALOG_BUTTON);
+      /*Event::disableEventDump(EVENT_ANALOG_BUTTON);
       Event::disableEventDump(EVENT_DIGITAL_BUTTON);
       Event::disableEventDump(EVENT_BATTERY_REFRESHED);
+      Event::disableEventDump(EVENT_NETWORK_CONNECTED);
+      Event::disableEventDump(EVENT_NETWORK_CONNECTION_CHANGED);
+      Event::disableEventDump(EVENT_NETWORK_DISCONNECTED);*/
+      Event::disableAllEventDumps();
+      
+
 
       // *********************************
       // SKELETONS & DATA SETS
@@ -1728,9 +1734,9 @@ void setup() {
     // MANAGE WEB APPLICATION
     //
     //------------------
-    void handleWeb(){
+    /*void handleWeb(){
       if (webAppService != nullptr) webAppService->handleWeb();
-    }
+    }*/
 
     void jumpToMenu(const char* menuTitle){
       // we branch to the lang menu

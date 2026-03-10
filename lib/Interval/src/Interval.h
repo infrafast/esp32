@@ -66,7 +66,7 @@ bool useUSBMidi = false;
   // Macros publiques
   #define DEBUG_INFO(...)  DEBUG_PRINT("\nℹ\t" __VA_ARGS__)    //✅
   #define DEBUG_WARN(...)  DEBUG_PRINT("\n⚠️\t" __VA_ARGS__)
-  #define DEBUG_ERROR(...) DEBUG_PRINT("\n⛔\t" __VA_ARGS__)
+  #define DEBUG_ERROR(...) DEBUG_PRINT("\n❌\t" __VA_ARGS__)
   
 
 #else
@@ -521,7 +521,7 @@ public:
 
   void fireEvent(const Event& evt) {
 #ifdef DEBUG
-    evt.dump("fire", getDispatcherName());
+    evt.dump("🔥fire", getDispatcherName());
 #endif
 
     for (uint8_t i = 0; i < maxHandlers; ++i) {
@@ -1572,14 +1572,6 @@ void stopGUIThread() {
   }
   //DEBUG_PRINT("\nstopGUIThread()");  
 }
-
-void handleWebTaskWrapper(void * parameter){
-  while(1){
-    app.handleWeb();
-    vTaskDelay(1);
-  }
-}
-
 
 
 void scanNetworksTaskWrapper(void * parameter){

@@ -312,7 +312,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;      
     }
 
-    virtual void setStatePending(String led = "green medium", String details = *lang.getString("Scanning devices")){
+    virtual void setStatePending(String led = "green medium", String details = *lang.getString("Scanning network")){
       DEBUG_INFO("%s::setStatePending()",interfaceName.c_str());      
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
@@ -331,6 +331,11 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.led = "red fast";
       state.progress = -1;
     }        
+
+    virtual void setStateError(String details=""){
+      setStateDisconnected(details);
+      state.label = IF_STATE_ERROR;
+    }
 
     #define IF_CFG_FILE_PATH "/"
 
@@ -434,7 +439,7 @@ class NetWorkService{
 
     }
 
-    #define SERVICES_WEIGHT_LIMIT  4
+    #define SERVICES_WEIGHT_LIMIT  5
     
     bool serviceLocked = true; // by default locked to avoid monitoring straight after startup
 
@@ -801,7 +806,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       return changed;
     }       
 
-    virtual void setStateReady(){            
+    virtual void setStateConnected(){            
       DeviceInterface::setStateReady("green", *lang.getString(IF_STATE_CONNECTED), destination.ip.toString(),destination.ip.toString());
     }
 

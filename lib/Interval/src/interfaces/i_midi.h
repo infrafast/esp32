@@ -63,8 +63,17 @@ class MIDIInterface: public DeviceInterface{
   #define GROUP_INTERFACE_MIDI "MIDI"
   public:
 
-    MidiData midiData;
-    Event evtMidi = Event(&midiData);
+    #define MAX_SYSEX_SIZE 256
+    struct MidiDataCopy{
+      uint8_t type = MIDI_CC;
+      byte channel = 0;
+      byte number = 0;
+      byte value = 0;
+      byte sysexdata[MAX_SYSEX_SIZE];
+      unsigned length;  
+    }midiDataCopy;
+
+    Event evtMidi = Event(&midiDataCopy);
 
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
       //data = &midiData;       // this inertaface handle  MidiData
@@ -100,10 +109,10 @@ class MIDIInterface: public DeviceInterface{
 
       if (dataAvailable) return; // previous data has not been ocnsummed yet so we ignore it (we could make a queue)
       
-      midiData.type = MIDI_CC;
-      midiData.channel = channel;
-      midiData.number = number;
-      midiData.value = value;
+      midiDataCopy.type = MIDI_CC;
+      midiDataCopy.channel = channel;
+      midiDataCopy.number = number;
+      midiDataCopy.value = value;
       dataAvailable = 1;
 
     }
@@ -118,19 +127,19 @@ class MIDIInterface: public DeviceInterface{
       // ------------------------------------------------------------------------
       // Ancien mécanisme conservé pour compatibilité
       // ------------------------------------------------------------------------
-      midiData.type = MIDI_SYSEX;
+      midiDataCopy.type = MIDI_SYSEX;
 
-      if (midiData.sysexdata != nullptr) {
-        delete[] midiData.sysexdata;
-        midiData.sysexdata = nullptr;
+      // Comme la data va etre consommée dans la prochaine boucle, les pointeurs seront perdus, il faut donc faire une copie profonde (unique... sinon on peut faire une queue) qu'on utilisera plus tard
+      uint16_t copyLen = length;
+
+      if (copyLen >= MAX_SYSEX_SIZE) {
+        copyLen = MAX_SYSEX_SIZE - 1; // garde une place pour '\0'
       }
 
-      if (length > 0) {
-        midiData.sysexdata = new byte[length];
-        if (midiData.sysexdata != nullptr) {
-          memcpy(midiData.sysexdata, sysexdata, length);
-        }
+      if (sysexdata != nullptr && copyLen > 0) {
+        memcpy(midiDataCopy.sysexdata,sysexdata, copyLen);
       }
+      midiDataCopy.length = copyLen;
 
       dataAvailable = 1;
     } 
@@ -947,8 +956,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
         state.details = *lang.getString("session disconnected");        
       }else{
         // oherwise, this is considered as an error
-        state.label = IF_STATE_ERROR;        
-        state.details = *lang.getString(exception);
+        setStateError(*lang.getString(exception));
         exception = UNDEF_EXCEPTION; //acknowledged
       }
     }    
