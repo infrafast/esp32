@@ -24,36 +24,32 @@ class NetworkSocket: public NetworkDevice{
       //destination.host = "192.168.99.99"; 
     }
 
-    virtual void monitorService(){
-      
-        // check if we have a data socket in the queue
-        // ...
-        //
-        //if (socket.available()) process();
+    virtual void route(const char *message,uint16_t length) = 0;
+
+    virtual void monitorService(){   
 
       if (dataAvailable){
-        process(socketCopy.message,socketCopy.length);
+        // recupere la donnée reçue et stockée  
+        route(socketCopy.message,socketCopy.length);                 
         dataAvailable = false;
       }
 
-        #define PULSE_CHECK_DELAY kTimeoutInterval*1.1        // kTimeoutInterval is the timeout of opening a socket from 
-        // delay expired, we didn't receive any incoming socket message...
-        // time to ping the device to see if it's still alive or if we have to attempt reconnecting      
-        if (millis()-destination.lastQueryTime > PULSE_CHECK_DELAY){                
-            destination.lastQueryTime = millis(); // reset timer
-            if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
-                // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
-                ping();
-            }else{
-                // if we have no socket connection or we loose it, we try to esbalish one
-                if (!handleConnectService()) setStateError("Thread socket-open failed");
-                else setStatePending();
-            }        
-        }                                                                   
+      #define PULSE_CHECK_DELAY kTimeoutInterval*1.1        // kTimeoutInterval is the timeout of opening a socket from 
+      // delay expired, we didn't receive any incoming socket message...
+      // time to ping the device to see if it's still alive or if we have to attempt reconnecting      
+      if (millis()-destination.lastQueryTime > PULSE_CHECK_DELAY){                
+          destination.lastQueryTime = millis(); // reset timer
+          if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
+              // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
+              ping();
+          }else{
+              // if we have no socket connection or we loose it, we try to esbalish one
+              if (!handleConnectService()) setStateError("Thread socket-open failed");
+              else setStatePending();
+          }        
+      }                                                                   
     }
   
-
-    virtual void process(const char *message, uint16_t length) = 0;
 
     void virtual onSocketConnected() = 0; //called when socket connection has been established
 

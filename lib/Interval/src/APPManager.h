@@ -982,7 +982,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       // unsused interfaces are the one which are not referred by any instanciated strips
       for (const auto& interface : interfaceRepo.interfaces){
         if (interface->countRegisteredListeners()==0 && interface->hasStrip){ // only for interfaces that are exposed => means they can be configured by user
-          DEBUG_INFO("%s has no strip : DISABLED",interface->interfaceName.c_str());
+          DEBUG_INFO("%s has no strip : 🚫DISABLED",interface->interfaceName.c_str());
           //interface->switchDevice(false);  // BE CAREFULL
           interface->state.enabled = false;
         }

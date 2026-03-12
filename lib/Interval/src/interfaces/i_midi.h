@@ -75,6 +75,8 @@ class MIDIInterface: public DeviceInterface{
 
     Event evtMidi = Event(&midiDataCopy);
 
+    bool dataAvailable = false;
+
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
       //data = &midiData;       // this inertaface handle  MidiData
     }

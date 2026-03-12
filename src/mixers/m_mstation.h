@@ -75,7 +75,8 @@ class MixingStation: public NetworkSocket, public MixerInterface{
     ////////////////////////////////////////
     // Main processor : JSON PATH ROUTER
     ///////////////////////////////////////    
-    void process(const char *message, uint16_t length) {
+    virtual void route(const char *message,uint16_t length) override{
+
       //DEBUG_INFO("%s::process(%s,%i)",interfaceName.c_str(),message,length);
       destination.lastQueryTime = millis(); 
     
@@ -128,7 +129,7 @@ class MixingStation: public NetworkSocket, public MixerInterface{
         (this->*(r->fn.jh))(path,body);
       }
 
-      if (r->propagate) fireEvent(evtSock);
+      if (r->propagate) fireEvent(evtSock);                 // filter event propagation based on their flag
     }  
 
     // ------------------ Path Handlers ------------------

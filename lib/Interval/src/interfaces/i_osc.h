@@ -5,11 +5,28 @@
 #include "DataManagement.h"
 #include "OSCMessage.h"
 
-#define GROUP_INTERFACE_OSC "OSC"
-/*class OSCInterface{
-  public:
-};*/
 
+// ============================================================
+// Helpers de parsing
+// ============================================================
+
+static bool parse2Digits(const char* p, uint8_t& value) {
+  if (p[0] < '0' || p[0] > '9') return false;
+  if (p[1] < '0' || p[1] > '9') return false;
+  value = (p[0] - '0') * 10 + (p[1] - '0');
+  return true;
+}
+
+static bool strEquals(const char* a, const char* b) {
+  return strcmp(a, b) == 0;
+}
+
+static bool strStartsWith(const char* s, const char* prefix) {
+  return strncmp(s, prefix, strlen(prefix)) == 0;
+}
+
+
+#define GROUP_INTERFACE_OSC "OSC"
 
 class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
@@ -17,6 +34,10 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
     OSCMessage osc;
     Event evtOSC = Event(&osc);
+    // from remote UDP
+    IPAddress UDPIP;
+    int UDPPort;
+    UDP* udp = nullptr;
 
     virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
 
@@ -25,9 +46,9 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
       if (!destination.ip.fromString(_OSC_IPaddress)) destination.ip = IPAddress(0,0,0,0);
   
-      registerDataSetAddress(&addressPing);         // global      
+      registerDataSetAddress(&addressPing);         //       
     
-      evtOSC.type = EVENT_OSC_MESSAGE;
+      evtOSC.type = EVENT_OSC_MESSAGE;              // thta's the only event type this interface is raising
 
     }
 
@@ -59,13 +80,29 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
      virtual void monitorService(){
       // Check if packet was received
-      dataAvailable = readOSC();
+      int8_t dataAvailable = readOSC();
 
       if (dataAvailable > 0){                                     // data has come
+
         if (state.code != IF_READY) setStateConnected();          // set the device to connected
         destination.lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
         connectAttemptCount = 0;                                  // reset attempt counter                
-        return;                                                   
+
+        const char* addr = osc.getAddress();
+        DEBUG_INFO("<<%s(%s,%i) ",addr,destination.ip.toString().c_str(),remotePort);  
+
+        // now filter events we keep for our internal use
+        if ( destination.echoCommand == addr ){
+          // see if it's a ping, we measure
+          determineQoS();
+          // store remote UDP port and IP as utilities information
+          UDPIP = udp->remoteIP();
+          UDPPort = udp->remotePort();
+        }
+        
+        // before pushing to the derived class, we may filter by addr
+        process();      // we now treat the osc data
+        return;         // job done                                   
       }
 
       if (dataAvailable == -1){                                     // UDP not replying
@@ -80,17 +117,23 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         if (connectAttemptCount++ == 1){            //put 2 if you give it a new chance or set state (2x try)
           setStateQueryingDevice();
           connectAttemptCount = 0;          
-        }else{
-          if (!ping()) handleConnectService();
+        }else{          
+          if (!ping()) handleConnectService();     // as ping failed, it means no socket are available, hence we have to connect it
         }                                                                 
       }                                                                   
     }
 
+    virtual void process() {
+      fireEvent(evtOSC);  //simply propagate the data
+    }    
+
     int readOSC(){
         UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);   // request UDP slot
+        udp = nullptr;
+        
         if (udpSlot == NULL) return -1;                
 
-        UDP* udp = udpSlot->udp;
+        udp = udpSlot->udp;
         if (udp == nullptr) return -1;
 
         int size = udp->parsePacket();
@@ -134,7 +177,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         return 0;
     }
 
-
     bool sendOSCMessage(OSCMessage *msg){           
       
       bool success = false;
@@ -171,7 +213,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       return true;
     }    
 
-    virtual bool handleConnectService(){
+    virtual bool handleConnectService() override{
       DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
       // network connection is established so we now try to connect the device to its protocol
       if (udpID == -1) {
@@ -185,12 +227,11 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       return true;
     }
 
-    virtual bool handleDisconnectService(){
+    virtual bool handleDisconnectService() override{
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
       destination.lastQueryTime = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
-      //setStateDisconnected();
-      
+      //setStateDisconnected();      
       return true;
     }    
   

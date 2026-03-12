@@ -88,6 +88,7 @@ class FreeTextAddress: public Address{
   public:
     String friendlyName = "";
     String regex = "";
+    bool hide = false;
 
     FreeTextAddress(String p, String _fName, String _regex):friendlyName(_fName), regex(_regex), Address(p,INPUTTEXT){}
 
@@ -308,6 +309,41 @@ class SerializableParameters {
       return true;
     }
 
+    bool unregisterDataSetAddress(Address* address) {
+
+      if (!address) {
+        return false;
+      }
+
+      // 1️⃣ suppression dans parameterAddresses
+      for (auto it = parameterAddresses.begin(); it != parameterAddresses.end(); ++it) {
+        if (*it == address) {
+          parameterAddresses.erase(it);
+          break;
+        }
+      }
+
+      // 2️⃣ suppression du ConfigDataSet associé
+      if (registerConfigDataSets) {
+        for (auto it = ownedDataSets.begin(); it != ownedDataSets.end(); ++it) {
+
+          DataSet* ds = *it;
+
+          // on suppose que ConfigDataSet possède getAddress()
+          if (ds && ds->address == address) {
+
+            delete ds;
+            ownedDataSets.erase(it);
+            break;
+          }
+        }
+      }
+
+      return true;
+    }
+    
+
+
     Address* getDataSetAddress(size_t index) const {
       if (index >= parameterAddresses.size()){
         return nullptr;
@@ -359,7 +395,6 @@ class SerializableParameters {
 
     protected:
       char* buf;    //used for serialization
-
 
 };
 

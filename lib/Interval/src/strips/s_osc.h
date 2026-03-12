@@ -26,6 +26,8 @@ class OSCStrip : public Strip{  // should inherit from MidiStrip before so metho
     OSCStrip(StripSkeleton* s,bool debug=false):Strip(s){
     }
 
+    OSCMessage* osc = nullptr;
+
     ~OSCStrip(){};
 
     virtual void composeWidgets(uint8_t layout) override{      
@@ -49,59 +51,16 @@ class OSCStrip : public Strip{  // should inherit from MidiStrip before so metho
     }
 
     void onEvent(const Event& evt) override {
-      switch (evt.type) {
-        /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
-        break;*/
-      }
+      // only receive evt.type == EVENT_OSC_MESSAGE
+      osc = (OSCMessage*)evt.data;
+
+      const char* addr = osc->getAddress();
+      if (!addr) return;
+      
+      ////  .... 
+
     }     
 
-    /*virtual void update(){
-        ////update is called if data are availabe and must therefore cast the data to the right data structure
-        OSCMessage* osc = static_cast<OSCMessage*>(interface->data); // WARNING CAREFULLY TEST IF POLYMORPHISM WORKS
-
-        
-        int numberOfValues = msg.size();
-
-        for (int i = 0; i < numberOfValues; i++) {
-            char type = msg.getType(i);
-
-            switch (type) {
-            case 's': {
-                char str[64];
-                msg.getString(i, str, sizeof(str));
-                break;
-            }
-            case 'i':
-                data[EXEC_VALUE][i] = msg.getInt(i);
-                break;
-            case 'f':
-                data[EXEC_VALUE][i] = msg.getFloat(i);
-                break;
-            case 'T':
-                data[EXEC_VALUE][i] = true;
-                break;
-            case 'F':
-                data[EXEC_VALUE][i] = false;
-                break;
-            case 'b': { // blob (tableau d’octets)
-                int blobSize = msg.getBlobLength(i);
-                const uint8_t* blobData = msg.getBlob(i);
-                // Créer un tableau JSON pour le blob
-                JsonArray blobArray = data[EXEC_VALUE][i].createNestedArray();
-                for (int j = 0; j < blobSize; j++) {
-                    blobArray.add(blobData[j]);
-                }
-                break;
-            }                    
-            default:
-                data[EXEC_VALUE][i] = "unsupported";
-                break;
-            }
-        }
-
-        msg.getAddress(buffer);
-
-    }  */
 
     virtual void queryInterface(){ // this code is called by focus() to send a command that will be executed, 
     //then its outcome will be read at the next process()

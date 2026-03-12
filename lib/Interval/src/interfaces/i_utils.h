@@ -27,7 +27,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     }
   
       virtual void load() override{
-        DEBUG_INFO("%s::load() default ignored => DISABLED", interfaceName.c_str()); 
+        DEBUG_INFO("%s::load() default ignored => 🚫DISABLED", interfaceName.c_str()); 
         // ignore the given parameter. Just enable the interface
         state.enabled = false;       
         hasStrip = true;             // textStrip...
@@ -313,7 +313,7 @@ class DirectoryInterface: public NetworkDevice{
           );          
         }      
       }
-
+    
       void wiFiRTPDiscoveryTask(){
         DEBUG_INFO("[RTP-WiFi]\t\tScan RTP-MIDI lancé...\n");     
         int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
@@ -360,7 +360,7 @@ class WebApplicationService: public NetworkDevice{
 
 
     virtual void load() override{
-      DEBUG_INFO("%s::load() default ignored => DISABLED", interfaceName.c_str());
+      DEBUG_INFO("%s::load() default ignored => 🚫DISABLED", interfaceName.c_str());
       state.enabled = false;
       state.switchable = false;
       hasStrip = false;

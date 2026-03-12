@@ -37,7 +37,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     String interfaceName; 
   
-    bool dataAvailable;
     //void* data;                 // will be replaced by EVENT QUEUE : MUST BE AFFECTED IN CONSTRUCTOR OF DERIVED CLASS AND THEN CASTED IN THE UPDATE() MEDTHOD OF STRIP (WHICH IS CALLED WHEN AVAILABLE RETURN > 0 in STRIP PROCESS())    
 
     bool exposed = true;          // 
@@ -164,7 +163,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       if (config.containsKey(INTERFACE_ENABLED)){
         bool enabled = config[INTERFACE_ENABLED];
         state.enabled = enabled;  //switchDevice(enabled); // BE CAREFULL!
-        DEBUG_INFO("%s : %s",interfaceName.c_str(),enabled?"ENABLED":"DISABLED");
+        DEBUG_INFO("%s : %s",interfaceName.c_str(),enabled?"✅ENABLED":"🚫DISABLED");
       }
       
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -214,17 +213,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     }
 
-    /*int available(){ // called by strip 
-      return dataAvailable; 
-    }*/
-
-
     virtual void update(){      // return a boolean indicatin if the interface has changed its state
       // reset change state
       state.changed = false;
-
-      // reset the flag so strips will not be updated and re-processed already consummed data
-      //dataAvailable = 0;
 
       // report if state has changed
       if (state.label != state.previousStateLabel){
@@ -401,8 +392,6 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       return false;
     } 
     
-    // monitor manage internal state and set the dataAvailable flag using internal functions to indicate data are available with available() method that expose the value in "data"
-    // do not need to care about offline state as it is managed by update method
     virtual void monitor() = 0; 
 
     virtual void handlePropertyChange(){DEBUG_INFO("%s::handlePropertyChange() : void",name.c_str());} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
@@ -454,9 +443,7 @@ class NetWorkService{
         - actualisation (sans modification des parametres) et avec differents etats
         - actualisation (avec modification des parametres) et avec differents etats
         - demarrer une interface alors qu'elle doit etre lock
-        - demarrer une interface en disable
-
-    
+        - demarrer une interface en disable  
     */
 
     void releaseCapacity(){
@@ -713,7 +700,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
   public:
 
     int remotePort = 0;
-    int localPort = 0;  
+    int localPort = 0;
 
     NetworkDevice(String name, String group, int lport, int rport, String echoCommand, bool _configurable=false):DeviceInterface(name, group,_configurable){
       
@@ -779,7 +766,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       free(buf);
 
       buf = (char*)malloc((strlen(ADDRESS_IP)+destination.ip.toString().length())*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_IP,destination.ip.toString());
+      sprintf(buf,ADDRESS_IP,destination.ip.toString().c_str());
       properties.add(String(buf)); 
       free(buf);                
     }

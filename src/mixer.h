@@ -5,8 +5,9 @@
 
 class MixerInterface{
   public:
-    String mixerName ="mixerName";
-    
-};
+    String mixerName = "mixerName";
+    String mixerModel = "mixerModel";
+    IPAddress mixerIP = IPAddress(0,0,0,0);      
+};  
 
 #endif
