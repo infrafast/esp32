@@ -254,11 +254,11 @@ class BLEMIDIInterface: public MIDIInterface{
 
 
     void setStateReady(){            
-      DeviceInterface::setStateReady("blue",*lang.getString("paired"));
+      DeviceInterface::setStateReady("blue",lang.getString("paired")->c_str());
     }
 
     void setStatePending(){
-      DeviceInterface::setStatePending("blue medium",concatStrings(*lang.getString("Connect Blutooth"), " ", BLE_CONNECTION_NAME));
+      DeviceInterface::setStatePending("blue medium",concatStrings(*lang.getString("Connect Blutooth"), " ", BLE_CONNECTION_NAME).c_str());
     } 
 
     static void handleConnectedStatic() {
@@ -520,6 +520,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }    
 
     void requestDirectoryRefresh(){
+      if (state.enabled == false) return;
       // trigger application manager to call discovery.discoveryRequest()
       DEBUG_INFO("%s::requestDirectoryRefresh()",interfaceName.c_str());
       // state will be recalled when directory service has finished
@@ -958,7 +959,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
         state.details = *lang.getString("session disconnected");        
       }else{
         // oherwise, this is considered as an error
-        setStateError(*lang.getString(exception));
+        setStateError(lang.getString(exception)->c_str());
         exception = UNDEF_EXCEPTION; //acknowledged
       }
     }    

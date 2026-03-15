@@ -117,12 +117,14 @@ class DirectoryInterface: public NetworkDevice{
 
       DirectoryInterface(bool _configurable = false):NetworkDevice(DIRECTORY_INTERFACE,GROUP_INTERFACE_UTILS,APPLE_MIDI_PORT,0,"",_configurable){
         attachDeviceInterface(this);
+        unregisterDataSetAddress(&addressIP);              // we un-expose the ping parameter as user should not modify it 
+        unregisterDataSetAddress(&addressPort);              // we un-expose the ping parameter as user should not modify it 
       }
 
       virtual void load() override{
         DEBUG_INFO("%s::load() default ignored => ENABLE", interfaceName.c_str()); 
         // ignore the given parameter. 
-        state.enabled = false;          // the interface is forced disabled at startup as we do not need to browse network until a request is sent (by startWebApp to publish DNS name or by appleMidi to advert)
+        switchDevice(DEVICE_OFF);          // the interface is forced disabled at startup as we do not need to browse network until a request is sent (by startWebApp to publish DNS name or by appleMidi to advert)
         hasStrip = false;             
       }
 
@@ -170,7 +172,7 @@ class DirectoryInterface: public NetworkDevice{
 
         //discoveryRequest();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
 
-        DeviceInterface::setStateReady("green",*lang.getString("online"),"",*systemCfg.getString(S_AP_NAME));
+        DeviceInterface::setStateReady("green",lang.getString("online")->c_str(),"",systemCfg.getString(S_AP_NAME)->c_str());
 
         return true;
       }
@@ -207,7 +209,8 @@ class DirectoryInterface: public NetworkDevice{
           MDNS.end();
         }          
 
-        setStateOffline(concatStrings(*lang.getString("Device is not detectable on the network. Use")," ",hwm.network->IP.toString()," ",*lang.getString("to connect")));                
+        if (deviceInterface->state.enabled == false) setStateDisabled();
+        deviceInterface->state.details = concatStrings(*lang.getString("Device is not detectable on the network. Use")," ",hwm.network->IP.toString()," ",*lang.getString("to connect"));
 
         return true;
       }        

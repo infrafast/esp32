@@ -20,7 +20,7 @@ class NetworkSocket: public NetworkDevice{
 
     Event evtSock = Event(&socketCopy);  // we always fire the event using the copy
 
-    NetworkSocket(String name=INTERFACE_SOCKET, String group=GROUP_INTERFACE_UTILS,String echoCommand="ping",int localP=8887,int remoteP=8888, bool exposed=false):NetworkDevice(name,group,localP,remoteP,echoCommand, exposed){
+    NetworkSocket(String name=INTERFACE_SOCKET, String group=GROUP_INTERFACE_UTILS,String echoCommand="",int localP=8887,int remoteP=8888, bool exposed=false):NetworkDevice(name,group,localP,remoteP,echoCommand, exposed){
       //destination.host = "192.168.99.99"; 
     }
 
@@ -45,7 +45,10 @@ class NetworkSocket: public NetworkDevice{
           }else{
               // if we have no socket connection or we loose it, we try to esbalish one
               if (!handleConnectService()) setStateError("Thread socket-open failed");
-              else setStatePending();
+              else{
+                setStatePending();
+                pendingSinceMs = millis();
+              }
           }        
       }                                                                   
     }

@@ -45,11 +45,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       icon = "g";        
 
       if (!destination.ip.fromString(_OSC_IPaddress)) destination.ip = IPAddress(0,0,0,0);
-  
+
       registerDataSetAddress(&addressPing);         //       
     
       evtOSC.type = EVENT_OSC_MESSAGE;              // thta's the only event type this interface is raising
 
+    
     }
 
     ~NetworkOSC(){
@@ -116,6 +117,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         destination.lastQueryTime = millis();
         if (connectAttemptCount++ == 1){            //put 2 if you give it a new chance or set state (2x try)
           setStateQueryingDevice();
+          pendingSinceMs = millis();          
           connectAttemptCount = 0;          
         }else{          
           if (!ping()) handleConnectService();     // as ping failed, it means no socket are available, hence we have to connect it

@@ -5,13 +5,15 @@
 #include "mixer.h"
 
 #define MS_APP_STATE "/app/state"
+#define MS_MIXERS_CURRENT "/app/mixers/current"
 
 #define INTERFACE_MIXINGSTATION "MixingStation"
-class MixingStation: public NetworkSocket, public MixerInterface{
+class MixingStation:  public MixerDevice<NetworkSocket>{
   public:
   
-    MixingStation():NetworkSocket(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_APP_STATE,8887,8088,true){
+    MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_MIXERS_CURRENT,8887,8088,true){
       //destination.host = "192.168.99.99";
+      currentMixer.name = "MSStation";
     }
 
     virtual bool ping() override{
@@ -20,8 +22,11 @@ class MixingStation: public NetworkSocket, public MixerInterface{
     }
 
     virtual void onSocketConnected() override{
-      hwm.network->clientSocketSend(post("/console/data/subscribe",bodyPathFormat("ch.*.mix.lvl","val")));  // forge a MS get json query with echoCommand as the path
+      hwm.network->clientSocketSend(get(MS_APP_STATE));  // forge a MS get json query with echoCommand as the path
+      //hwm.network->clientSocketSend(post("/console/data/subscribe",bodyPathFormat("ch.*.mix.lvl","val")));  // forge a MS get json query with echoCommand as the path
+      //requestMixerInfo();
     }
+ 
  
   protected: 
     ////////////////////////////////////////
@@ -148,14 +153,16 @@ class MixingStation: public NetworkSocket, public MixerInterface{
       DEBUG_INFO("%s::processState: msg:%s,progress:%i,state:%s,topState:%s",interfaceName.c_str(),msg,progress,state,topState);
 
       if (strcmp(topState, MS_IDLE) == 0) {
-        setStatePending();
-        deviceInterface->state.label = MS_IDLE;               // do not invert details/label as label=IDLE forces state refresh for the GUI compared to label=PENDING which is also set by device scan
-        deviceInterface->state.details = IF_STATE_PENDING;
+        if (deviceInterface->state.label = MS_IDLE){
+          setStatePending();
+          deviceInterface->state.label = MS_IDLE;               // do not invert details/label as label=IDLE forces state refresh for the GUI compared to label=PENDING which is also set by device scan
+          deviceInterface->state.details = IF_STATE_PENDING;
+        }
       }
       else if (strcmp(topState, MS_CONNECTING) == 0) {
         if (strcmp(state, MS_SYNCING) == 0){
           if (deviceInterface->state.subState != IF_STATE_SYNCING){
-            setStateSyncing(MS_SYNCING);
+            setStateSyncing(MS_SYNCING);            
           }
         }else{
           if (deviceInterface->state.subState != String(state)){
@@ -164,21 +171,63 @@ class MixingStation: public NetworkSocket, public MixerInterface{
         }
         deviceInterface->state.progress = progress;         
       }
-      else if (strcmp(topState, MS_CONNECTED) == 0) {
-        if (deviceInterface->state.label != IF_STATE_CONNECTED){
-          setStateConnected();
+      else if (strcmp(topState, MS_CONNECTED) == 0) {  
+        
+        /*if (millis()-lastTimeMixerWasSet > PULSE_CHECK_DELAY*10 ) resetMixer();         //  we didn't see it since too long (multiple ping didn't answers) we froce a mixer sync                               
+        if (deviceInterface->state.label != IF_STATE_CONNECTED || dataSync == false){
+          if (mixerHasChanged()) requestMixerInfo();
+        }else{
+          setStateConnected();      // we are connected to mixing station, not yet sync. The "liveState" will be set by the setMixer call;
+        }*/
+        //requestMixerInfo();       
+        //if (deviceInterface->state.label != IF_STATE_CONNECTED)
+        {
+          if (!dataSync) queryMixer();
         }
+
       }
       else if (strcmp(topState, MS_RECONNECTING) == 0) {
-        setStatePending("green medium",concatStrings(state));  
+        setStatePending("green medium",concatStrings(state).c_str());  
         deviceInterface->state.label = topState;
         deviceInterface->state.subState = state;      
       }
       else{
-        setStatePending("green medium",concatStrings("UNHANDLED MS STATE:",state));
+        // we do not alter main state code, only report what we received
+        setStatePending("green medium",concatStrings("UNHANDLED MS STATE:",state).c_str());
         deviceInterface->state.label = topState;
         deviceInterface->state.subState = state;        
       }
+
+    }
+
+    void queryMixer(){
+      hwm.network->clientSocketSend(get(MS_MIXERS_CURRENT)); // retrieve name, etc...            
+    }
+
+    void processMixer(const char* path, JsonVariant body) {
+      // got the connected mixer informartion
+      #define OFFLINE "offline"
+      IPAddress ip;
+      ip.fromString(body["ipAddress"] | "");
+      String name   = body["name"]    | OFFLINE;
+      String model  = body["currentModel"] | "";
+
+      if (name != OFFLINE){
+        
+        syncMixer(name,model,ip);
+        
+      }else{
+
+        hwm.network->clientSocketSend(get(MS_APP_STATE));   // force getting the state as a backup in case mixerQuery didn't pass thru
+
+      }
+
+    }
+
+    virtual void startMixerDataSync() override{
+      dataSync = true;
+      hwm.network->clientSocketSend(post("/console/data/subscribe",bodyPathFormat("ch.*.cfg.name","val")));  // forge a MS get json query with echoCommand as the path
+      setStateMixerLive();
     }
 
     void processMixersAvailable(char* rx, size_t len) {
@@ -189,7 +238,13 @@ class MixingStation: public NetworkSocket, public MixerInterface{
       filter["body"]["consoles"][0]["name"]          = true;
 
       JsonDocument d;
-      if (deserializeJson(d, rx, len, DeserializationOption::Filter(filter))) return;
+
+      DeserializationError e;
+      e = deserializeJson(d, rx, len, DeserializationOption::Filter(filter));
+      if (e){
+        DEBUG_ERROR("JSON error: %s", e.c_str());        
+        return;
+      }
 
       JsonArray consoles = d["body"]["consoles"].as<JsonArray>();
       for (JsonObject c : consoles) {
@@ -215,7 +270,7 @@ class MixingStation: public NetworkSocket, public MixerInterface{
     /////////////////////////////////////////////////////////////
 
     void setStateDisconnected() override{
-      DeviceInterface::setStateDisconnected(*lang.getString("MixingStation unreachable"));      
+      DeviceInterface::setStateDisconnected(lang.getString("MixingStation unreachable")->c_str());      
     }
 
     //////////////////////////////////////////////
@@ -270,7 +325,8 @@ class MixingStation: public NetworkSocket, public MixerInterface{
 };
 
 const MixingStation::Route MixingStation::routes[] = {
-  { "/app/state",            RouteMode::JsonBody,   { .jh = &MixingStation::processState },           false },
+  { MS_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState },           false },
+  { MS_MIXERS_CURRENT,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixer },           false },  
   { "/app/mixers/available", RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }, false },
   { "/console/data/get/*",   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet },         true },
 };

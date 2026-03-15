@@ -795,7 +795,7 @@ class Network : public HWComponent2State{
     IPAddress IP, gateway,subnet;
     //HttpClient* http = NULL;    
     Client* client = NULL;   
-    TargetEcho internet = TargetEcho("8.8.8.8"); 
+    TargetEcho internet = TargetEcho("8.8.8.8",0); 
     uint16_t LANlatency = 38;
 
     bool ethEnabled = true;
@@ -1936,8 +1936,6 @@ class WiFiEth : public Network{
   private:
     byte ethMac[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
     //bool _newWifiAttempt = false;    // set to false to allow ether connection first to start
-    int mixerPort = 10023;
-    IPAddress mixerIP={192,168,0,255};
     bool  webAppOn = false;
     unsigned long lastWiFiAttempt = 0, lastEthAttempt = 0;
     uint8_t rstPin;

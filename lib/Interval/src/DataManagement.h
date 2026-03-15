@@ -100,7 +100,7 @@ class FreeTextAddress: public Address{
 
 FreeTextAddress addressIP = FreeTextAddress(ADDRESS_IP, "ip", REGEX_IPADDRESS);    
 FreeTextAddress addressPing = FreeTextAddress(ADDRESS_PING, "ping", REGEX_STRING);  
-FreeTextAddress* addressPort = new FreeTextAddress(ADDRESS_PORT,"port", REGEX_0to65535);  
+FreeTextAddress addressPort = FreeTextAddress(ADDRESS_PORT,"port", REGEX_0to65535);  
 
 String errorDatasetOOR = "outOfRange";
 

@@ -146,7 +146,7 @@ class StripMixer{
       if (mixerServer->refreshed){
         changedState = true;
         JsonDocument json;
-        //{{mixerState:{"interfaceState":{"mixerName":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"mixerModel":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}},"mixerDemo":{"ip":"82.85.52.72","port":10023}}
+        //{{mixerState:{"interfaceState":{"currentMixer.name":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"currentMixer.model":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}},"mixerDemo":{"ip":"82.85.52.72","port":10023}}
         json[MIXER_STATE_KEY] = mixerServer->getMixerState();        
         String jsonString;
         serializeJson(json, jsonString);
@@ -717,7 +717,7 @@ void QueryingDemoMixer(bool internet){
 String getMixersState(){
   String jsonString;
   JsonDocument json;
-  //{{mixerState:{"interfaceState":{"mixerName":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"mixerModel":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}},"mixerDemo":{"ip":"82.85.52.72","port":10023}}
+  //{{mixerState:{"interfaceState":{"currentMixer.name":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"currentMixer.model":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}},"mixerDemo":{"ip":"82.85.52.72","port":10023}}
   json[MIXER_STATE_KEY] = mixerServer.getMixerState();
   json[MIXER_DEMO_KEY] = mixerDemoJsonString();
   serializeJson(json,jsonString);

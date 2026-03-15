@@ -265,7 +265,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     void setStateDeactivated(){
-      DEBUG_INFO("%s::setStateDeactivated()",interfaceName.c_str());
+      DEBUG_INFO("%s::setStateDeactivated()◎",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_DEACTIVATED;
       state.subState =  "";
@@ -274,7 +274,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     void setStateDisabled(){
-      DEBUG_INFO("%s::setStateDisabled()",interfaceName.c_str());
+      DEBUG_INFO("%s::setStateDisabled()⚫",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_DISABLED;
       state.subState =  IF_STATE_DISABLED;
@@ -284,7 +284,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     void setStateNotImplemented(){
-      DEBUG_INFO("%s:setStateNotImplemented",interfaceName.c_str());
+      DEBUG_INFO("%s:setStateNotImplemented()◎",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_NOTIMPLEMENTED;
       state.subState =  IF_STATE_DISABLED;
@@ -293,8 +293,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;          
     }
 
-    virtual void setStateReady(String led = "green", String label = *lang.getString(IF_STATE_READY), String subState = "", String details = ""){            
-      DEBUG_INFO("%s::setStateReady()",interfaceName.c_str());
+    virtual void setStateReady(const char* led = "green", const char* label = lang.getString(IF_STATE_READY)->c_str(), const char* subState = "", const char* details = ""){            
+      DEBUG_INFO("%s:setStateReady(%s,%s)🟢",interfaceName.c_str(),label,details);
       state.code = IF_READY;      
       state.label = label;
       state.subState = subState;
@@ -303,8 +303,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;      
     }
 
-    virtual void setStatePending(String led = "green medium", String details = *lang.getString("Scanning network")){
-      DEBUG_INFO("%s::setStatePending()",interfaceName.c_str());      
+    virtual void setStatePending(const char* led = "green medium", const char* details = lang.getString("Scanning network")->c_str()){
+      DEBUG_INFO("%s:setStatePending()◐",interfaceName.c_str());      
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
       state.details = details;
@@ -313,8 +313,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;
     }
 
-    virtual void setStateDisconnected(String details=""){
-      DEBUG_INFO("%s::setStateDisconnected()",interfaceName.c_str());      
+    virtual void setStateDisconnected(const char* details=""){
+      DEBUG_INFO("%s:setStateDisconnected()🔴",interfaceName.c_str());      
       state.code = IF_NOT_READY;
       state.label = IF_STATE_DISCONNECTED;
       state.subState = "";
@@ -323,7 +323,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;
     }        
 
-    virtual void setStateError(String details=""){
+    virtual void setStateError(const char* details=""){
       setStateDisconnected(details);
       state.label = IF_STATE_ERROR;
     }
@@ -411,7 +411,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
 class NetWorkService{
   public:
-    TargetEcho destination = TargetEcho("0.0.0.0");
+    TargetEcho destination = TargetEcho("0.0.0.0",0);
 
     // ---- Global inventory of services (NetWorkService*) ----
     static std::vector<NetWorkService*> inventory;
@@ -496,10 +496,10 @@ class NetWorkService{
 
     virtual void setStateDisconnected(){ // to be overrided by derived class
       if (!deviceInterface) return;
-      DEBUG_INFO("%s::setStateDisconnected()", deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s::setStateDisconnected()🔴", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
-      deviceInterface->state.details = concatStrings(*lang.getString("disconnected"));
+      deviceInterface->state.details = "";
       deviceInterface->state.led = "red";
       deviceInterface->state.progress = -1;
     }
@@ -605,17 +605,8 @@ class NetWorkService{
       // progress is altered by the network
     }
 
-    virtual void setStateOffline(String details=""){
-      DEBUG_INFO("%s::setStateOffline()",deviceInterface->interfaceName.c_str());      
-      deviceInterface->state.code = IF_NOT_READY;
-      deviceInterface->state.label = IF_STATE_OFFLINE;
-      deviceInterface->state.subState = "";
-      deviceInterface->state.details = details;
-      deviceInterface->state.led = "red";
-      deviceInterface->state.progress = -1;
-    }     
 
-    virtual void setStateLocked(String led = "orange",String details = *lang.getString("Reached maximum network device capacity. Disable other device(s) to enable this one.")){
+    virtual void setStateLocked(const char* led = "orange",const char* details = lang.getString("Reached maximum network device capacity. Disable other device(s) to enable this one.")->c_str()){
       DEBUG_INFO("%s::setStateLocked()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_LOCKED;
@@ -631,7 +622,7 @@ class NetWorkService{
       deviceInterface->state.details = *lang.getString("Enable Directory to browse devices");
     }
 
-    void setStateConnecting(String subState, String details){
+    void setStateConnecting(const char* subState, const char* details){
       DEBUG_INFO("%s: setStateConnecting()",deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;      
       deviceInterface->state.label = IF_STATE_CONNECTING;   
@@ -641,7 +632,7 @@ class NetWorkService{
       deviceInterface->state.progress = 0; //show progress bar
     }     
 
-    void setStateSyncing(String details){
+    void setStateSyncing(const char* details){
       setStateConnecting(IF_STATE_SYNCING,details);
       DEBUG_INFO("%s: setStateSyncing()",deviceInterface->interfaceName.c_str());
       deviceInterface->state.led = "green fast";
@@ -702,13 +693,15 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     int remotePort = 0;
     int localPort = 0;
 
+    unsigned long pendingSinceMs;
+
     NetworkDevice(String name, String group, int lport, int rport, String echoCommand, bool _configurable=false):DeviceInterface(name, group,_configurable){
       
       attachDeviceInterface(this);
       
       destination.echoCommand = echoCommand;
 
-      registerDataSetAddress(addressPort);          // global
+      registerDataSetAddress(&addressPort);          // global
       registerDataSetAddress(&addressIP);           // global       
 
       remotePort = rport;
@@ -793,13 +786,14 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       return changed;
     }       
 
-    virtual void setStateConnected(){            
-      DeviceInterface::setStateReady("green", *lang.getString(IF_STATE_CONNECTED), destination.ip.toString(),destination.ip.toString());
+    virtual void setStateConnected(){
+      DEBUG_INFO("%s:setSetateConnected()🟢",deviceInterface->interfaceName.c_str());
+      DeviceInterface::setStateReady("green", lang.getString(IF_STATE_CONNECTED)->c_str(),destination.ip.toString().c_str(), concatStrings(destination.ip.toString(),":",String(remotePort)).c_str());
     }
 
     virtual void setStateDisconnected() override{
-      DeviceInterface::setStateDisconnected();
-      deviceInterface->state.details = concatStrings(*lang.getString("no connection"));      
+      DEBUG_INFO("%s:setStateDisconnected()🔴",deviceInterface->interfaceName.c_str());
+      DeviceInterface::setStateDisconnected(concatStrings(*lang.getString("no connection")).c_str());
     }       
 
 };

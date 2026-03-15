@@ -9,7 +9,7 @@
 0.20 - compatibility with code server
 0.21 - udp connectivity hardening
 0.22 - interfaces refactor + better state management
-0.xx - event and data handing
+0.23 - event and data handing, implementation of interfaces
 */
 
 
@@ -93,7 +93,8 @@ class TargetEcho{
     uint16_t jitter = 0;
     String host;
     IPAddress ip;  
-    TargetEcho(String h):host(h){} 
+    TargetEcho(String h, unsigned long d):host(h),delayBetweenTwoEcho(d){} 
+    unsigned long delayBetweenTwoEcho;
     String echoCommand = "";
 };
 
