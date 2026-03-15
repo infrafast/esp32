@@ -795,7 +795,7 @@ class Network : public HWComponent2State{
     IPAddress IP, gateway,subnet;
     //HttpClient* http = NULL;    
     Client* client = NULL;   
-    TargetEcho internet = TargetEcho("8.8.8.8",0); 
+    TargetEcho internet = TargetEcho("8.8.8.8"); 
     uint16_t LANlatency = 38;
 
     bool ethEnabled = true;

@@ -93,8 +93,7 @@ class TargetEcho{
     uint16_t jitter = 0;
     String host;
     IPAddress ip;  
-    TargetEcho(String h, unsigned long d):host(h),delayBetweenTwoEcho(d){} 
-    unsigned long delayBetweenTwoEcho;
+    TargetEcho(String h):host(h){} 
     String echoCommand = "";
 };
 
@@ -544,6 +543,34 @@ private:
   #define API_OK 1
   #define API_ERROR 0
 #define API_BODY   "body"
+
+
+////////////////////// UTILITIES ///////////////////////////
+void populateFileList(String extension, String folder, std::vector<String> *list, String prefix="", bool withExtension=true) {
+  //we first clean all items from the list
+
+  list->clear();
+
+  File root = LittleFS.open(folder);
+  //DEBUG_PRINT("\n\nListing: .%s in %S",extension.c_str(),folder.c_str());
+  File file = root.openNextFile();
+  while (file){
+    if (!file.isDirectory()){
+      String fullFileName = file.name();
+      if (fullFileName.endsWith(extension) || extension == "*") {
+        String filename = prefix;
+        // if we don't want the extension, we remmove it
+        if (!withExtension) filename = concatStrings(filename,fullFileName.substring(0, fullFileName.lastIndexOf('.')));
+        else filename = concatStrings(filename,fullFileName); // k is the icon ID
+        list->push_back(filename);
+        //DEBUG_PRINT("\n\t %s",filename->c_str());
+      }
+    }
+    file = root.openNextFile();
+    yield();
+  }
+}
+
 
 bool checkAndDeleteFile(const char* filename) {
     if (LittleFS.exists(filename)) {

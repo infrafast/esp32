@@ -411,7 +411,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
 class NetWorkService{
   public:
-    TargetEcho destination = TargetEcho("0.0.0.0",0);
+    TargetEcho destination = TargetEcho("0.0.0.0");
 
     // ---- Global inventory of services (NetWorkService*) ----
     static std::vector<NetWorkService*> inventory;
@@ -713,8 +713,8 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     virtual bool ping() = 0;
 
     // network devices listen to network event
-    virtual bool begin(){     // called by init()
-      DEBUG_INFO("%s::begin() => self registering to network event",interfaceName.c_str());
+    virtual bool begin() override{     // called by init()
+      DEBUG_INFO("NetworkDevice(%s)::begin() => self registering to network event",interfaceName.c_str());
       hwm.network->registerEventListener(this);
       return true;
     };        

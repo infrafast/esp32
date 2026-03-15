@@ -17,7 +17,7 @@ struct MixerIdentity {
                ip == other.ip;
     }
 
-    void clear() {
+    /*void clear() {
         name = "";
         model = "";
         ip = IPAddress(0,0,0,0);
@@ -25,8 +25,9 @@ struct MixerIdentity {
 
     bool isValid() const {
         return ip != IPAddress(0,0,0,0);
-    }
+    }*/
 };
+
 
 template <typename NetworkBase>
 class MixerDevice : public NetworkBase {
@@ -43,27 +44,40 @@ public:
     MixerDevice(Args&&... args)
         : NetworkBase(std::forward<Args>(args)...)
     {
-
+      currentMixer.model = "undef";
+      currentMixer.name = "offline";
+      currentMixer.ip = IPAddress(0,0,0,0);
     }
 
     virtual void  startMixerDataSync() = 0;
 
-    bool syncMixer(String& name, String&model, IPAddress& ip) {
-      DEBUG_INFO("%s:syncMixer(%s,%s,%s) 🎛",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
+    /*virtual bool begin(){     // called by init()
+      NetworkBase::begin();
+      DEBUG_INFO("%s:begin() setting up mixer");
+      setModel(currentMixer.model);
+    }*/
+
+    bool isNewMixer(String& name, String&model, IPAddress& ip) {
+      DEBUG_INFO("%s:isNewMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
 
       MixerIdentity newMixer { name, model, ip };
 
       bool mixerChanged = !currentMixer.equals(newMixer);
+      
+      if (mixerChanged){
+        DEBUG_PRINT("\t%s",mixerChanged?"yes✅":"no");
+        setMixer(newMixer);
+      }           
+      
       bool offlineTooLong = (this->state.label == IF_STATE_PENDING) &&
                             this->pendingSinceMs != 0 &&
-                            (millis() - this->pendingSinceMs >= 20000);
+                            (millis() - this->pendingSinceMs >= 15000);
 
-      currentMixer = newMixer;
+      DEBUG_PRINT("\t%s",offlineTooLong?"offline too long⌛":""); //,dataSync?"":"not synced🔄");
 
-      bool needSync = mixerChanged || offlineTooLong || !dataSync;
+      bool needSync = mixerChanged || offlineTooLong; //|| !dataSync;
 
       if (needSync) {
-        DEBUG_PRINT("\t%s %s %s",mixerChanged?"mixer changed✅":"",offlineTooLong?"offline too long⌛":"",dataSync?"":"not synced🔄");
         if (this->state.label != IF_STATE_DATASYNCING) startMixerDataSync();            
       }else{
         if (this->state.label != IF_STATE_LIVE) setStateMixerLive();
@@ -71,6 +85,25 @@ public:
 
       return needSync;
 
+    }
+
+    void setModel(const char* model){
+      DEBUG_INFO("%s:setModel(%s)",this->interfaceName.c_str(),model);                  
+      if (currentMixer.model != model){
+        // perform json file load to set mixer attributes like number of channels, etc....
+        // clear all datasets
+        // ...            
+        DEBUG_PRINT("\tMODEL HAS CHANGED: CLEARING MIXER DATASET AND SETTTING UP ATTRIBUTES");                  
+      }else{
+        DEBUG_PRINT("\tmodel didn't change");                  
+      }
+    }
+
+    void setMixer(const MixerIdentity& newMixer){
+      currentMixer = newMixer;     
+      //dataSync = false;
+      DEBUG_INFO("%s:setMixer(%s,%s,%s)🎛, data sync cleared",this->interfaceName.c_str(),currentMixer.name.c_str(),currentMixer.model.c_str(),currentMixer.ip.toString().c_str());            
+      setModel(currentMixer.model.c_str());
     }
 
     void setStatePendingDataSync(){
@@ -86,7 +119,8 @@ public:
       DEBUG_INFO("%s:setStateMixerLive()🟢",this->interfaceName.c_str());
       this->state.label = IF_STATE_LIVE;
       this->state.details = concatStrings(currentMixer.name," ",currentMixer.model," ",currentMixer.ip.toString(),":",this->remotePort);
-    }
+    }    
+
 
 };
 

@@ -4,6 +4,7 @@
 #include "mixer.h"
 
 #define ADDRESS_CONNECT_METHOD "/connect/%d"
+#define ADDRESS_MIXER_MODEL "/model/%s"
 #define INTERFACE_BEHRINGERXM "BehringerXM"
 
 enum{
@@ -35,6 +36,31 @@ class ConnectMethodDS : public DataSet{
      
 };
 
+
+class XMmixerModelDS : public DataSet{
+  
+  public:
+    std::vector<String> mixerModels;
+
+    XMmixerModelDS(Address* _address): DataSet(_address, INTERFACE_BEHRINGERXM, &IFdataRepo){       
+    }
+    
+    virtual const String* getValuePtr(uint16_t index){
+      if (index>getSize()) return &errorDatasetOOR;
+      return &mixerModels[index];    
+    }  
+
+    void load(){
+        populateFileList("mixer","/",&mixerModels);     // this populate the list of countries with the icon (prefix = k-) and without extension                
+    }
+
+    virtual uint16_t getSize(){
+      return mixerModels.size();
+    }
+     
+};
+
+
 class BehringerXM: public MixerDevice<NetworkOSC>{
   public:
 
@@ -48,30 +74,49 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
     uint8_t discoveryIndex = 0;               // rolling index;
 
     ConnectMethodDS connectMethodDS = ConnectMethodDS(new DropDownAddress(ADDRESS_CONNECT_METHOD));
+    XMmixerModelDS mixerModelDS = XMmixerModelDS(new DropDownAddress(ADDRESS_MIXER_MODEL));
     
     BehringerXM():MixerDevice<NetworkOSC>(INTERFACE_BEHRINGERXM,8888,"192.168.0.1",10023,XM_BEHRINGER_PING_CMD,true,GROUP_INTERFACE_MIXER){
       
         unregisterDataSetAddress(&addressPing);              // we un-expose the ping parameter as user should not modify it 
-        destination.echoCommand = XM_BEHRINGER_PING_CMD;     // instead we set it manually once for all
-        destination.delayBetweenTwoEcho =         
 
         registerDataSetAddress(connectMethodDS.address);    // add a connect method parameter
+        registerDataSetAddress(mixerModelDS.address);       // select mixer when offline
 
-        currentMixer.model = "XM?";
+        destination.echoCommand = XM_BEHRINGER_PING_CMD;     // instead we set it manually once for all
 
     }     
 
+    virtual bool begin() override{     // called by init()
+        //MixerDevice::begin();
+        DEBUG_INFO("%s::begin() => creating mixers model list",interfaceName.c_str());        
+        mixerModelDS.load();
+    }
+
+
     virtual void serializeProperties(JsonArray& properties) override{
 
-      char* buf = (char*)malloc(strlen(ADDRESS_CONNECT_METHOD)*sizeof(char*));
-      sprintf(buf,ADDRESS_CONNECT_METHOD,connectMethod);
-      properties.add(String(buf));
-      free(buf); 
+        char* buf;
 
-      // inherited parameters from NetworkOSC (IP+port) are useless when we are in discovery, we therefore do not use store/serialize them
-      if (CONNECT_DISCOVER != connectMethod){
-        NetworkOSC::serializeProperties(properties);        
-      }
+        if (state.enabled){
+            // if mixer is enabled, we show normal parameter except choosing the model because it will be imposed by connection
+            buf = (char*)malloc(strlen(ADDRESS_CONNECT_METHOD)*sizeof(char*));
+            sprintf(buf,ADDRESS_CONNECT_METHOD,connectMethod);
+            properties.add(String(buf));
+            free(buf); 
+
+            // inherited parameters from NetworkOSC (IP+port) are useless when we are in discovery, we therefore do not use store/serialize them
+            if (CONNECT_DISCOVER != connectMethod){
+                NetworkOSC::serializeProperties(properties);        
+            }
+
+        }else{
+            // we only give the possibility to user to select the model if we are offline
+            buf = (char*)malloc((strlen(ADDRESS_MIXER_MODEL)+64)*sizeof(char*));
+            sprintf(buf,ADDRESS_MIXER_MODEL,currentMixer.model.c_str());
+            properties.add(String(buf));
+            free(buf); 
+        }
 
     }
 
@@ -84,12 +129,27 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
         if (connectMethod != newMethod) changed = true;
         connectMethod = newMethod;
       }
+
+      char model[64];
+      if (sscanf(property, ADDRESS_MIXER_MODEL, &model)){
+        if (currentMixer.model != model) changed = true;        
+        currentMixer.model = model;
+      }
+
+      setModel(model);
+
       // inherited parameters from NetworkOSC (IP+port) are useless when we are in discovery, we therefore do not recall them
       if (CONNECT_DISCOVER != connectMethod){
         changed |= NetworkOSC::restoreProperty(property);
       }
       return changed;
     }       
+
+    virtual void switchDevice(bool _enable) override{
+        NetworkDevice::switchDevice(_enable);
+        //we capture the device switching because we do not display the same properties if we are enable or disable (see serializeProperties), hence have to broadcast the change
+        state.broadcastConfig = true;
+    }
 
     virtual void handlePropertyChange(){
       NetworkOSC::handlePropertyChange();
@@ -147,7 +207,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
             osc.getString(2, stringBuffer);     // index 2 = model
             String model = stringBuffer;  // used by mixerHasChanged to perform the comparison against currentMixer.name. Hence we can detect a change
 
-            if (syncMixer(name,model,destination.ip))  state.broadcastConfig = true;  
+            if (isNewMixer(name,model,destination.ip))  state.broadcastConfig = true;  
             
         }
         else

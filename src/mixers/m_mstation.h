@@ -172,19 +172,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         deviceInterface->state.progress = progress;         
       }
       else if (strcmp(topState, MS_CONNECTED) == 0) {  
-        
-        /*if (millis()-lastTimeMixerWasSet > PULSE_CHECK_DELAY*10 ) resetMixer();         //  we didn't see it since too long (multiple ping didn't answers) we froce a mixer sync                               
-        if (deviceInterface->state.label != IF_STATE_CONNECTED || dataSync == false){
-          if (mixerHasChanged()) requestMixerInfo();
-        }else{
-          setStateConnected();      // we are connected to mixing station, not yet sync. The "liveState" will be set by the setMixer call;
-        }*/
-        //requestMixerInfo();       
-        //if (deviceInterface->state.label != IF_STATE_CONNECTED)
-        {
-          if (!dataSync) queryMixer();
-        }
-
+        if (!dataSync) queryMixer();
       }
       else if (strcmp(topState, MS_RECONNECTING) == 0) {
         setStatePending("green medium",concatStrings(state).c_str());  
@@ -214,7 +202,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
       if (name != OFFLINE){
         
-        syncMixer(name,model,ip);
+        isNewMixer(name,model,ip);
         
       }else{
 
@@ -225,9 +213,10 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
     virtual void startMixerDataSync() override{
-      dataSync = true;
+      //dataSync = true;
       hwm.network->clientSocketSend(post("/console/data/subscribe",bodyPathFormat("ch.*.cfg.name","val")));  // forge a MS get json query with echoCommand as the path
-      setStateMixerLive();
+      //setStateMixerLive();
+      setStatePendingDataSync();
     }
 
     void processMixersAvailable(char* rx, size_t len) {

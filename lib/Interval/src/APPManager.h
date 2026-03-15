@@ -1675,6 +1675,7 @@ void setup() {
       return String(item).substring(2);
     }
 
+    std::vector<String> countryList;
     void buildLangMenu(){
       if (langMenu != nullptr) delete langMenu;
       langMenu = new Menu(langMenuString,menu_selected);
@@ -1683,7 +1684,7 @@ void setup() {
 
       // populate the menu with all language found
       for(int i = 0; i < countryList.size(); i++){
-        const char* countryIconAndName = countryList.get(i)->c_str();
+        const char* countryIconAndName = countryList[i].c_str();
         langMenu->add_item(new MenuItem(countryIconAndName, loadLangFromMenu_item_selected));
         if (debug){
           //DEBUG_PRINT("\nadded menu entry: %s",countryList.get(i)->c_str());
@@ -3422,7 +3423,8 @@ void setup() {
 
     ScreenUnion oldScreen;
 
-    LinkedList<String*> countryList = LinkedList<String*>();
+    //LinkedList<String*> countryList = LinkedList<String*>();
+
     //LinkedList<String*> webGZFiles = LinkedList<String*>();
     //LinkedList<String*> webFiles = LinkedList<String*>();
 
@@ -3460,34 +3462,6 @@ void setup() {
 
       jsonOutput.shrinkToFit();
       broadCast(jsonString);
-    }
-
-    void populateFileList(String extension, String folder, LinkedList<String*> *list, String prefix="", bool withExtension=true) {
-      //we first clean all items from the list
-
-      while (list->size()>0){
-        String* s = list->shift();
-        delete(s);
-      }
-
-      File root = LittleFS.open(folder);
-      //DEBUG_PRINT("\n\nListing: .%s in %S",extension.c_str(),folder.c_str());
-      File file = root.openNextFile();
-      while (file){
-        if (!file.isDirectory()){
-          String fullFileName = file.name();
-          if (fullFileName.endsWith(extension) || extension == "*") {
-            String* filename = new String(prefix);
-            // if we don't want the extension, we remmove it
-            if (!withExtension) *filename += fullFileName.substring(0, fullFileName.lastIndexOf('.'));
-            else *filename += fullFileName; // k is the icon ID
-            list->add(filename);
-            //DEBUG_PRINT("\n\t %s",filename->c_str());
-          }
-        }
-        file = root.openNextFile();
-        yield();
-      }
     }
 
     MenuItem* back_menu_item;
