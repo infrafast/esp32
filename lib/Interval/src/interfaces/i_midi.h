@@ -191,8 +191,8 @@ class BLEMIDIInterface: public MIDIInterface{
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
     }
 
-    virtual bool begin(){
-      DEBUG_INFO("%s::begin()",interfaceName.c_str());          
+    virtual bool _begin() override{
+      DEBUG_INFO("%s::_begin() => BLE set handler and switchable",interfaceName.c_str());          
       MIDIInterface::init();  
       bleInstancePtr = this;   // do not forget otherwise callback function will crash
 
@@ -339,8 +339,8 @@ class USBMIDIInterface: public MIDIInterface{
       state.progress = -1;
     }
 
-    virtual bool begin() override{
-      DEBUG_INFO("%s::begin()",interfaceName.c_str());
+    virtual bool _begin() override{
+      DEBUG_INFO("%s::_begin() => checking useUSBMidi",interfaceName.c_str());
       MIDIInterface::init();
       // if the fooswtich has started in FW update or debug mode, USB MIDI is not active, hence we set the status once for all
       if (!useUSBMidi){
@@ -498,7 +498,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     ~AppleMIDIInterface(){
     }    
 
-    virtual bool begin() override{      
+    virtual bool _begin() override{      
       DEBUG_INFO("AppleMIDIInterface::begin() => self registering to network event + basePtr affectation");
       MIDIInterface::init();
       appleInstancePtr = this;   // do not forget otherwise callback function will crash

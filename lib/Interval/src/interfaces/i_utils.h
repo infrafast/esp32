@@ -42,8 +42,8 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     
     virtual void* read(){return nullptr;}
     
-    virtual bool begin(){
-      DEBUG_INFO("%s::begin() => registered systemDS",interfaceName.c_str());          
+    virtual bool _begin() override{
+      DEBUG_INFO("%s::_begin() => registered systemDS",interfaceName.c_str());          
       systemDS.registerDataSetAddress(dsText.address);      // register all ds             
 
       //dataProviderName = getProviderNameForData();      
@@ -128,8 +128,8 @@ class DirectoryInterface: public NetworkDevice{
         hasStrip = false;             
       }
 
-      virtual bool begin(){     // called by init()
-        DEBUG_INFO("%s::begin() registering serviceFoundWrapper and _instance",interfaceName.c_str());
+      virtual bool _begin() override{     // called by init()
+        DEBUG_INFO("%s::_begin() registering serviceFoundWrapper and _instance",interfaceName.c_str());
         instance_ = this;  // enregistrer l’instance active       // we don't do that in the constructor as the instance has multiple heritage, hence we want to be sure the object is fully created
         EthernetBonjour.setServiceFoundCallback(&DirectoryInterface::serviceFoundWrapper);  
         return true;        
@@ -369,10 +369,10 @@ class WebApplicationService: public NetworkDevice{
       hasStrip = false;
     }
 
-    virtual bool begin() override{
+    /*virtual bool _begin() override{
       DEBUG_INFO("%s::begin()", interfaceName.c_str());
       return NetworkDevice::begin();
-    }
+    }*/
 
     virtual bool save() override{
       DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str());

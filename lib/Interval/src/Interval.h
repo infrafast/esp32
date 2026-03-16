@@ -552,7 +552,7 @@ void populateFileList(String extension, String folder, std::vector<String> *list
   list->clear();
 
   File root = LittleFS.open(folder);
-  //DEBUG_PRINT("\n\nListing: .%s in %S",extension.c_str(),folder.c_str());
+  DEBUG_INFO("Listing: 📝.%s in %S",extension.c_str(),folder.c_str());
   File file = root.openNextFile();
   while (file){
     if (!file.isDirectory()){
@@ -563,7 +563,7 @@ void populateFileList(String extension, String folder, std::vector<String> *list
         if (!withExtension) filename = concatStrings(filename,fullFileName.substring(0, fullFileName.lastIndexOf('.')));
         else filename = concatStrings(filename,fullFileName); // k is the icon ID
         list->push_back(filename);
-        //DEBUG_PRINT("\n\t %s",filename->c_str());
+        DEBUG_PRINT("\n\t %s",filename.c_str());
       }
     }
     file = root.openNextFile();

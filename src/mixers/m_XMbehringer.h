@@ -36,6 +36,7 @@ class ConnectMethodDS : public DataSet{
      
 };
 
+#define BEHRINGER_MIXER_PROFILE_FILENAME_EXTENSION "mix"
 
 class XMmixerModelDS : public DataSet{
   
@@ -50,21 +51,31 @@ class XMmixerModelDS : public DataSet{
       return &mixerModels[index];    
     }  
 
-    void load(){
-        populateFileList("mixer","/",&mixerModels);     // this populate the list of countries with the icon (prefix = k-) and without extension                
+    void populate(){
+      populateFileList(BEHRINGER_MIXER_PROFILE_FILENAME_EXTENSION,MIXER_DEFINITION_PATH,&mixerModels,"",false);     // no extension               
     }
 
     virtual uint16_t getSize(){
       return mixerModels.size();
     }
+
+    bool contains(const String& value) const {
+      for (const auto& model : mixerModels) {
+        if (model == value) {
+          return true;
+        }
+      }
+      return false;
+    }    
      
 };
+
 
 
 class BehringerXM: public MixerDevice<NetworkOSC>{
   public:
 
-    #define XM_BEHRINGER_PING_CMD "/xinfo"
+    #define XM_BEHRINGER_PING_CMD "/xinfo"    //=> maybe go to mixer definition if not the same for all X/M....
 
     int connectMethod = CONNECT_DISCOVER;
 
@@ -87,11 +98,20 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
 
     }     
 
-    /*irtual bool begin() override{     // called by init()
-        //MixerDevice::begin();
-        DEBUG_INFO("%s::begin() => creating mixers model list",interfaceName.c_str());        
-        mixerModelDS.load();
-    }*/
+    virtual bool begin() override{
+      DEBUG_INFO("%s::begin() => user setting up XMmixerModelDS",interfaceName.c_str());      
+      mixerModelDS.populate();        // feeding the list of available mixer definitions for when we are offline and want to select a mixer      
+
+      // check if mixerID.model is in the list, otherwise set it to the first item from it
+      if (!mixerModelDS.contains(mixerID.model)){
+        const char* firstValidModel = mixerModelDS.getValuePtr(0)->c_str();
+        DEBUG_WARN("%s is not a valid model, use %s as default",mixerID.model,firstValidModel);
+        setModel(firstValidModel);
+        return true;
+      }
+      
+      return restoreMixerProfile();       // setting up the last connected mixer
+    }
 
 
     virtual void serializeProperties(JsonArray& properties) override{
@@ -113,7 +133,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
         }else{
             // we only give the possibility to user to select the model if we are offline
             buf = (char*)malloc((strlen(ADDRESS_MIXER_MODEL)+64)*sizeof(char*));
-            sprintf(buf,ADDRESS_MIXER_MODEL,currentMixer.model.c_str());
+            sprintf(buf,ADDRESS_MIXER_MODEL,mixerID.model.c_str());
             properties.add(String(buf));
             free(buf); 
         }
@@ -132,18 +152,29 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
 
       char model[64];
       if (sscanf(property, ADDRESS_MIXER_MODEL, &model)){
-        if (currentMixer.model != model) changed = true;        
-        currentMixer.model = model;
+        if (mixerID.model != model) changed = true;        
+        setModel(model);        
       }
-
-      setModel(model);
-
+      
       // inherited parameters from NetworkOSC (IP+port) are useless when we are in discovery, we therefore do not recall them
       if (CONNECT_DISCOVER != connectMethod){
         changed |= NetworkOSC::restoreProperty(property);
       }
       return changed;
     }       
+
+    virtual bool restoreMixerProfile(){
+      DEBUG_INFO("%s::restoreMixerProfile() => deserializing definition and protocol",interfaceName.c_str()); 
+      String mixerDefinitionFilename = concatStrings(mixerID.model,".",BEHRINGER_MIXER_PROFILE_FILENAME_EXTENSION);
+      bool success = deserializeMixerDefinitionFromFile(mixerDefinitionFilename.c_str());
+      success &= deserializeMixerProtocolFromFile(mixerDef.protocol.c_str());
+      return success;
+    }
+
+    bool deserializeMixerProtocolFromFile(const char* filename){
+      DEBUG_INFO("%s::deserializeMixerProtocolFromFile(%s) to mixerProtocol",interfaceName.c_str(),filename); 
+      return true;
+    }
 
     virtual void switchDevice(bool _enable) override{
         NetworkDevice::switchDevice(_enable);
@@ -182,7 +213,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
                 // however we ignore and keep the address from the user if it is different but it was not a discovery
                 // which would means in that case that there are some ip masquerading and we really ened to keep the one provided by user
                 if (
-                    UDPIP[0] != currentMixer.ip[0] || currentMixer.ip[1] != currentMixer.ip[1] || currentMixer.ip[2] != currentMixer.ip[2] || UDPIP[3] != currentMixer.ip[3]
+                    UDPIP[0] != mixerID.ip[0] || mixerID.ip[1] != mixerID.ip[1] || mixerID.ip[2] != mixerID.ip[2] || UDPIP[3] != mixerID.ip[3]
                 ){
                     DEBUG_WARN("Mixer IP differs from UDP packet, switching to UDP IP instead. %s->%s",stringBuffer,UDPIP.toString());
                     ip = UDPIP;                      
@@ -202,10 +233,10 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
             }     
 
             osc.getString(1, stringBuffer);     // index 1 = name
-            String name = stringBuffer;   // used by mixerHasChanged to perform the comparison against currentMixer.name. Hence we can detect a change
+            String name = stringBuffer;   // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
 
             osc.getString(2, stringBuffer);     // index 2 = model
-            String model = stringBuffer;  // used by mixerHasChanged to perform the comparison against currentMixer.name. Hence we can detect a change
+            String model = stringBuffer;  // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
 
             if (isNewMixer(name,model,destination.ip))  state.broadcastConfig = true;  
             

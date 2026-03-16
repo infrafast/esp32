@@ -1,0 +1,7 @@
+{
+  "channelCount":16, 
+  "busCount":4,
+  "auxCount":1,
+  "fxCount":4,
+  "protocol":"xair.osc"    
+}

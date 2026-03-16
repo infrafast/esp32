@@ -5,15 +5,37 @@
 #include "mixer.h"
 
 #define MS_APP_STATE "/app/state"
-#define MS_MIXERS_CURRENT "/app/mixers/current"
+#define MS_MIXER_IDENTITY "/app/mixers/current"                   // mixer name, model, address IP
+#define MS_MIXER_DEFINITION "/console/information"                // mixer attributes like  number of channel...
+#define MS_SUBSCRIBE "/console/data/subscribe"
+#define MS_MIXERS_AVAILABLE "/app/mixers/available"
+#define MS_MIXER_GET_ANY_DATA "/console/data/get/*"
+
+#define MS_MIXER_PROFILE_FILENAME "/mixerProfile.ms" 
+/* data types
+  0: Channel
+  1: Aux
+  2:  => not behringer / not used
+  3: FX
+  4: Bus
+  5: => not behringer / not used
+  6: Main L/R
+  7: Mtx (Matrix)
+  8: DCA
+*/
+
 
 #define INTERFACE_MIXINGSTATION "MixingStation"
 class MixingStation:  public MixerDevice<NetworkSocket>{
   public:
   
-    MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_MIXERS_CURRENT,8887,8088,true){
+    MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_MIXER_IDENTITY,8887,8088,true){
       //destination.host = "192.168.99.99";
-      currentMixer.name = "MSStation";
+      mixerID.name = "MSStation";
+      
+      // protocol is hard-coded
+      mixerProtocol.anyChannelName = "ch.*.cfg.name";
+
     }
 
     virtual bool ping() override{
@@ -27,6 +49,44 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       //requestMixerInfo();
     }
  
+    virtual bool restoreMixerProfile(){
+      DEBUG_INFO("%s::restoreMixerProfile() => only deserializing definition, protocol is unique and hard wired",interfaceName.c_str());       
+      return deserializeMixerDefinitionFromFile(MS_MIXER_PROFILE_FILENAME);
+    }    
+
+    virtual bool begin() override{
+      return restoreMixerProfile();              // setting up the last connected mixer
+    }
+    
+
+    bool saveMixerDefinition(const char* filename) {
+
+      // that's exactly the symetry of mixer::deserializeMixerDefinitionFromFile 
+
+      DEBUG_INFO("%s::saveMixerDefinition() => %s",interfaceName.c_str(),filename);
+      File file = LittleFS.open(filename, "w");
+      if (!file) {
+        DEBUG_PRINT("❌ can't write file");
+        return false;
+      }
+
+      JsonDocument doc;
+
+      doc["channelCount"] = mixerDef.channelCount;
+      doc["busCount"]     = mixerDef.busCount;
+      doc["auxCount"]     = mixerDef.auxCount;
+      doc["fxCount"]      = mixerDef.fxCount;
+      doc["protocol"]     = mixerDef.protocol;
+
+      if (serializeJsonPretty(doc, file) == 0) {
+        DEBUG_PRINT("❌ serializeJsonPretty error");
+        file.close();
+        return false;
+      }
+
+      file.close();
+      return true;
+    }    
  
   protected: 
     ////////////////////////////////////////
@@ -172,7 +232,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         deviceInterface->state.progress = progress;         
       }
       else if (strcmp(topState, MS_CONNECTED) == 0) {  
-        if (!dataSync) queryMixer();
+        if (!dataSync) getMixerDefinition();
       }
       else if (strcmp(topState, MS_RECONNECTING) == 0) {
         setStatePending("green medium",concatStrings(state).c_str());  
@@ -188,11 +248,34 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
-    void queryMixer(){
-      hwm.network->clientSocketSend(get(MS_MIXERS_CURRENT)); // retrieve name, etc...            
+    void getMixerDefinition(){      
+      hwm.network->clientSocketSend(get(MS_MIXER_DEFINITION)); // retrieve name, etc...            
     }
 
-    void processMixer(const char* path, JsonVariant body) {
+    void processMixerDefinition(char* rx, size_t len) {
+      JsonDocument filter;
+      filter["body"]["type"]     = true;
+      filter["body"]["count"]     = true;
+      filter["body"]["offset"]  = true;
+
+      JsonDocument d;
+
+      DeserializationError e;
+      e = deserializeJson(d, rx, len, DeserializationOption::Filter(filter));
+      if (e){
+        DEBUG_ERROR("JSON error: %s", e.c_str());        
+        return;
+      }
+
+      // now serialize this onfo into the MS_MIXER_PROFILE_FILENAME
+
+      // now get the mixer identity
+      hwm.network->clientSocketSend(get(MS_MIXER_IDENTITY)); // retrieve name, etc...            
+
+    }
+
+
+    void processMixerIdentity(const char* path, JsonVariant body) {
       // got the connected mixer informartion
       #define OFFLINE "offline"
       IPAddress ip;
@@ -202,7 +285,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
       if (name != OFFLINE){
         
-        isNewMixer(name,model,ip);
+        if (isNewMixer(name,model,ip)){
+          // nothing special to be done by mixing station upon connexion of a new mixer
+        }
         
       }else{
 
@@ -214,7 +299,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     virtual void startMixerDataSync() override{
       //dataSync = true;
-      hwm.network->clientSocketSend(post("/console/data/subscribe",bodyPathFormat("ch.*.cfg.name","val")));  // forge a MS get json query with echoCommand as the path
+      hwm.network->clientSocketSend(post(MS_SUBSCRIBE,bodyPathFormat(mixerProtocol.anyChannelName.c_str(),"val")));  // forge a MS get json query with echoCommand as the path
       //setStateMixerLive();
       setStatePendingDataSync();
     }
@@ -315,9 +400,10 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
 const MixingStation::Route MixingStation::routes[] = {
   { MS_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState },           false },
-  { MS_MIXERS_CURRENT,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixer },           false },  
-  { "/app/mixers/available", RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }, false },
-  { "/console/data/get/*",   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet },         true },
+  { MS_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity },   false },  
+  { MS_MIXER_DEFINITION,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixerDefinition }, false },  
+  { MS_MIXERS_AVAILABLE,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }, false },
+  { MS_MIXER_GET_ANY_DATA,   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet },         true },
 };
 
 #endif

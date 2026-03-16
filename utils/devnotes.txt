@@ -1,5 +1,5 @@
 
-~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C 0x42036664:0x3fcebd40 0x42036651:0x3fcebd60 0x42036f20:0x3fcebd80 0x42037aa2:0x3fcebda0 0x42038386:0x3fcebe40 0x4206a7aa:0x3fcebe80
+~/.platformio/packages/toolchain-xtensa-esp32s3/bin/xtensa-esp32s3-elf-addr2line -e .pio/build/dev/firmware.elf -f -C 0x42154b52:0x3fcebd40 0x42036c85:0x3fcebd60 0x42037620:0x3fcebd80 0x4203814e:0x3fcebda0 0x42038a36:0x3fcebe40 0x4206ae52:0x3fcebe80
 
 
 packages are in C:\Users\progman\.platformio\packages

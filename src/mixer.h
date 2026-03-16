@@ -3,8 +3,9 @@
 
 #define GROUP_INTERFACE_MIXER "Mixer"   
 
-
 #include "Interfaces.h"
+
+#define MIXER_DEFINITION_PATH "/"
 
 struct MixerIdentity {
     String name;
@@ -28,12 +29,29 @@ struct MixerIdentity {
     }*/
 };
 
+struct MixerDefinition{
+  uint8_t channelCount = 18;
+  uint8_t busCount = 4 ;
+  uint8_t auxCount = 1;
+  uint8_t fxCount = 4; 
+
+  String protocol = "/xair.osc";
+};
+
+struct MixerProtocol{
+  String anyChannelName = "ch.*.cfg.name";
+};
+
+
 
 template <typename NetworkBase>
 class MixerDevice : public NetworkBase {
 public:
 
-    MixerIdentity currentMixer;
+    // mixer definition
+    MixerIdentity mixerID;
+    MixerDefinition mixerDef;
+    MixerProtocol mixerProtocol;
 
     bool dataSync = false;
 
@@ -44,25 +62,19 @@ public:
     MixerDevice(Args&&... args)
         : NetworkBase(std::forward<Args>(args)...)
     {
-      currentMixer.model = "undef";
-      currentMixer.name = "offline";
-      currentMixer.ip = IPAddress(0,0,0,0);
+      mixerID.model = "undef";
+      mixerID.name = "offline";
+      mixerID.ip = IPAddress(0,0,0,0);
     }
 
     virtual void  startMixerDataSync() = 0;
-
-    /*virtual bool begin(){     // called by init()
-      NetworkBase::begin();
-      DEBUG_INFO("%s:begin() setting up mixer");
-      setModel(currentMixer.model);
-    }*/
 
     bool isNewMixer(String& name, String&model, IPAddress& ip) {
       DEBUG_INFO("%s:isNewMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
 
       MixerIdentity newMixer { name, model, ip };
 
-      bool mixerChanged = !currentMixer.equals(newMixer);
+      bool mixerChanged = !mixerID.equals(newMixer);
       
       if (mixerChanged){
         DEBUG_PRINT("\t%s",mixerChanged?"yes✅":"no");
@@ -87,23 +99,57 @@ public:
 
     }
 
+    // used to retrieve the 
+    virtual bool restoreMixerProfile() = 0;
+
+    bool deserializeMixerDefinitionFromFile(const char* filename){
+      DEBUG_INFO("%s:deserializeMixerDefinitionFromFile(%s)",this->interfaceName.c_str(),filename);       
+      // ...  restore mixerDef
+
+      String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename);
+
+      File file = LittleFS.open(fullFilename, "r");
+      if (!file) {
+        DEBUG_PRINT("❌ can't open file");
+        return false;
+      }
+
+      JsonDocument doc;
+
+      DeserializationError error = deserializeJson(doc, file);
+      file.close();
+
+      if (error) {
+        DEBUG_PRINT("❌ json error:%s",error.c_str());
+        return false;
+      }
+
+      mixerDef.channelCount = doc["channelCount"] | mixerDef.channelCount;
+      mixerDef.busCount     = doc["busCount"]     | mixerDef.busCount;
+      mixerDef.auxCount     = doc["auxCount"]     | mixerDef.auxCount;
+      mixerDef.fxCount      = doc["fxCount"]      | mixerDef.fxCount;
+      mixerDef.protocol     = doc["protocol"]     | mixerDef.protocol;
+
+      return true;
+    }
+
     void setModel(const char* model){
-      DEBUG_INFO("%s:setModel(%s)",this->interfaceName.c_str(),model);                  
-      if (currentMixer.model != model){
-        // perform json file load to set mixer attributes like number of channels, etc....
-        // clear all datasets
-        // ...            
-        DEBUG_PRINT("\tMODEL HAS CHANGED: CLEARING MIXER DATASET AND SETTTING UP ATTRIBUTES");                  
+      DEBUG_INFO("%s:setModel(%s)",this->interfaceName.c_str(),model);
+      if (mixerID.model != model){
+        mixerID.model = model;                                
+        restoreMixerProfile();        // since the model has changed we have to rebuild it    
+        // PROBABLY HERE WE SHOULD BRODCAST interfaceConfig 
+        // BUT ALSO SEND AN EVENT TO ASK APPLICATION MANAGER TO REPUBLISH THE BANKS
       }else{
-        DEBUG_PRINT("\tmodel didn't change");                  
+        DEBUG_PRINT("\t model didn't change!");
       }
     }
 
     void setMixer(const MixerIdentity& newMixer){
-      currentMixer = newMixer;     
+      mixerID = newMixer;     
       //dataSync = false;
-      DEBUG_INFO("%s:setMixer(%s,%s,%s)🎛, data sync cleared",this->interfaceName.c_str(),currentMixer.name.c_str(),currentMixer.model.c_str(),currentMixer.ip.toString().c_str());            
-      setModel(currentMixer.model.c_str());
+      DEBUG_INFO("%s:setMixer(%s,%s,%s)🎛, data sync cleared",this->interfaceName.c_str(),mixerID.name.c_str(),mixerID.model.c_str(),mixerID.ip.toString().c_str());            
+      setModel(mixerID.model.c_str());
     }
 
     void setStatePendingDataSync(){
@@ -118,7 +164,7 @@ public:
       this->setStateConnected();
       DEBUG_INFO("%s:setStateMixerLive()🟢",this->interfaceName.c_str());
       this->state.label = IF_STATE_LIVE;
-      this->state.details = concatStrings(currentMixer.name," ",currentMixer.model," ",currentMixer.ip.toString(),":",this->remotePort);
+      this->state.details = concatStrings(mixerID.name," ",mixerID.model," ",mixerID.ip.toString(),":",this->remotePort);
     }    
 
 

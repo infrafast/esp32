@@ -59,10 +59,15 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     void onEvent(const Event& evt) override {}
 
-    virtual bool begin(){     // called by init()
-      DEBUG_INFO("%s::begin() void",interfaceName.c_str());
+    virtual bool _begin(){     // called by init()
+      DEBUG_INFO("%s::_begin() void",interfaceName.c_str());
       return true;
     };        
+
+    virtual bool begin(){     // called by _begin() and let user define its own begin in derived class. Curently only in user with NetworkDevice
+      DEBUG_INFO("DeviceInterface(%s)::begin() => default void",interfaceName.c_str());
+      return true;
+    }    
 
     virtual bool end(){         // called to shutdown completely
       DEBUG_INFO("%s::end() void",interfaceName.c_str());
@@ -132,7 +137,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       DEBUG_INFO("----------------------------------  %s->init(...)  ---------------------------------- ", interfaceName.c_str());
       //registerEventListener(listener);
       load();
-      bool success = begin();
+      bool success = _begin();
       DEBUG_INFO("-----------------------------------------------------------------------------------------------------\n");
       return success;
     }
@@ -571,7 +576,7 @@ class NetWorkService{
           setStateDisconnected();
         }
       }
-      DEBUG_INFO("After %s enable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
+      //DEBUG_INFO("After %s enable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
     void disable(){
@@ -579,7 +584,7 @@ class NetWorkService{
       releaseCapacity();
       deviceInterface->setStateDisabled();
       handleDisconnectService();
-      DEBUG_INFO("After %s disable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
+      //DEBUG_INFO("After %s disable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
     void monitorNetwork(){
@@ -713,10 +718,10 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     virtual bool ping() = 0;
 
     // network devices listen to network event
-    virtual bool begin() override{     // called by init()
-      DEBUG_INFO("NetworkDevice(%s)::begin() => self registering to network event",interfaceName.c_str());
-      hwm.network->registerEventListener(this);
-      return true;
+    virtual bool _begin() override{     // called by init()
+      DEBUG_INFO("NetworkDevice(%s)::_begin() => self registering to network event",interfaceName.c_str());
+      hwm.network->registerEventListener(this);   
+      return begin();    // derived class call   
     };        
 
 
@@ -798,6 +803,4 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
 };
 
-
-//DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable)
 #endif

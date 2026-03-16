@@ -11,8 +11,8 @@ class DMXInterface : public DeviceInterface{
       state.switchable = false;
     }
     
-    virtual bool begin(){     // called by init()
-      DEBUG_INFO("%s::begin() setStateNotImplemented",interfaceName.c_str());
+    virtual bool _begin() override{     // called by init()
+      DEBUG_INFO("%s::_begin() setStateNotImplemented",interfaceName.c_str());
       setStateNotImplemented();
       return true;
     };        
