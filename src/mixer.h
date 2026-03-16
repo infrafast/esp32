@@ -29,7 +29,7 @@ struct MixerIdentity {
     }*/
 };
 
-struct MixerDefinition{
+struct BaseMixerDefinition{
   uint8_t channelCount = 18;
   uint8_t busCount = 4 ;
   uint8_t auxCount = 1;
@@ -48,7 +48,6 @@ public:
 
     // mixer definition
     MixerIdentity mixerID;
-    MixerDefinition mixerDef;
     MixerProtocol mixerProtocol;
 
     bool dataSync = false;

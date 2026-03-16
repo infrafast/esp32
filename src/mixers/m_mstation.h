@@ -25,11 +25,19 @@
   8: DCA
 */
 
+struct MSmixerDefinition : public BaseMixerDefinition{
+  uint8_t channelOffset = 0;
+  uint8_t busOffset = 0 ;
+  uint8_t auxOffset = 0;
+  uint8_t fxOffset = 0; 
+};
 
 #define INTERFACE_MIXINGSTATION "MixingStation"
 class MixingStation:  public MixerDevice<NetworkSocket>{
   public:
   
+    MSmixerDefinition mixerDef;
+
     MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_MIXER_IDENTITY,8887,8088,true){
       //destination.host = "192.168.99.99";
       mixerID.name = "MSStation";
@@ -53,7 +61,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     virtual bool restoreMixerProfile(){
       DEBUG_INFO("%s::restoreMixerProfile() => only deserializing definition, protocol is unique and hard wired",interfaceName.c_str());       
       // version générique pour ESP32 Arduino, afin de sauvegarder / charger n’importe quelle struct POD avec une seule paire de fonctions :
-      return loadStruct(MS_MIXER_PROFILE_FILENAME, mixerDef);
+      return deserializeMixerDefinitionFromFile(MS_MIXER_PROFILE_FILENAME);
     }    
 
     virtual bool begin() override{
@@ -66,28 +74,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }    
 
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) override{
-        File f = LittleFS.open(filename, FILE_READ);
-        if (!f) {
-            Serial.println("Fichier inexistant");
-            return false;
-        }
-
-        if (f.size() != sizeof(MixerDefinition)) {
-            Serial.println("Taille fichier invalide");
-            f.close();
-            return false;
-        }
-
-        size_t read = f.read((uint8_t*)&mixerDef, sizeof(MixerDefinition));
-
-        f.close();
-
-        if (read != sizeof(MixerDefinition)) {
-            Serial.println("Erreur lecture structure");
-            return false;
-        }
-
-        return true;
+      return loadStruct(filename, mixerDef);
     }    
  
   protected: 
@@ -267,6 +254,60 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       if (e){
         DEBUG_ERROR("JSON error: %s", e.c_str());        
         return;
+      }
+
+      //feed the mixerDef
+      JsonArray channelTypes = d["channelTypes"].as<JsonArray>();
+      if (channelTypes.isNull()) {
+        DEBUG_ERROR("JSON error: channelTypes missing");
+        return;
+      }
+
+      // Valeurs par défaut si certaines sections n'existent pas
+      mixerDef.channelCount = 0;
+      mixerDef.busCount     = 0;
+      mixerDef.auxCount     = 0;
+      mixerDef.fxCount      = 0;
+      mixerDef.channelOffset = 0;
+      mixerDef.busOffset     = 0;
+      mixerDef.auxOffset    = 0;
+      mixerDef.fxOffset      = 0;
+
+      for (JsonObject ct : channelTypes) {
+        uint8_t type  = ct["type"]  | 255;
+        uint8_t count = ct["count"] | 0;
+        uint8_t offset = ct["offset"] | 0;
+
+        switch (type) {
+          case 0: // Channel / Input
+            mixerDef.channelCount = count;
+            mixerDef.channelOffset = offset;
+            break;
+
+          case 1: // Aux
+            mixerDef.auxCount = count;
+            mixerDef.auxOffset = offset;
+            break;
+
+          case 3: // FX Return
+            mixerDef.fxCount = count;
+            mixerDef.fxOffset = offset;
+            break;
+
+          case 4: // Bus
+            mixerDef.busCount = count;
+            mixerDef.busOffset = offset;
+            break;
+
+          // Types présents mais non utilisés ici
+          case 2: // not used
+          case 5: // not used
+          case 6: // Main L/R
+          case 7: // Matrix
+          case 8: // DCA
+          default:
+            break;
+        }
       }
 
       // now serialize this onfo into the MS_MIXER_PROFILE_FILENAME in binary form

@@ -70,6 +70,9 @@ class XMmixerModelDS : public DataSet{
      
 };
 
+struct XMmixerDefinition : public BaseMixerDefinition{
+  String protocol = "";
+};
 
 
 class BehringerXM: public MixerDevice<NetworkOSC>{
@@ -78,7 +81,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
     #define XM_BEHRINGER_PING_CMD "/xinfo"    //=> maybe go to mixer definition if not the same for all X/M....
 
     int connectMethod = CONNECT_DISCOVER;
-    String protocol;
+    XMmixerDefinition mixerDef;
 
     /* */
     #define DISCOVERY_PORT_COUNT 2 
@@ -168,7 +171,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
       DEBUG_INFO("%s::restoreMixerProfile() => deserializing definition and protocol",interfaceName.c_str()); 
       String mixerDefinitionFilename = concatStrings(mixerID.model,".",BEHRINGER_MIXER_PROFILE_FILENAME_EXTENSION);
       bool success = deserializeMixerDefinitionFromFile(mixerDefinitionFilename.c_str());
-      success &= deserializeMixerProtocolFromFile(protocol.c_str());
+      success &= deserializeMixerProtocolFromFile(mixerDef.protocol.c_str());
       return success;
     }
 
@@ -203,7 +206,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
       mixerDef.busCount     = doc["busCount"]     | mixerDef.busCount;
       mixerDef.auxCount     = doc["auxCount"]     | mixerDef.auxCount;
       mixerDef.fxCount      = doc["fxCount"]      | mixerDef.fxCount;
-      protocol              = doc["protocol"]     | protocol;
+      mixerDef.protocol     = doc["protocol"]     | mixerDef.protocol;
 
       return true;
     }
