@@ -87,11 +87,11 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
 
     }     
 
-    virtual bool begin() override{     // called by init()
+    /*irtual bool begin() override{     // called by init()
         //MixerDevice::begin();
         DEBUG_INFO("%s::begin() => creating mixers model list",interfaceName.c_str());        
         mixerModelDS.load();
-    }
+    }*/
 
 
     virtual void serializeProperties(JsonArray& properties) override{
