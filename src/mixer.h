@@ -34,8 +34,6 @@ struct MixerDefinition{
   uint8_t busCount = 4 ;
   uint8_t auxCount = 1;
   uint8_t fxCount = 4; 
-
-  String protocol = "/xair.osc";
 };
 
 struct MixerProtocol{
@@ -102,36 +100,7 @@ public:
     // used to retrieve the 
     virtual bool restoreMixerProfile() = 0;
 
-    bool deserializeMixerDefinitionFromFile(const char* filename){
-      DEBUG_INFO("%s:deserializeMixerDefinitionFromFile(%s)",this->interfaceName.c_str(),filename);       
-      // ...  restore mixerDef
-
-      String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename);
-
-      File file = LittleFS.open(fullFilename, "r");
-      if (!file) {
-        DEBUG_PRINT("❌ can't open file");
-        return false;
-      }
-
-      JsonDocument doc;
-
-      DeserializationError error = deserializeJson(doc, file);
-      file.close();
-
-      if (error) {
-        DEBUG_PRINT("❌ json error:%s",error.c_str());
-        return false;
-      }
-
-      mixerDef.channelCount = doc["channelCount"] | mixerDef.channelCount;
-      mixerDef.busCount     = doc["busCount"]     | mixerDef.busCount;
-      mixerDef.auxCount     = doc["auxCount"]     | mixerDef.auxCount;
-      mixerDef.fxCount      = doc["fxCount"]      | mixerDef.fxCount;
-      mixerDef.protocol     = doc["protocol"]     | mixerDef.protocol;
-
-      return true;
-    }
+    virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;
 
     void setModel(const char* model){
       DEBUG_INFO("%s:setModel(%s)",this->interfaceName.c_str(),model);

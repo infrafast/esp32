@@ -11,7 +11,8 @@
 #define MS_MIXERS_AVAILABLE "/app/mixers/available"
 #define MS_MIXER_GET_ANY_DATA "/console/data/get/*"
 
-#define MS_MIXER_PROFILE_FILENAME "/mixerProfile.ms" 
+#define MS_MIXER_PROFILE_FILENAME "/mixerDef.ms"
+
 /* data types
   0: Channel
   1: Aux
@@ -51,41 +52,42 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
  
     virtual bool restoreMixerProfile(){
       DEBUG_INFO("%s::restoreMixerProfile() => only deserializing definition, protocol is unique and hard wired",interfaceName.c_str());       
-      return deserializeMixerDefinitionFromFile(MS_MIXER_PROFILE_FILENAME);
+      // version générique pour ESP32 Arduino, afin de sauvegarder / charger n’importe quelle struct POD avec une seule paire de fonctions :
+      return loadStruct(MS_MIXER_PROFILE_FILENAME, mixerDef);
     }    
 
     virtual bool begin() override{
       return restoreMixerProfile();              // setting up the last connected mixer
     }
     
+    bool saveMixerDefinition(){
+      // version générique pour ESP32 Arduino, afin de sauvegarder / charger n’importe quelle struct POD avec une seule paire de fonctions :
+      return saveStruct(MS_MIXER_PROFILE_FILENAME, mixerDef);
+    }    
 
-    bool saveMixerDefinition(const char* filename) {
+    virtual bool deserializeMixerDefinitionFromFile(const char* filename) override{
+        File f = LittleFS.open(filename, FILE_READ);
+        if (!f) {
+            Serial.println("Fichier inexistant");
+            return false;
+        }
 
-      // that's exactly the symetry of mixer::deserializeMixerDefinitionFromFile 
+        if (f.size() != sizeof(MixerDefinition)) {
+            Serial.println("Taille fichier invalide");
+            f.close();
+            return false;
+        }
 
-      DEBUG_INFO("%s::saveMixerDefinition() => %s",interfaceName.c_str(),filename);
-      File file = LittleFS.open(filename, "w");
-      if (!file) {
-        DEBUG_PRINT("❌ can't write file");
-        return false;
-      }
+        size_t read = f.read((uint8_t*)&mixerDef, sizeof(MixerDefinition));
 
-      JsonDocument doc;
+        f.close();
 
-      doc["channelCount"] = mixerDef.channelCount;
-      doc["busCount"]     = mixerDef.busCount;
-      doc["auxCount"]     = mixerDef.auxCount;
-      doc["fxCount"]      = mixerDef.fxCount;
-      doc["protocol"]     = mixerDef.protocol;
+        if (read != sizeof(MixerDefinition)) {
+            Serial.println("Erreur lecture structure");
+            return false;
+        }
 
-      if (serializeJsonPretty(doc, file) == 0) {
-        DEBUG_PRINT("❌ serializeJsonPretty error");
-        file.close();
-        return false;
-      }
-
-      file.close();
-      return true;
+        return true;
     }    
  
   protected: 
@@ -267,7 +269,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         return;
       }
 
-      // now serialize this onfo into the MS_MIXER_PROFILE_FILENAME
+      // now serialize this onfo into the MS_MIXER_PROFILE_FILENAME in binary form
+      saveMixerDefinition();
 
       // now get the mixer identity
       hwm.network->clientSocketSend(get(MS_MIXER_IDENTITY)); // retrieve name, etc...            

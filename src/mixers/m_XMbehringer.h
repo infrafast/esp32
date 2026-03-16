@@ -78,6 +78,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
     #define XM_BEHRINGER_PING_CMD "/xinfo"    //=> maybe go to mixer definition if not the same for all X/M....
 
     int connectMethod = CONNECT_DISCOVER;
+    String protocol;
 
     /* */
     #define DISCOVERY_PORT_COUNT 2 
@@ -167,12 +168,43 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
       DEBUG_INFO("%s::restoreMixerProfile() => deserializing definition and protocol",interfaceName.c_str()); 
       String mixerDefinitionFilename = concatStrings(mixerID.model,".",BEHRINGER_MIXER_PROFILE_FILENAME_EXTENSION);
       bool success = deserializeMixerDefinitionFromFile(mixerDefinitionFilename.c_str());
-      success &= deserializeMixerProtocolFromFile(mixerDef.protocol.c_str());
+      success &= deserializeMixerProtocolFromFile(protocol.c_str());
       return success;
     }
 
     bool deserializeMixerProtocolFromFile(const char* filename){
       DEBUG_INFO("%s::deserializeMixerProtocolFromFile(%s) to mixerProtocol",interfaceName.c_str(),filename); 
+      return true;
+    }
+
+    virtual bool deserializeMixerDefinitionFromFile(const char* filename){
+      DEBUG_INFO("%s:deserializeMixerDefinitionFromFile(%s)",this->interfaceName.c_str(),filename);       
+      // ...  restore mixerDef
+
+      String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename);
+
+      File file = LittleFS.open(fullFilename, "r");
+      if (!file) {
+        DEBUG_PRINT("❌ can't open file");
+        return false;
+      }
+
+      JsonDocument doc;
+
+      DeserializationError error = deserializeJson(doc, file);
+      file.close();
+
+      if (error) {
+        DEBUG_PRINT("❌ json error:%s",error.c_str());
+        return false;
+      }
+
+      mixerDef.channelCount = doc["channelCount"] | mixerDef.channelCount;
+      mixerDef.busCount     = doc["busCount"]     | mixerDef.busCount;
+      mixerDef.auxCount     = doc["auxCount"]     | mixerDef.auxCount;
+      mixerDef.fxCount      = doc["fxCount"]      | mixerDef.fxCount;
+      protocol              = doc["protocol"]     | protocol;
+
       return true;
     }
 

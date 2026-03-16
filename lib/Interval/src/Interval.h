@@ -571,6 +571,53 @@ void populateFileList(String extension, String folder, std::vector<String> *list
   }
 }
 
+template<typename T>
+bool saveStruct(const char* filename, const T& data)
+{
+    File f = LittleFS.open(filename, FILE_WRITE);
+    if (!f) {
+        Serial.println("Erreur ouverture fichier en écriture");
+        return false;
+    }
+
+    size_t written = f.write(reinterpret_cast<const uint8_t*>(&data), sizeof(T));
+    f.close();
+
+    if (written != sizeof(T)) {
+        Serial.println("Erreur ecriture structure");
+        return false;
+    }
+
+    return true;
+}
+/*
+technique utilisée dans beaucoup de firmware ESP32 qui permet de sauvegarder et charger 
+automatiquement n'importe quelle struct dans SPIFFS/NVS avec une seule fonction template :
+*/
+template<typename T>
+bool loadStruct(const char* filename, T& data){
+    File f = LittleFS.open(filename, FILE_READ);
+    if (!f) {
+        DEBUG_ERROR("can't open file ❌  %s",filename);
+        return false;
+    }
+
+    if (f.size() != sizeof(T)) {
+        DEBUG_WARN("invalid file size ❌  %s : %i/%i",filename,f.size(),sizeof(T));
+        f.close();
+        return false;
+    }
+
+    size_t read = f.read(reinterpret_cast<uint8_t*>(&data), sizeof(T));
+    f.close();
+
+    if (read != sizeof(T)) {
+        DEBUG_WARN("error reading ❌  %s : %i/%i",filename);
+        return false;
+    }
+
+    return true;
+}
 
 bool checkAndDeleteFile(const char* filename) {
     if (LittleFS.exists(filename)) {
