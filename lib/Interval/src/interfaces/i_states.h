@@ -15,8 +15,6 @@
 #define IF_STATE_INVITING           "inviting"
 #define IF_STATE_OFFLINE            "offline"
 #define IF_STATE_SYNCING            "syncing"
-#define IF_STATE_LIVE               "live"
-#define IF_STATE_DATASYNCING        "getting data"
 
 
 #endif

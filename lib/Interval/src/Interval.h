@@ -572,8 +572,8 @@ void populateFileList(String extension, String folder, std::vector<String> *list
 }
 
 template<typename T>
-bool saveStruct(const char* filename, const T& data)
-{
+bool saveStruct(const char* filename, const T& data){
+
     File f = LittleFS.open(filename, FILE_WRITE);
     if (!f) {
         Serial.println("Erreur ouverture fichier en écriture");
@@ -598,12 +598,12 @@ template<typename T>
 bool loadStruct(const char* filename, T& data){
     File f = LittleFS.open(filename, FILE_READ);
     if (!f) {
-        DEBUG_ERROR("can't open file ❌  %s",filename);
+        DEBUG_ERROR("can't open file %s",filename);
         return false;
     }
 
     if (f.size() != sizeof(T)) {
-        DEBUG_WARN("invalid file size ❌  %s : %i/%i",filename,f.size(),sizeof(T));
+        DEBUG_ERROR("invalid file size %s : %i/%i",filename,f.size(),sizeof(T));
         f.close();
         return false;
     }
@@ -612,7 +612,7 @@ bool loadStruct(const char* filename, T& data){
     f.close();
 
     if (read != sizeof(T)) {
-        DEBUG_WARN("error reading ❌  %s : %i/%i",filename);
+        DEBUG_ERROR("error reading %s : %i/%i",filename);
         return false;
     }
 

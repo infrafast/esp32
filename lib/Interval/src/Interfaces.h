@@ -278,7 +278,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;
     }
 
-    void setStateDisabled(){
+    virtual void setStateDisabled(){
       DEBUG_INFO("%s::setStateDisabled()⚫",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_DISABLED;

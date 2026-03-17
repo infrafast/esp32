@@ -7,15 +7,15 @@
 #include "Interval.h"
 
 #include "mixers/m_mstation.h"
-#include "mixers/m_XMbehringer.h"
+#include "mixers/m_xmseries.h"
 
 MixingStation* msMixer;
-BehringerXM* xmMixer;
+XMSeries* xmMixer;
 
 void setup(){
     
     msMixer = new MixingStation();    
-    xmMixer = new BehringerXM();
+    xmMixer = new XMSeries();
 
     app.init();
 }

@@ -13,17 +13,18 @@
 
 #define MS_MIXER_PROFILE_FILENAME "/mixerDef.ms"
 
-/* data types
-  0: Channel
-  1: Aux
-  2:  => not behringer / not used
-  3: FX
-  4: Bus
-  5: => not behringer / not used
-  6: Main L/R
-  7: Mtx (Matrix)
-  8: DCA
-*/
+// data types
+
+
+#define    MS_TYPE_CHANNEL  0
+#define    MS_TYPE_AUX      1
+#define    MS_TYPE_UNDEF1   2
+#define    MS_TYPE_FX       3
+#define    MS_TYPE_BUS      4
+#define    MS_TYPE_UNDEF2   5
+#define    MS_TYPE_MAINLR   6
+#define    MS_TYPE_MATRIX   7
+#define    MS_TYPE_DCA      8
 
 struct MSmixerDefinition : public BaseMixerDefinition{
   uint8_t channelOffset = 0;
@@ -54,8 +55,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     virtual void onSocketConnected() override{
       hwm.network->clientSocketSend(get(MS_APP_STATE));  // forge a MS get json query with echoCommand as the path
-      //hwm.network->clientSocketSend(post("/console/data/subscribe",bodyPathFormat("ch.*.mix.lvl","val")));  // forge a MS get json query with echoCommand as the path
-      //requestMixerInfo();
     }
  
     virtual bool restoreMixerProfile(){
@@ -69,6 +68,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
     
     bool saveMixerDefinition(){
+      DEBUG_INFO("%s::saveMixerDefinition()",interfaceName.c_str());       
       // version générique pour ESP32 Arduino, afin de sauvegarder / charger n’importe quelle struct POD avec une seule paire de fonctions :
       return saveStruct(MS_MIXER_PROFILE_FILENAME, mixerDef);
     }    
@@ -221,7 +221,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         deviceInterface->state.progress = progress;         
       }
       else if (strcmp(topState, MS_CONNECTED) == 0) {  
-        if (!dataSync) getMixerDefinition();
+        getMixerDefinition();
       }
       else if (strcmp(topState, MS_RECONNECTING) == 0) {
         setStatePending("green medium",concatStrings(state).c_str());  
@@ -242,10 +242,16 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
     void processMixerDefinition(char* rx, size_t len) {
+      #define MS_CHANNEL_TYPES    "channelTypes"
+        #define MS_OFFSET   "offset"
+        #define MS_COUNT    "count"
+        #define MS_TYPE     "type"
+
+
       JsonDocument filter;
-      filter["body"]["type"]     = true;
-      filter["body"]["count"]     = true;
-      filter["body"]["offset"]  = true;
+      filter["body"][MS_CHANNEL_TYPES][0][MS_OFFSET]     = true;
+      filter["body"][MS_CHANNEL_TYPES][0][MS_COUNT]     = true;
+      filter["body"][MS_CHANNEL_TYPES][0][MS_TYPE]     = true;
 
       JsonDocument d;
 
@@ -257,9 +263,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       }
 
       //feed the mixerDef
-      JsonArray channelTypes = d["channelTypes"].as<JsonArray>();
+      JsonArray channelTypes = d["body"][MS_CHANNEL_TYPES].as<JsonArray>();
       if (channelTypes.isNull()) {
-        DEBUG_ERROR("JSON error: channelTypes missing");
+        DEBUG_ERROR("JSON error: %s missing",MS_CHANNEL_TYPES);
         return;
       }
 
@@ -274,37 +280,37 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       mixerDef.fxOffset      = 0;
 
       for (JsonObject ct : channelTypes) {
-        uint8_t type  = ct["type"]  | 255;
-        uint8_t count = ct["count"] | 0;
-        uint8_t offset = ct["offset"] | 0;
+        uint8_t type  = ct[MS_TYPE]  | 255;
+        uint8_t count = ct[MS_COUNT] | 0;
+        uint8_t offset = ct[MS_OFFSET] | 0;
 
         switch (type) {
-          case 0: // Channel / Input
+          case MS_TYPE_CHANNEL: // Channel / Input
             mixerDef.channelCount = count;
             mixerDef.channelOffset = offset;
             break;
 
-          case 1: // Aux
+          case MS_TYPE_AUX: // Aux
             mixerDef.auxCount = count;
             mixerDef.auxOffset = offset;
             break;
 
-          case 3: // FX Return
+          case MS_TYPE_FX: // FX Return
             mixerDef.fxCount = count;
             mixerDef.fxOffset = offset;
             break;
 
-          case 4: // Bus
+          case MS_TYPE_BUS: // Bus
             mixerDef.busCount = count;
             mixerDef.busOffset = offset;
             break;
 
           // Types présents mais non utilisés ici
-          case 2: // not used
-          case 5: // not used
-          case 6: // Main L/R
-          case 7: // Matrix
-          case 8: // DCA
+          case MS_TYPE_UNDEF1: // not used
+          case MS_TYPE_UNDEF2: // not used
+          case MS_TYPE_MAINLR: // Main L/R
+          case MS_TYPE_MATRIX: // Matrix
+          case MS_TYPE_DCA: // DCA
           default:
             break;
         }
@@ -327,24 +333,16 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       String name   = body["name"]    | OFFLINE;
       String model  = body["currentModel"] | "";
 
-      if (name != OFFLINE){
-        
-        if (isNewMixer(name,model,ip)){
-          // nothing special to be done by mixing station upon connexion of a new mixer
-        }
-        
+      if (name != OFFLINE){        
+        setMixer(name,model,ip);                
       }else{
-
         hwm.network->clientSocketSend(get(MS_APP_STATE));   // force getting the state as a backup in case mixerQuery didn't pass thru
-
       }
 
     }
 
     virtual void startMixerDataSync() override{
-      //dataSync = true;
       hwm.network->clientSocketSend(post(MS_SUBSCRIBE,bodyPathFormat(mixerProtocol.anyChannelName.c_str(),"val")));  // forge a MS get json query with echoCommand as the path
-      //setStateMixerLive();
       setStatePendingDataSync();
     }
 

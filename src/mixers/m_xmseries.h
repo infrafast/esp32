@@ -5,7 +5,7 @@
 
 #define ADDRESS_CONNECT_METHOD "/connect/%d"
 #define ADDRESS_MIXER_MODEL "/model/%s"
-#define INTERFACE_BEHRINGERXM "BehringerXM"
+#define INTERFACE_XMSeries "XMSeries"
 
 enum{
     CONNECT_MANUAL=1,                   // select always start at value 1
@@ -23,7 +23,7 @@ class ConnectMethodDS : public DataSet{
         "discovery"
     };     
 
-    ConnectMethodDS(Address* _address): DataSet(_address, INTERFACE_BEHRINGERXM, &IFdataRepo){}
+    ConnectMethodDS(Address* _address): DataSet(_address, INTERFACE_XMSeries, &IFdataRepo){}
     
     virtual const String* getValuePtr(uint16_t index){
       if (index>getSize()-1) return &errorDatasetOOR;
@@ -43,7 +43,7 @@ class XMmixerModelDS : public DataSet{
   public:
     std::vector<String> mixerModels;
 
-    XMmixerModelDS(Address* _address): DataSet(_address, INTERFACE_BEHRINGERXM, &IFdataRepo){       
+    XMmixerModelDS(Address* _address): DataSet(_address, INTERFACE_XMSeries, &IFdataRepo){       
     }
     
     virtual const String* getValuePtr(uint16_t index){
@@ -53,6 +53,7 @@ class XMmixerModelDS : public DataSet{
 
     void populate(){
       populateFileList(BEHRINGER_MIXER_PROFILE_FILENAME_EXTENSION,MIXER_DEFINITION_PATH,&mixerModels,"",false);     // no extension               
+      if (getSize()<1) mixerModels.push_back("empty");
     }
 
     virtual uint16_t getSize(){
@@ -75,7 +76,7 @@ struct XMmixerDefinition : public BaseMixerDefinition{
 };
 
 
-class BehringerXM: public MixerDevice<NetworkOSC>{
+class XMSeries: public MixerDevice<NetworkOSC>{
   public:
 
     #define XM_BEHRINGER_PING_CMD "/xinfo"    //=> maybe go to mixer definition if not the same for all X/M....
@@ -91,7 +92,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
     ConnectMethodDS connectMethodDS = ConnectMethodDS(new DropDownAddress(ADDRESS_CONNECT_METHOD));
     XMmixerModelDS mixerModelDS = XMmixerModelDS(new DropDownAddress(ADDRESS_MIXER_MODEL));
     
-    BehringerXM():MixerDevice<NetworkOSC>(INTERFACE_BEHRINGERXM,8888,"192.168.0.1",10023,XM_BEHRINGER_PING_CMD,true,GROUP_INTERFACE_MIXER){
+    XMSeries():MixerDevice<NetworkOSC>(INTERFACE_XMSeries,8888,"192.168.0.1",10023,XM_BEHRINGER_PING_CMD,true,GROUP_INTERFACE_MIXER){
       
         unregisterDataSetAddress(&addressPing);              // we un-expose the ping parameter as user should not modify it 
 
@@ -233,37 +234,31 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
 
         // Routes fixes
         if (strEquals(addr, XM_BEHRINGER_PING_CMD)) {    
-
+            IPAddress ip;
             // in case we are in discovery mode, we need to retrieve the destination IP and port from the UDP connection established with the mixer
             if (CONNECT_DISCOVER == connectMethod){
-                /* 1️⃣ retrieve mixer IP
-                    method: DISCOVER => Always use the IP of the Mixer
-                    method: MANUAL =>  if UDP IP differs from Mixer, use UDP IP
-                */
-                osc.getString(0, stringBuffer);         // index 0 = IP address
-                IPAddress ip;
-                if (ip.fromString(stringBuffer)) {
-                // 2️⃣ if the IP returned from the mixer differs from the on in the UDP packet,
-                // this happens for instance when the mixer is on a different network (emulator on DSM for example)            
-                // however we ignore and keep the address from the user if it is different but it was not a discovery
-                // which would means in that case that there are some ip masquerading and we really ened to keep the one provided by user
-                if (
-                    UDPIP[0] != mixerID.ip[0] || mixerID.ip[1] != mixerID.ip[1] || mixerID.ip[2] != mixerID.ip[2] || UDPIP[3] != mixerID.ip[3]
-                ){
-                    DEBUG_WARN("Mixer IP differs from UDP packet, switching to UDP IP instead. %s->%s",stringBuffer,UDPIP.toString());
-                    ip = UDPIP;                      
-                }
-                //DEBUG_PRINT("\nPinging Mixer (%s) to retrieve latency from dynamic IP",mixerIP.toString().c_str());
-                //blockingPing(mixerIP); // we retrieve the real latency, now that we have the mixer address      
-                } else {
-                    DEBUG_ERROR("String reçue mais IP invalide");
-                }
-                    
-                // 3️⃣ check if mixerIP is different than the current identified destination =>  
-                if (destination.ip != ip){
-                    remotePort = UDPPort;               // we use the port from the UDP socket that successfully connected the mixer
-                    destination.ip = ip;
-                }
+              /* 1️⃣ retrieve mixer IP
+                  method: DISCOVER => Always use the IP of the Mixer
+                  method: MANUAL =>  if UDP IP differs from Mixer, use UDP IP
+              */
+              osc.getString(0, stringBuffer);         // index 0 = IP address
+              if (ip.fromString(stringBuffer)) {
+              // 2️⃣ if the IP returned from the mixer differs from the destinationIP (which is the one from UDP packet)
+              // this happens for instance when the mixer is on a different network (emulator on DSM for example)            
+              if (
+                  ip[0] != destination.ip[0] || ip[1] != destination.ip[1] || ip[2] != destination.ip[2] || ip[3] != destination.ip[3]
+              ){
+                  DEBUG_WARN("Mixer IP differs from UDP packet %s->%s",stringBuffer,UDPIP.toString());
+                  // if we are on a different subnet, then we have to keep the destination ip we used to connect                  
+                  //destination.ip = ip;
+              }
+              //DEBUG_PRINT("\nPinging Mixer (%s) to retrieve latency from dynamic IP",mixerIP.toString().c_str());
+              //blockingPing(mixerIP); // we retrieve the real latency, now that we have the mixer address      
+              } else {
+                  DEBUG_ERROR("String reçue mais IP invalide");
+              }   
+              
+              remotePort = UDPPort;               // we use the port from the UDP socket that successfully connected the mixer
 
             }     
 
@@ -273,7 +268,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
             osc.getString(2, stringBuffer);     // index 2 = model
             String model = stringBuffer;  // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
 
-            if (isNewMixer(name,model,destination.ip))  state.broadcastConfig = true;  
+            setMixer(name,model,destination.ip);
             
         }
         else
@@ -287,7 +282,7 @@ class BehringerXM: public MixerDevice<NetworkOSC>{
 
     virtual bool ping() override{
       // in case we are in discovery mode, we alternate the value of the port using 
-      if (CONNECT_DISCOVER == connectMethod){        
+      if (CONNECT_DISCOVER == connectMethod && state.code != IF_READY){        
         remotePort = discoveryPort[discoveryIndex];        
         discoveryIndex = (discoveryIndex + 1) % DISCOVERY_PORT_COUNT;
       }

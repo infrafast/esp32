@@ -5,6 +5,9 @@
 
 #include "Interfaces.h"
 
+#define IF_STATE_LIVE               "live"
+#define IF_STATE_DATASYNCING        "syncing"
+
 #define MIXER_DEFINITION_PATH "/"
 
 struct MixerIdentity {
@@ -49,11 +52,12 @@ public:
     // mixer definition
     MixerIdentity mixerID;
     MixerProtocol mixerProtocol;
+    //BaseMixerDefinition mixerDef  : implemented by derived class
+
 
     bool dataSync = false;
 
     unsigned long lastTimeMixerWasSet = 0;     
-    //bool dataSync = false;
 
     template<typename... Args>
     MixerDevice(Args&&... args)
@@ -66,36 +70,35 @@ public:
 
     virtual void  startMixerDataSync() = 0;
 
-    bool isNewMixer(String& name, String&model, IPAddress& ip) {
-      DEBUG_INFO("%s:isNewMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
+    void setMixer(String& name, String&model, IPAddress& ip) {
+      DEBUG_INFO("%s:setMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
 
-      MixerIdentity newMixer { name, model, ip };
+      MixerIdentity newID { name, model, ip };
 
-      bool mixerChanged = !mixerID.equals(newMixer);
+      bool mixerChanged = !mixerID.equals(newID);
       
       if (mixerChanged){
         DEBUG_PRINT("\t%s",mixerChanged?"yes✅":"no");
-        setMixer(newMixer);
+        newMixer(newID);
       }           
-      
+
       bool offlineTooLong = (this->state.label == IF_STATE_PENDING) &&
                             this->pendingSinceMs != 0 &&
                             (millis() - this->pendingSinceMs >= 15000);
 
-      DEBUG_PRINT("\t%s",offlineTooLong?"offline too long⌛":""); //,dataSync?"":"not synced🔄");
+      if (offlineTooLong) dataSync = false;
 
-      bool needSync = mixerChanged || offlineTooLong; //|| !dataSync;
+      DEBUG_PRINT("\t%s%s",offlineTooLong?"offline too long⌛":"",dataSync?"":"not synced🔄");
 
-      if (needSync) {
-        if (this->state.label != IF_STATE_DATASYNCING) startMixerDataSync();            
+      if (!dataSync){
+        if (this->state.label != IF_STATE_DATASYNCING) startMixerDataSync();
       }else{
         if (this->state.label != IF_STATE_LIVE) setStateMixerLive();
       }
 
-      return needSync;
-
     }
 
+   
     // used to retrieve the 
     virtual bool restoreMixerProfile() = 0;
 
@@ -113,18 +116,19 @@ public:
       }
     }
 
-    void setMixer(const MixerIdentity& newMixer){
+    void newMixer(const MixerIdentity& newMixer){
+      DEBUG_INFO("%s:newMixer()🎛",this->interfaceName.c_str());            
       mixerID = newMixer;     
-      //dataSync = false;
-      DEBUG_INFO("%s:setMixer(%s,%s,%s)🎛, data sync cleared",this->interfaceName.c_str(),mixerID.name.c_str(),mixerID.model.c_str(),mixerID.ip.toString().c_str());            
+      dataSync = false;       // mixer is new so sync it is a must
       setModel(mixerID.model.c_str());
+      this->state.broadcastConfig = true;   // inform web app about the chnage of mixer
     }
 
     void setStatePendingDataSync(){
       DEBUG_INFO("%s:setStatePendingDataSync()🕒",this->interfaceName.c_str());
       this->state.code = IF_READY;
-      this->state.label = IF_STATE_SYNCING;
-      this->state.details = "data sync";
+      this->state.label = IF_STATE_DATASYNCING;
+      this->state.details = "Getting data";
       this->state.led = "green fast";      
     }
 
@@ -135,6 +139,10 @@ public:
       this->state.details = concatStrings(mixerID.name," ",mixerID.model," ",mixerID.ip.toString(),":",this->remotePort);
     }    
 
+    virtual void setStateDisabled() override{
+      NetworkBase::setStateDisabled();
+      this->state.details =  "Interface is offline";
+    }
 
 };
 
