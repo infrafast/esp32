@@ -119,8 +119,6 @@ class DataSet{
     virtual const String* getValuePtr(uint16_t i) = 0;
     virtual JsonObject serialize(JsonObject o);
     virtual void serializeContent(JsonObject o);
-
-
 };
 
 class ConfigDataSet : public DataSet{
@@ -183,7 +181,7 @@ class DataRepository{
   private:
     std::vector<DataSet*> dataSets;
 
-}dataRepo,    // used by skeletons, Shortcuts, SystemInterface
+}dataRepo,    // used by skeletons, Shortcuts
 IFdataRepo; // used by Interfaces
 
 DataSet::DataSet(Address* addr, const String& _name, DataRepository* targetRepo): address(addr), name(_name) {

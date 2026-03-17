@@ -338,7 +338,7 @@ class Shortcuts: public DataProvider{
 
 ///////////////////// MAIN APPLICATION CLASS ////////////////////////
 
-class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, EventListener{
+class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, public EventListener{
   //
   public:
   #define maxConcurrentClients 3
@@ -748,14 +748,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         ftp.begin();
       #endif
 
+      Event::disableAllEventDumps();
       /*Event::disableEventDump(EVENT_ANALOG_BUTTON);
       Event::disableEventDump(EVENT_DIGITAL_BUTTON);
       Event::disableEventDump(EVENT_BATTERY_REFRESHED);
       Event::disableEventDump(EVENT_NETWORK_CONNECTED);
       Event::disableEventDump(EVENT_NETWORK_CONNECTION_CHANGED);
-      Event::disableEventDump(EVENT_NETWORK_DISCONNECTED);*/
-      Event::disableAllEventDumps();
-      
+      Event::disableEventDump(EVENT_NETWORK_DISCONNECTED);*/      
+      Event::enableEventDump(EVENT_WEBAPP_TO_REQUEST_REFRESH_BANKS);
 
 
       // *********************************
@@ -1040,6 +1040,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             goSleepCountdownStart = millis();
             goToBigBatteryIconScreenAndSleep();
           }
+        break;
+        case EVENT_WEBAPP_TO_REQUEST_REFRESH_BANKS:
+          broadCast("{\"reloadBanks\":\"\"}");
         break;
       }
       fireEvent(evt);   // propagate the event
@@ -2847,6 +2850,8 @@ void setup() {
         }else if(param == "fullConfig"){
           jsonAnswer.callback = bulkconfig;
           serialize(&jsonAnswer.value);
+        }else if(param == "banks"){
+          refreshBanksResponse();
         }
       }else if (command == "set"){
         //{"command":"set","param":{"section":"system","id":"pushDelay","value":"3"}}
@@ -3164,24 +3169,7 @@ void setup() {
               jsonAnswer.value = "Data reload error";
             }else{
               // then resend the banks with updated datasets
-
-              JsonDocument doc;
-
-              /*JsonArray ds = doc[stripdatasets].to<JsonArray>();
-              dataRepo.serialize(&ds); */
-              JsonObject ds = doc.createNestedObject(stripdatasets);
-              dataRepo.serialize(ds);
-
-
-              String banksString = serializeBanks();
-              doc["banks"]=banksString;
-
-              //{bulkConfig:{$datasets,$banks}}';
-              jsonAnswer.callback = bulkconfig;
-
-              serializeJson(doc, jsonAnswer.value);
-              removeJsonQuote(&jsonAnswer.value);
-
+              refreshBanksResponse();
             }
           }
           //do the same for osc messages here
@@ -3222,6 +3210,26 @@ void setup() {
       return jsonString;
 
     }
+    
+    void refreshBanksResponse(){
+      JsonDocument doc;
+
+      /*JsonArray ds = doc[stripdatasets].to<JsonArray>();
+      dataRepo.serialize(&ds); */
+      JsonObject ds = doc.createNestedObject(stripdatasets);
+      dataRepo.serialize(ds);
+
+
+      String banksString = serializeBanks();
+      doc["banks"]=banksString;
+
+      //{bulkConfig:{$datasets,$banks}}';
+      jsonAnswer.callback = bulkconfig;
+
+      serializeJson(doc, jsonAnswer.value);
+      removeJsonQuote(&jsonAnswer.value);      
+    }
+
 
     bool writeStringtoFile(const String &filename, String& entries) {
       File file = LittleFS.open(filename, "w");

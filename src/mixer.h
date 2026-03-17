@@ -10,6 +10,62 @@
 
 #define MIXER_DEFINITION_PATH "/"
 
+#define UNSYNC_PATTERN "~"
+class DataSetSynced: public DataSet{
+  public: 
+    String* values = nullptr;
+    uint16_t syncCount = 0;
+    unsigned long lastSyncTime = 0; 
+    //int offset = 0;
+    String defaultName="";
+    uint8_t size;
+
+    DataSetSynced(Address* adress,String name,uint16_t _size,String defVal/*, int _offset*/) : DataSet(adress,name,&dataRepo){
+      init(_size, defVal/*, _offset*/);
+    }
+
+    virtual uint16_t getSize() override{
+      return size;
+    };
+
+    void set(uint16_t index, String value){
+      if (index>size) return;
+      
+      if (values[index] != value){
+        values[index] = value;
+      }
+       
+    }
+
+    void init(uint16_t _size,String defVal/*, int _offset*/){
+      //offset = _offset;
+      defaultName = defVal;
+      //DEBUG_PRINT("\nDataSetSynced init(%d,%s,%d)",size,defVal.c_str(),offset);
+
+      if (size != _size){
+        size = _size;
+        // Supprimer le tableau existant s'il y en a un
+        if (values != nullptr) delete[] values; // Libérer la mémoire précédemment allouée
+        // Créer un nouveau tableau dynamique avec la taille passée
+        values = new String[size];
+        // Initialiser les valeurs (par exemple, 0)
+      }
+     
+      for (int i = 0; i < size; ++i) {
+          values[i] = concatStrings(defVal, i);
+      }
+    }
+
+
+    virtual const String* getValuePtr(uint16_t i) override{    
+      if (i < size) return &values[i];
+      else return &defaultName;
+    }      
+
+};
+
+
+
 struct MixerIdentity {
     String name;
     String model;
@@ -43,6 +99,8 @@ struct MixerProtocol{
   String anyChannelName = "ch.*.cfg.name";
 };
 
+#define ADDRESS_CH_NAME "/ch/name/%s"
+DropDownAddress addressCHname = DropDownAddress(ADDRESS_CH_NAME);
 
 
 template <typename NetworkBase>
@@ -52,8 +110,16 @@ public:
     // mixer definition
     MixerIdentity mixerID;
     MixerProtocol mixerProtocol;
-    //BaseMixerDefinition mixerDef  : implemented by derived class
+    BaseMixerDefinition* mixerDef;  // implemented by derived class
 
+
+    DataSetSynced* chNames;
+    DataSetSynced* busNames;  
+    DataSetSynced* auxNames;  
+    DataSetSynced* fxRetNames;
+    DataSetSynced* mainNames;
+
+    std::vector<DataSetSynced*> dsNames;
 
     bool dataSync = false;
 
@@ -66,6 +132,9 @@ public:
       mixerID.model = "undef";
       mixerID.name = "offline";
       mixerID.ip = IPAddress(0,0,0,0);
+
+      this->registerEventListener(&app);
+
     }
 
     virtual void  startMixerDataSync() = 0;
@@ -109,11 +178,25 @@ public:
       if (mixerID.model != model){
         mixerID.model = model;                                
         restoreMixerProfile();        // since the model has changed we have to rebuild it    
+        buildDatasets();
+
         // PROBABLY HERE WE SHOULD BRODCAST interfaceConfig 
         // BUT ALSO SEND AN EVENT TO ASK APPLICATION MANAGER TO REPUBLISH THE BANKS
+        Event evt;
+        evt.type = EVENT_WEBAPP_TO_REQUEST_REFRESH_BANKS;
+        this->fireEvent(evt);
       }else{
         DEBUG_PRINT("\t model didn't change!");
       }
+    }
+
+    void buildDatasets(){
+      chNames = new DataSetSynced(&addressCHname,this->interfaceName,mixerDef->channelCount,UNSYNC_PATTERN "CH");
+
+      /*busNames = new DataSetSynced(MS_BUS_SHORTNAME,ADDRESS_BUSNAME,INPUTSELECT,busSize,UNSYNC_PATTERN "BUS",1);
+      auxNames = new DataSetSynced(MS_AUX_SHORTNAME,ADDRESS_AUXNAME,INPUTSELECT,auxSize,UNSYNC_PATTERN "AUX",1);
+      fxRetNames = new DataSetSynced(MS_FXRET_SHORTNAME,ADDRESS_FXRETNAME,INPUTSELECT,fxRetSize,UNSYNC_PATTERN "FX",1);
+      mainNames = new DataSetSynced(MS_MAIN_SHORTNAME,ADDRESS_MAINNAME, INPUTSELECT,mainSize,UNSYNC_PATTERN "MAIN",1);      */
     }
 
     void newMixer(const MixerIdentity& newMixer){
@@ -125,8 +208,8 @@ public:
     }
 
     void setStatePendingDataSync(){
-      DEBUG_INFO("%s:setStatePendingDataSync()🕒",this->interfaceName.c_str());
-      this->state.code = IF_READY;
+      NetworkBase::setStateConnected();
+      DEBUG_INFO("%s:setStatePendingDataSync()🕒",this->interfaceName.c_str());      
       this->state.label = IF_STATE_DATASYNCING;
       setMixerDetails();
       this->state.led = "green fast";      

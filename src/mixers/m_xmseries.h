@@ -82,7 +82,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     #define XM_BEHRINGER_PING_CMD "/xinfo"    //=> maybe go to mixer definition if not the same for all X/M....
 
     int connectMethod = CONNECT_DISCOVER;
-    XMmixerDefinition mixerDef;
+    String protocolName ="xair";
 
     /* */
     #define DISCOVERY_PORT_COUNT 2 
@@ -100,6 +100,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         registerDataSetAddress(mixerModelDS.address);       // select mixer when offline
 
         destination.echoCommand = XM_BEHRINGER_PING_CMD;     // instead we set it manually once for all
+
+        mixerDef = new BaseMixerDefinition();
 
     }     
 
@@ -172,7 +174,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       DEBUG_INFO("%s::restoreMixerProfile() => deserializing definition and protocol",interfaceName.c_str()); 
       String mixerDefinitionFilename = concatStrings(mixerID.model,".",BEHRINGER_MIXER_PROFILE_FILENAME_EXTENSION);
       bool success = deserializeMixerDefinitionFromFile(mixerDefinitionFilename.c_str());
-      success &= deserializeMixerProtocolFromFile(mixerDef.protocol.c_str());
+      success &= deserializeMixerProtocolFromFile(protocolName.c_str());
       return success;
     }
 
@@ -183,9 +185,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
     virtual bool deserializeMixerDefinitionFromFile(const char* filename){
       DEBUG_INFO("%s:deserializeMixerDefinitionFromFile(%s)",this->interfaceName.c_str(),filename);       
-      // ...  restore mixerDef
 
-      String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename);
+      String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename); 
 
       File file = LittleFS.open(fullFilename, "r");
       if (!file) {
@@ -203,11 +204,11 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         return false;
       }
 
-      mixerDef.channelCount = doc["channelCount"] | mixerDef.channelCount;
-      mixerDef.busCount     = doc["busCount"]     | mixerDef.busCount;
-      mixerDef.auxCount     = doc["auxCount"]     | mixerDef.auxCount;
-      mixerDef.fxCount      = doc["fxCount"]      | mixerDef.fxCount;
-      mixerDef.protocol     = doc["protocol"]     | mixerDef.protocol;
+      mixerDef->channelCount = doc["channelCount"] | mixerDef->channelCount;
+      mixerDef->busCount     = doc["busCount"]     | mixerDef->busCount;
+      mixerDef->auxCount     = doc["auxCount"]     | mixerDef->auxCount;
+      mixerDef->fxCount      = doc["fxCount"]      | mixerDef->fxCount;
+      protocolName           = doc["protocol"]     | protocolName;
 
       return true;
     }
@@ -288,24 +289,13 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         m.toUpperCase();
 
         // X32 / M32
-        if (m.indexOf("32") >= 0 ) {
-            return XM32series;
-        }
-
-        // XR12
-        if (m.indexOf("12") >= 0) {
-            return XR12;
-        }
-
+        if (m.indexOf("32") >= 0 ) return XM32series;
+        // XR12 
+        if (m.indexOf("12") >= 0) return XR12;
         // XR16
-        if (m.indexOf("16") >= 0) {
-            return XR16;
-        }
-
+        if (m.indexOf("16") >= 0) return XR16;
         // XR18 / X18 / MR18
-        if (m.indexOf("18") >= 0 ) {
-            return XMR18series;
-        }
+        if (m.indexOf("18") >= 0 ) return XMR18series;
 
         // fallback
         return m;

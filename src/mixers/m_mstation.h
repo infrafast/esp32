@@ -11,7 +11,7 @@
 #define MS_MIXERS_AVAILABLE "/app/mixers/available"
 #define MS_MIXER_GET_ANY_DATA "/console/data/get/*"
 
-#define MS_MIXER_PROFILE_FILENAME "/mixerDef.ms"
+#define MS_MIXER_PROFILE_FILENAME "/mixerDef->ms"
 
 // data types
 
@@ -33,18 +33,38 @@ struct MSmixerDefinition : public BaseMixerDefinition{
   uint8_t fxOffset = 0; 
 };
 
+#ifdef DEBUG
+char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize) {
+
+  snprintf(buffer, bufferSize,
+           "channelCount=%u busCount=%u auxCount=%u fxCount=%u "
+           "channelOffset=%u busOffset=%u auxOffset=%u fxOffset=%u",
+           def.channelCount,
+           def.busCount,
+           def.auxCount,
+           def.fxCount,
+           def.channelOffset,
+           def.busOffset,
+           def.auxOffset,
+           def.fxOffset);
+
+  return buffer;
+}
+#endif
+
+
 #define INTERFACE_MIXINGSTATION "MixingStation"
 class MixingStation:  public MixerDevice<NetworkSocket>{
   public:
   
-    MSmixerDefinition mixerDef;
-
     MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_MIXER_IDENTITY,8887,8088,true){
       //destination.host = "192.168.99.99";
       mixerID.name = "MSStation";
       
       // protocol is hard-coded
       mixerProtocol.anyChannelName = "ch.*.cfg.name";
+
+      mixerDef = new MSmixerDefinition();
 
     }
 
@@ -70,11 +90,20 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     bool saveMixerDefinition(){
       DEBUG_INFO("%s::saveMixerDefinition()",interfaceName.c_str());       
       // version générique pour ESP32 Arduino, afin de sauvegarder / charger n’importe quelle struct POD avec une seule paire de fonctions :
-      return saveStruct(MS_MIXER_PROFILE_FILENAME, mixerDef);
+      return saveStruct(MS_MIXER_PROFILE_FILENAME, *((MSmixerDefinition*)mixerDef));
     }    
 
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) override{
-      return loadStruct(filename, mixerDef);
+      #ifdef DEBUG
+        char buffer[128];
+        DEBUG_INFO("%s::deserializeMixerDefinitionFromFile() => before load() :\t%s",interfaceName.c_str(),dumpMixerDef(*((MSmixerDefinition*)mixerDef),buffer, sizeof(buffer)));   
+      #endif
+
+      bool success = loadStruct(filename, *((MSmixerDefinition*)mixerDef));
+      #ifdef DEBUG
+        DEBUG_INFO("%s::deserializeMixerDefinitionFromFile() => after load() :\t%s",interfaceName.c_str(),dumpMixerDef(*((MSmixerDefinition*)mixerDef),buffer, sizeof(buffer)));   
+      #endif
+      return success;
     }    
  
   protected: 
@@ -193,7 +222,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       #define MS_CONNECTING   "connecting"
       #define MS_CONNECTED    "connected"
       #define MS_RECONNECTING "reconnecting"
-      #define MS_SYNCING      "synchronizing"
+      #define MS_SYNCING      "syncing"
 
       const char* msg      = body["msg"]      | "";
       int progress         = body["progress"] | 0;
@@ -205,20 +234,21 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         if (deviceInterface->state.label = MS_IDLE){
           setStatePending();
           deviceInterface->state.label = MS_IDLE;               // do not invert details/label as label=IDLE forces state refresh for the GUI compared to label=PENDING which is also set by device scan
-          deviceInterface->state.details = IF_STATE_PENDING;
+          deviceInterface->state.details = destinationDetails();  // connexion details of mixing station
         }
       }
       else if (strcmp(topState, MS_CONNECTING) == 0) {
         if (strcmp(state, MS_SYNCING) == 0){
           if (deviceInterface->state.subState != IF_STATE_SYNCING){
-            setStateSyncing(MS_SYNCING);            
+            setStateSyncing(MS_SYNCING);      
+            deviceInterface->state.details = destinationDetails();
           }
         }else{
           if (deviceInterface->state.subState != String(state)){
             setStateConnecting(state,msg);
           }
         }
-        deviceInterface->state.progress = progress;         
+        deviceInterface->state.progress = progress;                 
       }
       else if (strcmp(topState, MS_CONNECTED) == 0) {  
         getMixerDefinition();
@@ -270,14 +300,14 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       }
 
       // Valeurs par défaut si certaines sections n'existent pas
-      mixerDef.channelCount = 0;
-      mixerDef.busCount     = 0;
-      mixerDef.auxCount     = 0;
-      mixerDef.fxCount      = 0;
-      mixerDef.channelOffset = 0;
-      mixerDef.busOffset     = 0;
-      mixerDef.auxOffset    = 0;
-      mixerDef.fxOffset      = 0;
+      mixerDef->channelCount = 0;
+      mixerDef->busCount     = 0;
+      mixerDef->auxCount     = 0;
+      mixerDef->fxCount      = 0;
+      ((MSmixerDefinition*)mixerDef)->channelOffset = 0;
+      ((MSmixerDefinition*)mixerDef)->busOffset     = 0;
+      ((MSmixerDefinition*)mixerDef)->auxOffset    = 0;
+      ((MSmixerDefinition*)mixerDef)->fxOffset      = 0;
 
       for (JsonObject ct : channelTypes) {
         uint8_t type  = ct[MS_TYPE]  | 255;
@@ -286,23 +316,23 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
         switch (type) {
           case MS_TYPE_CHANNEL: // Channel / Input
-            mixerDef.channelCount = count;
-            mixerDef.channelOffset = offset;
+            mixerDef->channelCount = count;
+            ((MSmixerDefinition*)mixerDef)->channelOffset = offset;
             break;
 
           case MS_TYPE_AUX: // Aux
-            mixerDef.auxCount = count;
-            mixerDef.auxOffset = offset;
+            mixerDef->auxCount = count;
+            ((MSmixerDefinition*)mixerDef)->auxOffset = offset;
             break;
 
           case MS_TYPE_FX: // FX Return
-            mixerDef.fxCount = count;
-            mixerDef.fxOffset = offset;
+            mixerDef->fxCount = count;
+            ((MSmixerDefinition*)mixerDef)->fxOffset = offset;
             break;
 
           case MS_TYPE_BUS: // Bus
-            mixerDef.busCount = count;
-            mixerDef.busOffset = offset;
+            mixerDef->busCount = count;
+            ((MSmixerDefinition*)mixerDef)->busOffset = offset;
             break;
 
           // Types présents mais non utilisés ici
@@ -393,7 +423,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     // HELPER TO BUILD AND RETURN A SOCKET REQUEST
     //////////////////////////////////////////////  
     const char* build(const char* path, const char* method, const char* body) {
-      static char buffer[150];
+      static char buffer[255];
 
       if (body == nullptr){
         snprintf(buffer, sizeof(buffer),

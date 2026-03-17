@@ -640,6 +640,7 @@ class NetWorkService{
     void setStateSyncing(const char* details){
       setStateConnecting(IF_STATE_SYNCING,details);
       DEBUG_INFO("%s: setStateSyncing()",deviceInterface->interfaceName.c_str());
+      deviceInterface->state.label = IF_STATE_SYNCING;
       deviceInterface->state.led = "green fast";
       deviceInterface->state.progress = 0; //show progress bar
     }     
@@ -724,8 +725,6 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       return begin();    // derived class call   
     };        
 
-
-
     virtual void monitor(){           
       monitorNetwork();      
     }    
@@ -790,16 +789,20 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       }
       return changed;
     }       
-
+    
     virtual void setStateConnected(){
       DEBUG_INFO("%s:setSetateConnected()🟢",deviceInterface->interfaceName.c_str());
-      DeviceInterface::setStateReady("green", lang.getString(IF_STATE_CONNECTED)->c_str(),destination.ip.toString().c_str(), concatStrings(destination.ip.toString(),":",String(remotePort)).c_str());
+      DeviceInterface::setStateReady("green", lang.getString(IF_STATE_CONNECTED)->c_str(),destination.ip.toString().c_str(), destinationDetails().c_str());
+    }
+
+    String destinationDetails(){
+      return concatStrings(destination.ip.toString(),":",String(remotePort)).c_str();       
     }
 
     virtual void setStateDisconnected() override{
       DEBUG_INFO("%s:setStateDisconnected()🔴",deviceInterface->interfaceName.c_str());
       DeviceInterface::setStateDisconnected(concatStrings(*lang.getString("no connection")).c_str());
-    }       
+    }     
 
 };
 

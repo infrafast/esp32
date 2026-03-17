@@ -18,6 +18,7 @@ void setup(){
     xmMixer = new XMSeries();
 
     app.init();
+
 }
 
 void loop(){

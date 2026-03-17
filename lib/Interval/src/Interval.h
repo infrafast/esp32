@@ -312,6 +312,7 @@ enum EventType : uint8_t {
   EVENT_OSC_MESSAGE,
   EVENT_WEBSOCKET_CLOSED,
   EVENT_TEXT_MESSAGE,
+  EVENT_WEBAPP_TO_REQUEST_REFRESH_BANKS,
   EVENT_COUNT
 };
 
@@ -337,7 +338,8 @@ static const char* const EVENT_NAMES[EVENT_COUNT] = {
   "EVENT_INTERFACE_DATA_READY",
   "EVENT_OSC_MESSAGE",
   "EVENT_WEBSOCKET_CLOSED",
-  "EVENT_TEXT_MESSAGE"
+  "EVENT_TEXT_MESSAGE",
+  "EVENT_WEBAPP_TO_REQUEST_REFRESH_BANKS"
 };
 #endif
 
@@ -521,9 +523,9 @@ public:
   }  
 
   void fireEvent(const Event& evt) {
-#ifdef DEBUG
-    evt.dump("🔥fire", getDispatcherName());
-#endif
+    #ifdef DEBUG
+      evt.dump("🔥fire", getDispatcherName());
+    #endif
 
     for (uint8_t i = 0; i < maxHandlers; ++i) {
       if (eventHandlers[i].fn) {
