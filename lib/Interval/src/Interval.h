@@ -10,6 +10,7 @@
 0.21 - udp connectivity hardening
 0.22 - interfaces refactor + better state management
 0.23 - event and data handing, implementation of interfaces
+0.24 - starting sync data implementation
 */
 
 

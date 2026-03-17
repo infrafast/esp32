@@ -266,13 +266,49 @@ class XMSeries: public MixerDevice<NetworkOSC>{
             String name = stringBuffer;   // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
 
             osc.getString(2, stringBuffer);     // index 2 = model
-            String model = stringBuffer;  // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
+            String model = mapModelToSeries(stringBuffer);  // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
 
             setMixer(name,model,destination.ip);
             
         }
         else
             fireEvent(evtOSC);      // propage les données      
+    }
+
+    #define XM32series "xm32"
+    #define XMR18series "xmr18"
+    #define XR12 "xr12"
+    #define XR16 "xr16"
+
+    String mapModelToSeries(const char* model) {
+
+        if (model == nullptr) return XM32series;
+
+        String m = String(model);
+        m.toUpperCase();
+
+        // X32 / M32
+        if (m.indexOf("32") >= 0 ) {
+            return XM32series;
+        }
+
+        // XR12
+        if (m.indexOf("12") >= 0) {
+            return XR12;
+        }
+
+        // XR16
+        if (m.indexOf("16") >= 0) {
+            return XR16;
+        }
+
+        // XR18 / X18 / MR18
+        if (m.indexOf("18") >= 0 ) {
+            return XMR18series;
+        }
+
+        // fallback
+        return m;
     }
 
     virtual void startMixerDataSync() override{

@@ -6,7 +6,7 @@
 #include "Interfaces.h"
 
 #define IF_STATE_LIVE               "live"
-#define IF_STATE_DATASYNCING        "syncing"
+#define IF_STATE_DATASYNCING        "Getting data"
 
 #define MIXER_DEFINITION_PATH "/"
 
@@ -128,15 +128,19 @@ public:
       DEBUG_INFO("%s:setStatePendingDataSync()🕒",this->interfaceName.c_str());
       this->state.code = IF_READY;
       this->state.label = IF_STATE_DATASYNCING;
-      this->state.details = "Getting data";
+      setMixerDetails();
       this->state.led = "green fast";      
+    }
+
+    void setMixerDetails(){
+      this->state.details = concatStrings(mixerID.name," ",mixerID.model," ",mixerID.ip.toString(),":",this->remotePort);
     }
 
     void setStateMixerLive(){
       this->setStateConnected();
       DEBUG_INFO("%s:setStateMixerLive()🟢",this->interfaceName.c_str());
-      this->state.label = IF_STATE_LIVE;
-      this->state.details = concatStrings(mixerID.name," ",mixerID.model," ",mixerID.ip.toString(),":",this->remotePort);
+      this->state.label = IF_STATE_LIVE;      
+      setMixerDetails();
     }    
 
     virtual void setStateDisabled() override{

@@ -90,7 +90,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         connectAttemptCount = 0;                                  // reset attempt counter                
 
         const char* addr = osc.getAddress();
-        DEBUG_INFO("<<%s(%s,%i) ",addr,destination.ip.toString().c_str(),remotePort);  
 
         // now filter events we keep for our internal use
         if ( destination.echoCommand == addr ){
@@ -128,6 +127,10 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     virtual void process() {
       fireEvent(evtOSC);  //simply propagate the data
     }    
+    
+    #ifdef DEBUG
+      char oscDump[256];
+    #endif
 
     int readOSC(){
         UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);   // request UDP slot
@@ -163,10 +166,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
                 determineQoS();             
               }
 
+              #ifdef DEBUG
+                dump(osc, oscDump, sizeof(oscDump));              
+                DEBUG_INFO("<<%s(%s,%i) %s",addr,destination.ip.toString().c_str(),remotePort, oscDump);              
+              #endif
+              
               // we now forward the event
-              // before that we may filter here some message (ex. the ping...)
-              DEBUG_INFO("<<%s(%s,%i) ",addr,destination.ip.toString().c_str(),remotePort);              
-
               fireEvent(evtOSC);
 
             }              
@@ -177,6 +182,24 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         }
     
         return 0;
+    }
+
+    char* dump(OSCMessage &msg, char* buffer, size_t bufferSize) {
+      size_t offset = 0;
+      for (int i = 0; i < msg.size(); i++) {
+        if (offset >= bufferSize) break;
+        if (msg.isInt(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%d ", msg.getInt(i));
+        else if (msg.isFloat(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%f ", msg.getFloat(i));
+        else if (msg.isString(i)) {
+          char txt[128];
+          if (msg.getString(i, txt, sizeof(txt)) > 0) offset += snprintf(buffer + offset, bufferSize - offset,"%s ", txt);
+        }
+        else if (msg.isBoolean(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%s ", msg.getBoolean(i) ? "true" : "false");
+        else if (msg.isDouble(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%lf ", msg.getDouble(i));
+        else if (msg.isBlob(i)) offset += snprintf(buffer + offset, bufferSize - offset,"[blob:%d] ", msg.getBlobLength(i));
+        else offset += snprintf(buffer + offset, bufferSize - offset,"[type:%c] ", msg.getType(i));
+      }
+      return buffer;
     }
 
     bool sendOSCMessage(OSCMessage *msg){           
@@ -279,7 +302,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
       }
 
-      DEBUG_PRINT("\t latency: %i, jitter:%i",destination.latency,destination.jitter);      
+      DEBUG_PRINT("\t(latency: %i, jitter:%i)",destination.latency,destination.jitter);      
 
       // Sécurité bornes
       if (destination.latency > 500) destination.latency = 500;
