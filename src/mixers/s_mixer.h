@@ -69,24 +69,26 @@ class Ch2BusStrip : public SendStrip{
       //valueMin = 0; valueMax = 1;
     }
 
-    virtual bool actionCallback(uint8_t trigger){
+    virtual bool actionCallback(uint8_t trigger) override{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
       DEBUG_PRINT("\n%s actionCallback() ",type.c_str());
       return true;        
     }
 
-    virtual void queryInterface(){
+    virtual void onEvent(const Event& evt) override{}
+
+    virtual void queryInterface() override{
       DEBUG_PRINT("\nqueryState %s",type.c_str());      
     }
 
-    virtual float increaseCallback(unsigned long time,uint8_t trigger){
+    virtual float increaseCallback(unsigned long time,uint8_t trigger) override{
       float delta = Strip::increaseCallback(time,trigger);
       if (delta != 0.0) setChBusLevel();
       return delta;
     }    
 
-    virtual float decreaseCallback(unsigned long time,uint8_t trigger){
+    virtual float decreaseCallback(unsigned long time,uint8_t trigger) override{
       float delta = Strip::decreaseCallback(time,trigger);
       if (delta != 0.0) setChBusLevel();
       return delta;
@@ -112,7 +114,7 @@ class Ch2BusStrip : public SendStrip{
 StripSkeleton* stripCh2BusSkel;
 Strip* sendStripConstructorCallback(){
   //DEBUG_PRINT("\n\tch2busStripConstructorCallback()");
-  //return new Ch2BusStrip(stripCh2BusSkel);
+  return new Ch2BusStrip(stripCh2BusSkel);
 }
 
 #define CHGAINDB_MIN  -12
@@ -147,17 +149,19 @@ class ChGainStrip : public OneSelectStrip, public StripMixer{
 
     }
 
-    virtual void queryInterface(){
+    virtual void onEvent(const Event& evt) override{} 
+
+    virtual void queryInterface() override{
       DEBUG_PRINT("\nqueryInterface %s",type.c_str());
     }
 
-    virtual float increaseCallback(unsigned long time,uint8_t trigger){
+    virtual float increaseCallback(unsigned long time,uint8_t trigger) override{
       float delta = Strip::increaseCallback(time,trigger);
       if (delta != 0.0) setChGain();
       return delta;
     }
 
-    virtual float decreaseCallback(unsigned long time,uint8_t trigger){
+    virtual float decreaseCallback(unsigned long time,uint8_t trigger) override{
       float delta = Strip::decreaseCallback(time,trigger);
       if (delta != 0.0) setChGain();
       return delta;
@@ -178,7 +182,7 @@ class ChGainStrip : public OneSelectStrip, public StripMixer{
       mixerServer->mixerInterface->execute(command.as<JsonObject>());  */
     }
 
-    virtual bool actionCallback(uint8_t trigger){
+    virtual bool actionCallback(uint8_t trigger) override{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       /*char addr[100];
 
@@ -196,15 +200,12 @@ class ChGainStrip : public OneSelectStrip, public StripMixer{
       return true;
     }       
 
-    virtual const String* getTopLabel() override{return &type;}
-    virtual const String* getBottomLabel() override {return select1ContentPtr;}        // will be the selected ch
-
 };
 
 StripSkeleton* stripChGainSkel;
 Strip* gain2chStripConstructorCallback(){
   //DEBUG_PRINT("\n\tgain2chStripConstructorCallback()");
-  //return new ChGainStrip(stripChGainSkel);
+  return new ChGainStrip(stripChGainSkel);
 }
 
 

@@ -839,8 +839,8 @@ class OneSelectStrip : public Strip{
       }
     }  
 
-    virtual const String* getTopLabel(){return &type;}
-    virtual const String* getBottomLabel(){return select1ContentPtr;}     
+    virtual const String* getTopLabel() override{return &type;}
+    virtual const String* getBottomLabel() override {return select1ContentPtr;}        // will be the selected ch   
  
   protected:
     Top1Toggle1Label* topLabels;
