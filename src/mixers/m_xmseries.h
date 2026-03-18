@@ -113,11 +113,11 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       if (!mixerModelDS.contains(mixerID.model)){
         const char* firstValidModel = mixerModelDS.getValuePtr(0)->c_str();
         DEBUG_WARN("%s is not a valid model, use %s as default",mixerID.model,firstValidModel);
-        setModel(firstValidModel);
-        return true;
+        mixerID.model = firstValidModel;
       }
       
-      return restoreMixerProfile();       // setting up the last connected mixer
+      setModel(mixerID.model.c_str());       // setting up the last connected mixer
+      return true;
     }
 
 

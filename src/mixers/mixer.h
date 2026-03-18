@@ -18,10 +18,10 @@ class DataSetSynced: public DataSet{
     unsigned long lastSyncTime = 0; 
     //int offset = 0;
     String defaultName="";
-    uint8_t size;
+    uint8_t size = 0;
 
-    DataSetSynced(Address* adress,String name,uint16_t _size,String defVal/*, int _offset*/) : DataSet(adress,name,&dataRepo){
-      init(_size, defVal/*, _offset*/);
+    DataSetSynced(Address* adress,String name,String defVal/*, int _offset*/) : DataSet(adress,name,&dataRepo),defaultName(defVal) {
+      init(1);
     }
 
     virtual uint16_t getSize() override{
@@ -37,9 +37,8 @@ class DataSetSynced: public DataSet{
        
     }
 
-    void init(uint16_t _size,String defVal/*, int _offset*/){
+    void init(uint16_t _size/*, int _offset*/){
       //offset = _offset;
-      defaultName = defVal;
       //DEBUG_PRINT("\nDataSetSynced init(%d,%s,%d)",size,defVal.c_str(),offset);
 
       if (size != _size){
@@ -52,10 +51,9 @@ class DataSetSynced: public DataSet{
       }
      
       for (int i = 0; i < size; ++i) {
-          values[i] = concatStrings(defVal, i);
+          values[i] = concatStrings(defaultName, i);
       }
     }
-
 
     virtual const String* getValuePtr(uint16_t i) override{    
       if (i < size) return &values[i];
@@ -102,6 +100,9 @@ struct MixerProtocol{
 #define ADDRESS_CH_NAME "/ch/name/%s"
 DropDownAddress addressCHname = DropDownAddress(ADDRESS_CH_NAME);
 
+#define ADDRESS_BUS_NAME "/ch/bus/%s"
+DropDownAddress addressBUSname = DropDownAddress(ADDRESS_BUS_NAME);
+
 
 template <typename NetworkBase>
 class MixerDevice : public NetworkBase {
@@ -113,11 +114,11 @@ public:
     BaseMixerDefinition* mixerDef;  // implemented by derived class
 
 
-    DataSetSynced* chNames;
-    DataSetSynced* busNames;  
-    DataSetSynced* auxNames;  
-    DataSetSynced* fxRetNames;
-    DataSetSynced* mainNames;
+    DataSetSynced* chNamesDS;
+    DataSetSynced* busNamesDS;  
+    DataSetSynced* auxNamesDS;  
+    DataSetSynced* fxRetNamesDS;
+    DataSetSynced* mainNamesDS;
 
     std::vector<DataSetSynced*> dsNames;
 
@@ -126,15 +127,20 @@ public:
     unsigned long lastTimeMixerWasSet = 0;     
 
     template<typename... Args>
-    MixerDevice(Args&&... args)
-        : NetworkBase(std::forward<Args>(args)...)
-    {
+    MixerDevice(Args&&... args): NetworkBase(std::forward<Args>(args)...){
       mixerID.model = "undef";
       mixerID.name = "offline";
       mixerID.ip = IPAddress(0,0,0,0);
-    }
 
-    virtual void  startMixerDataSync() = 0;
+      chNamesDS = new DataSetSynced(&addressCHname,this->interfaceName,UNSYNC_PATTERN "CH");
+      busNamesDS = new DataSetSynced(&addressBUSname,this->interfaceName,UNSYNC_PATTERN "BUS");
+    }
+    
+    //// pure virtual ////
+    virtual void startMixerDataSync() = 0;
+    virtual bool restoreMixerProfile() = 0;
+    virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;    
+    /////////////////////
 
     void setMixer(String& name, String&model, IPAddress& ip) {
       DEBUG_INFO("%s:setMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
@@ -164,19 +170,12 @@ public:
 
     }
 
-   
-    // used to retrieve the 
-    virtual bool restoreMixerProfile() = 0;
-
-    virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;
-
     void setModel(const char* model){
       DEBUG_INFO("%s:setModel(%s)",this->interfaceName.c_str(),model);
       if (mixerID.model != model){
         mixerID.model = model;                                
         restoreMixerProfile();        // since the model has changed we have to rebuild it    
-        buildDatasets();
-
+        initDatasets();
         // as the mixer attributes have changed,
         // ASK APPLICATION MANAGER TO REPUBLISH THE BANKS
         app.webAppToRefreshBanks();
@@ -185,13 +184,10 @@ public:
       }
     }
 
-    void buildDatasets(){
-      chNames = new DataSetSynced(&addressCHname,this->interfaceName,mixerDef->channelCount,UNSYNC_PATTERN "CH");
-
-      /*busNames = new DataSetSynced(MS_BUS_SHORTNAME,ADDRESS_BUSNAME,INPUTSELECT,busSize,UNSYNC_PATTERN "BUS",1);
-      auxNames = new DataSetSynced(MS_AUX_SHORTNAME,ADDRESS_AUXNAME,INPUTSELECT,auxSize,UNSYNC_PATTERN "AUX",1);
-      fxRetNames = new DataSetSynced(MS_FXRET_SHORTNAME,ADDRESS_FXRETNAME,INPUTSELECT,fxRetSize,UNSYNC_PATTERN "FX",1);
-      mainNames = new DataSetSynced(MS_MAIN_SHORTNAME,ADDRESS_MAINNAME, INPUTSELECT,mainSize,UNSYNC_PATTERN "MAIN",1);      */
+    void initDatasets(){      
+      DEBUG_INFO("%s:initDatasets()",this->interfaceName.c_str());
+      chNamesDS->init(mixerDef->channelCount);
+      busNamesDS->init(mixerDef->busCount);
     }
 
     void newMixer(const MixerIdentity& newMixer){
@@ -223,7 +219,7 @@ public:
 
     virtual void setStateDisabled() override{
       NetworkBase::setStateDisabled();
-      this->state.details =  "Interface is offline";
+      this->state.details =  concatStrings("Offline as virtual mixer ",mixerID.model);
     }
 
 };

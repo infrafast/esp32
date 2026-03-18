@@ -11,7 +11,7 @@
 #define MS_MIXERS_AVAILABLE "/app/mixers/available"
 #define MS_MIXER_GET_ANY_DATA "/console/data/get/*"
 
-#define MS_MIXER_PROFILE_FILENAME "/mixerDef->ms"
+#define MS_MIXER_PROFILE_FILENAME "/mixerDef.ms"
 
 // data types
 
@@ -27,6 +27,7 @@
 #define    MS_TYPE_DCA      8
 
 struct MSmixerDefinition : public BaseMixerDefinition{
+  char model[64] = {};
   uint8_t channelOffset = 0;
   uint8_t busOffset = 0 ;
   uint8_t auxOffset = 0;
@@ -38,7 +39,8 @@ char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize
 
   snprintf(buffer, bufferSize,
            "channelCount=%u busCount=%u auxCount=%u fxCount=%u "
-           "channelOffset=%u busOffset=%u auxOffset=%u fxOffset=%u",
+           "channelOffset=%u busOffset=%u auxOffset=%u fxOffset=%u "
+           "model=%s",
            def.channelCount,
            def.busCount,
            def.auxCount,
@@ -46,7 +48,8 @@ char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize
            def.channelOffset,
            def.busOffset,
            def.auxOffset,
-           def.fxOffset);
+           def.fxOffset,
+           def.model);
 
   return buffer;
 }
@@ -60,11 +63,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_MIXER_IDENTITY,8887,8088,true){
       //destination.host = "192.168.99.99";
       mixerID.name = "MSStation";
-      
+     
       // protocol is hard-coded
       mixerProtocol.anyChannelName = "ch.*.cfg.name";
 
       mixerDef = new MSmixerDefinition();
+      strcpy(((MSmixerDefinition*)mixerDef)->model, mixerID.model.c_str());
 
     }
 
@@ -84,7 +88,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }    
 
     virtual bool begin() override{
-      return restoreMixerProfile();              // setting up the last connected mixer
+      setModel("virtual");      // "virtual" is different than default value "offline" and this forces setModel to reload and set the model from the definition file
+      return true;
     }
     
     bool saveMixerDefinition(){
@@ -100,6 +105,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       #endif
 
       bool success = loadStruct(filename, *((MSmixerDefinition*)mixerDef));
+      mixerID.model = ((MSmixerDefinition*)mixerDef)->model; // mixing station is particular in that sense that the model is stored directly in the definition because it is "virtual". Long story short.
       #ifdef DEBUG
         DEBUG_INFO("%s::deserializeMixerDefinitionFromFile() => after load() :\t%s",interfaceName.c_str(),dumpMixerDef(*((MSmixerDefinition*)mixerDef),buffer, sizeof(buffer)));   
       #endif

@@ -16,8 +16,11 @@ void setup(){
     xmMixer = new XMSeries();
 
     stripCh2BusSkel = new StripSkeleton(STRIP_CH2BUS,GROUP_INTERFACE_MIXER,sendStripConstructorCallback,'*');
-    /*dsOSCMessages = new OSCLib(new DropDownAddress(ADDRESS_OSCMSG));        // this dataset is based on a gzip file therefore it needs to be created after littleFS init and reloaded each time a saveLibrary is saved
-    oscSkel->registerDataSetAddress(dsOSCMessages->address);*/
+        stripCh2BusSkel->registerDataSetAddress(&addressCHname);
+        stripCh2BusSkel->registerDataSetAddress(&addressBUSname);
+    
+    stripChGainSkel = new StripSkeleton(STRIP_CHGAIN,GROUP_INTERFACE_MIXER,gain2chStripConstructorCallback,'*');
+        stripChGainSkel->registerDataSetAddress(&addressCHname);
 
     app.init();
 
