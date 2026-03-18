@@ -755,7 +755,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       Event::disableEventDump(EVENT_NETWORK_CONNECTED);
       Event::disableEventDump(EVENT_NETWORK_CONNECTION_CHANGED);
       Event::disableEventDump(EVENT_NETWORK_DISCONNECTED);*/      
-      Event::enableEventDump(EVENT_WEBAPP_TO_REQUEST_REFRESH_BANKS);
 
 
       // *********************************
@@ -989,6 +988,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
+    void webAppToRefreshBanks(){
+      // the banks have to be send by POST http and not socket, hence we just tells the application:
+      // now you need to request the banks to be send you back by placing a postQuery
+      broadCast("{\"reloadBanks\":\"\"}");
+    }
+
     // *********************************
     // EVENTS HANDLERS
     // *********************************
@@ -1040,9 +1045,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             goSleepCountdownStart = millis();
             goToBigBatteryIconScreenAndSleep();
           }
-        break;
-        case EVENT_WEBAPP_TO_REQUEST_REFRESH_BANKS:
-          broadCast("{\"reloadBanks\":\"\"}");
         break;
       }
       fireEvent(evt);   // propagate the event

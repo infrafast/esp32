@@ -132,9 +132,6 @@ public:
       mixerID.model = "undef";
       mixerID.name = "offline";
       mixerID.ip = IPAddress(0,0,0,0);
-
-      this->registerEventListener(&app);
-
     }
 
     virtual void  startMixerDataSync() = 0;
@@ -180,11 +177,9 @@ public:
         restoreMixerProfile();        // since the model has changed we have to rebuild it    
         buildDatasets();
 
-        // PROBABLY HERE WE SHOULD BRODCAST interfaceConfig 
-        // BUT ALSO SEND AN EVENT TO ASK APPLICATION MANAGER TO REPUBLISH THE BANKS
-        Event evt;
-        evt.type = EVENT_WEBAPP_TO_REQUEST_REFRESH_BANKS;
-        this->fireEvent(evt);
+        // as the mixer attributes have changed,
+        // ASK APPLICATION MANAGER TO REPUBLISH THE BANKS
+        app.webAppToRefreshBanks();
       }else{
         DEBUG_PRINT("\t model didn't change!");
       }

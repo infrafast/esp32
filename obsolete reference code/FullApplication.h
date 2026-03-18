@@ -274,10 +274,10 @@ class OSCTestStrip : public TextStrip, public StripMixer{
     String message="message";
 };
 
-class SendStrip : public ThreeSelectStrip, public StripMixer{
+class SendStrip : public TwoSelectStrip, public StripMixer{
   public:
 
-    SendStrip(StripSkeleton* s,GUIManager* g,MixerServer* _mi,bool debug=false):ThreeSelectStrip(s,g, debug),StripMixer(_mi){}
+    SendStrip(StripSkeleton* s,GUIManager* g,MixerServer* _mi,bool debug=false):TwoSelectStrip(s,g, debug),StripMixer(_mi){}
 
     ~SendStrip(){};
   
@@ -365,8 +365,8 @@ class Ch2BusStrip : public SendStrip{
 
       char formattedCommandString[50];
       String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHBUSMUTE];
-      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
-      uint8_t busID = dropDownIDtoInterfaceID(select3ID);  
+      uint8_t chID = dropDownIDtoInterfaceID(select1ID);
+      uint8_t busID = dropDownIDtoInterfaceID(select2ID);  
       sprintf(formattedCommandString,addressTemplate.c_str(),chID,busID);
 
       JsonDocument command;
@@ -383,8 +383,8 @@ class Ch2BusStrip : public SendStrip{
       DEBUG_PRINT("\nupdate %s",type.c_str());      
 
       char formattedCommandString[50];
-      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
-      uint8_t busID = dropDownIDtoInterfaceID(select3ID);  
+      uint8_t chID = dropDownIDtoInterfaceID(select1ID);
+      uint8_t busID = dropDownIDtoInterfaceID(select2ID);  
       // we query levels and mute state to update the strip
 
       JsonDocument command;      
@@ -426,20 +426,20 @@ class Ch2BusStrip : public SendStrip{
       
       if (OSCInterface::matchPattern(interface->addresses[ADDR_BUSMUTE],data[EXEC_ADDRESS])){
         if(match1AddressIDtoDropDownID(data[EXEC_ADDRESS],interface->addresses[ADDR_BUSMUTE].c_str())){ 
-          if (id1 == select3ID){  // retrieved ID match the select3ID which is the bus
+          if (id1 == select2ID){  // retrieved ID match the select2ID which is the bus
             toggle2 = data[EXEC_VALUE][0];
           }
         }
       }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSMUTE],data[EXEC_ADDRESS])){
         if(match2AddressIDtoDropDownID(data[EXEC_ADDRESS],interface->addresses[ADDR_CHBUSMUTE].c_str())){ 
-          if (id1 == select2ID && id2 == select3ID){  
+          if (id1 == select1ID && id2 == select2ID){  
             toggle1 = data[EXEC_VALUE][0];
           }
         }
       }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSVALUE],data[EXEC_ADDRESS])){        
         if(match2AddressIDtoDropDownID(data[EXEC_ADDRESS],interface->addresses[ADDR_CHBUSVALUE].c_str())){         
-          //DEBUG_PRINT("\n id1:%d(%d) id2:%d(%d)",id1,select2ID,id2,select3ID);
-          if (id1 == select2ID && id2 == select3ID){  
+          //DEBUG_PRINT("\n id1:%d(%d) id2:%d(%d)",id1,select1ID,id2,select2ID);
+          if (id1 == select1ID && id2 == select2ID){  
             value = data[EXEC_VALUE][0];
             //DEBUG_PRINT("\t value: %.2f",value);
           }
@@ -468,8 +468,8 @@ class Ch2BusStrip : public SendStrip{
 
       char formattedCommandString[50];
       String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHBUSVALUE];
-      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
-      uint8_t busID = dropDownIDtoInterfaceID(select3ID);  
+      uint8_t chID = dropDownIDtoInterfaceID(select1ID);
+      uint8_t busID = dropDownIDtoInterfaceID(select2ID);  
       sprintf(formattedCommandString,addressTemplate.c_str(),chID,busID);
 
       JsonDocument command;
@@ -484,11 +484,11 @@ class Ch2BusStrip : public SendStrip{
 
 #define CHGAINDB_MIN  -12
 #define CHGAINDB_MAX  60
-class ChGainStrip : public TwoSelectStrip, public StripMixer{
+class ChGainStrip : public OneSelectStrip, public StripMixer{
   #define STRIP_CHGAIN "chGain"
 
   public:
-    ChGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):TwoSelectStrip(s,g,debug),StripMixer(mi){
+    ChGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):OneSelectStrip(s,g,debug),StripMixer(mi){
       valueMin = CHGAINDB_MIN;
       valueMax = CHGAINDB_MAX;
       value = (valueMin + valueMax)/2;
@@ -557,7 +557,7 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
     void setChGain(){
       char formattedCommandString[50];
       String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHGAIN];
-      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
+      uint8_t chID = dropDownIDtoInterfaceID(select1ID);
       sprintf(formattedCommandString,addressTemplate.c_str(),chID);
 
       JsonDocument command;
@@ -573,7 +573,7 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       /*char addr[100];
 
-      //select2ID = chID
+      //select1ID = chID
 
       //sprintf(addr,mixerServer->chNames.address.c_str(),chID);
       String val = concatStrings("name", random(1000));

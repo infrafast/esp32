@@ -205,7 +205,7 @@ class Strip: public EventListener{
     uint8_t x, y, win, index;
     
     // top left corner position on TFT screen
-    int16_t topX, topY;
+    int16_t topLeftX, topLeftY;
     
     String size;
     unsigned char icon = 0x21;
@@ -401,40 +401,12 @@ class Strip: public EventListener{
         lastHoldUpdate = 0;
     }
 
-      virtual float increaseCallback(unsigned long /*time*/, uint8_t trigger){
-        return applyProgressive(+1, trigger);
-      }
+    virtual float increaseCallback(unsigned long /*time*/, uint8_t trigger){
+      return applyProgressive(+1, trigger);
+    }
 
-      virtual float decreaseCallback(unsigned long /*time*/, uint8_t trigger){
-        return applyProgressive(-1, trigger);
-      }
-
-
-    virtual bool progressiveDelay(unsigned long time,uint8_t trigger){
-      
-      uint16_t TIME_MAX_PROGRESSIVITY = 3000;
-      if (valueMax-valueMin<=20) TIME_MAX_PROGRESSIVITY = 5000;
-      else if (valueMax-valueMin>500) TIME_MAX_PROGRESSIVITY = 1000;
-
-      //we start counting the time between two calls when we have called the first time, means during debounce duration
-      if (time<DEBOUCE_TIME){
-        lastCall = 0;      
-        // first call we start timer
-
-      }
-      if (time>=TIME_MAX_PROGRESSIVITY) time = TIME_MAX_PROGRESSIVITY;
-
-      unsigned long waitBetween2update; 
-      
-      if (trigger == BUTTON_HOLD) waitBetween2update = (TIME_MAX_PROGRESSIVITY-time)/5;
-      else waitBetween2update = 50 ; // 50ms 
-
-      unsigned long delaySoFar = millis() - lastCall;
-
-      if (delaySoFar < waitBetween2update) return false;  
-      lastCall = millis();
-
-      return true;    
+    virtual float decreaseCallback(unsigned long /*time*/, uint8_t trigger){
+      return applyProgressive(-1, trigger);
     }
 
     virtual uint8_t getNumberOfProperties(){
@@ -561,7 +533,7 @@ class Strip: public EventListener{
         return;
       }
             
-      if (!determineXY(layout)){
+      if (!determineTopLeft(layout)){
         renderError = true;
         DEBUG_ERROR("\nIncorrect strip size of layout: %s / %d",size.c_str(), layout);
         pushSimpleText(layout, lang.getString("Strip shape error"));
@@ -581,31 +553,31 @@ class Strip: public EventListener{
 
     }
 
-    bool determineXY(uint8_t layout){      
+    bool determineTopLeft(uint8_t layout){      
 
       //DEBUG_PRINT("\nstrip[%d] %s topLeft=",index,type.c_str());
-      // retrieve the corner of the strip where we can start drawing, which is topX, topY
+      // retrieve the corner of the strip where we can start drawing, which is topLeftX, topLeftY
       if (layout == LAYOUT_ZOOM || size == SHAPE4X4){
-        topX = 0;
-        topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);
+        topLeftX = 0;
+        topLeftY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);
         areaW = WIDGET4X4W;
         areaH = WIDGET4X4H;        
       }
       else if (size == SHAPE1X4){
-        topX = x * WIDGET1X4W;
-        topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);        
+        topLeftX = x * WIDGET1X4W;
+        topLeftY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2);        
         areaW = WIDGET1X4H;   
         areaH = WIDGET4X1H*0.6; // some margin to avoid text being rendered with overlap on top2label  
       }
       else if (size == SHAPE4X1){
-        topX = 0;
-        topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET4X1H) ;        
+        topLeftX = 0;
+        topLeftY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET4X1H) ;        
         areaW = WIDGET4X1W;
         areaH = WIDGET4X1H;        
       }
       else if (size == SHAPE2X2){
-        topX = (x * WIDGET2X2W/2);
-        topY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
+        topLeftX = (x * WIDGET2X2W/2);
+        topLeftY = WIDGET_PADDING + (TOP2WIDGET_SIZE*2) + (y*WIDGET2X2H/2);
         areaW = WIDGET2X2W;
         areaH = WIDGET2X2H;
     
@@ -613,20 +585,20 @@ class Strip: public EventListener{
         return false;
       }         
 
-      centerX = topX + areaW / 2;       //middle
-      centerY = topY + (areaH/2) -2;       //middle
+      centerX = topLeftX + areaW / 2;       //middle
+      centerY = topLeftY + (areaH/2) -2;       //middle
 
       // fix position according to some widget size specificity, but only when layout is DETAILS:
       if (layout == LAYOUT_DETAILS){
         if (size == SHAPE4X1) simpleTextY -= WIDGET4X1H/2-3;     // fix vertical location for flat strip
         else if (size == SHAPE1X4) {
           // special treatment for vertical widget where text is rotated
-          centerX = topX + WIDGET1X4W/2;   // exactly middle
-          centerY = topY + WIDGET1X4H/2.5; // we want middle but for some reason we have to give it some margin
+          centerX = topLeftX + WIDGET1X4W/2;   // exactly middle
+          centerY = topLeftY + WIDGET1X4H/2.5; // we want middle but for some reason we have to give it some margin
         }
       }
 
-      //DEBUG_PRINT("(%i,%i)",topX,topY);
+      //DEBUG_PRINT("(%i,%i)",topLeftX,topLeftY);
       return true;
     }
 
@@ -692,6 +664,8 @@ class Strip: public EventListener{
       }      
     }    
 
+    /////////////////////////////// state widgets library
+
     void pushIFState4x4(){
       if (!interface) return;
       gui.add(new Label(&interface->state.label, Align::Center,&GUI::midScreenHoriz, &GUI::topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));    
@@ -704,32 +678,32 @@ class Strip: public EventListener{
     }   
 
     void pushIFState1x4(){      
-      IFledX = topX + WIDGET1X4W / 1.25;
-      IFledY = topY + WIDGET1X4H / 2.5;
+      IFledX = topLeftX + WIDGET1X4W / 1.25;
+      IFledY = topLeftY + WIDGET1X4H / 2.5;
 
-      IFiconX = topX + WIDGET1X4W / 1.05;
-      IFiconY = topY + WIDGET1X4H / 1.8;      
+      IFiconX = topLeftX + WIDGET1X4W / 1.05;
+      IFiconY = topLeftY + WIDGET1X4H / 1.8;      
 
       pushSmallLedandIcon();
     }      
 
 
     void pushIFState2x2(){      
-      IFledX = topX + WIDGET2X2W / 2.5;
-      IFledY = topY + SIZE_20;
+      IFledX = topLeftX + WIDGET2X2W / 2.5;
+      IFledY = topLeftY + SIZE_20;
 
-      IFiconX = topX + WIDGET2X2W / 1.4;
-      IFiconY = topY + SIZE_10 ;
+      IFiconX = topLeftX + WIDGET2X2W / 1.4;
+      IFiconY = topLeftY + SIZE_10 ;
 
       pushSmallLedandIcon();
     }     
     
     void pushIFState4x1(){      
       IFledX = GUI::leftMenuIconXpos+3;
-      IFledY = topY + WIDGET4X1H/2;
+      IFledY = topLeftY + WIDGET4X1H/2;
 
       IFiconX = TFT_WIDTH - SIZE_26/2;
-      IFiconY = topY + SIZE_26/4;
+      IFiconY = topLeftY + SIZE_26/4;
 
       pushSmallLedandIcon();
     }     
@@ -741,7 +715,45 @@ class Strip: public EventListener{
       gui.add(new Icon(interface->getIcon(),Align::Right,&IFiconX, &IFiconY,SIZE_26,&GUI::gold,&GUI::transparentColor,&brightness));    
     }
 
-    virtual void composeWidgets(uint8_t layout){
+    /////////////////////////////// common widgets library
+    void push4x4hBar(){      
+      h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
+      w = WIDGET4X4W-GUI::three*2;      
+      gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &GUI::three /*x*/, &GUI::midScreenHoriz /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));      
+    }
+
+    void push1x4vBar(){
+      w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
+      h = WIDGET1X4H;
+      topLeftX += w/2;           
+      gui.add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topLeftX /*x*/, &topLeftY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+    }
+
+    void push2x2RingMeter(){
+      w = WIDGET2X2W;   // width of the bar is 2 time less big than the full width of the cell
+      h = WIDGET2X2H;
+      topLeftX += w/2;   
+      topLeftY += h/2;      
+      RingMeter* ringMeter = new RingMeter(&value, valueMin, valueMax, 1, &topLeftX,&topLeftY, h/2, &unitString,&GUI::blue,&GUI::transparentColor,&brightness);
+      gui.add(ringMeter);
+    }
+
+    void push4x1hBar(){
+      h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
+      w = WIDGET4X1W;
+      gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topLeftX /*x*/, &topLeftY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+    }
+
+    void push2x2hBar(){
+      h = WIDGET2X2H/2;   // height of the bar is 2 time less big than the full height of the cell          
+      uint8_t widthOffset = WIDGET2X2H/10;
+      w = WIDGET2X2W-widthOffset;
+      gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topLeftX /*x*/, &topLeftY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+    }
+
+    //////////////// default rendering /////////////////////////////////
+
+    virtual void composeWidgets(uint8_t layout){      // has to be override by derived class
       drawWidgetsFrames(layout);
     } 
 
@@ -754,11 +766,11 @@ class Strip: public EventListener{
 
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         // having a frame when we are 4x4 is useless unless we want to indicate interface is offline
-          gui.add(new Canva(&topX, &topY, WIDGET4X4W, WIDGET4X4H,4, &frameColor, &GUI::transparentColor,&brightness));  
+          gui.add(new Canva(&topLeftX, &topLeftY, WIDGET4X4W, WIDGET4X4H,4, &frameColor, &GUI::transparentColor,&brightness));  
       }
-      else if ( size == SHAPE1X4) gui.add(new Canva(&topX, &topY, WIDGET1X4W, WIDGET1X4H, 4,&frameColor, &GUI::transparentColor,&brightness));
-      else if (size == SHAPE2X2) gui.add(new Canva(&topX, &topY, WIDGET2X2W, WIDGET2X2H,4, &frameColor, &GUI::transparentColor,&brightness));  
-      else if (size == SHAPE4X1) gui.add(new Canva(&topX, &topY, WIDGET4X1W, WIDGET4X1H,4, &frameColor, &GUI::transparentColor,&brightness));      
+      else if ( size == SHAPE1X4) gui.add(new Canva(&topLeftX, &topLeftY, WIDGET1X4W, WIDGET1X4H, 4,&frameColor, &GUI::transparentColor,&brightness));
+      else if (size == SHAPE2X2) gui.add(new Canva(&topLeftX, &topLeftY, WIDGET2X2W, WIDGET2X2H,4, &frameColor, &GUI::transparentColor,&brightness));  
+      else if (size == SHAPE4X1) gui.add(new Canva(&topLeftX, &topLeftY, WIDGET4X1W, WIDGET4X1H,4, &frameColor, &GUI::transparentColor,&brightness));      
     }
 
     JsonArray properties;
@@ -778,90 +790,120 @@ class Strip: public EventListener{
   protected:
     unsigned long lastCall;     
     uint16_t frameColor = TFT_GOLD;
-    //Label* defaultLabel = nullptr;
+    uint16_t h = 0, w = 0;    
+    String unitString;
 
 };
 
-class TwoSelectStrip : public Strip{
+#define PROPERTY_BUF_CHAR_MAX 128  // to restore and serialize address string value
+class OneSelectStrip : public Strip{
 
   public: 
-    TwoSelectStrip(StripSkeleton* s, bool debug=false):Strip(s){
-      Address* select2Address = s->getDataSetAddress(0);
-      if (select2Address != nullptr){
-        select2PropertyAddress = select2Address->pattern;
+    OneSelectStrip(StripSkeleton* s, bool debug=false):Strip(s){
+      Address* select1Address = s->getDataSetAddress(0);
+      if (select1Address != nullptr){
+        select1PropertyAddress = select1Address->pattern;
       }
     }
 
     void serializeProperties(){
-      char* buf = (char*)malloc(select2PropertyAddress.length()*sizeof(char*));
-      sprintf(buf,select2PropertyAddress.c_str(),select2ID);
-      properties.add(String(buf));
-      free(buf);
-
-    }
-
-    virtual void pushToGUI(uint8_t layout = LAYOUT_DETAILS){      
-      Strip::pushToGUI(layout);
-    }    
+      char* buf;
+      // if address contains a %d , we extract the select1ID to populate the address otherwise we use the string value      
+      if (select1PropertyAddress.indexOf("%d") != -1){
+        buf = (char*)malloc(select1PropertyAddress.length()*sizeof(char*));
+        sprintf(buf,select1PropertyAddress.c_str(),select1ID);
+        properties.add(String(buf));
+        free(buf);
+      }else{
+        buf = (char*)malloc((select1PropertyAddress.length()+PROPERTY_BUF_CHAR_MAX)*sizeof(char*));
+        snprintf(buf, sizeof(buf), select1PropertyAddress.c_str(), select1ContentPtr->c_str());    // secured size sprintf
+        properties.add(String(buf));
+        free(buf);        
+      }
+    }  
 
     void deserializeProperty(String property){
       if (!interface) return;
-      if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
-        select2Content = skeleton->getValuePtr(interface->getProviderNameForData(),select2PropertyAddress,select2ID);
+      // if address contains a %d , we extract the select1ID that is then used to get the corresponding string value in the related dataset
+      if (property.indexOf("%d") != -1){
+        if (sscanf(property.c_str(), select1PropertyAddress.c_str(), &select1ID)){
+          select1ContentPtr = skeleton->getValuePtr(interface->getProviderNameForData(),select1PropertyAddress,select1ID);
+        }
+      }else{
+        //otherwise we search for the string 
+        char buf[PROPERTY_BUF_CHAR_MAX];         
+        if (sscanf(property.c_str(), select1PropertyAddress.c_str(), buf) == 1){
+          select1Content = buf;
+          select1ContentPtr = &select1Content;
+        }         
       }
     }  
 
     virtual const String* getTopLabel(){return &type;}
-    virtual const String* getBottomLabel(){return select2Content;}     
+    virtual const String* getBottomLabel(){return select1ContentPtr;}     
  
   protected:
     Top1Toggle1Label* topLabels;
-    uint8_t select2ID=1; 
-    const String *select2Content;
-    String select2PropertyAddress; 
+    uint8_t select1ID=1; 
+    const String *select1ContentPtr;
+    String select1Content;
+    String select1PropertyAddress; 
     String label = "~";    
 };
 
 
-class ThreeSelectStrip: public TwoSelectStrip{
+class TwoSelectStrip: public OneSelectStrip{
   public:
-    ThreeSelectStrip(StripSkeleton* s,bool debug=false):TwoSelectStrip(s,debug){
-      Address* select3Address = s->getDataSetAddress(1);
-      if (select3Address != nullptr){
-        select3PropertyAddress = select3Address->pattern;
+    TwoSelectStrip(StripSkeleton* s,bool debug=false):OneSelectStrip(s,debug){
+      Address* select2Address = s->getDataSetAddress(1);
+      if (select2Address != nullptr){
+        select2PropertyAddress = select2Address->pattern;
       }
     }
   
     void serializeProperties(){
-      TwoSelectStrip::serializeProperties();
-
-      char* buf = (char*)malloc(select3PropertyAddress.length()*sizeof(char*));
-      sprintf(buf,select3PropertyAddress.c_str(),select3ID);
-      properties.add(String(buf));
-      free(buf);
-
-    }
-
-    virtual void pushToGUI(uint8_t layout = LAYOUT_DETAILS){
-      TwoSelectStrip::pushToGUI(layout);
-    }    
-    
-
-    void deserializeProperty(String property){
-      if (!interface) return;
-      TwoSelectStrip::deserializeProperty(property);
-      if (sscanf(property.c_str(), select3PropertyAddress.c_str(), &select3ID)) {
-        select3Content = skeleton->getValuePtr(interface->getProviderNameForData(),select3PropertyAddress,select3ID-1);         
+      OneSelectStrip::serializeProperties();
+      char* buf;
+      // if address contains a %d , we extract the select2ID to populate the address otherwise we use the string value      
+      if (select2PropertyAddress.indexOf("%d") != -1){
+        buf = (char*)malloc(select2PropertyAddress.length()*sizeof(char*));
+        sprintf(buf,select2PropertyAddress.c_str(),select2ID);
+        properties.add(String(buf));
+        free(buf);
+      }else{
+        buf = (char*)malloc((select2PropertyAddress.length()+PROPERTY_BUF_CHAR_MAX)*sizeof(char*));
+        snprintf(buf, sizeof(buf), select2PropertyAddress.c_str(), select2ContentPtr->c_str());    // secured size sprintf
+        properties.add(String(buf));
+        free(buf);        
       }
     }  
 
-    virtual const String* getTopLabel(){return select2Content;}
-    virtual const String* getBottomLabel(){return select3Content;}      
+    void deserializeProperty(String property){
+      if (!interface) return;
+      OneSelectStrip::deserializeProperty(property);
+      // if address contains a %d , we extract the select2ID that is then used to get the corresponding string value in the related dataset
+      if (property.indexOf("%d") != -1){
+        if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
+          select2ContentPtr = skeleton->getValuePtr(interface->getProviderNameForData(),select2PropertyAddress,select2ID);
+        }
+      }else{
+        //otherwise we search for the string 
+        char buf[PROPERTY_BUF_CHAR_MAX];         
+        if (sscanf(property.c_str(), select2PropertyAddress.c_str(), buf) == 1){
+          select2Content = buf;
+          select2ContentPtr = &select2Content;
+        }         
+      }
+    }  
+
+    virtual const String* getTopLabel(){return select1ContentPtr;}
+    virtual const String* getBottomLabel(){return select2ContentPtr;}      
 
   protected:
-    uint8_t select3ID=1; 
-    const String *select3Content;
-    String select3PropertyAddress;
+    uint8_t select2ID=1; 
+    const String *select2ContentPtr;
+    String select2Content;
+    String select2PropertyAddress;
     Top2Toggles* topLabels;  
 };
 
