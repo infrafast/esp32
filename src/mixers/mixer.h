@@ -219,7 +219,8 @@ public:
 
     virtual void setStateDisabled() override{
       NetworkBase::setStateDisabled();
-      this->state.details =  concatStrings("Offline as virtual mixer ",mixerID.model);
+      this->state.label = mixerID.model; // we use the mixer model as the label state to force the state.brodCast updating the webapp GUI.
+      this->state.details =  concatStrings("Offline virtual mixer");
     }
 
 };
