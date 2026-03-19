@@ -4,23 +4,23 @@
 class StripMixer{
   public:
 
-    bool match2AddressIDtoDropDownID(const char* address,const char* pattern){
+   /* bool match2AddressIDtoDropDownID(const char* address,const char* pattern){
       // this method is called when we have to decompose the ids embedded into an address according to a provided pattern
       // upon reception of an OSC frame
-      //if (sscanf(address, pattern,&id1,&id2) != 2) return false;
-      //if (mixerServer->mixerInterface->idStart == 0){ id1 += 1; id2 += 1;}    // we have to make ID consistent, they should all start at 1
+      if (sscanf(address, pattern,&id1,&id2) != 2) return false;
+      if (mixerServer->mixerInterface->idStart == 0){ id1 += 1; id2 += 1;}    // we have to make ID consistent, they should all start at 1
       return true;
     }
 
     bool match1AddressIDtoDropDownID(const char* address,const char* pattern){
-      //if (sscanf(address, pattern,&id1) != 1) return false;
-      //if (mixerServer->mixerInterface->idStart == 0){ id1 += 1;}    // we have to make ID consistent, they should all start at 1
+      if (sscanf(address, pattern,&id1) != 1) return false;
+      if (mixerServer->mixerInterface->idStart == 0){ id1 += 1;}    // we have to make ID consistent, they should all start at 1
       return true;
     }
 
     uint8_t dropDownIDtoInterfaceID(uint8_t id){
       // this return the value starting either at 0 or one depending on the mixerInterface (mixing station starts at 0 so drop downvalue would need to be decreased by 1)
-      //return id-(1-mixerServer->mixerInterface->idStart);
+      return id-(1-mixerServer->mixerInterface->idStart);
     }
 
   protected:
@@ -28,7 +28,7 @@ class StripMixer{
     // example
     // /fxrtn/03/mix/06/on
     // v1 = 03
-    // v2 = 06
+    // v2 = 06*/
 };
 
 

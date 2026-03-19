@@ -4,12 +4,16 @@
 #include "interfaces/i_socket.h"
 #include "mixer.h"
 
-#define MS_APP_STATE "/app/state"
-#define MS_MIXER_IDENTITY "/app/mixers/current"                   // mixer name, model, address IP
-#define MS_MIXER_DEFINITION "/console/information"                // mixer attributes like  number of channel...
-#define MS_SUBSCRIBE "/console/data/subscribe"
-#define MS_MIXERS_AVAILABLE "/app/mixers/available"
-#define MS_MIXER_GET_ANY_DATA "/console/data/get/*"
+
+// that the protocol
+#define PATH_APP_STATE "/app/state"
+#define PATH_MIXER_IDENTITY "/app/mixers/current"                   // mixer name, model, address IP
+#define PATH_MIXER_DEFINITION "/console/information"                // mixer attributes like  number of channel...
+#define PATH_SUBSCRIBE "/console/data/subscribe"
+#define PATH_MIXERS_AVAILABLE "/app/mixers/available"
+#define PATH_MIXER_GET_ANY_DATA "/console/data/get/*"
+
+#define MSDATA_CH_CONFIG_NAME  "ch.%d.cfg.name"
 
 #define MS_MIXER_PROFILE_FILENAME "/mixerDef.ms"
 
@@ -55,30 +59,18 @@ char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize
 }
 #endif
 
-
 #define INTERFACE_MIXINGSTATION "MixingStation"
 class MixingStation:  public MixerDevice<NetworkSocket>{
   public:
   
-    MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_MIXER_IDENTITY,8887,8088,true){
+    MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,PATH_MIXER_IDENTITY,8887,8088,true){
       //destination.host = "192.168.99.99";
       mixerID.name = "MSStation";
      
-      // protocol is hard-coded
-      mixerProtocol.anyChannelName = "ch.*.cfg.name";
-
       mixerDef = new MSmixerDefinition();
       strcpy(((MSmixerDefinition*)mixerDef)->model, mixerID.model.c_str());
 
     }
-
-    virtual void setDatasetPattern() override{
-      chNamesDS->pattern = "";
-      busNamesDS->pattern = "";
-      auxNamesDS->pattern = "";
-      fxNamesDS->pattern = "";
-    }
-
 
     virtual bool ping() override{
       hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));  // forge a MS get json query with echoCommand as the path
@@ -86,7 +78,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
     virtual void onSocketConnected() override{
-      hwm.network->clientSocketSend(get(MS_APP_STATE));  // forge a MS get json query with echoCommand as the path
+      hwm.network->clientSocketSend(get(PATH_APP_STATE));  // forge a MS get json query with echoCommand as the path
     }
  
     virtual bool restoreMixerProfile(){
@@ -96,6 +88,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }    
 
     virtual bool begin() override{
+      DEBUG_INFO("%s::begin() => setting model and dataset pattern",interfaceName.c_str());      
       setModel("virtual");      // "virtual" is different than default value "offline" and this forces setModel to reload and set the model from the definition file
       return true;
     }
@@ -283,7 +276,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
     void getMixerDefinition(){      
-      hwm.network->clientSocketSend(get(MS_MIXER_DEFINITION)); // retrieve name, etc...            
+      hwm.network->clientSocketSend(get(PATH_MIXER_DEFINITION)); // retrieve name, etc...            
     }
 
     void processMixerDefinition(char* rx, size_t len) {
@@ -365,7 +358,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       saveMixerDefinition();
 
       // now get the mixer identity
-      hwm.network->clientSocketSend(get(MS_MIXER_IDENTITY)); // retrieve name, etc...            
+      hwm.network->clientSocketSend(get(PATH_MIXER_IDENTITY)); // retrieve name, etc...            
 
     }
 
@@ -381,15 +374,15 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       if (name != OFFLINE){        
         setMixer(name,model,ip);                
       }else{
-        hwm.network->clientSocketSend(get(MS_APP_STATE));   // force getting the state as a backup in case mixerQuery didn't pass thru
+        hwm.network->clientSocketSend(get(PATH_APP_STATE));   // force getting the state as a backup in case mixerQuery didn't pass thru
       }
 
     }
 
-    virtual void startMixerDataSync() override{
-      hwm.network->clientSocketSend(post(MS_SUBSCRIBE,bodyPathFormat(mixerProtocol.anyChannelName.c_str(),"val")));  // forge a MS get json query with echoCommand as the path
+    /*virtual void startMixerDataSync() override{
+      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(mixerProtocol.anyChannelName.c_str(),"val")));  // forge a MS get json query with echoCommand as the path
       setStatePendingDataSync();
-    }
+    }*/
 
     void processMixersAvailable(char* rx, size_t len) {
       JsonDocument filter;
@@ -422,8 +415,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     void processDataGet(const char* path, JsonVariant body) {
       // traitement de /console/data/get/*
-      float value          =  body["value"]   | 0.0;
-      DEBUG_INFO("%s::processDataGet: %s = %.2f",interfaceName.c_str(),path,value);
+      DEBUG_INFO("%s::processDataGet: %s",interfaceName.c_str(),path);
+
+      //float value          =  body["value"]   | 0.0;
     }
 
     //////////////////////////////////////////////////////////////
@@ -482,15 +476,28 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
         return buffer;
     }    
+
+    /////////////////////////////////// MIXER RELATED REQUEST ////////////////////////////
+    virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override{
+
+      if (dataset == chNamesDS) index += ((MSmixerDefinition*)mixerDef)->channelOffset;
+      else if (dataset == busNamesDS) index += ((MSmixerDefinition*)mixerDef)->busOffset;
+      else if (dataset == auxNamesDS) index += ((MSmixerDefinition*)mixerDef)->auxOffset;
+      else if (dataset == fxNamesDS) index += ((MSmixerDefinition*)mixerDef)->fxOffset;
+
+      DEBUG_INFO("🔄"MSDATA_CH_CONFIG_NAME,index);
+
+    }
+
   
 };
 
 const MixingStation::Route MixingStation::routes[] = {
-  { MS_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState },           false },
-  { MS_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity },   false },  
-  { MS_MIXER_DEFINITION,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixerDefinition }, false },  
-  { MS_MIXERS_AVAILABLE,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }, false },
-  { MS_MIXER_GET_ANY_DATA,   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet },         true },
+  { PATH_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState },           false },
+  { PATH_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity },   false },  
+  { PATH_MIXER_DEFINITION,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixerDefinition }, false },  
+  { PATH_MIXERS_AVAILABLE,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }, false },
+  { PATH_MIXER_GET_ANY_DATA,   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet },         true },
 };
 
 #endif

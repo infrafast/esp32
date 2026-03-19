@@ -725,7 +725,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       return begin();    // derived class call   
     };        
 
-    virtual void monitor(){           
+    virtual void monitor() override{           
       monitorNetwork();      
     }    
 

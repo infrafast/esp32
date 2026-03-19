@@ -71,8 +71,8 @@ class XMmixerModelDS : public DataSet{
      
 };
 
-struct XMmixerDefinition : public BaseMixerDefinition{
-  String protocol = "";
+struct MixerProtocol{
+  String anyChannelName = "/";      // not sure if we can replace that by a jsondocument yet
 };
 
 
@@ -82,7 +82,9 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     #define XM_BEHRINGER_PING_CMD "/xinfo"    //=> maybe go to mixer definition if not the same for all X/M....
 
     int connectMethod = CONNECT_DISCOVER;
+    
     String protocolName ="xair";
+    MixerProtocol protocol;         //jsondocument ? or array of Strings ?
 
     /* */
     #define DISCOVERY_PORT_COUNT 2 
@@ -106,25 +108,15 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     }     
 
     virtual bool begin() override{
-      DEBUG_INFO("%s::begin() => user setting up XMmixerModelDS",interfaceName.c_str());      
+      DEBUG_INFO("%s::begin() => user setting up XMmixerModelDS/model and dataset pattern",interfaceName.c_str());      
       mixerModelDS.populate();        // feeding the list of available mixer definitions for when we are offline and want to select a mixer      
-
       // check if mixerID.model is in the list, otherwise set it to the first item from it
       if (!mixerModelDS.contains(mixerID.model)){
         const char* firstValidModel = mixerModelDS.getValuePtr(0)->c_str();
         DEBUG_WARN("%s is not a valid model, use %s as default",mixerID.model,firstValidModel);
-        mixerID.model = firstValidModel;
-      }
-      
-      setModel(mixerID.model.c_str());       // setting up the last connected mixer
+        setModel(firstValidModel);
+      }else setModel(mixerID.model.c_str());       // setting up the last connected mixer
       return true;
-    }
-
-    virtual void setDatasetPattern() override{
-      chNamesDS->pattern = "";
-      busNamesDS->pattern = "";
-      auxNamesDS->pattern = "";
-      fxNamesDS->pattern = "";
     }
 
     virtual void serializeProperties(JsonArray& properties) override{
@@ -307,10 +299,10 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         return m;
     }
 
-    virtual void startMixerDataSync() override{
+    /*virtual void startMixerDataSync() override{
         // do whatever is required here      
         setStatePendingDataSync();                      
-    }
+    }*/
 
     virtual bool ping() override{
       // in case we are in discovery mode, we alternate the value of the port using 
@@ -338,6 +330,17 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       }
 
       return NetworkOSC::handleConnectService();
+    }
+
+    /////////////////////////////////// MIXER RELATED REQUEST ////////////////////////////
+    virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override{
+      // this method drop the request to get a name
+      const char* request;
+      if (dataset == chNamesDS) request = "/ch/";
+      else if (dataset == busNamesDS) request = "/bus/";
+      else if (dataset == auxNamesDS) request = "/aux/";
+      else if (dataset == fxNamesDS) request = "/fx/";
+      DEBUG_INFO("🔄%s%d",request,index);
     }
     
 
