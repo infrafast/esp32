@@ -39,8 +39,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     int UDPPort;
     UDP* udp = nullptr;
 
-    virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
-
     NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String echoCommand, bool _configurable=false, String group = GROUP_INTERFACE_OSC):NetworkDevice(name, group ,_OSC_localPort,_OSC_remotePort,echoCommand, _configurable){
       icon = "g";        
 

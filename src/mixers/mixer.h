@@ -97,10 +97,10 @@ struct MixerProtocol{
   String anyChannelName = "ch.*.cfg.name";
 };
 
-#define ADDRESS_CH_NAME "/ch/name/%s"
+#define ADDRESS_CH_NAME "/ch/name/%d"
 DropDownAddress addressCHname = DropDownAddress(ADDRESS_CH_NAME);
 
-#define ADDRESS_BUS_NAME "/ch/bus/%s"
+#define ADDRESS_BUS_NAME "/ch/bus/%d"
 DropDownAddress addressBUSname = DropDownAddress(ADDRESS_BUS_NAME);
 
 
@@ -141,6 +141,8 @@ public:
     virtual bool restoreMixerProfile() = 0;
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;    
     /////////////////////
+
+    virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
 
     void setMixer(String& name, String&model, IPAddress& ip) {
       DEBUG_INFO("%s:setMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
@@ -219,8 +221,8 @@ public:
 
     virtual void setStateDisabled() override{
       NetworkBase::setStateDisabled();
-      this->state.label = mixerID.model; // we use the mixer model as the label state to force the state.brodCast updating the webapp GUI.
-      this->state.details =  concatStrings("Offline virtual mixer");
+      this->state.label = "Offline";
+      this->state.details =  "";    // remove the default statement "interface is disabled"
     }
 
 };

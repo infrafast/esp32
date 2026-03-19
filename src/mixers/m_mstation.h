@@ -105,7 +105,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       #endif
 
       bool success = loadStruct(filename, *((MSmixerDefinition*)mixerDef));
-      mixerID.model = ((MSmixerDefinition*)mixerDef)->model; // mixing station is particular in that sense that the model is stored directly in the definition because it is "virtual". Long story short.
+      if (success) mixerID.model = ((MSmixerDefinition*)mixerDef)->model; // mixing station is particular in that sense that the model is stored directly in the definition because it is "virtual". Long story short.
+      else mixerID.model = "Mixing Station";
       #ifdef DEBUG
         DEBUG_INFO("%s::deserializeMixerDefinitionFromFile() => after load() :\t%s",interfaceName.c_str(),dumpMixerDef(*((MSmixerDefinition*)mixerDef),buffer, sizeof(buffer)));   
       #endif

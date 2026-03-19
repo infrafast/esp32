@@ -3163,19 +3163,20 @@ void setup() {
 
         //write the data with compression
         if (writeBufferToGzFile(concatStrings(WEBAPP_PATH, "/", fileName, ".gz"), entries.c_str()) != 0){
-
+          bool success;
           // reload the datasets
           if (fileName == SYSEXLIB_FILENAME){
-            if (!dsSysexMessages->reload()){
-              jsonAnswer.callback=RET_POPUP;
-              jsonAnswer.value = "Data reload error";
-            }else{
-              // then resend the banks with updated datasets
-              refreshBanksResponse();
-            }
+            success = dsSysexMessages->reload();
+          }else if (fileName == OSCLIB_FILENAME){
+            success = dsOSCMessages->reload();
           }
-          //do the same for osc messages here
-
+          if (!success){
+            jsonAnswer.callback=RET_POPUP;
+            jsonAnswer.value = "Data reload error";
+          }else{
+            // then resend the banks with updated datasets
+            refreshBanksResponse();
+          }
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;
           jsonAnswer.value = "File Error";
