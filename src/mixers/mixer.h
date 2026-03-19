@@ -46,14 +46,14 @@ class Synchronizer{
 class DataSetSynced: public DataSet{
   public: 
     String* values = nullptr;
-    uint16_t syncCount = 0;
+    uint16_t syncIndex = 0;
     unsigned long lastSyncTime = 0; 
     //int offset = 0;
     String defaultName="";
     uint8_t size = 0;
 
     DataSetSynced(Address* adress,String name,String defVal,Synchronizer* synchronizer) : DataSet(adress,name,&dataRepo),defaultName(defVal) {
-      init(1);
+      init(1);                    // one data by default
       synchronizer->add(this);    // a SyncDataSet self register himself to the overall synchroniser
     }
 
@@ -105,16 +105,6 @@ struct MixerIdentity {
                model == other.model &&
                ip == other.ip;
     }
-
-    /*void clear() {
-        name = "";
-        model = "";
-        ip = IPAddress(0,0,0,0);
-    }
-
-    bool isValid() const {
-        return ip != IPAddress(0,0,0,0);
-    }*/
 };
 
 struct BaseMixerDefinition{
@@ -191,7 +181,7 @@ public:
         }else{
           // drop the request to sync the current item in the current unsync dataset
           DataSetSynced* dataset = synchronizer.getCurrent();
-          dropDSnameRequest(dataset,dataset->syncCount);        // we use the inner index
+          dropDSnameRequest(dataset,dataset->syncIndex);        // we use the inner index
         }
       }
 
@@ -243,12 +233,13 @@ public:
     void initDatasets(){      
       DEBUG_INFO("%s:initDatasets()",this->interfaceName.c_str());
       
-      // setting up the data size
+      // setting up the data size and its value as not synchronized
       chNamesDS->init(mixerDef->channelCount);
       busNamesDS->init(mixerDef->busCount);
       auxNamesDS->init(mixerDef->auxCount);
       fxNamesDS->init(mixerDef->fxCount);
       
+      // clear all counters
       synchronizer.reset();
     }   
 
@@ -293,30 +284,28 @@ void Synchronizer::reset(){
   syncedSoFar = 0;
   dsIndex = 0;
    for (const auto& dataset : datasets){
-    dataset->syncCount = 0;
+    dataset->syncIndex = 0;
     totalToSync += dataset->size;
   }  
 }
     
 int8_t Synchronizer::update(){  
   
-  if (dsIndex >= datasets.size() || synced){ // we've synced it all
-    return 100; //100%
-  }
-
   DataSetSynced* dataset = datasets[dsIndex]; //sync in serial, next dataset
 
-  if (dataset->syncCount < dataset->getSize()){ // complete ?
-    while (dataset->getValuePtr(dataset->syncCount)->indexOf(UNSYNC_PATTERN) == -1 && dataset->syncCount < dataset->getSize()){
-      dataset->syncCount++;  // check the next item
+  if (dataset->syncIndex < dataset->getSize()){ // complete ?
+    while (dataset->getValuePtr(dataset->syncIndex)->indexOf(UNSYNC_PATTERN) == -1 && dataset->syncIndex < dataset->getSize()){
+      dataset->syncIndex++;  // check the next item
       syncedSoFar++;
     }
   }else dsIndex++;
 
   // computing the overall progress
   int8_t progress = map(syncedSoFar, 0, totalToSync, 0, 100);      
-  if (progress >=100) synced = true;
-  else synced = false;  
+  if (progress >=100){
+    synced = true;
+    progress = 100;
+  } else synced = false;  
 
   return progress;      
 }
