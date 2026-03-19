@@ -120,6 +120,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       return true;
     }
 
+    virtual void setDatasetPattern() override{
+      chNamesDS->pattern = "";
+      busNamesDS->pattern = "";
+      auxNamesDS->pattern = "";
+      fxNamesDS->pattern = "";
+    }
 
     virtual void serializeProperties(JsonArray& properties) override{
 

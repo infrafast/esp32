@@ -10,6 +10,29 @@
 
 #define MIXER_DEFINITION_PATH "/"
 
+class DataSetSynced;
+
+class Synchronizer{
+  public:
+    bool synced = false;
+
+    uint16_t totalToSync = 0;   // sum of items to be synced
+    uint16_t syncedSoFar = 0;
+    uint8_t  dsIndex = 0;       // which dataset we are currently synchronizing
+
+    void reset();
+    int8_t update();
+
+    void add(DataSetSynced* ds){
+       datasets.push_back(ds);
+    }
+
+  protected:
+    std::vector<DataSetSynced*> datasets;    
+
+};
+
+
 #define UNSYNC_PATTERN "~"
 class DataSetSynced: public DataSet{
   public: 
@@ -18,10 +41,12 @@ class DataSetSynced: public DataSet{
     unsigned long lastSyncTime = 0; 
     //int offset = 0;
     String defaultName="";
+    String pattern="";
     uint8_t size = 0;
 
-    DataSetSynced(Address* adress,String name,String defVal/*, int _offset*/) : DataSet(adress,name,&dataRepo),defaultName(defVal) {
+    DataSetSynced(Address* adress,String name,String defVal,Synchronizer* synchronizer) : DataSet(adress,name,&dataRepo),defaultName(defVal) {
       init(1);
+      synchronizer->add(this);    // a SyncDataSet self register himself to the overall synchroniser
     }
 
     virtual uint16_t getSize() override{
@@ -62,8 +87,6 @@ class DataSetSynced: public DataSet{
 
 };
 
-
-
 struct MixerIdentity {
     String name;
     String model;
@@ -97,12 +120,52 @@ struct MixerProtocol{
   String anyChannelName = "ch.*.cfg.name";
 };
 
-#define ADDRESS_CH_NAME "/ch/name/%d"
+#define ADDRESS_CH_NAME "/chname/%d"
 DropDownAddress addressCHname = DropDownAddress(ADDRESS_CH_NAME);
 
-#define ADDRESS_BUS_NAME "/ch/bus/%d"
+#define ADDRESS_BUS_NAME "/busname/%d"
 DropDownAddress addressBUSname = DropDownAddress(ADDRESS_BUS_NAME);
 
+#define ADDRESS_FX_NAME "/fxname/%d"
+DropDownAddress addressFXname = DropDownAddress(ADDRESS_FX_NAME);
+
+#define ADDRESS_AUX_NAME "/auxname/%d"
+DropDownAddress addressAUXname = DropDownAddress(ADDRESS_AUX_NAME);
+
+
+void Synchronizer::reset(){
+  DEBUG_INFO("Synchronizer:reset()");      
+  // resetting all sync counters
+  totalToSync = 0;
+  syncedSoFar = 0;
+  dsIndex = 0;
+   for (const auto& dataset : datasets){
+    dataset->syncCount = 0;
+    totalToSync += dataset->size;
+  }  
+}
+    
+int8_t Synchronizer::update(){  
+  
+  if (dsIndex >= datasets.size() || synced){ // we've synced it all
+    return 100; //100%
+  }
+
+  DataSetSynced* dataset = datasets[dsIndex]; //sync in serial, next dataset
+
+  if (dataset->syncCount < dataset->getSize()){ // complete ?
+    if (dataset->getValuePtr(dataset->syncCount)->indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.
+           
+    }   
+  }else dsIndex++;
+
+  // computing the overall progress
+  int8_t progress = map(syncedSoFar, 0, totalToSync, 0, 100);      
+  if (progress >=100) synced = true;
+  else synced = false;  
+
+  return progress;      
+}
 
 template <typename NetworkBase>
 class MixerDevice : public NetworkBase {
@@ -113,18 +176,14 @@ public:
     MixerProtocol mixerProtocol;
     BaseMixerDefinition* mixerDef;  // implemented by derived class
 
-
+    // properties that are synced
     DataSetSynced* chNamesDS;
     DataSetSynced* busNamesDS;  
     DataSetSynced* auxNamesDS;  
-    DataSetSynced* fxRetNamesDS;
-    DataSetSynced* mainNamesDS;
+    DataSetSynced* fxNamesDS;
 
-    std::vector<DataSetSynced*> dsNames;
-
-    bool dataSync = false;
-
-    unsigned long lastTimeMixerWasSet = 0;     
+    // this classes does all the work
+    Synchronizer synchronizer;
 
     template<typename... Args>
     MixerDevice(Args&&... args): NetworkBase(std::forward<Args>(args)...){
@@ -132,15 +191,25 @@ public:
       mixerID.name = "offline";
       mixerID.ip = IPAddress(0,0,0,0);
 
-      chNamesDS = new DataSetSynced(&addressCHname,this->interfaceName,UNSYNC_PATTERN "CH");
-      busNamesDS = new DataSetSynced(&addressBUSname,this->interfaceName,UNSYNC_PATTERN "BUS");
+      // SyncDataSet auto register themelves to the overall synchroniser
+      chNamesDS = new DataSetSynced(&addressCHname,this->interfaceName,UNSYNC_PATTERN "CH", &synchronizer); 
+      busNamesDS = new DataSetSynced(&addressBUSname,this->interfaceName,UNSYNC_PATTERN "BUS", &synchronizer);
+      auxNamesDS = new DataSetSynced(&addressAUXname,this->interfaceName,UNSYNC_PATTERN "AUX", &synchronizer);
+      fxNamesDS = new DataSetSynced(&addressFXname,this->interfaceName,UNSYNC_PATTERN "FX", &synchronizer);
+
+      setDatasetPattern();    // this defines the templates to recognize incoming frame to match
+
     }
     
-    //// pure virtual ////
+    //// pure virtual utilities ////
     virtual void startMixerDataSync() = 0;
     virtual bool restoreMixerProfile() = 0;
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;    
-    /////////////////////
+    virtual void setDatasetPattern() = 0;
+    
+    //// pure virtual utilities ////
+    virtual void queryCHname(uint8_t index);
+
 
     virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
 
@@ -160,12 +229,13 @@ public:
                             this->pendingSinceMs != 0 &&
                             (millis() - this->pendingSinceMs >= 15000);
 
-      if (offlineTooLong) dataSync = false;
+      DEBUG_PRINT("\t%s",offlineTooLong?"offline too long⌛":"");
 
-      DEBUG_PRINT("\t%s%s",offlineTooLong?"offline too long⌛":"",dataSync?"":"not synced🔄");
+      if (offlineTooLong) synchronizer.reset();
 
-      if (!dataSync){
-        if (this->state.label != IF_STATE_DATASYNCING) startMixerDataSync();
+      if (!synchronizer.synced){
+        DEBUG_PRINT("\tsynced🔄 required");
+        startMixerDataSync();
       }else{
         if (this->state.label != IF_STATE_LIVE) setStateMixerLive();
       }
@@ -188,14 +258,19 @@ public:
 
     void initDatasets(){      
       DEBUG_INFO("%s:initDatasets()",this->interfaceName.c_str());
+      
+      // setting up the data size
       chNamesDS->init(mixerDef->channelCount);
       busNamesDS->init(mixerDef->busCount);
-    }
+      auxNamesDS->init(mixerDef->auxCount);
+      fxNamesDS->init(mixerDef->fxCount);
+      
+      synchronizer.reset();
+    }   
 
     void newMixer(const MixerIdentity& newMixer){
       DEBUG_INFO("%s:newMixer()🎛",this->interfaceName.c_str());            
       mixerID = newMixer;     
-      dataSync = false;       // mixer is new so sync it is a must
       setModel(mixerID.model.c_str());
       this->state.broadcastConfig = true;   // inform web app about the chnage of mixer
     }

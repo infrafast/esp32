@@ -736,7 +736,7 @@ class BehringerMixer : public OSCMixerInterface {
       DataSetSynced* dsName = dsNames[dsNameIndex]; //sync in serial, next dsName
 
       if (dsName->syncIndex < dsName->getSize()){ // then are buses complete ?
-        //DEBUG_PRINT("\nSyncing %s%d =>",dsName->shortName.c_str(),dsName->syncIndex);
+        //DEBUG_PRINT("\nSyncing %s%d =>",dsName->shortName.c_str(),dsName->syncIndex);.
         if (dsName->values[dsName->syncIndex].indexOf(UNSYNC_PATTERN) != -1){  // if not sync, we sync it.
           sprintf(OSCCommand, dsName->pattern.c_str(), dsName->syncIndex+dsName->offset);
 

@@ -72,6 +72,14 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
+    virtual void setDatasetPattern() override{
+      chNamesDS->pattern = "";
+      busNamesDS->pattern = "";
+      auxNamesDS->pattern = "";
+      fxNamesDS->pattern = "";
+    }
+
+
     virtual bool ping() override{
       hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));  // forge a MS get json query with echoCommand as the path
       return true;
