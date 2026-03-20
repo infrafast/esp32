@@ -1,5 +1,5 @@
 {
-    "protocol":"xair",
+    "protocol":"xair.osc",
     "channelCount":18,
     "busCount":4,
     "auxCount":1,

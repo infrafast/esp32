@@ -395,7 +395,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
       destination.lastQueryTime = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
-      //setStateDisconnected();      
+      queue.clear();      
       return true;
     }    
   

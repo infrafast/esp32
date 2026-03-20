@@ -20,6 +20,8 @@ class Synchronizer{
     Synchronizer(){}   
 
     bool synced = false;
+    bool syncRequestLocker = false;
+    uint8_t holdLoopCount = 0;
 
     uint16_t totalToSync = 0;   // sum of items to be synced
     uint16_t syncedSoFar = 0;
@@ -33,7 +35,8 @@ class Synchronizer{
     }
 
     DataSetSynced* getCurrent(){
-      return datasets[dsIndex];
+      if (syncRequestLocker) return nullptr;
+      else return datasets[dsIndex];
     }
 
   protected:
@@ -49,7 +52,6 @@ class DataSetSynced: public DataSet{
     uint16_t syncStep = 0;
     String defaultName="";
     uint8_t size = 0;
-    uint16_t lastRequestedSyncStep = 0xFFFF;      // utilisé pour marquer que l'item du DS est en cours de syncrho et eviter des duplicats de demande
 
     DataSetSynced(Address* adress,String name,String defVal,Synchronizer* synchronizer) : DataSet(adress,name,&dataRepo),defaultName(defVal) {
       init(1);                    // one data by default
@@ -85,7 +87,6 @@ class DataSetSynced: public DataSet{
       for (int i = 0; i < size; ++i) {
           values[i] = concatStrings(defaultName, i);
       }
-      lastRequestedSyncStep = 0xFFFF;
       syncStep = 0;
     }
 
@@ -179,24 +180,12 @@ public:
         if (synchronizer.synced){
           // all done, we go back to full connected mode
           this->setStateLive();        
-        }else{
-          DataSetSynced* dataset = synchronizer.getCurrent();
-          // on n'envoie qu'une seule fois pour la valeur courante de syncStep
-          /*
-            exemple: syncStep == 9, lastRequestedSyncStep == 0xFFFF → envoi
-
-            boucle suivante, tant que la réponse n’a pas encore été traitée :
-            syncStep == 9 et lastRequestedSyncStep == 9 → pas de renvoi
-
-            quand la réponse "Strings" arrive et met à jour le dataset, update() fera avancer syncStep à 10
-
-            alors lastRequestedSyncStep != syncStep → envoi de /ch/10/config/name          
-          */
-
-          if (dataset->lastRequestedSyncStep != dataset->syncStep){
-            dataset->lastRequestedSyncStep = dataset->syncStep;
+        }else{          
+          DataSetSynced* dataset = synchronizer.getCurrent();   // return null if syncRequest is still locked
+          if (dataset){
             dropDSnameRequest(dataset, dataset->syncStep);
-          }
+            synchronizer.syncRequestLocker = true;        // tells the synchroniser we are syncing
+          }            
         }
       }
     }  
@@ -218,7 +207,7 @@ public:
 
       //DEBUG_PRINT("\t%s 🕒 elpasedOffline:%i",offlineTooLong?"offline too long⌛":"",elpasedOffline);
 
-      if (offlineTooLong) synchronizer.reset();
+      if (offlineTooLong || mixerChanged) synchronizer.reset();
 
       if (!synchronizer.synced){
         setStatePendingDataSync();
@@ -237,6 +226,7 @@ public:
         // as the mixer attributes have changed,
         // ASK APPLICATION MANAGER TO REPUBLISH THE BANKS
         app.webAppToRefreshBanks();
+        this->state.broadcastConfig = true;   // inform web app about the chnage of model
       }else{
         DEBUG_PRINT("\t model didn't change!");
       }
@@ -257,8 +247,8 @@ public:
 
     void newMixer(const MixerIdentity& newMixer){
       DEBUG_INFO("%s:newMixer()🎛",this->interfaceName.c_str());            
+      setModel(newMixer.model.c_str());
       mixerID = newMixer;     
-      setModel(mixerID.model.c_str());
       this->state.broadcastConfig = true;   // inform web app about the chnage of mixer
     }
 
@@ -284,7 +274,7 @@ public:
     virtual void setStateDisabled() override{
       NetworkBase::setStateDisabled();
       this->state.label = "Offline";
-      this->state.details =  "";    // remove the default statement "interface is disabled"
+      this->state.details =  mixerID.model;    // remove the default statement "interface is disabled"
     }
 
 };
@@ -294,10 +284,12 @@ void Synchronizer::reset(){
   // resetting all sync counters
   totalToSync = 0;
   syncedSoFar = 0;
+  synced = false;
   dsIndex = 0;  
+  syncRequestLocker = false; // allow to request a dataset
+  holdLoopCount = 0;          // release the locker after certain time (3 loops)
    for (const auto& dataset : datasets){
     dataset->syncStep = 0;
-    dataset->lastRequestedSyncStep = 0xFFFF;
     totalToSync += dataset->size;
   }  
 }
@@ -305,6 +297,13 @@ void Synchronizer::reset(){
 int8_t Synchronizer::update(){  
   
   DataSetSynced* dataset = datasets[dsIndex]; //sync in serial, next dataset
+
+  holdLoopCount++;
+
+  if (holdLoopCount >= 3){
+    syncRequestLocker = false;   // autorise relance d'une requete
+    holdLoopCount = 0;
+  }
 
   if (dataset->syncStep < dataset->getSize()){ // complete ?
     while (dataset->getValuePtr(dataset->syncStep)->indexOf(UNSYNC_PATTERN) == -1 && dataset->syncStep < dataset->getSize()){
