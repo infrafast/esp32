@@ -49,6 +49,7 @@ class DataSetSynced: public DataSet{
     uint16_t syncStep = 0;
     String defaultName="";
     uint8_t size = 0;
+    uint16_t lastRequestedSyncStep = 0xFFFF;      // utilisé pour marquer que l'item du DS est en cours de syncrho et eviter des duplicats de demande
 
     DataSetSynced(Address* adress,String name,String defVal,Synchronizer* synchronizer) : DataSet(adress,name,&dataRepo),defaultName(defVal) {
       init(1);                    // one data by default
@@ -60,7 +61,7 @@ class DataSetSynced: public DataSet{
     };
 
     void set(uint16_t index, String value){
-      if (index>size) return;
+      if (index>=size) return;
       
       if (values[index] != value){
         values[index] = value;
@@ -70,7 +71,7 @@ class DataSetSynced: public DataSet{
 
     void init(uint16_t _size/*, int _offset*/){
       //offset = _offset;
-      //DEBUG_PRINT("\nDataSetSynced init(%d,%s,%d)",size,defVal.c_str(),offset);
+      //DEBUG_PRINT("\nDataSetSynced init(%d,%s,%d)",size,defVal.c_str(),offset);      
 
       if (size != _size){
         size = _size;
@@ -84,6 +85,8 @@ class DataSetSynced: public DataSet{
       for (int i = 0; i < size; ++i) {
           values[i] = concatStrings(defaultName, i);
       }
+      lastRequestedSyncStep = 0xFFFF;
+      syncStep = 0;
     }
 
     virtual const String* getValuePtr(uint16_t i) override{    
@@ -177,12 +180,25 @@ public:
           // all done, we go back to full connected mode
           this->setStateLive();        
         }else{
-          // drop the request to sync the current item in the current unsync dataset
           DataSetSynced* dataset = synchronizer.getCurrent();
-          dropDSnameRequest(dataset,dataset->syncStep);        // we use the inner index
+          // on n'envoie qu'une seule fois pour la valeur courante de syncStep
+          /*
+            exemple: syncStep == 9, lastRequestedSyncStep == 0xFFFF → envoi
+
+            boucle suivante, tant que la réponse n’a pas encore été traitée :
+            syncStep == 9 et lastRequestedSyncStep == 9 → pas de renvoi
+
+            quand la réponse "Strings" arrive et met à jour le dataset, update() fera avancer syncStep à 10
+
+            alors lastRequestedSyncStep != syncStep → envoi de /ch/10/config/name          
+          */
+
+          if (dataset->lastRequestedSyncStep != dataset->syncStep){
+            dataset->lastRequestedSyncStep = dataset->syncStep;
+            dropDSnameRequest(dataset, dataset->syncStep);
+          }
         }
       }
-
     }  
 
 
@@ -198,11 +214,9 @@ public:
         newMixer(newID);
       }           
 
-      bool offlineTooLong = (this->state.label == IF_STATE_PENDING) &&
-                            this->pendingSinceMs != 0 &&
-                            (millis() - this->pendingSinceMs >= 15000);
+      bool offlineTooLong = false;
 
-      DEBUG_PRINT("\t%s",offlineTooLong?"offline too long⌛":"");
+      //DEBUG_PRINT("\t%s 🕒 elpasedOffline:%i",offlineTooLong?"offline too long⌛":"",elpasedOffline);
 
       if (offlineTooLong) synchronizer.reset();
 
@@ -280,9 +294,10 @@ void Synchronizer::reset(){
   // resetting all sync counters
   totalToSync = 0;
   syncedSoFar = 0;
-  dsIndex = 0;
+  dsIndex = 0;  
    for (const auto& dataset : datasets){
     dataset->syncStep = 0;
+    dataset->lastRequestedSyncStep = 0xFFFF;
     totalToSync += dataset->size;
   }  
 }

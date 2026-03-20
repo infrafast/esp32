@@ -30,7 +30,7 @@ class NetworkSocket: public NetworkDevice{
 
       if (dataAvailable){
         // recupere la donnée reçue et stockée  
-        route(socketCopy.message,socketCopy.length);                 
+        route(socketCopy.message,socketCopy.length);      // informe qui de droit          
         dataAvailable = false;
       }
 
@@ -40,15 +40,13 @@ class NetworkSocket: public NetworkDevice{
       if (millis()-destination.lastQueryTime > PULSE_CHECK_DELAY){                
           destination.lastQueryTime = millis(); // reset timer
           if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
-              // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
-              ping();
+            // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
+            ping();
           }else{
-              // if we have no socket connection or we loose it, we try to esbalish one
-              if (!handleConnectService()) setStateError("Thread socket-open failed");
-              else{
-                setStatePending();
-                pendingSinceMs = millis();
-              }
+            // if we have no socket connection or we loose it, we try to esbalish one
+            if (!handleConnectService()) setStateError("Thread socket-open failed");
+            else setStatePending();
+            if (state.code != IF_READY) offlineStart = millis();
           }        
       }                                                                   
     }

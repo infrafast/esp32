@@ -25,6 +25,163 @@ static bool strStartsWith(const char* s, const char* prefix) {
   return strncmp(s, prefix, strlen(prefix)) == 0;
 }
 
+// serialization de message OSC
+class MemoryPrint : public Print {
+public:
+  MemoryPrint(uint8_t* buf, size_t maxLen)
+    : _buf(buf), _maxLen(maxLen), _len(0) {}
+
+  size_t write(uint8_t b) override {
+    if (_len >= _maxLen) return 0;
+    _buf[_len++] = b;
+    return 1;
+  }
+
+  size_t length() const { return _len; }
+
+private:
+  uint8_t* _buf;
+  size_t _maxLen;
+  size_t _len;
+};
+
+struct OscQueueNode {
+  String address;
+  uint8_t* data = nullptr;
+  size_t len = 0;
+  OscQueueNode* next = nullptr;
+};
+
+class OscMessageQueue {
+public:
+  OscMessageQueue()
+    : head(nullptr), tail(nullptr), count(0), lastSendTime(0) {}
+
+  ~OscMessageQueue() {
+    clear();
+  }
+
+  bool enqueue(OSCMessage& msg) {
+    // enqueue une copie d'un message OSC
+    size_t msgLen = msg.size();
+
+    // Sécurité minimale : allouer au moins 64 octet, meme si pas de parametres au message
+    size_t allocLen = (msgLen > 0) ? msgLen : 64;
+
+    uint8_t* temp = new uint8_t[allocLen];
+    if (!temp) return false;
+
+    MemoryPrint mp(temp, allocLen);
+    msg.send(mp);
+
+    size_t actualLen = mp.length();
+
+    // Si rien n'a été écrit → invalide
+    if (actualLen == 0) {
+      delete[] temp;
+      return false;
+    }
+
+    // Vérifie doublon
+    for (OscQueueNode* cur = head; cur != nullptr; cur = cur->next) {
+      if (cur->len == actualLen && memcmp(cur->data, temp, actualLen) == 0) {
+        delete[] temp;
+        return false;
+      }
+    }
+
+    // Ajuste la taille si nécessaire
+    uint8_t* finalBuf = temp;
+    if (actualLen != allocLen) {
+      finalBuf = new uint8_t[actualLen];
+      if (!finalBuf) {
+        delete[] temp;
+        return false;
+      }
+      memcpy(finalBuf, temp, actualLen);
+      delete[] temp;
+    }
+
+    // Création node
+    OscQueueNode* node = new OscQueueNode();
+    if (!node) {
+      delete[] finalBuf;
+      return false;
+    }
+
+    node->data = finalBuf;
+    node->len = actualLen;
+    node->next = nullptr;
+
+    // FIFO
+    if (!tail) {
+      head = tail = node;
+    } else {
+      tail->next = node;
+      tail = node;
+    }
+
+    count++;
+    return true;
+  }
+
+
+  // Déqueue uniquement si 50 ms écoulées depuis le dernier envoi
+  bool dequeue(OSCMessage& outMsg, int delayBetweenTwoSend) {
+    if (!head){
+      return false;
+    }
+
+    unsigned long now = millis();
+    if ((now - lastSendTime) < delayBetweenTwoSend) {
+      return false;
+    }
+
+    OscQueueNode* node = head;
+
+    for (size_t i = 0; i < node->len; i++) {
+      outMsg.fill(node->data[i]);
+    }
+
+    head = head->next;
+    if (!head) tail = nullptr;
+
+    delete[] node->data;
+    delete node;
+    count--;
+
+    lastSendTime = now;
+    return true;
+  }
+
+  bool isEmpty() const {
+    return head == nullptr;
+  }
+
+  size_t size() const {
+    return count;
+  }
+
+  void clear() {
+    while (head) {
+      OscQueueNode* node = head;
+      head = head->next;
+      delete[] node->data;
+      delete node;
+    }
+    tail = nullptr;
+    count = 0;
+  }
+
+private:
+  OscQueueNode* head;
+  OscQueueNode* tail;
+  size_t count;
+  unsigned long lastSendTime;
+};
+
+
+
 
 #define GROUP_INTERFACE_OSC "OSC"
 
@@ -32,7 +189,9 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
-    OSCMessage osc;
+    OSCMessage osc;   // reception
+    OscMessageQueue queue; // envoi compatible avec la latence
+
     Event evtOSC = Event(&osc);
     // from remote UDP
     IPAddress UDPIP;
@@ -78,11 +237,18 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }        
 
      virtual void monitorService(){
-      // Check if packet was received
+
+      // envoit si message dans la queue
+      OSCMessage msgOut;
+      if (queue.dequeue(msgOut, destination.latency)) {
+        _sendOSCMessage(&msgOut);
+      }
+
+      // reception ?
       int8_t dataAvailable = readOSC();
 
       if (dataAvailable > 0){                                     // data has come
-
+       
         if (state.code != IF_READY) setStateConnected();          // set the device to connected
         destination.lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
         connectAttemptCount = 0;                                  // reset attempt counter                
@@ -111,10 +277,11 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       #define OSC_PING_DELAY 3000
       // delay expired
       if (millis()-destination.lastQueryTime > OSC_PING_DELAY){        
-        destination.lastQueryTime = millis();
+        destination.lastQueryTime = millis();        
+
         if (connectAttemptCount++ == 1){            //put 2 if you give it a new chance or set state (2x try)
           setStateQueryingDevice();
-          pendingSinceMs = millis();          
+          if (state.code != IF_READY) offlineStart = millis();
           connectAttemptCount = 0;          
         }else{          
           if (!ping()) handleConnectService();     // as ping failed, it means no socket are available, hence we have to connect it
@@ -122,7 +289,11 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       }                                                                   
     }
 
-    virtual void process() {
+    bool send(OSCMessage& msg){
+      return queue.enqueue(msg);
+    }
+
+    virtual void process(){
       fireEvent(evtOSC);  //simply propagate the data
     }    
     
@@ -169,9 +340,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
                 DEBUG_INFO("<<%s(%s,%i) %s",addr,destination.ip.toString().c_str(),remotePort, oscDump);              
               #endif
               
-              // we now forward the event
-              fireEvent(evtOSC);
-
             }              
             // ✔ message valide
             // retour : au moins 1, même si aucun argument
@@ -198,33 +366,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         else offset += snprintf(buffer + offset, bufferSize - offset,"[type:%c] ", msg.getType(i));
       }
       return buffer;
-    }
-
-    bool sendOSCMessage(OSCMessage *msg){           
-      
-      bool success = false;
-
-      DEBUG_INFO(">>%s(%s,%i->%i) ",msg->getAddress(),destination.ip.toString().c_str(),localPort, remotePort);
-
-      UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
-
-      if (udpSlot == nullptr){
-          DEBUG_ERROR(" **** FAIL (UdpSlot null) ****");
-          return false;
-      }            
-     
-      UDP* udp = udpSlot->udp; 
-
-      if (udp != nullptr){
-        udp->beginPacket(destination.ip, remotePort);
-        msg->send(*udp);
-        udp->endPacket();
-        success = true;
-      }else{
-        DEBUG_ERROR(" **** FAIL (udp null) ****");        
-      }
-
-      return success;          
     }
 
     virtual bool stop() override{          // disconnect the network for network interface
@@ -268,8 +409,8 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
     virtual bool ping() override{
       destination.lastQueryTime = millis();       
-      OSCMessage msg(destination.echoCommand.c_str());
-      return sendOSCMessage(&msg);
+      OSCMessage msg(destination.echoCommand.c_str()); 
+      return send(msg);
     }
 
     void determineQoS(){      
@@ -322,6 +463,34 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     int udpID = -1;
     
     //UDP* udp = nullptr; // DIRECT UDP
+
+    bool _sendOSCMessage(OSCMessage *msg){           
+      
+      bool success = false;
+
+      DEBUG_INFO(">>%s(%s,%i->%i) ",msg->getAddress(),destination.ip.toString().c_str(),localPort, remotePort);
+
+      UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
+
+      if (udpSlot == nullptr){
+          DEBUG_ERROR(" **** FAIL (UdpSlot null) ****");
+          return false;
+      }            
+     
+      UDP* udp = udpSlot->udp; 
+
+      if (udp != nullptr){
+        udp->beginPacket(destination.ip, remotePort);
+        msg->send(*udp);
+        udp->endPacket();
+        success = true;
+      }else{
+        DEBUG_ERROR(" **** FAIL (udp null) ****");        
+      }
+
+      return success;          
+    }
+
 
 };
 

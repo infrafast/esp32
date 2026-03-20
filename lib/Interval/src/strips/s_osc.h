@@ -61,11 +61,9 @@ class OSCStrip : public Strip{  // should inherit from MidiStrip before so metho
     } 
 
     virtual bool actionCallback(uint8_t trigger) {
-        if (!interface) return false;
-        
-        OSCMessage msg(oscMessageString.c_str());
-        
-        return  ((NetworkOSC*)interface)->sendOSCMessage(&msg);
+        if (!interface) return false;        
+        OSCMessage msg(oscMessageString.c_str());        
+        return  ((NetworkOSC*)interface)->send(msg);
     }
 
     virtual void serializeProperties(){

@@ -426,7 +426,6 @@ class NetWorkService{
     virtual bool handleConnectService()=0;
     virtual bool handleDisconnectService()=0;
 
-
     static void addToInventory(NetWorkService* iface) {
       if (iface == nullptr) return;
       inventory.push_back(iface);
@@ -589,7 +588,7 @@ class NetWorkService{
 
     void monitorNetwork(){
 
-      if (!deviceInterface) return;
+      if (!deviceInterface) return;  
 
       if (hwm.network->state == DISCONNECTED){
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
@@ -699,7 +698,8 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     int remotePort = 0;
     int localPort = 0;
 
-    unsigned long pendingSinceMs;
+    unsigned long offlineStart = 0;
+    unsigned long offlineElpased = 0;    
 
     NetworkDevice(String name, String group, int lport, int rport, String echoCommand, bool _configurable=false):DeviceInterface(name, group,_configurable){
       

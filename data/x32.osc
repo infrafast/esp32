@@ -1,3 +1,5 @@
-{
-    "anyChannelName":"/ch/%02d/config/name"
-}
+/ch/%02d/config/name
+/bus/%02d/config/name
+/auxin/%02d/config/name
+/fxrtn/%02d/config/name
+/ch/%02d/mix/%02d/level

@@ -1,7 +1,7 @@
 {
   "channelCount":32, 
-  "busCount":8,
-  "auxCount":6,
+  "busCount":16,
+  "auxCount":8,
   "fxCount":8,
   "protocol":"x32.osc"    
 }

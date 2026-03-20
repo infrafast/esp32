@@ -71,10 +71,14 @@ class XMmixerModelDS : public DataSet{
      
 };
 
-struct MixerProtocol{
-  String anyChannelName = "/";      // not sure if we can replace that by a jsondocument yet
+enum{
+  XM_CH_CONFIG_NAME,
+  XM_BUS_CONFIG_NAME,
+  XM_AUX_CONFIG_NAME,
+  XM_FX_CONFIG_NAME,
+  XM_CH_BUS_MIX_LEVEL,
+  XM_PROOTCOL_COUNT
 };
-
 
 class XMSeries: public MixerDevice<NetworkOSC>{
   public:
@@ -84,7 +88,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     int connectMethod = CONNECT_DISCOVER;
     
     String protocolName ="xair";
-    MixerProtocol protocol;         //jsondocument ? or array of Strings ?
+    String protocol[XM_PROOTCOL_COUNT];         
 
     /* */
     #define DISCOVERY_PORT_COUNT 2 
@@ -176,8 +180,42 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       return success;
     }
 
-    bool deserializeMixerProtocolFromFile(const char* filename){
-      DEBUG_INFO("%s::deserializeMixerProtocolFromFile(%s) to mixerProtocol",interfaceName.c_str(),filename); 
+    bool deserializeMixerProtocolFromFile(const char* filename) {
+    /*
+      ouvre le fichier de protocole
+      lit chaque ligne avec readStringUntil('\n')
+      enlève les éventuels \r et espaces parasites via trim()
+      stocke chaque ligne dans protocol[index]
+      s’arrête si :
+      - le fichier est fini
+      - ou si XM_PROOTCOL_COUNT lignes ont été lues    
+    */
+      String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename);   
+      DEBUG_INFO("%s::deserializeMixerProtocolFromFile(%s) to mixerProtocol",interfaceName.c_str(), fullFilename.c_str());
+
+      File file = LittleFS.open(fullFilename, "r");
+      if (!file) {
+        DEBUG_ERROR("%s::deserializeMixerProtocolFromFile -> impossible d'ouvrir %s",interfaceName.c_str(), fullFilename.c_str());
+        return false;
+      }
+
+      int index = 0;
+      while (file.available() && index < XM_PROOTCOL_COUNT) {
+        String line = file.readStringUntil('\n');
+        // Nettoyage des fins de ligne Windows (\r\n)
+        line.trim();
+        protocol[index] = line;
+        DEBUG_INFO("protocol[%d] = %s", index, protocol[index].c_str());
+        index++;
+      }
+
+      file.close();
+
+      // Si le fichier contient moins de lignes que prévu
+      if (index < XM_PROOTCOL_COUNT) {
+        DEBUG_WARN("%s::deserializeMixerProtocolFromFile -> fichier incomplet (%d/%d lignes)",interfaceName.c_str(), index, XM_PROOTCOL_COUNT);
+      }
+
       return true;
     }
 
@@ -223,56 +261,83 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       state.broadcastConfig = true; // it could be that the connect method has changed so we need to redisplay/hide the configuration fields  
     }    
 
+    // used to extract values from the path    
     #define STRING_MAX_SIZE 64
     char stringBuffer[STRING_MAX_SIZE];
+    int i1,i2;
+    float f1;
 
     virtual void process() override {
 
-        const char* addr = osc.getAddress();
+        
+
+        // fonction principale de routage
+        const char* addr = osc.getAddress();        
         if (!addr) return;
 
+     
         // Routes fixes
         if (strEquals(addr, XM_BEHRINGER_PING_CMD)) {    
-            IPAddress ip;
-            // in case we are in discovery mode, we need to retrieve the destination IP and port from the UDP connection established with the mixer
-            if (CONNECT_DISCOVER == connectMethod){
-              /* 1️⃣ retrieve mixer IP
-                  method: DISCOVER => Always use the IP of the Mixer
-                  method: MANUAL =>  if UDP IP differs from Mixer, use UDP IP
-              */
-              osc.getString(0, stringBuffer);         // index 0 = IP address
-              if (ip.fromString(stringBuffer)) {
-              // 2️⃣ if the IP returned from the mixer differs from the destinationIP (which is the one from UDP packet)
-              // this happens for instance when the mixer is on a different network (emulator on DSM for example)            
-              if (
-                  ip[0] != destination.ip[0] || ip[1] != destination.ip[1] || ip[2] != destination.ip[2] || ip[3] != destination.ip[3]
-              ){
-                  DEBUG_WARN("Mixer IP differs from UDP packet %s->%s",stringBuffer,UDPIP.toString());
-                  // if we are on a different subnet, then we have to keep the destination ip we used to connect                  
-                  //destination.ip = ip;
-              }
-              //DEBUG_PRINT("\nPinging Mixer (%s) to retrieve latency from dynamic IP",mixerIP.toString().c_str());
-              //blockingPing(mixerIP); // we retrieve the real latency, now that we have the mixer address      
-              } else {
-                  DEBUG_ERROR("String reçue mais IP invalide");
-              }   
-              
-              remotePort = UDPPort;               // we use the port from the UDP socket that successfully connected the mixer
-
-            }     
-
-            osc.getString(1, stringBuffer);     // index 1 = name
-            String name = stringBuffer;   // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
-
-            osc.getString(2, stringBuffer);     // index 2 = model
-            String model = mapModelToSeries(stringBuffer);  // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
-
-            setMixer(name,model,destination.ip);
+          IPAddress ip;
+          // in case we are in discovery mode, we need to retrieve the destination IP and port from the UDP connection established with the mixer
+          if (CONNECT_DISCOVER == connectMethod){
+            /* 1️⃣ retrieve mixer IP
+                method: DISCOVER => Always use the IP of the Mixer
+                method: MANUAL =>  if UDP IP differs from Mixer, use UDP IP
+            */
+            osc.getString(0, stringBuffer);         // index 0 = IP address
+            if (ip.fromString(stringBuffer)) {
+            // 2️⃣ if the IP returned from the mixer differs from the destinationIP (which is the one from UDP packet)
+            // this happens for instance when the mixer is on a different network (emulator on DSM for example)            
+            if (
+                ip[0] != destination.ip[0] || ip[1] != destination.ip[1] || ip[2] != destination.ip[2] || ip[3] != destination.ip[3]
+            ){
+                DEBUG_WARN("Mixer IP differs from UDP packet %s->%s",stringBuffer,UDPIP.toString());
+                // if we are on a different subnet, then we have to keep the destination ip we used to connect                  
+                //destination.ip = ip;
+            }
+            //DEBUG_PRINT("\nPinging Mixer (%s) to retrieve latency from dynamic IP",mixerIP.toString().c_str());
+            //blockingPing(mixerIP); // we retrieve the real latency, now that we have the mixer address      
+            } else {
+                DEBUG_ERROR("String reçue mais IP invalide");
+            }   
             
+            remotePort = UDPPort;               // we use the port from the UDP socket that successfully connected the mixer
+
+          }     
+
+          osc.getString(1, stringBuffer);     // index 1 = name
+          String name = stringBuffer;   // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
+
+          osc.getString(2, stringBuffer);     // index 2 = model
+          String model = mapModelToSeries(stringBuffer);  // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
+
+          setMixer(name,model,destination.ip);
+        
+        }else if (sscanf(addr, protocol[XM_CH_BUS_MIX_LEVEL].c_str(), &i1, &i2) == 2) {
+          f1 = osc.getFloat(0);
+          DEBUG_INFO("XM_CH_BUS_MIX_LEVEL(%d,%d) = %.2f",i1,i2,f1);
+          //fireEvent();
+        }else if (sscanf(addr, protocol[XM_CH_CONFIG_NAME].c_str(), &i1) == 1) {
+          osc.getString(0, stringBuffer);
+          DEBUG_INFO("XM_CH_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = channel id, stringBuffer = channel name
+          chNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
+        }else if (sscanf(addr, protocol[XM_BUS_CONFIG_NAME].c_str(), &i1) == 1) {
+          osc.getString(0, stringBuffer);
+          DEBUG_INFO("XM_BUS_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = bus id, stringBuffer = bus name
+          busNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
+        }else if (sscanf(addr, protocol[XM_AUX_CONFIG_NAME].c_str(), &i1) == 1) {
+          osc.getString(0, stringBuffer);
+          DEBUG_INFO("XM_AUX_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = aux id, stringBuffer = aux name
+          auxNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
+        }else if (sscanf(addr, protocol[XM_FX_CONFIG_NAME].c_str(), &i1) == 1) {
+          osc.getString(0, stringBuffer);
+          DEBUG_INFO("XM_FX_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = fx id, stringBuffer = fx name
+          fxNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
         }
-        else
-            fireEvent(evtOSC);      // propage les données      
+         
     }
+
 
     #define XM32series "xm32"
     #define XMR18series "xmr18"
@@ -280,29 +345,21 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     #define XR16 "xr16"
 
     String mapModelToSeries(const char* model) {
-
-        if (model == nullptr) return XM32series;
-
-        String m = String(model);
-        m.toUpperCase();
-
-        // X32 / M32
-        if (m.indexOf("32") >= 0 ) return XM32series;
-        // XR12 
-        if (m.indexOf("12") >= 0) return XR12;
-        // XR16
-        if (m.indexOf("16") >= 0) return XR16;
-        // XR18 / X18 / MR18
-        if (m.indexOf("18") >= 0 ) return XMR18series;
-
-        // fallback
-        return m;
+      // based on the token retrieved from the OSC answer, we deduct the right mixer model
+      if (model == nullptr) return XM32series;
+      String m = String(model);
+      m.toUpperCase();
+      // X32 / M32
+      if (m.indexOf("32") >= 0 ) return XM32series;
+      // XR12 
+      if (m.indexOf("12") >= 0) return XR12;
+      // XR16
+      if (m.indexOf("16") >= 0) return XR16;
+      // XR18 / X18 / MR18
+      if (m.indexOf("18") >= 0 ) return XMR18series;
+      // fallback
+      return m;
     }
-
-    /*virtual void startMixerDataSync() override{
-        // do whatever is required here      
-        setStatePendingDataSync();                      
-    }*/
 
     virtual bool ping() override{
       // in case we are in discovery mode, we alternate the value of the port using 
@@ -335,14 +392,33 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     /////////////////////////////////// MIXER RELATED REQUEST ////////////////////////////
     virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override{
       // this method drop the request to get a name
-      const char* request;
-      if (dataset == chNamesDS) request = "/ch/";
-      else if (dataset == busNamesDS) request = "/bus/";
-      else if (dataset == auxNamesDS) request = "/aux/";
-      else if (dataset == fxNamesDS) request = "/fx/";
-      DEBUG_INFO("🔄%s%d",request,index);
+
+      index += 1 ; // always starts at 1 for Behringer
+
+      char path[64];
+      const char* pattern;      
+
+      if (dataset == chNamesDS) pattern = protocol[XM_CH_CONFIG_NAME].c_str();
+      else if (dataset == busNamesDS) pattern = protocol[XM_BUS_CONFIG_NAME].c_str();
+      else if (dataset == auxNamesDS) pattern = protocol[XM_AUX_CONFIG_NAME].c_str();
+      else if (dataset == fxNamesDS) pattern = protocol[XM_FX_CONFIG_NAME].c_str();
+
+      buildPathIndex(path, sizeof(path), index, pattern);
+
+      oscOut.empty();
+      oscOut.setAddress(path);   // si disponible dans ta version
+      send(oscOut);
+
+      //DEBUG_INFO("🔄%s",path);
     }
     
+    //construit la chaîne en remplaçant les placeholders %d et %s
+    void buildPathIndex(char* destination, size_t bufferSize, int index, const char* pattern) {
+        snprintf(destination, bufferSize, pattern, index);
+    }    
+
+  protected:
+    OSCMessage oscOut;
 
 
 };
