@@ -46,9 +46,7 @@ class Synchronizer{
 class DataSetSynced: public DataSet{
   public: 
     String* values = nullptr;
-    uint16_t syncIndex = 0;
-    unsigned long lastSyncTime = 0; 
-    //int offset = 0;
+    uint16_t syncStep = 0;
     String defaultName="";
     uint8_t size = 0;
 
@@ -181,7 +179,7 @@ public:
         }else{
           // drop the request to sync the current item in the current unsync dataset
           DataSetSynced* dataset = synchronizer.getCurrent();
-          dropDSnameRequest(dataset,dataset->syncIndex);        // we use the inner index
+          dropDSnameRequest(dataset,dataset->syncStep);        // we use the inner index
         }
       }
 
@@ -284,7 +282,7 @@ void Synchronizer::reset(){
   syncedSoFar = 0;
   dsIndex = 0;
    for (const auto& dataset : datasets){
-    dataset->syncIndex = 0;
+    dataset->syncStep = 0;
     totalToSync += dataset->size;
   }  
 }
@@ -293,9 +291,9 @@ int8_t Synchronizer::update(){
   
   DataSetSynced* dataset = datasets[dsIndex]; //sync in serial, next dataset
 
-  if (dataset->syncIndex < dataset->getSize()){ // complete ?
-    while (dataset->getValuePtr(dataset->syncIndex)->indexOf(UNSYNC_PATTERN) == -1 && dataset->syncIndex < dataset->getSize()){
-      dataset->syncIndex++;  // check the next item
+  if (dataset->syncStep < dataset->getSize()){ // complete ?
+    while (dataset->getValuePtr(dataset->syncStep)->indexOf(UNSYNC_PATTERN) == -1 && dataset->syncStep < dataset->getSize()){
+      dataset->syncStep++;  // check the next item
       syncedSoFar++;
     }
   }else dsIndex++;
