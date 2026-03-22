@@ -33,7 +33,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     State state;
 
     //int8_t stripCount = 0;      // indicate if an interface is not refered by any strip
-
+    unsigned long offlineStart = 0;
 
     String interfaceName; 
   
@@ -250,11 +250,25 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
         state.previousSwitchable = state.switchable;
       }      
 
-      if (state.changed) state.broadcastState = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
+      if (state.changed){
+        state.broadcastState = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
+
+        if (state.code == IF_READY){      // we just went online 
+          offlineStart = 0;               // so we reset timer
+          DEBUG_INFO("------- offlineStart=%i ---------- ",offlineStart);           
+        }else{
+          if (offlineStart == 0){          
+            offlineStart = millis();     // we went offline, so we start counting
+            DEBUG_INFO("------- offlineStart=%i ---------- ",offlineStart);           
+          }
+        }
+      }
 
       if (state.enabled){      
         monitor();
-      }      
+      } 
+     
+      
     }
 
     bool isSwitchable(){
@@ -421,7 +435,7 @@ class NetWorkService{
     // ---- Global inventory of services (NetWorkService*) ----
     static std::vector<NetWorkService*> inventory;
     static int8_t enabledServicesWeightSum;
-   
+  
     virtual void monitorService()=0;
     virtual bool handleConnectService()=0;
     virtual bool handleDisconnectService()=0;
@@ -697,9 +711,6 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
     int remotePort = 0;
     int localPort = 0;
-
-    unsigned long offlineStart = 0;
-    unsigned long offlineElpased = 0;    
 
     NetworkDevice(String name, String group, int lport, int rport, String echoCommand, bool _configurable=false):DeviceInterface(name, group,_configurable){
       

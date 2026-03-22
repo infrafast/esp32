@@ -281,7 +281,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
         if (connectAttemptCount++ == 1){            //put 2 if you give it a new chance or set state (2x try)
           setStateQueryingDevice();
-          if (state.code != IF_READY) offlineStart = millis();
           connectAttemptCount = 0;          
         }else{          
           if (!ping()) handleConnectService();     // as ping failed, it means no socket are available, hence we have to connect it

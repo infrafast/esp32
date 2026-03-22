@@ -46,7 +46,6 @@ class NetworkSocket: public NetworkDevice{
             // if we have no socket connection or we loose it, we try to esbalish one
             if (!handleConnectService()) setStateError("Thread socket-open failed");
             else setStatePending();
-            if (state.code != IF_READY) offlineStart = millis();
           }        
       }                                                                   
     }

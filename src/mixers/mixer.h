@@ -78,12 +78,14 @@ class DataSetSynced: public DataSet{
         // Créer un nouveau tableau dynamique avec la taille passée
         values = new String[size];
         // Initialiser les valeurs (par exemple, 0)
-      }
-     
+      }   
+    }
+
+    void clearValues(){
       for (int i = 0; i < size; ++i) {
           values[i] = concatStrings(defaultName, i);
       }
-      syncStep = 0;
+      syncStep = 0;      
     }
 
     virtual const String* getValuePtr(uint16_t i) override{    
@@ -170,12 +172,13 @@ public:
     virtual void monitor() override{           
       NetworkBase::monitorNetwork();
       
+      /////////// GESTION DE LA PROGRESSION DE SYNCHRO
       if (this->state.label == IF_STATE_DATASYNCING) {
         // call synchronizer update to return global progress and sets all sync index        
         this->state.progress = synchronizer.update();
         if (synchronizer.synced){
           // all done, we go back to full connected mode
-          this->setStateLive();        
+          this->setStateLive();      
         }else{          
           DataSetSynced* dataset = synchronizer.getCurrent();   // return null if syncRequest is still locked
           if (dataset){
@@ -199,9 +202,13 @@ public:
         newMixer(newID);
       }           
 
-      bool offlineTooLong = false;
+      bool offlineTooLong = false; 
 
-      //DEBUG_PRINT("\t%s 🕒 elpasedOffline:%i",offlineTooLong?"offline too long⌛":"",elpasedOffline);
+      if (this->offlineStart > 0 ){
+        unsigned long  elpasedOffline = millis() - this->offlineStart;
+        offlineTooLong = (elpasedOffline > 10000);
+        DEBUG_PRINT("\t%s 🕒 elpasedOffline:%i",offlineTooLong?"offline too long⌛":"",elpasedOffline);        
+      }
 
       if (offlineTooLong || mixerChanged) synchronizer.reset();
 
@@ -285,7 +292,7 @@ void Synchronizer::reset(){
   syncRequestLocker = false; // allow to request a dataset
   holdLoopCount = 0;          // release the locker after certain time (3 loops)
    for (const auto& dataset : datasets){
-    dataset->syncStep = 0;
+    dataset->clearValues();
     totalToSync += dataset->size;
   }  
 }
