@@ -11,7 +11,7 @@
 #define PATH_MIXER_DEFINITION "/console/information"                // mixer attributes like  number of channel...
 #define PATH_SUBSCRIBE "/console/data/subscribe"
 #define PATH_MIXERS_AVAILABLE "/app/mixers/available"
-#define PATH_MIXER_GET_ANY_DATA "/console/data/get/*"
+#define PATH_MIXER_GET_DATA "/console/data/get"
 
 #define MSDATA_CH_CONFIG_NAME  "ch.%d.cfg.name"
 
@@ -138,7 +138,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     static const Route routes[];
 
-    #define ROUTES_COUNT 3
+    #define ROUTES_COUNT 5
 
     bool routeMatches(const char* routePath, const char* testedPath) const {
       if (!routePath || !testedPath) return false;
@@ -231,6 +231,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       #define MS_CONNECTED    "connected"
       #define MS_RECONNECTING "reconnecting"
       #define MS_SYNCING      "syncing"
+      #define MS_BGSYNC       "backgroundSync"
 
       const char* msg      = body["msg"]      | "";
       int progress         = body["progress"] | 0;
@@ -258,8 +259,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         }
         deviceInterface->state.progress = progress;                 
       }
-      else if (strcmp(topState, MS_CONNECTED) == 0) {  
-        getMixerDefinition();
+      else if (strcmp(topState, MS_CONNECTED) == 0) {
+        // we would now query the mixer
+        // EXCEPT if the state comes from a background sync, we just ignore it, oherwise we kill the capacity
+        // it means in that case that the progress is != 0 
+        //       MixingStation::path ✅ /app/state
+        //ℹ       MixingStation::processState: msg:,progress:94,state:backgroundSync,topState:connected
+        if (progress == 0) getMixerDefinition();
       }
       else if (strcmp(topState, MS_RECONNECTING) == 0) {
         setStatePending("green medium",concatStrings(state).c_str());  
@@ -415,7 +421,52 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     void processDataGet(const char* path, JsonVariant body) {
       // traitement de /console/data/get/*
-      DEBUG_INFO("%s::processDataGet: %s",interfaceName.c_str(),path);
+      String data;
+
+      /*
+      "path": "/console/data/get/DATAPATH",
+      "method": "GET",
+      "body": {
+        "format": "val",
+        "value": "Voc-Claude"
+      }*/
+      const char* value =  body["value"];     
+
+      if (extractPath(path,PATH_MIXER_GET_DATA,data)){
+        // data = /console/data/get/DATAPATH 
+        DEBUG_INFO("%s::data: %s",interfaceName.c_str(),data.c_str());
+        int index = -1;
+        if (sscanf(data.c_str(), "/"MSDATA_CH_CONFIG_NAME, &index) == 1) {
+          // DATAPATH => ch.0.cfg.name/val
+          // now based on the index, we know which datasets we have to update          
+          MSmixerDefinition* msDef = (MSmixerDefinition*)mixerDef;
+          int type = getTypeFromIndex(msDef,index);          
+          switch (type) {
+            case MS_TYPE_CHANNEL: // Channel / Input
+              chNamesDS->set(index-msDef->channelOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
+            break;
+            case MS_TYPE_AUX: // Aux
+              auxNamesDS->set(index-msDef->auxOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
+            break;
+            case MS_TYPE_FX: // FX Return
+              fxNamesDS->set(index-msDef->fxOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
+            break;
+            case MS_TYPE_BUS: // Bus
+              busNamesDS->set(index-msDef->busOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
+            break;
+            // Types présents mais non utilisés ici
+            case MS_TYPE_UNDEF1: // not used
+            case MS_TYPE_UNDEF2: // not used
+            case MS_TYPE_MAINLR: // Main L/R
+            case MS_TYPE_MATRIX: // Matrix
+            case MS_TYPE_DCA: // DCA
+            default:
+              DEBUG_ERROR("processDataGet() failed, unmanaged type: %d",type);
+              break;
+          }          
+        }      
+      }  
+
 
       //float value          =  body["value"]   | 0.0;
     }
@@ -485,19 +536,59 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       else if (dataset == auxNamesDS) index += ((MSmixerDefinition*)mixerDef)->auxOffset;
       else if (dataset == fxNamesDS) index += ((MSmixerDefinition*)mixerDef)->fxOffset;
 
-      DEBUG_INFO("🔄"MSDATA_CH_CONFIG_NAME,index);
+      char data[64];  
+      snprintf(data,  sizeof(data), MSDATA_CH_CONFIG_NAME, index);
+      String path = concatStrings(PATH_MIXER_GET_DATA,"/",data,"/val");
 
+      hwm.network->clientSocketSend(get(path.c_str()));  // forge a MS get json query with echoCommand as the path     
+      
+
+    }
+
+    // utility
+    bool extractPath(const String& full, const String& base, String& remainder) {
+        if (full.startsWith(base)) {
+            remainder = full.substring(base.length());
+            return true;
+        }
+        return false;
+    }
+
+    // à partir d’un index, retrouver le type (CHANNEL, AUX, FX, BUS, …)
+    int getTypeFromIndex(MSmixerDefinition* mixerDef, int index) {
+
+        if (index >= mixerDef->channelOffset &&
+            index < mixerDef->channelOffset + mixerDef->channelCount) {
+            return MS_TYPE_CHANNEL;
+        }
+
+        if (index >= mixerDef->auxOffset &&
+            index < mixerDef->auxOffset + mixerDef->auxCount) {
+            return MS_TYPE_AUX;
+        }
+
+        if (index >= mixerDef->fxOffset &&
+            index < mixerDef->fxOffset + mixerDef->fxCount) {
+            return MS_TYPE_FX;
+        }
+
+        if (index >= mixerDef->busOffset &&
+            index < mixerDef->busOffset + mixerDef->busCount) {
+            return MS_TYPE_BUS;
+        }
+
+        return MS_TYPE_UNDEF1; // ou un type INVALID si tu en as un
     }
 
   
 };
 
-const MixingStation::Route MixingStation::routes[] = {
+const MixingStation::Route MixingStation::routes[ROUTES_COUNT] = {
   { PATH_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState },           false },
   { PATH_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity },   false },  
   { PATH_MIXER_DEFINITION,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixerDefinition }, false },  
   { PATH_MIXERS_AVAILABLE,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }, false },
-  { PATH_MIXER_GET_ANY_DATA,   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet },         true },
+  { PATH_MIXER_GET_DATA"/*",   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet },         true },
 };
 
 #endif

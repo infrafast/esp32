@@ -1335,13 +1335,13 @@ class WiFiEth : public Network{
         if (wsEthClient!= nullptr){      
           if (wsEthClient->getReadyState() == WebSocketReadyState::OPEN){
             wsEthClient->send(WebSocketDataType::TEXT, message, strlen(message));
-            DEBUG_INFO("[ETHSocketSend] <%s>",message);
+            DEBUG_INFO("🌐→→→ %s",message);
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){      
           wsWiFiClient->send(WebSocketDataType::TEXT, message, strlen(message));
-          DEBUG_INFO("[WIFISocketSend] <%s>",message);
+          DEBUG_INFO("🌐→→→ %s",message);
         }
       }      
     }
@@ -1479,6 +1479,7 @@ class WiFiEth : public Network{
           evtSock.type = EVENT_SOCKET_MESSAGE;
           socketData.message = message;
           socketData.length = length;
+          //DEBUG_INFO("🌐←←← %s",message); // too heavy
           fireEvent(evtSock);
         }
         break;

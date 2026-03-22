@@ -63,12 +63,8 @@ class DataSetSynced: public DataSet{
     };
 
     void set(uint16_t index, String value){
-      if (index>=size) return;
-      
-      if (values[index] != value){
-        values[index] = value;
-      }
-       
+      if (index>=size) return;    
+      values[index] = value;      
     }
 
     void init(uint16_t _size/*, int _offset*/){
@@ -235,7 +231,7 @@ public:
     void initDatasets(){      
       DEBUG_INFO("%s:initDatasets()",this->interfaceName.c_str());
       
-      // setting up the data size and its value as not synchronized
+      // setting up the data size and flag their value as not synchronized using the defaultvalue 
       chNamesDS->init(mixerDef->channelCount);
       busNamesDS->init(mixerDef->busCount);
       auxNamesDS->init(mixerDef->auxCount);
@@ -274,7 +270,7 @@ public:
     virtual void setStateDisabled() override{
       NetworkBase::setStateDisabled();
       this->state.label = "Offline";
-      this->state.details =  mixerID.model;    // remove the default statement "interface is disabled"
+      this->state.details =  "";    //mixerID.model;    // remove the default statement "interface is disabled"
     }
 
 };
@@ -296,16 +292,16 @@ void Synchronizer::reset(){
     
 int8_t Synchronizer::update(){  
   
-  DataSetSynced* dataset = datasets[dsIndex]; //sync in serial, next dataset
-
+  //should we unlock (after 3 loop)?
   holdLoopCount++;
-
   if (holdLoopCount >= 3){
     syncRequestLocker = false;   // autorise relance d'une requete
     holdLoopCount = 0;
   }
 
+  DataSetSynced* dataset = datasets[dsIndex]; //sync in serial, next dataset  
   if (dataset->syncStep < dataset->getSize()){ // complete ?
+    //DEBUG_INFO("Synchronizer::update() %i %s",dataset->syncStep, dataset->getValuePtr(dataset->syncStep));
     while (dataset->getValuePtr(dataset->syncStep)->indexOf(UNSYNC_PATTERN) == -1 && dataset->syncStep < dataset->getSize()){
       dataset->syncStep++;  // check the next item
       syncedSoFar++;
