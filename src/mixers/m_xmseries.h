@@ -280,7 +280,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     virtual void handlePropertyChange(){
       NetworkOSC::handlePropertyChange();
       DEBUG_INFO("%s::handlePropertyChange() refresh config",interfaceName.c_str());    
-      state.broadcastConfig = true; // it could be that the connect method has changed so we need to redisplay/hide the configuration fields  
+      state.broadcastConfig = true; // it could be that the connect method has changed so we need to redisplay/hide the configuration fields
+      handleConnectService();
     }    
 
     // used to extract values from the path    
