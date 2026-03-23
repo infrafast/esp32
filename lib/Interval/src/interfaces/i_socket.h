@@ -44,8 +44,8 @@ class NetworkSocket: public NetworkDevice{
             ping();
           }else{
             // if we have no socket connection or we loose it, we try to esbalish one
-            if (!handleConnectService()) setStateError("Thread socket-open failed");
-            else setStatePending();
+            if (handleConnectService()) setStatePending();
+            else  setStateError("Thread socket-open failed");
           }        
       }                                                                   
     }
@@ -61,7 +61,9 @@ class NetworkSocket: public NetworkDevice{
       switch(evt.type){
         case EVENT_SOCKET_OPEN:
           // connexion has just been made to NetworkSocket
-          setStateConnected();
+          //setStateConnected();
+          setStatePending();      // the derived class will have to override state
+          deviceInterface->state.details = "Querying application";
           destination.lastQueryTime = 0;   // request an immediate /app/state to ping
           onSocketConnected();    
         break;

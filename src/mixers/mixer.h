@@ -241,9 +241,9 @@ public:
         DEBUG_PRINT("\t%s",mixerChanged?"yes✅":"no");
         newMixer(newID);
       }           
-
+      
+      
       bool offlineTooLong = false; 
-
       if (this->offlineStart > 0 ){
         unsigned long  elpasedOffline = millis() - this->offlineStart;
         offlineTooLong = (elpasedOffline > 10000);

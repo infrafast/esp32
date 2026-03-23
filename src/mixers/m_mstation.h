@@ -433,11 +433,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
-    /*virtual void startMixerDataSync() override{
-      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(mixerProtocol.anyChannelName.c_str(),"val")));  // forge a MS get json query with echoCommand as the path
-      setStatePendingDataSync();
-    }*/
-
     void processMixersAvailable(char* rx, size_t len) {
       JsonDocument filter;
       filter["body"]["consoles"][0]["consoleId"]     = true;
