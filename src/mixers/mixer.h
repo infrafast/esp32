@@ -81,7 +81,7 @@ class DataSetSynced : public DataSet {
       const char* provider = name.c_str();
       char* addr = (char*)malloc(strlen(address->pattern.c_str())*sizeof(char*));
       
-      sprintf(addr,address->pattern.c_str(),index);
+      sprintf(addr,address->pattern.c_str(),index+1);     // mixer address starts always at 1
       free(addr);
 
 
@@ -108,7 +108,7 @@ class DataSetSynced : public DataSet {
 
     void clearValues() {
       for (uint16_t i = 0; i < size; ++i) {
-        values[i] = concatStrings(defaultName, i);
+        values[i] = concatStrings(defaultName, i+1);
       }
       syncStep = 0;
     }
