@@ -5,6 +5,7 @@
 
 #define ADDRESS_CONNECT_METHOD "/connect/%d"
 #define ADDRESS_MIXER_MODEL "/model/%s"
+
 #define INTERFACE_XMSeries "XMSeries"
 
 enum{
@@ -83,7 +84,8 @@ enum{
 class XMSeries: public MixerDevice<NetworkOSC>{
   public:
 
-    #define XM_BEHRINGER_PING_CMD "/xinfo"    //=> maybe go to mixer definition if not the same for all X/M....
+    #define XMSERIES_PING_CMD "/xinfo"          //=> maybe go to mixer definition if not the same for all X/M....
+    #define XMSERIES_XREMOTE_CMD "/xremote"     // called every 9 seconds
 
     int connectMethod = CONNECT_DISCOVER;
     
@@ -95,21 +97,41 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     int discoveryPort[DISCOVERY_PORT_COUNT] = {10024, 10023};
     uint8_t discoveryIndex = 0;               // rolling index;
 
+    unsigned long lastXremote = 0;          // when di we last drop the xremote command
+    #define XREMOTE_INTERVAL  9000           // 9 secondes
+
     ConnectMethodDS connectMethodDS = ConnectMethodDS(new DropDownAddress(ADDRESS_CONNECT_METHOD));
     XMmixerModelDS mixerModelDS = XMmixerModelDS(new DropDownAddress(ADDRESS_MIXER_MODEL));
     
-    XMSeries():MixerDevice<NetworkOSC>(INTERFACE_XMSeries,8888,"192.168.0.1",10023,XM_BEHRINGER_PING_CMD,true,GROUP_INTERFACE_MIXER){
+    XMSeries():MixerDevice<NetworkOSC>(INTERFACE_XMSeries,8888,"192.168.0.1",10023,XMSERIES_PING_CMD,true,GROUP_INTERFACE_MIXER){
       
         unregisterDataSetAddress(&addressPing);              // we un-expose the ping parameter as user should not modify it 
 
         registerDataSetAddress(connectMethodDS.address);    // add a connect method parameter
         registerDataSetAddress(mixerModelDS.address);       // select mixer when offline
 
-        destination.echoCommand = XM_BEHRINGER_PING_CMD;     // instead we set it manually once for all
+        destination.echoCommand = XMSERIES_PING_CMD;     // instead we set it manually once for all
 
         mixerDef = new BaseMixerDefinition();
 
     }     
+
+    // method which is called when sync is finished so we can perform action like subscribing mixer changes...
+    virtual void postSync(){
+      // do nothing
+    }
+
+    virtual void monitorService() override{
+      NetworkOSC::monitorService();
+      unsigned long now = millis();
+
+      if (now - lastXremote >= XREMOTE_INTERVAL) {
+        oscOut.empty();
+        oscOut.setAddress(XMSERIES_XREMOTE_CMD);   // si disponible dans ta version
+        send(oscOut);    
+        lastXremote = now;
+      }      
+    }
 
     virtual bool begin() override{
       DEBUG_INFO("%s::begin() => user setting up XMmixerModelDS/model and dataset pattern",interfaceName.c_str());      
@@ -268,16 +290,15 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     float f1;
 
     virtual void process() override {
-
-        
+      
 
         // fonction principale de routage
-        const char* addr = osc.getAddress();        
+        const char* addr = oscIn.getAddress();        
         if (!addr) return;
 
      
         // Routes fixes
-        if (strEquals(addr, XM_BEHRINGER_PING_CMD)) {    
+        if (strEquals(addr, XMSERIES_PING_CMD)) {    
           IPAddress ip;
           // in case we are in discovery mode, we need to retrieve the destination IP and port from the UDP connection established with the mixer
           if (CONNECT_DISCOVER == connectMethod){
@@ -285,7 +306,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
                 method: DISCOVER => Always use the IP of the Mixer
                 method: MANUAL =>  if UDP IP differs from Mixer, use UDP IP
             */
-            osc.getString(0, stringBuffer);         // index 0 = IP address
+            oscIn.getString(0, stringBuffer);         // index 0 = IP address
             if (ip.fromString(stringBuffer)) {
             // 2️⃣ if the IP returned from the mixer differs from the destinationIP (which is the one from UDP packet)
             // this happens for instance when the mixer is on a different network (emulator on DSM for example)            
@@ -306,32 +327,32 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
           }     
 
-          osc.getString(1, stringBuffer);     // index 1 = name
+          oscIn.getString(1, stringBuffer);     // index 1 = name
           String name = stringBuffer;   // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
 
-          osc.getString(2, stringBuffer);     // index 2 = model
+          oscIn.getString(2, stringBuffer);     // index 2 = model
           String model = mapModelToSeries(stringBuffer);  // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
 
           setMixer(name,model,destination.ip);
         
         }else if (sscanf(addr, protocol[XM_CH_BUS_MIX_LEVEL].c_str(), &i1, &i2) == 2) {
-          f1 = osc.getFloat(0);
+          f1 = oscIn.getFloat(0);
           DEBUG_INFO("XM_CH_BUS_MIX_LEVEL(%d,%d) = %.2f",i1,i2,f1);
           //fireEvent();
         }else if (sscanf(addr, protocol[XM_CH_CONFIG_NAME].c_str(), &i1) == 1) {
-          osc.getString(0, stringBuffer);
+          oscIn.getString(0, stringBuffer);
           DEBUG_INFO("XM_CH_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = channel id, stringBuffer = channel name
           chNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
         }else if (sscanf(addr, protocol[XM_BUS_CONFIG_NAME].c_str(), &i1) == 1) {
-          osc.getString(0, stringBuffer);
+          oscIn.getString(0, stringBuffer);
           DEBUG_INFO("XM_BUS_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = bus id, stringBuffer = bus name
           busNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
         }else if (sscanf(addr, protocol[XM_AUX_CONFIG_NAME].c_str(), &i1) == 1) {
-          osc.getString(0, stringBuffer);
+          oscIn.getString(0, stringBuffer);
           DEBUG_INFO("XM_AUX_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = aux id, stringBuffer = aux name
           auxNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
         }else if (sscanf(addr, protocol[XM_FX_CONFIG_NAME].c_str(), &i1) == 1) {
-          osc.getString(0, stringBuffer);
+          oscIn.getString(0, stringBuffer);
           DEBUG_INFO("XM_FX_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = fx id, stringBuffer = fx name
           fxNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
         }
@@ -418,8 +439,6 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     }    
 
   protected:
-    OSCMessage oscOut;
-
 
 };
 

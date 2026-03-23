@@ -189,10 +189,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
-    OSCMessage osc;   // reception
+    OSCMessage oscIn;   // reception
+    OSCMessage oscOut;  // envoi
+
     OscMessageQueue queue; // envoi compatible avec la latence
 
-    Event evtOSC = Event(&osc);
+    Event evtOSC = Event(&oscIn);
     // from remote UDP
     IPAddress UDPIP;
     int UDPPort;
@@ -253,7 +255,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         destination.lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
         connectAttemptCount = 0;                                  // reset attempt counter                
 
-        const char* addr = osc.getAddress();
+        const char* addr = oscIn.getAddress();
 
         // now filter events we keep for our internal use
         if ( destination.echoCommand == addr ){
@@ -312,21 +314,21 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         int size = udp->parsePacket();
 
         if (size > 0){
-            osc.empty();
+            oscIn.empty();
 
             while (size--){
-                osc.fill(udp->read());                                
+                oscIn.fill(udp->read());                                
                 delay(0);               
             }
 
             //xSemaphoreGive(udpSlot->mutex);
 
-            if (osc.hasError()) {
-                DEBUG_INFO("readOSC: %i\n", osc.getError());
+            if (oscIn.hasError()) {
+                DEBUG_INFO("readOSC: %i\n", oscIn.getError());
                 return 0;   // message invalide
             }else{
               char addr[64];
-              osc.getAddress(addr, 0);
+              oscIn.getAddress(addr, 0);
 
               // see if it's a ping, we measure
               if ( destination.echoCommand == addr ){
@@ -335,14 +337,14 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
               }
 
               #ifdef DEBUG
-                dump(osc, oscDump, sizeof(oscDump));              
+                dump(oscIn, oscDump, sizeof(oscDump));              
                 DEBUG_INFO("<<%s(%s,%i) %s",addr,destination.ip.toString().c_str(),remotePort, oscDump);              
               #endif
               
             }              
             // ✔ message valide
             // retour : au moins 1, même si aucun argument
-            int argCount = osc.size();
+            int argCount = oscIn.size();
             return (argCount == 0 ? 1 : argCount);
         }
     

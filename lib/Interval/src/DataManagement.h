@@ -374,14 +374,14 @@ class SerializableParameters {
     const String* getValuePtr(String provider, String address, uint8_t index){
       const String *retVal = &emptyString;
 
-      DEBUG_PRINT("\nSerializableDataset::getValuePtr(%s,%s,%i): ",provider.c_str(),address.c_str(),index);
+      //DEBUG_PRINT("\nSerializableDataset::getValuePtr(%s,%s,%i): ",provider.c_str(),address.c_str(),index);
       DataSet* ds = repo->getDataSet(provider, address);
 
       if (ds != nullptr){
         retVal = ds->getValuePtr(index);
       }
 
-      DEBUG_PRINT("\t ====> <%s>",retVal->c_str());
+      //DEBUG_PRINT("\t ====> <%s>",retVal->c_str());
 
       return retVal;
     }    

@@ -22,13 +22,35 @@
 
 #define    MS_TYPE_CHANNEL  0
 #define    MS_TYPE_AUX      1
-#define    MS_TYPE_UNDEF1   2
+#define    MS_TYPE_UNKNW1   2
 #define    MS_TYPE_FX       3
 #define    MS_TYPE_BUS      4
-#define    MS_TYPE_UNDEF2   5
+#define    MS_TYPE_UNKNW2   5
 #define    MS_TYPE_MAINLR   6
-#define    MS_TYPE_MATRIX   7
+#define    MS_TYPE_MTX      7
 #define    MS_TYPE_DCA      8
+#define    MS_TYPE_UNDEF    9
+
+const char* MStypeToString(uint8_t type) {
+    static const char* const types[] PROGMEM = {
+        "CHANNEL",
+        "AUX",
+        "UNKNW1",
+        "FX",
+        "BUS",
+        "UNKNW2",
+        "MAINLR",
+        "MATRIX",
+        "DCA",
+        "UNDEF"
+    };
+
+    if (type < 9) {
+        return types[type];
+    }
+    return "ERRTYPE";
+}
+
 
 struct MSmixerDefinition : public BaseMixerDefinition{
   char model[64] = {};
@@ -36,23 +58,39 @@ struct MSmixerDefinition : public BaseMixerDefinition{
   uint8_t busOffset = 0 ;
   uint8_t auxOffset = 0;
   uint8_t fxOffset = 0; 
+  uint8_t mtxOffset = 0;
+  uint8_t mainOffset = 0;
+  uint8_t DCAOffset = 0;
+  uint8_t unk1Offset = 0;
+  uint8_t unk2Offset = 0;
+
 };
 
 #ifdef DEBUG
 char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize) {
 
   snprintf(buffer, bufferSize,
-           "channelCount=%u busCount=%u auxCount=%u fxCount=%u "
-           "channelOffset=%u busOffset=%u auxOffset=%u fxOffset=%u "
+           "channelCount=%u busCount=%u auxCount=%u fxCount=%u mtxCount=%u mainCount=%u DCAcount=%u unk1Count=%u unk1Count=%u"
+           "channelOffset=%u busOffset=%u auxOffset=%u fxOffset=%u mtxOffset=%u mainOffset=%u DCAoffset=%u unk1Offset=%u unk2Offset:%u"
            "model=%s",
            def.channelCount,
            def.busCount,
            def.auxCount,
            def.fxCount,
+           def.mtxCount,
+           def.mainCount,
+           def.DCAcount,
+           def.unk1Count,
+           def.unk2Count,
            def.channelOffset,
            def.busOffset,
            def.auxOffset,
            def.fxOffset,
+           def.mtxOffset,
+           def.mainOffset,
+           def.DCAOffset,
+           def.unk1Offset,
+           def.unk2Offset,
            def.model);
 
   return buffer;
@@ -101,10 +139,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) override{
       #ifdef DEBUG
-        char buffer[128];
+        char buffer[128];      
         DEBUG_INFO("%s::deserializeMixerDefinitionFromFile() => before load() :\t%s",interfaceName.c_str(),dumpMixerDef(*((MSmixerDefinition*)mixerDef),buffer, sizeof(buffer)));   
       #endif
-
       bool success = loadStruct(filename, *((MSmixerDefinition*)mixerDef));
       if (success) mixerID.model = ((MSmixerDefinition*)mixerDef)->model; // mixing station is particular in that sense that the model is stored directly in the definition because it is "virtual". Long story short.
       else mixerID.model = "Mixing Station";
@@ -202,7 +239,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         DEBUG_WARN("\tNo Path");
         return;
       }else{
-        DEBUG_INFO("%s::path ✅ %s",interfaceName.c_str(),path);
+        DEBUG_INFO("←←←🌐 %s::path ✅ %s",interfaceName.c_str(),path);
       }
 
       const Route* r = findRoute(path);
@@ -333,28 +370,39 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
             mixerDef->channelCount = count;
             ((MSmixerDefinition*)mixerDef)->channelOffset = offset;
             break;
-
           case MS_TYPE_AUX: // Aux
             mixerDef->auxCount = count;
             ((MSmixerDefinition*)mixerDef)->auxOffset = offset;
             break;
-
           case MS_TYPE_FX: // FX Return
             mixerDef->fxCount = count;
             ((MSmixerDefinition*)mixerDef)->fxOffset = offset;
             break;
-
           case MS_TYPE_BUS: // Bus
             mixerDef->busCount = count;
             ((MSmixerDefinition*)mixerDef)->busOffset = offset;
             break;
-
           // Types présents mais non utilisés ici
-          case MS_TYPE_UNDEF1: // not used
-          case MS_TYPE_UNDEF2: // not used
+          case MS_TYPE_UNKNW1: // not used
+            mixerDef->unk1Count = count;
+            ((MSmixerDefinition*)mixerDef)->unk1Offset = offset;          
+            break;
+          case MS_TYPE_UNKNW2: // not used
+            mixerDef->unk2Count = count;
+            ((MSmixerDefinition*)mixerDef)->unk2Offset = offset;          
+            break;
           case MS_TYPE_MAINLR: // Main L/R
-          case MS_TYPE_MATRIX: // Matrix
+            mixerDef->mainCount = count;
+            ((MSmixerDefinition*)mixerDef)->mainOffset = offset;
+            break;  
+          case MS_TYPE_MTX: // Matrix
+            mixerDef->mtxCount = count;
+            ((MSmixerDefinition*)mixerDef)->mtxOffset = offset;
+            break;  
           case MS_TYPE_DCA: // DCA
+            mixerDef->DCAcount = count;
+            ((MSmixerDefinition*)mixerDef)->DCAOffset = offset;
+            break;            
           default:
             break;
         }
@@ -434,7 +482,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
       if (extractPath(path,PATH_MIXER_GET_DATA,data)){
         // data = /console/data/get/DATAPATH 
-        DEBUG_INFO("%s::data: %s",interfaceName.c_str(),data.c_str());
+        DEBUG_INFO("%s::data: %s %s",interfaceName.c_str(),data.c_str(),value);
         int index = -1;
         if (sscanf(data.c_str(), "/"MSDATA_CH_CONFIG_NAME, &index) == 1) {
           // DATAPATH => ch.0.cfg.name/val
@@ -455,13 +503,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
               busNamesDS->set(index-msDef->busOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
             break;
             // Types présents mais non utilisés ici
-            case MS_TYPE_UNDEF1: // not used
-            case MS_TYPE_UNDEF2: // not used
+            case MS_TYPE_UNKNW1: // not used
+            case MS_TYPE_UNKNW2: // not used
             case MS_TYPE_MAINLR: // Main L/R
-            case MS_TYPE_MATRIX: // Matrix
+            case MS_TYPE_MTX: // Matrix
             case MS_TYPE_DCA: // DCA
             default:
-              DEBUG_ERROR("processDataGet() failed, unmanaged type: %d",type);
+              DEBUG_WARN("processDataGet() unmanaged type: %s",MStypeToString(type));
               break;
           }          
         }      
@@ -528,6 +576,16 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         return buffer;
     }    
 
+    /////////////////////////////////////////////
+    // method which is called when sync is finished so we can perform action like subscribing mixer changes...
+    virtual void postSync(){
+      String cfgNames = MSDATA_CH_CONFIG_NAME;
+      cfgNames.replace("%d","*");
+      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(cfgNames.c_str(),"val")));  // forge a MS get json query
+    }
+
+
+
     /////////////////////////////////// MIXER RELATED REQUEST ////////////////////////////
     virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override{
 
@@ -577,7 +635,22 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
             return MS_TYPE_BUS;
         }
 
-        return MS_TYPE_UNDEF1; // ou un type INVALID si tu en as un
+        if (index >= mixerDef->mtxOffset &&
+            index < mixerDef->mtxOffset + mixerDef->mtxCount) {
+            return MS_TYPE_MTX;
+        }
+        
+        if (index >= mixerDef->mainOffset &&
+            index < mixerDef->mainOffset + mixerDef->mainCount) {
+            return MS_TYPE_MAINLR;
+        }
+
+        if (index >= mixerDef->DCAOffset &&
+            index < mixerDef->DCAOffset + mixerDef->DCAcount) {
+            return MS_TYPE_DCA;
+        }        
+
+        return MS_TYPE_UNDEF; // ou un type INVALID si tu en as un
     }
 
   

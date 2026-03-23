@@ -69,6 +69,8 @@ class DataSetSynced : public DataSet {
       // add here a broadcast to inform web app the value has changed
       // {"dataSet":{"updateDataSets":[{"XMSeries":{"/ch/name/3":"toto"}},{"MIDI":{"/channel/3":"tutu"}}]}}
       if (index >= size) return;
+      if (values[index] == value) return; // no update
+
       values[index] = value;
       /*
       {\"dataSet\":{\"updateDataSets\":[{\"XMSeries\":{\"/ch/name/3\":\"toto\"}}]}}
@@ -134,6 +136,11 @@ struct BaseMixerDefinition{
   uint8_t busCount = 4 ;
   uint8_t auxCount = 1;
   uint8_t fxCount = 4; 
+  uint8_t mtxCount = 8;
+  uint8_t mainCount = 2;
+  uint8_t DCAcount = 6;
+  uint8_t unk1Count = 2;
+  uint8_t unk2Count = 2;
 };
 
 #define ADDRESS_CH_NAME "/chname/%d"
@@ -198,6 +205,8 @@ public:
     virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
 
 
+    virtual void postSync() = 0;
+
     virtual void monitor() override{           
       NetworkBase::monitorNetwork();
       
@@ -206,8 +215,10 @@ public:
         // call synchronizer update to return global progress and sets all sync index        
         this->state.progress = synchronizer.update();
         if (synchronizer.synced){
-          // all done, we go back to full connected mode
-          this->setStateLive();      
+          // post sync action (like subscription)
+          postSync();
+          // all done, we go back to full connected mode          
+          this->setStateLive();          
         }else{          
           DataSetSynced* dataset = synchronizer.getCurrent();   // return null if syncRequest is still locked
           if (dataset){
