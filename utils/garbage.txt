@@ -1,3 +1,0 @@
-
-
-#define DEBUG_PRINT(...) static_assert(false, "Use DEBUG_INFO / DEBUG_WARN / DEBUG_ERROR instead")

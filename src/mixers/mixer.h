@@ -66,8 +66,37 @@ class DataSetSynced : public DataSet {
     }
 
     void set(uint16_t index, const String& value) {
+      // add here a broadcast to inform web app the value has changed
+      // {"dataSet":{"updateDataSets":[{"XMSeries":{"/ch/name/3":"toto"}},{"MIDI":{"/channel/3":"tutu"}}]}}
       if (index >= size) return;
       values[index] = value;
+      /*
+      {\"dataSet\":{\"updateDataSets\":[{\"XMSeries\":{\"/ch/name/3\":\"toto\"}}]}}
+      {\"dataSet\":{\"updateDataSets\":[{\"%s\":{\"%s\":\"%s\"}}]}}
+      */
+      const char* frameTpl = "{\"updateDataSets\":[{\"%s\":{\"%s\":\"%s\"}}]}";
+
+      const char* provider = name.c_str();
+      char* addr = (char*)malloc(strlen(address->pattern.c_str())*sizeof(char*));
+      
+      sprintf(addr,address->pattern.c_str(),index);
+      free(addr);
+
+
+      char* frame = (char*)malloc(
+        (
+          strlen(frameTpl)+
+          strlen(provider)+
+          strlen(addr)+value.length()
+        )*sizeof(char*)
+      );
+
+      sprintf(frame,frameTpl,provider,addr,value.c_str());
+
+      app.broadCast(frame);
+
+      free(frame); 
+
     }
 
     void init(uint16_t newSize) {
