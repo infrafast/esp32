@@ -1,8 +1,30 @@
 #ifndef _S_MIXER_h
 #define _S_MIXER_h
 
+#include "mixers/mixer.h"
+
+
 class StripMixer{
   public:
+    
+    StripMixer(Strip* strip):baseStrip(strip){
+      mixer = (MixerBase*)strip->interface;
+    }
+
+
+
+  protected:
+    Strip* baseStrip = nullptr;   // need a reference to the base class to access mixer methods & properties
+
+    MixerBase* mixer = nullptr;
+};
+
+/*
+    //int id1=0, id2=0; // these are the values extracted from the address
+    // example
+    // /fxrtn/03/mix/06/on
+    // v1 = 03
+    // v2 = 06
 
    /* bool match2AddressIDtoDropDownID(const char* address,const char* pattern){
       // this method is called when we have to decompose the ids embedded into an address according to a provided pattern
@@ -23,19 +45,15 @@ class StripMixer{
       return id-(1-mixerServer->mixerInterface->idStart);
     }
 
-  protected:
-    int id1=0, id2=0; // these are the values extracted from the address
-    // example
-    // /fxrtn/03/mix/06/on
-    // v1 = 03
-    // v2 = 06*/
-};
+
+*/
 
 
-class SendStrip : public OneSelectStrip, public StripMixer{
+
+class SendStrip : public TwoSelectStrip, public StripMixer{
   public:
 
-    SendStrip(StripSkeleton* s,bool debug=false):OneSelectStrip(s,debug){}
+    SendStrip(StripSkeleton* s,bool debug=false):TwoSelectStrip(s,debug),StripMixer(this){}
 
     ~SendStrip(){};
   
@@ -53,6 +71,7 @@ class SendStrip : public OneSelectStrip, public StripMixer{
         push4x1hBar();
       }
     }
+           
 
   protected:
     String unitString="U";
@@ -66,8 +85,25 @@ class Ch2BusStrip : public SendStrip{
 
     Ch2BusStrip(StripSkeleton* s,bool debug=false):SendStrip(s,debug){      
       unitString = "dB";
+
+      /*select1PropertyAddress = ADDRESS_CH_NAME; 
+      select2PropertyAddress = ADDRESS_BUS_NAME; */
+
       //valueMin = 0; valueMax = 1;
     }
+
+    /*
+    virtual const String* getTopLabel() override{
+      return &select1Content;
+      //return mixer->chNamesDS->getValuePtr(select1ID-1);
+      //return &type;
+    }
+
+    virtual const String* getBottomLabel() override {
+      return &select2Content;
+      //return mixer->busNamesDS->getValuePtr(select2ID-1);
+      //return select1ContentPtr;
+    } */ 
 
     virtual bool actionCallback(uint8_t trigger) override{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
@@ -123,7 +159,9 @@ class ChGainStrip : public OneSelectStrip, public StripMixer{
   #define STRIP_CHGAIN "chGain"
 
   public:
-    ChGainStrip(StripSkeleton* s,bool debug=false):OneSelectStrip(s,debug){
+    ChGainStrip(StripSkeleton* s,bool debug=false):OneSelectStrip(s,debug),StripMixer(this){
+      //select1PropertyAddress = ADDRESS_CH_NAME; 
+      
       valueMin = CHGAINDB_MIN;
       valueMax = CHGAINDB_MAX;
       value = (valueMin + valueMax)/2;

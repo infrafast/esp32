@@ -825,18 +825,19 @@ class OneSelectStrip : public Strip{
     void deserializeProperty(String property){
       if (!interface) return;
       // if address contains a %d , we extract the select1ID that is then used to get the corresponding string value in the related dataset
-      if (property.indexOf("%d") != -1){
+      if (select1PropertyAddress.indexOf("%d") != -1){
         if (sscanf(property.c_str(), select1PropertyAddress.c_str(), &select1ID)){
           select1ContentPtr = skeleton->getValuePtr(interface->getProviderNameForData(),select1PropertyAddress,select1ID);
         }
       }else{
-        //otherwise we search for the string 
+        //otherwise we get the string itself directly in the address
         char buf[PROPERTY_BUF_CHAR_MAX];         
         if (sscanf(property.c_str(), select1PropertyAddress.c_str(), buf) == 1){
           select1Content = buf;
           select1ContentPtr = &select1Content;
         }         
       }
+      //DEBUG_INFO("%s::deserializeProperty(%s:%s) against %s = <%s>",type.c_str(),interface->getProviderNameForData().c_str(), property.c_str(),select1PropertyAddress.c_str(), select1ContentPtr->c_str());      
     }  
 
     virtual const String* getTopLabel() override{return &type;}
@@ -845,8 +846,8 @@ class OneSelectStrip : public Strip{
   protected:
     Top1Toggle1Label* topLabels;
     uint8_t select1ID=1; 
-    const String *select1ContentPtr;
-    String select1Content;
+    const String *select1ContentPtr = &select1Content;
+    String select1Content = "selectContent1";
     String select1PropertyAddress; 
     String label = "~";    
 };
@@ -882,7 +883,7 @@ class TwoSelectStrip: public OneSelectStrip{
       if (!interface) return;
       OneSelectStrip::deserializeProperty(property);
       // if address contains a %d , we extract the select2ID that is then used to get the corresponding string value in the related dataset
-      if (property.indexOf("%d") != -1){
+      if (select2PropertyAddress.indexOf("%d") != -1){
         if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
           select2ContentPtr = skeleton->getValuePtr(interface->getProviderNameForData(),select2PropertyAddress,select2ID);
         }
@@ -901,8 +902,8 @@ class TwoSelectStrip: public OneSelectStrip{
 
   protected:
     uint8_t select2ID=1; 
-    const String *select2ContentPtr;
-    String select2Content;
+    const String *select2ContentPtr = &select2Content;
+    String select2Content = "select2Content";
     String select2PropertyAddress;
     Top2Toggles* topLabels;  
 };

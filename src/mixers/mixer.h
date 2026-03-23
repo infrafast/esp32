@@ -46,53 +46,46 @@ class Synchronizer{
 
 
 #define UNSYNC_PATTERN "~"
-class DataSetSynced: public DataSet{
-  public: 
-    String* values = nullptr;
+class DataSetSynced : public DataSet {
+  public:
+    static constexpr uint16_t MAX_SIZE = 48;
+
+    String values[MAX_SIZE];
     uint16_t syncStep = 0;
-    String defaultName="";
-    uint8_t size = 0;
+    String defaultName = "";
+    uint16_t size = 0;
 
-    DataSetSynced(Address* adress,String name,String defVal,Synchronizer* synchronizer) : DataSet(adress,name,&dataRepo),defaultName(defVal) {
-      init(1);                    // one data by default
-      synchronizer->add(this);    // a SyncDataSet self register himself to the overall synchroniser
+    DataSetSynced(Address* adress, String name, String defVal, Synchronizer* synchronizer)
+      : DataSet(adress, name, &dataRepo), defaultName(defVal) {
+      init(1);                  // one data by default
+      synchronizer->add(this);  // self registration
     }
 
-    virtual uint16_t getSize() override{
+    virtual uint16_t getSize() override {
       return size;
-    };
-
-    void set(uint16_t index, String value){
-      if (index>=size) return;    
-      values[index] = value;      
     }
 
-    void init(uint16_t _size/*, int _offset*/){
-      //offset = _offset;
-      //DEBUG_PRINT("\nDataSetSynced init(%d,%s,%d)",size,defVal.c_str(),offset);      
-
-      if (size != _size){
-        size = _size;
-        // Supprimer le tableau existant s'il y en a un
-        if (values != nullptr) delete[] values; // Libérer la mémoire précédemment allouée
-        // Créer un nouveau tableau dynamique avec la taille passée
-        values = new String[size];
-        // Initialiser les valeurs (par exemple, 0)
-      }   
+    void set(uint16_t index, const String& value) {
+      if (index >= size) return;
+      values[index] = value;
     }
 
-    void clearValues(){
-      for (int i = 0; i < size; ++i) {
-          values[i] = concatStrings(defaultName, i);
+    void init(uint16_t newSize) {
+      size = newSize;
+      clearValues();
+    }
+
+    void clearValues() {
+      for (uint16_t i = 0; i < size; ++i) {
+        values[i] = concatStrings(defaultName, i);
       }
-      syncStep = 0;      
+      syncStep = 0;
     }
 
-    virtual const String* getValuePtr(uint16_t i) override{    
+    virtual const String* getValuePtr(uint16_t i) override {
       if (i < size) return &values[i];
-      else return &defaultName;
-    }      
-
+      return &errorDatasetOOR;
+    }
 };
 
 struct MixerIdentity {
@@ -126,19 +119,35 @@ DropDownAddress addressFXname = DropDownAddress(ADDRESS_FX_NAME);
 #define ADDRESS_AUX_NAME "/auxname/%d"
 DropDownAddress addressAUXname = DropDownAddress(ADDRESS_AUX_NAME);
 
-template <typename NetworkBase>
-class MixerDevice : public NetworkBase {
+
+class MixerBase {
 public:
-
-    // mixer definition
-    MixerIdentity mixerID;
-    BaseMixerDefinition* mixerDef;  // implemented by derived class
-
     // properties that are synced
     DataSetSynced* chNamesDS;
     DataSetSynced* busNamesDS;  
     DataSetSynced* auxNamesDS;  
     DataSetSynced* fxNamesDS;
+
+    virtual ~MixerBase() {}
+
+    //// pure virtual utilities ////
+    //virtual void startMixerDataSync() = 0;
+    virtual bool restoreMixerProfile() = 0;
+    virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;    
+
+    //// pure virtual mixer methods called by the strips ////
+    //virtual void queryCHname(uint8_t index) = 0;
+    virtual void dropDSnameRequest(DataSetSynced*, uint8_t) = 0;    
+};
+
+
+template <typename NetworkBase>
+class MixerDevice : public NetworkBase, public MixerBase {
+public:
+
+    // mixer definition
+    MixerIdentity mixerID;
+    BaseMixerDefinition* mixerDef;  // implemented by derived class
 
     // this classes does all the work
     Synchronizer synchronizer;
@@ -157,15 +166,6 @@ public:
 
     }
     
-    //// pure virtual utilities ////
-    //virtual void startMixerDataSync() = 0;
-    virtual bool restoreMixerProfile() = 0;
-    virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;    
-
-    //// pure virtual mixer methods called by the strips ////
-    //virtual void queryCHname(uint8_t index) = 0;
-    virtual void dropDSnameRequest(DataSetSynced*, uint8_t) = 0;
-
     virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
 
 

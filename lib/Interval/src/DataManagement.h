@@ -374,14 +374,14 @@ class SerializableParameters {
     const String* getValuePtr(String provider, String address, uint8_t index){
       const String *retVal = &emptyString;
 
-      //DEBUG_PRINT("\nSerializableDataset<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
+      DEBUG_PRINT("\nSerializableDataset::getValuePtr(%s,%s,%i): ",provider.c_str(),address.c_str(),index);
       DataSet* ds = repo->getDataSet(provider, address);
 
       if (ds != nullptr){
         retVal = ds->getValuePtr(index);
       }
 
-      //DEBUG_PRINT("\nSerializableParameters::getValuePtr<%s>",retVal->c_str());
+      DEBUG_PRINT("\t ====> <%s>",retVal->c_str());
 
       return retVal;
     }    
@@ -423,9 +423,9 @@ class WebLibrary : public DataSet, public JsonListFile{
     }
 
     virtual const String* getValuePtr(uint16_t index){      
-      if (index>size()-1) return &errorDatasetOOR;      
+      if (index<size()) getName(index);
       //return getString(getName(index));       // return the valuenof the jkey   
-      return getName(index);                
+      return &errorDatasetOOR;                      
     }  
 
     virtual uint16_t getSize(){
