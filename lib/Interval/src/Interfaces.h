@@ -255,11 +255,11 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
         if (state.code == IF_READY){      // we just went online 
           offlineStart = 0;               // so we reset timer
-          DEBUG_INFO("%s 🔌 ✔️ ------- Online, offlineStart = 0 ---------- ",interfaceName.c_str());           
+          //DEBUG_INFO("%s 🔌 ✔️ ------- Online, offlineStart = 0 ---------- ",interfaceName.c_str());           
         }else{
           if (offlineStart == 0){          
             offlineStart = millis();     // we went offline, so we start counting
-            DEBUG_INFO("%s 🔌 ❌------- Offline, offlineStart=%i ---------- ",interfaceName.c_str(),offlineStart);           
+            //DEBUG_INFO("%s 🔌 ❌------- Offline, offlineStart=%i ---------- ",interfaceName.c_str(),offlineStart);           
           }
         }
       }

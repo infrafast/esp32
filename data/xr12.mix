@@ -1,7 +1,12 @@
 {
+  "protocol":"xair", 
   "channelCount":12, 
   "busCount":4,
   "auxCount":1,
   "fxCount":4,
-  "protocol":"xair.osc"    
+  "mainCount":2,
+  "mtxCount":1,
+  "DCAcount":4,
+  "unk1Count":1,
+  "unk2Count":1
 }

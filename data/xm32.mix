@@ -1,7 +1,12 @@
 {
+  "protocol":"x32",  
   "channelCount":32, 
   "busCount":16,
   "auxCount":8,
   "fxCount":8,
-  "protocol":"x32.osc"    
+  "mainCount":2,
+  "mtxCount":8,
+  "DCAcount":8,
+  "unk1Count":1,
+  "unk2Count":1
 }

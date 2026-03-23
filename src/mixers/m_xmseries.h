@@ -212,7 +212,9 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       - le fichier est fini
       - ou si XM_PROOTCOL_COUNT lignes ont été lues    
     */
-      String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename);   
+      #define XMSERIES_PROTOCOL_FILE_EXTENSION ".osc"
+
+      String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename,XMSERIES_PROTOCOL_FILE_EXTENSION);   
       DEBUG_INFO("%s::deserializeMixerProtocolFromFile(%s) to mixerProtocol",interfaceName.c_str(), fullFilename.c_str());
 
       File file = LittleFS.open(fullFilename, "r");
@@ -242,9 +244,9 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     }
 
     virtual bool deserializeMixerDefinitionFromFile(const char* filename){
-      DEBUG_INFO("%s:deserializeMixerDefinitionFromFile(%s)",this->interfaceName.c_str(),filename);       
-
       String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename); 
+
+      DEBUG_INFO("%s:deserializeMixerDefinitionFromFile(%s)",this->interfaceName.c_str(),fullFilename.c_str());             
 
       File file = LittleFS.open(fullFilename, "r");
       if (!file) {
@@ -266,7 +268,16 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       mixerDef->busCount     = doc["busCount"]     | mixerDef->busCount;
       mixerDef->auxCount     = doc["auxCount"]     | mixerDef->auxCount;
       mixerDef->fxCount      = doc["fxCount"]      | mixerDef->fxCount;
+      mixerDef->mainCount    = doc["mainCount"]    | mixerDef->mainCount;
+      mixerDef->mtxCount     = doc["mtxCount"]     | mixerDef->mtxCount;
+      mixerDef->DCAcount     = doc["DCAcount"]     | mixerDef->DCAcount;
+      mixerDef->unk1Count    = doc["unk1Count"]    | mixerDef->unk1Count;
+      mixerDef->unk2Count    = doc["unk2Count"]    | mixerDef->unk2Count;
+      
       protocolName           = doc["protocol"]     | protocolName;
+
+
+      DEBUG_INFO("channelCount:%u busCOunt:%u auxCount:%u fxCount:%u mainCount:%u mtxCount:%u DCACount:%u unk1Count:%u unk2Count:%u",mixerDef->channelCount, mixerDef->busCount, mixerDef->auxCount, mixerDef->fxCount, mixerDef->mainCount, mixerDef->mtxCount, mixerDef->DCAcount, mixerDef->unk1Count, mixerDef->unk2Count);
 
       return true;
     }
@@ -281,7 +292,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       NetworkOSC::handlePropertyChange();
       DEBUG_INFO("%s::handlePropertyChange() refresh config",interfaceName.c_str());    
       state.broadcastConfig = true; // it could be that the connect method has changed so we need to redisplay/hide the configuration fields
-      handleConnectService();
+      if (state.enabled) handleConnectService();
     }    
 
     // used to extract values from the path    
