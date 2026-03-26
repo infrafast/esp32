@@ -347,7 +347,7 @@ DirectoryInterface* DirectoryInterface::instance_ = nullptr;
 
 class WebApplicationService: public NetworkDevice{
   #define WEBAPP_INTERFACE "WebApplication"
-  #define WEBAPP_INACTIVITY_TIMEOUT_MS 10000
+  #define WEBAPP_INACTIVITY_TIMEOUT_MS 20000
 
   public:
     using WebServerHandler = void (*)(Request&, Response&);

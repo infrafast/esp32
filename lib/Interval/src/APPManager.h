@@ -1946,10 +1946,10 @@ void setup() {
               }
             break;
             case STATE_UTILS_CONNECTWEBAPP:
-              if (hwm->configMedia->refreshed){
+              if (hwm->configMedia->refreshed ){
                 handleConfigConnection();
               }
-              if (webAppConnected == true){ // when web app connect we go back to normal screen
+              if (webAppConnected == true || !webAppService->state.enabled){ // when web app connect we go back to normal screen
                 restoreScreen();    // go back to caller. can be from bank/menu or wizard
               }
             break;
