@@ -347,6 +347,7 @@ DirectoryInterface* DirectoryInterface::instance_ = nullptr;
 
 class WebApplicationService: public NetworkDevice{
   #define WEBAPP_INTERFACE "WebApplication"
+  #define WEBAPP_INACTIVITY_TIMEOUT_MS 10000
 
   public:
     using WebServerHandler = void (*)(Request&, Response&);
@@ -381,6 +382,7 @@ class WebApplicationService: public NetworkDevice{
 
     virtual void monitorService() override{
       handleWeb();
+      monitorInactivityTimeout();
     }
 
     virtual bool ping() override{return true;}
@@ -397,12 +399,35 @@ class WebApplicationService: public NetworkDevice{
       return true;
     }
 
+    virtual void switchDevice(bool _enabled) override{
+      if (!_enabled){
+        socketConnected = false;
+      }else{
+        reportActivity();
+      }
+      NetworkDevice::switchDevice(_enabled);
+    }
+
     void setWebServerHandler(WebServerHandler callback){
       webServerHandler = callback;
     }
 
     void setWebSocketHandler(WebSocketHandler callback){
       webSocketHandler = callback;
+    }
+
+    void reportActivity(){
+      lastActivityMs = millis();
+    }
+
+    void reportSocketConnected(){
+      socketConnected = true;
+      reportActivity();
+    }
+
+    void reportSocketClosed(){
+      socketConnected = false;
+      reportActivity();
     }
 
     void handleWeb(){
@@ -447,6 +472,7 @@ class WebApplicationService: public NetworkDevice{
 
       hwm.configURL = concatStrings("http://", hwm.configMedia->IP.toString());
       DEBUG_INFO("[WEBAPP]\t\tserving on %s", hwm.configURL.c_str());
+      reportActivity();
       return true;
     }
 
@@ -456,6 +482,7 @@ class WebApplicationService: public NetworkDevice{
         delete webServer;
         webServer = nullptr;
       }
+      socketConnected = false;
       DEBUG_INFO("WebAppservices down");
     }
 
@@ -480,6 +507,8 @@ class WebApplicationService: public NetworkDevice{
   protected:
     WebServerHandler webServerHandler = nullptr;
     WebSocketHandler webSocketHandler = nullptr;
+    uint32_t lastActivityMs = 0;
+    bool socketConnected = false;
 
     char hdrContentType[120];
     char hdrContentLength[20];
@@ -489,6 +518,17 @@ class WebApplicationService: public NetworkDevice{
         wss->shutdown();
         delete wss;
         wss = nullptr;
+      }
+    }
+
+    void monitorInactivityTimeout(){
+      if (lastActivityMs == 0) return;
+      if (socketConnected) return;
+
+      const uint32_t now = millis();
+      if ((uint32_t)(now - lastActivityMs) > WEBAPP_INACTIVITY_TIMEOUT_MS){
+        DEBUG_INFO("[WEBAPP]\t\tInactivity timeout reached (%ums), stopping service", WEBAPP_INACTIVITY_TIMEOUT_MS);
+        switchDevice(false);
       }
     }
 };

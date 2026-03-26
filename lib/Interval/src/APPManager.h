@@ -2236,6 +2236,7 @@ void setup() {
 
     void commonFileServer(Request &req, Response &res) {
       if (hwm->network->media == CABLE_MEDIA) hwm->network->stopAllUDP();   // because of limited IP sockets in ethernet
+      if (webAppService != nullptr) webAppService->reportActivity();
       String path = req.path();
 
       // --- POST: endpoints spéciaux ---
