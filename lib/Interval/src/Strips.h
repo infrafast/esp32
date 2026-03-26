@@ -806,7 +806,7 @@ class OneSelectStrip : public Strip{
       }
     }
 
-    void serializeProperties(){
+    virtual void serializeProperties() override{
       char* buf;
       // if address contains a %d , we extract the select1ID to populate the address otherwise we use the string value      
       if (select1PropertyAddress.indexOf("%d") != -1){
@@ -822,7 +822,7 @@ class OneSelectStrip : public Strip{
       }
     }  
 
-    void deserializeProperty(String property){
+    virtual void deserializeProperty(String property) override{
       if (!interface) return;
       // if address contains a %d , we extract the select1ID that is then used to get the corresponding string value in the related dataset
       if (select1PropertyAddress.indexOf("%d") != -1){
@@ -862,7 +862,7 @@ class TwoSelectStrip: public OneSelectStrip{
       }
     }
   
-    void serializeProperties(){
+    virtual void serializeProperties() override{
       OneSelectStrip::serializeProperties();
       char* buf;
       // if address contains a %d , we extract the select2ID to populate the address otherwise we use the string value      
@@ -879,7 +879,7 @@ class TwoSelectStrip: public OneSelectStrip{
       }
     }  
 
-    void deserializeProperty(String property){
+    virtual void deserializeProperty(String property) override{
       if (!interface) return;
       OneSelectStrip::deserializeProperty(property);
       // if address contains a %d , we extract the select2ID that is then used to get the corresponding string value in the related dataset

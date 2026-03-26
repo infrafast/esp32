@@ -71,8 +71,7 @@ class SendStrip : public TwoSelectStrip, public StripMixer{
         push4x1hBar();
       }
     }
-           
-
+    
   protected:
     String unitString="U";
 
