@@ -2775,6 +2775,7 @@ void utilsScreenBuilder(uint8_t state){
 
 void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, const char *message, uint16_t length){
   String response;
+  if (app.webAppService != nullptr) app.webAppService->reportActivity();
   switch (dataType) {
     case net::WebSocketDataType::TEXT:
       response = app.parseJsonInput(message);
@@ -2791,13 +2792,14 @@ void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *re
   DEBUG_INFO("\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
   //DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
   app.webAppConnected = false;
-  if (app.webAppService != nullptr) app.webAppService->switchDevice(false);
+  if (app.webAppService != nullptr) app.webAppService->reportSocketClosed();
 }
 
 
 void socketConnectionCallback(IWebSocket &ws) {
   DEBUG_INFO("[WSS]\t\tconnected!\n\n");
   app.webAppConnected = true;
+  if (app.webAppService != nullptr) app.webAppService->reportSocketConnected();
 
   const auto protocol = ws.getProtocol();
   if (protocol) {
