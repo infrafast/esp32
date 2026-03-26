@@ -45,10 +45,14 @@ const char* MStypeToString(uint8_t type) {
         "UNDEF"
     };
 
+    static char buffer[20];  // suffisant pour "ERRTYPE:255"
+
     if (type < 9) {
         return types[type];
     }
-    return "ERRTYPE";
+
+    snprintf(buffer, sizeof(buffer), "UNDEFTYPE:%u", type);
+    return buffer;
 }
 
 
@@ -70,7 +74,7 @@ struct MSmixerDefinition : public BaseMixerDefinition{
 char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize) {
 
   snprintf(buffer, bufferSize,
-           "channelCount=%u busCount=%u auxCount=%u fxCount=%u mtxCount=%u mainCount=%u DCAcount=%u unk1Count=%u unk1Count=%u"
+           "channelCount=%u busCount=%u auxCount=%u fxCount=%u mtxCount=%u mainCount=%u DCAcount=%u unk1Count=%u unk1Count=%u "
            "channelOffset=%u busOffset=%u auxOffset=%u fxOffset=%u mtxOffset=%u mainOffset=%u DCAoffset=%u unk1Offset=%u unk2Offset:%u"
            "model=%s",
            def.channelCount,
@@ -139,7 +143,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) override{
       #ifdef DEBUG
-        char buffer[128];      
+        char buffer[256];      
         DEBUG_INFO("%s::deserializeMixerDefinitionFromFile() => before load() :\t%s",interfaceName.c_str(),dumpMixerDef(*((MSmixerDefinition*)mixerDef),buffer, sizeof(buffer)));   
       #endif
       bool success = loadStruct(filename, *((MSmixerDefinition*)mixerDef));
@@ -365,6 +369,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         uint8_t count = ct[MS_COUNT] | 0;
         uint8_t offset = ct[MS_OFFSET] | 0;
 
+        if (count > MAX_SYNC_DS_SIZE) count = MAX_SYNC_DS_SIZE; // avoid overflow 
+
         switch (type) {
           case MS_TYPE_CHANNEL: // Channel / Input
             mixerDef->channelCount = count;
@@ -477,7 +483,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
       if (extractPath(path,PATH_MIXER_GET_DATA,data)){
         // data = /console/data/get/DATAPATH 
-        DEBUG_INFO("%s::data: %s %s",interfaceName.c_str(),data.c_str(),value);
+        DEBUG_INFO("%s::data: %s \"%s\"",interfaceName.c_str(),data.c_str(),value);
         int index = -1;
         if (sscanf(data.c_str(), "/"MSDATA_CH_CONFIG_NAME, &index) == 1) {
           // DATAPATH => ch.0.cfg.name/val

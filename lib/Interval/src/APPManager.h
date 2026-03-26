@@ -755,6 +755,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       Event::disableEventDump(EVENT_NETWORK_CONNECTED);
       Event::disableEventDump(EVENT_NETWORK_CONNECTION_CHANGED);
       Event::disableEventDump(EVENT_NETWORK_DISCONNECTED);*/      
+      //Event::enableEventDump(EVENT_SOCKET_ERROR);
+      //Event::enableEventDump(EVENT_SOCKET_CLOSE);
+      //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
 
 
       // *********************************
