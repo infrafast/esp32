@@ -46,8 +46,6 @@ class SystemInterface: public DeviceInterface, public DataProvider{
       DEBUG_INFO("%s::_begin() => registered systemDS",interfaceName.c_str());          
       systemDS.registerDataSetAddress(dsText.address);      // register all ds             
 
-      //dataProviderName = getProviderNameForData();      
-
       return true;
     }
 

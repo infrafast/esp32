@@ -211,8 +211,6 @@ class Strip: public EventListener{
     unsigned char icon = 0x21;
     uint8_t colorID=0; 
 
-    //GUIManager* gui;
-
     float brightness = BRIGHTNESS_NOFOCUS;
 
     Strip(StripSkeleton* s){
@@ -827,7 +825,7 @@ class OneSelectStrip : public Strip{
       // if address contains a %d , we extract the select1ID that is then used to get the corresponding string value in the related dataset
       if (select1PropertyAddress.indexOf("%d") != -1){
         if (sscanf(property.c_str(), select1PropertyAddress.c_str(), &select1ID)){
-          select1ContentPtr = skeleton->getValuePtr(interface->getProviderNameForData(),select1PropertyAddress,select1ID);
+          select1ContentPtr = skeleton->getValuePtr(interface->getProviderNameForData(),select1PropertyAddress,select1ID-1);      // drop down values always starts at 1 so we have to deduect one to have the right index (arrays starting at)
         }
       }else{
         //otherwise we get the string itself directly in the address
@@ -885,7 +883,7 @@ class TwoSelectStrip: public OneSelectStrip{
       // if address contains a %d , we extract the select2ID that is then used to get the corresponding string value in the related dataset
       if (select2PropertyAddress.indexOf("%d") != -1){
         if (sscanf(property.c_str(), select2PropertyAddress.c_str(), &select2ID)){
-          select2ContentPtr = skeleton->getValuePtr(interface->getProviderNameForData(),select2PropertyAddress,select2ID);
+          select2ContentPtr = skeleton->getValuePtr(interface->getProviderNameForData(),select2PropertyAddress,select2ID-1); // drop down values always starts at 1 so we have to deduect one to have the right index (arrays starting at)
         }
       }else{
         //otherwise we search for the string 
