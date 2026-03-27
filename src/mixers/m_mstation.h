@@ -53,6 +53,7 @@ const char* MStypeToString(uint8_t type) {
         return types[type];
     }
 
+    char buffer[20];
     snprintf(buffer, sizeof(buffer), "UNDEFTYPE:%u", type);
     return buffer;
 }

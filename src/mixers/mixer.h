@@ -64,60 +64,47 @@ class DataSetSynced : public DataSet {
       return size;
     }
 
-    void set(uint16_t index, const String& value) {
-      // add here a broadcast to inform web app the value has changed
-      // {"dataSet":{"updateDataSets":[{"XMSeries":{"/ch/name/3":"toto"}},{"MIDI":{"/channel/3":"tutu"}}]}}
-      if (index >= size) return;
-      if (values[index] == value) return; // no update
-
-      if (value == "") 
-        values[index] = concatStrings(defaultName,index+1);
-      else 
-        values[index] = value;
-      /*
-      {\"dataSet\":{\"updateDataSets\":[{\"XMSeries\":{\"/ch/name/3\":\"toto\"}}]}}
-      {\"dataSet\":{\"updateDataSets\":[{\"%s\":{\"%s\":\"%s\"}}]}}
-      */
-      const char* frameTpl = "{\"updateDataSets\":[{\"%s\":{\"%s\":\"%s\"}}]}";
-
-      const char* provider = name.c_str();
-      char* addr = (char*)malloc(strlen(address->pattern.c_str())*sizeof(char*));
-      
-      sprintf(addr,address->pattern.c_str(),index+1);     // mixer address starts always at 1
-      free(addr);
-
-
-      char* frame = (char*)malloc(
-        (
-          strlen(frameTpl)+
-          strlen(provider)+
-          strlen(addr)+values[index].length()
-        )*sizeof(char*)
-      );
-
-      sprintf(frame,frameTpl,provider,addr,values[index].c_str());
-
-      app.broadCast(frame);
-
-      free(frame); 
-
+    virtual const String* getValuePtr(uint16_t i) override {
+      if (i < size) return &values[i];
+      return &errorDatasetOOR;
     }
 
     void init(uint16_t newSize) {
-      size = newSize;
+      size = (newSize > MAX_SYNC_DS_SIZE) ? MAX_SYNC_DS_SIZE : newSize;
       clearValues();
     }
 
     void clearValues() {
       for (uint16_t i = 0; i < size; ++i) {
-        values[i] = concatStrings(UNSYNC_PATTERN,defaultName, i+1);
+        values[i] = concatStrings(UNSYNC_PATTERN, defaultName, i + 1);
       }
       syncStep = 0;
     }
 
-    virtual const String* getValuePtr(uint16_t i) override {
-      if (i < size) return &values[i];
-      return &errorDatasetOOR;
+    void set(uint16_t index, const String& value) {
+      if (index >= size) return;
+
+      String newValue = (value == "") ? concatStrings(defaultName, index + 1) : value;
+
+      if (values[index] == newValue) return;
+
+      values[index] = newValue;
+
+      char addrBuf[64];
+      snprintf(addrBuf, sizeof(addrBuf), address->pattern.c_str(), index + 1); // addresses start at 1
+      
+      //{"dataSet":{"updateDataSets":[{"XMSeries":{"/ch/name/3":"toto"}}]}}
+      String frame = concatStrings(
+        "{\"dataSet\":{\"updateDataSets\":[{\"",
+        name,
+        "\":{\"",
+        String(addrBuf),
+        "\":\"",
+        values[index],
+        "\"}}]}}"
+      );
+
+      app.broadCast(frame.c_str());
     }
 };
 
@@ -272,6 +259,7 @@ public:
         // as the mixer attributes have changed,
         // ASK APPLICATION MANAGER TO REPUBLISH THE BANKS
         app.webAppToRefreshBanks();
+        app.triggerRedraw();            // tells strip to redraw themselves as labels may have change
         this->state.broadcastConfig = true;   // inform web app about the chnage of model
       }else{
         DEBUG_PRINT("\t model didn't change!");
