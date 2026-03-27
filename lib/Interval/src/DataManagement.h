@@ -422,10 +422,9 @@ class WebLibrary : public DataSet, public JsonListFile{
       return success;
     }
 
-    virtual const String* getValuePtr(uint16_t index){      
-      if (index<size()) getName(index);
-      //return getString(getName(index));       // return the valuenof the jkey   
-      return &errorDatasetOOR;                      
+    virtual const String* getValuePtr(uint16_t index){           
+      if (index>getSize()-1) return &errorDatasetOOR;
+      return getName(index);    
     }  
 
     virtual uint16_t getSize(){

@@ -46,11 +46,10 @@ class Synchronizer{
 
 
 #define UNSYNC_PATTERN "~"
+#define MAX_SYNC_DS_SIZE 48
 class DataSetSynced : public DataSet {
   public:
-    static constexpr uint16_t MAX_SIZE = 48;
-
-    String values[MAX_SIZE];
+    String values[MAX_SYNC_DS_SIZE];
     uint16_t syncStep = 0;
     String defaultName = "";
     uint16_t size = 0;
@@ -71,7 +70,10 @@ class DataSetSynced : public DataSet {
       if (index >= size) return;
       if (values[index] == value) return; // no update
 
-      values[index] = value;
+      if (value == "") 
+        values[index] = concatStrings(defaultName,index+1);
+      else 
+        values[index] = value;
       /*
       {\"dataSet\":{\"updateDataSets\":[{\"XMSeries\":{\"/ch/name/3\":\"toto\"}}]}}
       {\"dataSet\":{\"updateDataSets\":[{\"%s\":{\"%s\":\"%s\"}}]}}
@@ -89,11 +91,11 @@ class DataSetSynced : public DataSet {
         (
           strlen(frameTpl)+
           strlen(provider)+
-          strlen(addr)+value.length()
+          strlen(addr)+values[index].length()
         )*sizeof(char*)
       );
 
-      sprintf(frame,frameTpl,provider,addr,value.c_str());
+      sprintf(frame,frameTpl,provider,addr,values[index].c_str());
 
       app.broadCast(frame);
 
@@ -108,7 +110,7 @@ class DataSetSynced : public DataSet {
 
     void clearValues() {
       for (uint16_t i = 0; i < size; ++i) {
-        values[i] = concatStrings(defaultName, i+1);
+        values[i] = concatStrings(UNSYNC_PATTERN,defaultName, i+1);
       }
       syncStep = 0;
     }
@@ -196,10 +198,10 @@ public:
       mixerID.ip = IPAddress(0,0,0,0);
 
       // SyncDataSet auto register themelves to the overall synchroniser
-      chNamesDS = new DataSetSynced(&addressCHname,this->interfaceName,UNSYNC_PATTERN "CH", &synchronizer); 
-      busNamesDS = new DataSetSynced(&addressBUSname,this->interfaceName,UNSYNC_PATTERN "BUS", &synchronizer);
-      auxNamesDS = new DataSetSynced(&addressAUXname,this->interfaceName,UNSYNC_PATTERN "AUX", &synchronizer);
-      fxNamesDS = new DataSetSynced(&addressFXname,this->interfaceName,UNSYNC_PATTERN "FX", &synchronizer);
+      chNamesDS = new DataSetSynced(&addressCHname,this->interfaceName,"CH", &synchronizer); 
+      busNamesDS = new DataSetSynced(&addressBUSname,this->interfaceName,"BUS", &synchronizer);
+      auxNamesDS = new DataSetSynced(&addressAUXname,this->interfaceName,"AUX", &synchronizer);
+      fxNamesDS = new DataSetSynced(&addressFXname,this->interfaceName, "FX", &synchronizer);
 
     }
     
@@ -305,7 +307,12 @@ public:
     }
 
     void setMixerDetails(){
-      this->state.details = concatStrings(mixerID.name," ",mixerID.model," ",mixerID.ip.toString(),":",this->remotePort);
+      String mixerIP_Port;
+
+      if (mixerID.ip == IPAddress(0, 0, 0, 0)) mixerIP_Port = "virtual offline";     // if mixer IP = 0.0.0.0 it means we are connected to a virtual offline mixer (ex. mixing station)
+      else mixerIP_Port = mixerID.ip.toString(),":",this->remotePort;
+
+      this->state.details = concatStrings(mixerID.name," ",mixerID.model," ",mixerIP_Port);
     }
 
     void setStateLive(){

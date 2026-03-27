@@ -754,12 +754,9 @@ public:
 
   SocketEvent(void* data):Event(data){}
   const char* serialize() const override {
-    return ((SocketData*)data)->message;
+    if (((SocketData*)data)->length > 0) return ((SocketData*)data)->message;
+    else return "";
   }
-
-private:
-
-  mutable char _buffer[96] = {0};
 };
 
 class Network : public HWComponent2State{
@@ -1479,7 +1476,6 @@ class WiFiEth : public Network{
           evtSock.type = EVENT_SOCKET_MESSAGE;
           socketData.message = message;
           socketData.length = length;
-          //DEBUG_INFO("🌐←←← %s",message); // too heavy
           fireEvent(evtSock);
         }
         break;

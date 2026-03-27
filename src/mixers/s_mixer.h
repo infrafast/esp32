@@ -37,8 +37,8 @@ class SendStrip : public TwoSelectStrip, public StripMixer{
       else if (size == SHAPE4X1){
         push4x1hBar();
       }
-    }         
-
+    }
+    
   protected:
     String unitString="U";
 

@@ -755,6 +755,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       Event::disableEventDump(EVENT_NETWORK_CONNECTED);
       Event::disableEventDump(EVENT_NETWORK_CONNECTION_CHANGED);
       Event::disableEventDump(EVENT_NETWORK_DISCONNECTED);*/      
+      //Event::enableEventDump(EVENT_SOCKET_ERROR);
+      //Event::enableEventDump(EVENT_SOCKET_CLOSE);
+      //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
 
 
       // *********************************
@@ -1943,10 +1946,10 @@ void setup() {
               }
             break;
             case STATE_UTILS_CONNECTWEBAPP:
-              if (hwm->configMedia->refreshed){
+              if (hwm->configMedia->refreshed ){
                 handleConfigConnection();
               }
-              if (webAppConnected == true){ // when web app connect we go back to normal screen
+              if (webAppConnected == true || !webAppService->state.enabled){ // when web app connect we go back to normal screen
                 restoreScreen();    // go back to caller. can be from bank/menu or wizard
               }
             break;
@@ -2233,6 +2236,7 @@ void setup() {
 
     void commonFileServer(Request &req, Response &res) {
       if (hwm->network->media == CABLE_MEDIA) hwm->network->stopAllUDP();   // because of limited IP sockets in ethernet
+      if (webAppService != nullptr) webAppService->reportActivity();
       String path = req.path();
 
       // --- POST: endpoints spéciaux ---

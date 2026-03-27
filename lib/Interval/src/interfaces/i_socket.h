@@ -67,9 +67,21 @@ class NetworkSocket: public NetworkDevice{
           destination.lastQueryTime = 0;   // request an immediate /app/state to ping
           onSocketConnected();    
         break;
-        case EVENT_SOCKET_CLOSE:
+        case EVENT_SOCKET_CLOSE:{
+          SocketEvent* evtSock = (SocketEvent*)&evt;
+          SocketData* socketData = (SocketData*)evtSock->data;        
           // this is called when closing socket => so could be by handleDisconnectService or because we lost the connection
-          setStatePending();
+          switch(socketData->code){
+            case WebSocketCloseCode::MESSAGE_TOO_BIG:
+              setStateError("Unsupported mixer: too big!");
+            break;
+            case WebSocketCloseCode::NORMAL_CLOSURE:
+              setStatePending();  // continue normally
+            break;
+            default:
+              setStateError(concatStrings("Unsupported mixer: closure code:",socketData->code).c_str());
+          }
+        }
         break;
         case EVENT_SOCKET_ERROR:
           setStateDisconnected();
