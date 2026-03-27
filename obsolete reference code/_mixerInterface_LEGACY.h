@@ -658,7 +658,7 @@ class MixerOfflineInterface: public MixerInterface {
     }
 
     // commands
-    virtual void setChGain(uint8_t chID, float value){};
+    virtual void setInputGain(uint8_t chID, float value){};
     virtual void setChBusMute(uint8_t chID, uint8_t busID, bool mute){};    
 
     virtual void getChBusMute(uint8_t chID, uint8_t busID){};

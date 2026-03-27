@@ -18,34 +18,38 @@
 #define MS_MIXER_PROFILE_FILENAME "/mixerDef.ms"
 
 // data types
+enum ChannelType {
+  MS_TYPE_INPUT = 0,
+  MS_TYPE_AUX = 1,
+  MS_TYPE_FXSEND = 2,
+  MS_TYPE_FXRETURN = 3,
+  MS_TYPE_MIXBUS = 4,
+  MS_TYPE_GROUP = 5,
+  MS_TYPE_MAINLR = 6,
+  MS_TYPE_MTX = 7,
+  MS_TYPE_DCA = 8,
+  MS_TYPE_TALKBACK = 9,
+  MS_TYPE_COUNT,
+//  MS_TYPE_MASTER = 100,
+//  MS_TYPE_POP_GROUP = 101
+};
 
-
-#define    MS_TYPE_CHANNEL  0
-#define    MS_TYPE_AUX      1
-#define    MS_TYPE_UNKNW1   2
-#define    MS_TYPE_FX       3
-#define    MS_TYPE_BUS      4
-#define    MS_TYPE_UNKNW2   5
-#define    MS_TYPE_MAINLR   6
-#define    MS_TYPE_MTX      7
-#define    MS_TYPE_DCA      8
-#define    MS_TYPE_UNDEF    9
 
 const char* MStypeToString(uint8_t type) {
     static const char* const types[] PROGMEM = {
-        "CHANNEL",
+        "INPUT",
         "AUX",
-        "UNKNW1",
-        "FX",
-        "BUS",
-        "UNKNW2",
+        "FXSEND",
+        "FXRETURN",
+        "MIXBUS",
+        "GROUP",
         "MAINLR",
         "MATRIX",
         "DCA",
-        "UNDEF"
+        "TALKBACK"
     };
 
-    if (type < 9) {
+    if (type < MS_TYPE_COUNT) {
         return types[type];
     }
     return "ERRTYPE";
@@ -61,8 +65,9 @@ struct MSmixerDefinition : public BaseMixerDefinition{
   uint8_t mtxOffset = 0;
   uint8_t mainOffset = 0;
   uint8_t DCAOffset = 0;
-  uint8_t unk1Offset = 0;
-  uint8_t unk2Offset = 0;
+  uint8_t fxSndOffset = 0;
+  uint8_t groupOffset = 0;
+  uint8_t talkbackOffset = 0;
 
 };
 
@@ -70,28 +75,30 @@ struct MSmixerDefinition : public BaseMixerDefinition{
 char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize) {
 
   snprintf(buffer, bufferSize,
-           "channelCount=%u busCount=%u auxCount=%u fxCount=%u mtxCount=%u mainCount=%u DCAcount=%u unk1Count=%u unk1Count=%u"
-           "channelOffset=%u busOffset=%u auxOffset=%u fxOffset=%u mtxOffset=%u mainOffset=%u DCAoffset=%u unk1Offset=%u unk2Offset:%u"
-           "model=%s",
-           def.channelCount,
-           def.busCount,
-           def.auxCount,
-           def.fxCount,
-           def.mtxCount,
-           def.mainCount,
-           def.DCAcount,
-           def.unk1Count,
-           def.unk2Count,
-           def.channelOffset,
-           def.busOffset,
-           def.auxOffset,
-           def.fxOffset,
-           def.mtxOffset,
-           def.mainOffset,
-           def.DCAOffset,
-           def.unk1Offset,
-           def.unk2Offset,
-           def.model);
+      "channelCount=%u busCount=%u auxCount=%u fxCount=%u mtxCount=%u mainCount=%u DCAcount=%u fxSndCount=%u groupCount=%u talkbackCount=%u"
+      "channelOffset=%u busOffset=%u auxOffset=%u fxOffset=%u mtxOffset=%u mainOffset=%u DCAoffset=%u fxSndOffset=%u groupOffset:%u talkbackOffset=%u"
+      "model=%s",
+      def.channelCount,
+      def.busCount,
+      def.auxCount,
+      def.fxCount,
+      def.mtxCount,
+      def.mainCount,
+      def.DCAcount,
+      def.fxSndCount,
+      def.groupCount,
+      def.talkbackCount,
+      def.channelOffset,
+      def.busOffset,
+      def.auxOffset,
+      def.fxOffset,
+      def.mtxOffset,
+      def.mainOffset,
+      def.DCAOffset,
+      def.fxSndOffset,
+      def.groupOffset,
+      def.talkbackOffset,
+      def.model);
 
   return buffer;
 }
@@ -366,7 +373,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         uint8_t offset = ct[MS_OFFSET] | 0;
 
         switch (type) {
-          case MS_TYPE_CHANNEL: // Channel / Input
+          case MS_TYPE_INPUT: // Channel / Input
             mixerDef->channelCount = count;
             ((MSmixerDefinition*)mixerDef)->channelOffset = offset;
             break;
@@ -374,22 +381,21 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
             mixerDef->auxCount = count;
             ((MSmixerDefinition*)mixerDef)->auxOffset = offset;
             break;
-          case MS_TYPE_FX: // FX Return
+          case MS_TYPE_FXRETURN: // FX Return
             mixerDef->fxCount = count;
             ((MSmixerDefinition*)mixerDef)->fxOffset = offset;
             break;
-          case MS_TYPE_BUS: // Bus
+          case MS_TYPE_MIXBUS: // Bus
             mixerDef->busCount = count;
             ((MSmixerDefinition*)mixerDef)->busOffset = offset;
             break;
-          // Types présents mais non utilisés ici
-          case MS_TYPE_UNKNW1: // not used
-            mixerDef->unk1Count = count;
-            ((MSmixerDefinition*)mixerDef)->unk1Offset = offset;          
+          case MS_TYPE_FXSEND: // not used
+            mixerDef->fxSndCount = count;
+            ((MSmixerDefinition*)mixerDef)->fxSndOffset = offset;          
             break;
-          case MS_TYPE_UNKNW2: // not used
-            mixerDef->unk2Count = count;
-            ((MSmixerDefinition*)mixerDef)->unk2Offset = offset;          
+          case MS_TYPE_GROUP: // not used
+            mixerDef->groupCount = count;
+            ((MSmixerDefinition*)mixerDef)->groupOffset = offset;          
             break;
           case MS_TYPE_MAINLR: // Main L/R
             mixerDef->mainCount = count;
@@ -402,7 +408,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           case MS_TYPE_DCA: // DCA
             mixerDef->DCAcount = count;
             ((MSmixerDefinition*)mixerDef)->DCAOffset = offset;
-            break;            
+            break;    
+          case MS_TYPE_TALKBACK: // DCA
+            mixerDef->talkbackCount = count;
+            ((MSmixerDefinition*)mixerDef)->talkbackOffset = offset;
+            break;                      
           default:
             break;
         }
@@ -485,21 +495,21 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           MSmixerDefinition* msDef = (MSmixerDefinition*)mixerDef;
           int type = getTypeFromIndex(msDef,index);          
           switch (type) {
-            case MS_TYPE_CHANNEL: // Channel / Input
+            case MS_TYPE_INPUT: // Channel / Input
               chNamesDS->set(index-msDef->channelOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
             break;
             case MS_TYPE_AUX: // Aux
               auxNamesDS->set(index-msDef->auxOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
             break;
-            case MS_TYPE_FX: // FX Return
+            case MS_TYPE_FXRETURN: // FX Return
               fxNamesDS->set(index-msDef->fxOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
             break;
-            case MS_TYPE_BUS: // Bus
+            case MS_TYPE_MIXBUS: // Bus
               busNamesDS->set(index-msDef->busOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
             break;
             // Types présents mais non utilisés ici
-            case MS_TYPE_UNKNW1: // not used
-            case MS_TYPE_UNKNW2: // not used
+            case MS_TYPE_FXSEND: // not used
+            case MS_TYPE_GROUP: // not used
             case MS_TYPE_MAINLR: // Main L/R
             case MS_TYPE_MTX: // Matrix
             case MS_TYPE_DCA: // DCA
@@ -612,7 +622,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
         if (index >= mixerDef->channelOffset &&
             index < mixerDef->channelOffset + mixerDef->channelCount) {
-            return MS_TYPE_CHANNEL;
+            return MS_TYPE_INPUT;
         }
 
         if (index >= mixerDef->auxOffset &&
@@ -622,12 +632,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
         if (index >= mixerDef->fxOffset &&
             index < mixerDef->fxOffset + mixerDef->fxCount) {
-            return MS_TYPE_FX;
+            return MS_TYPE_FXRETURN;
         }
 
         if (index >= mixerDef->busOffset &&
             index < mixerDef->busOffset + mixerDef->busCount) {
-            return MS_TYPE_BUS;
+            return MS_TYPE_MIXBUS;
         }
 
         if (index >= mixerDef->mtxOffset &&
@@ -645,7 +655,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
             return MS_TYPE_DCA;
         }        
 
-        return MS_TYPE_UNDEF; // ou un type INVALID si tu en as un
+        return MS_TYPE_TALKBACK; // ou un type INVALID si tu en as un
     }
 
   

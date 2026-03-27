@@ -271,13 +271,13 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       mixerDef->mainCount    = doc["mainCount"]    | mixerDef->mainCount;
       mixerDef->mtxCount     = doc["mtxCount"]     | mixerDef->mtxCount;
       mixerDef->DCAcount     = doc["DCAcount"]     | mixerDef->DCAcount;
-      mixerDef->unk1Count    = doc["unk1Count"]    | mixerDef->unk1Count;
-      mixerDef->unk2Count    = doc["unk2Count"]    | mixerDef->unk2Count;
+      mixerDef->fxSndCount    = doc["fxSndCount"]    | mixerDef->fxSndCount;
+      mixerDef->groupCount    = doc["groupCount"]    | mixerDef->groupCount;
       
       protocolName           = doc["protocol"]     | protocolName;
 
 
-      DEBUG_INFO("channelCount:%u busCOunt:%u auxCount:%u fxCount:%u mainCount:%u mtxCount:%u DCACount:%u unk1Count:%u unk2Count:%u",mixerDef->channelCount, mixerDef->busCount, mixerDef->auxCount, mixerDef->fxCount, mixerDef->mainCount, mixerDef->mtxCount, mixerDef->DCAcount, mixerDef->unk1Count, mixerDef->unk2Count);
+      DEBUG_INFO("channelCount:%u busCOunt:%u auxCount:%u fxCount:%u mainCount:%u mtxCount:%u DCACount:%u fxSndCount:%u groupCount:%u",mixerDef->channelCount, mixerDef->busCount, mixerDef->auxCount, mixerDef->fxCount, mixerDef->mainCount, mixerDef->mtxCount, mixerDef->DCAcount, mixerDef->fxSndCount, mixerDef->groupCount);
 
       return true;
     }

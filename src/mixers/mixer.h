@@ -139,8 +139,9 @@ struct BaseMixerDefinition{
   uint8_t mtxCount = 8;
   uint8_t mainCount = 2;
   uint8_t DCAcount = 6;
-  uint8_t unk1Count = 2;
-  uint8_t unk2Count = 2;
+  uint8_t fxSndCount = 2;
+  uint8_t groupCount = 2;
+  uint8_t talkbackCount = 1;
 };
 
 #define ADDRESS_CH_NAME "/chname/%d"

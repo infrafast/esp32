@@ -327,12 +327,12 @@ class SendStrip : public TwoSelectStrip, public StripMixer{
 
 };
 
-class Ch2BusStrip : public SendStrip{
-  #define STRIP_CH2BUS "ch2bus"
+class Input2MixbusStrip : public SendStrip{
+  #define STRIP_INPUT2MIXBUS "input2mixbus"
 
   public:
 
-    Ch2BusStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):SendStrip(s,g,mi,debug){      
+    Input2MixbusStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):SendStrip(s,g,mi,debug){      
       unitString = "dB";
       //valueMin = 0; valueMax = 1;
     }
@@ -482,21 +482,21 @@ class Ch2BusStrip : public SendStrip{
     }    
 };
 
-#define CHGAINDB_MIN  -12
-#define CHGAINDB_MAX  60
-class ChGainStrip : public OneSelectStrip, public StripMixer{
-  #define STRIP_CHGAIN "chGain"
+#define INPUGAINDB_MIN  -12
+#define INPUGAINDB_MAX  60
+class inputGainStrip : public OneSelectStrip, public StripMixer{
+  #define STRIP_INPUTGAIN "chGain"
 
   public:
-    ChGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):OneSelectStrip(s,g,debug),StripMixer(mi){
-      valueMin = CHGAINDB_MIN;
-      valueMax = CHGAINDB_MAX;
+    inputGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):OneSelectStrip(s,g,debug),StripMixer(mi){
+      valueMin = INPUGAINDB_MIN;
+      valueMax = INPUGAINDB_MAX;
       value = (valueMin + valueMax)/2;
       label = "gain";
       //icon = ICON_CHGAIN_STRIP;
     }
 
-    ~ChGainStrip(){};
+    ~inputGainStrip(){};
 
     virtual bool update(JsonObject& data) {     
       // IMPLEMENTS CODE TO PROCESS DATA HERE
@@ -544,17 +544,17 @@ class ChGainStrip : public OneSelectStrip, public StripMixer{
 
     virtual float increaseCallback(unsigned long time,uint8_t trigger){
       float delta = Strip::increaseCallback(time,trigger);
-      if (delta != 0.0) setChGain();
+      if (delta != 0.0) setInputGain();
       return delta;
     }
 
     virtual float decreaseCallback(unsigned long time,uint8_t trigger){
       float delta = Strip::decreaseCallback(time,trigger);
-      if (delta != 0.0) setChGain();
+      if (delta != 0.0) setInputGain();
       return delta;
     }
 
-    void setChGain(){
+    void setInputGain(){
       char formattedCommandString[50];
       String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHGAIN];
       uint8_t chID = dropDownIDtoInterfaceID(select1ID);
@@ -659,13 +659,13 @@ Strip* testOSCStripConstructorCallback(){
 
 Strip* sendStripConstructorCallback(){
   //DEBUG_PRINT("\n\tch2busStripConstructorCallback()");
-  return new Ch2BusStrip(stripSendSkel,&gui,&mixerServer);
+  return new Input2MixbusStrip(stripSendSkel,&gui,&mixerServer);
 }
 
-StripSkeleton* stripChGainSkel;
+StripSkeleton* stripInputGainSkel;
 Strip* gain2chStripConstructorCallback(){
   //DEBUG_PRINT("\n\tgain2chStripConstructorCallback()");
-  return new ChGainStrip(stripChGainSkel,&gui,&mixerServer);
+  return new inputGainStrip(stripInputGainSkel,&gui,&mixerServer);
 }
 
 //////////////////////////////////////////////////////////////////
@@ -998,12 +998,12 @@ Serial.println(velocity);
 /////////////////////                         /////////////////////
 //////////////////////////////////////////////////////////////////
 { 
-  stripSendSkel = new StripSkeleton(STRIP_CH2BUS,STRIP_XAIR_GROUP,sendStripConstructorCallback,'!');  
+  stripSendSkel = new StripSkeleton(STRIP_INPUT2MIXBUS,STRIP_XAIR_GROUP,sendStripConstructorCallback,'!');  
   stripSendSkel->registerDataSetAddress(ADDRESS_CHNAME);
   stripSendSkel->registerDataSetAddress(ADDRESS_BUSNAME);
   
-  stripChGainSkel = new StripSkeleton(STRIP_CHGAIN,STRIP_XAIR_GROUP,gain2chStripConstructorCallback,'y'); 
-  stripChGainSkel->registerDataSetAddress(ADDRESS_CHNAME);
+  stripInputGainSkel = new StripSkeleton(STRIP_INPUTGAIN,STRIP_XAIR_GROUP,gain2chStripConstructorCallback,'y'); 
+  stripInputGainSkel->registerDataSetAddress(ADDRESS_CHNAME);
 
   stripOSCSkel = new StripSkeleton(STRIP_OSCTEST,STRIP_UTILS_GROUP,testOSCStripConstructorCallback,'a');
   stripOSCSkel->registerDataSetAddress(ADDRESS_IP);
@@ -1012,7 +1012,7 @@ Serial.println(velocity);
 
   /*stripFactory.add(stripTextSkel);
   stripFactory.add(stripSendSkel);
-  stripFactory.add(stripChGainSkel);
+  stripFactory.add(stripInputGainSkel);
   stripFactory.add(stripOSCSkel);*/
 
   /*app.stripDataRepository.addDataSet(&macroNames);   
