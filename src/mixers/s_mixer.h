@@ -7,13 +7,31 @@
 class StripMixer{
   public:
     
-    StripMixer(Strip* strip){//:baseStrip(strip){
-      mixer = (MixerBase*)strip->interface;
-    }
+    StripMixer(Strip* strip):baseStrip(strip){}
 
   protected:
-    //Strip* baseStrip = nullptr;   // need a reference to the base class to access mixer methods & properties
+    Strip* baseStrip = nullptr;   // need a reference to the base class to access mixer methods & properties
     MixerBase* mixer = nullptr;
+    DeviceInterface* boundInterface = nullptr;
+
+    MixerBase* getMixer(){
+      if (baseStrip == nullptr || baseStrip->interface == nullptr){
+        mixer = nullptr;
+        boundInterface = nullptr;
+        return nullptr;
+      }
+
+      // interface can be assigned after strip construction or changed at runtime
+      if (boundInterface == baseStrip->interface && mixer != nullptr) return mixer;
+
+      mixer = MixerBase::fromDeviceInterface(baseStrip->interface);
+      boundInterface = baseStrip->interface;
+      if (mixer == nullptr){
+        DEBUG_ERROR("StripMixer::getMixer() no mixer binding for interface: %s",baseStrip->interface->interfaceName.c_str());
+        return nullptr;
+      }
+      return mixer;
+    }
 };
 
 
@@ -64,7 +82,9 @@ class Input2MixbusStrip : public SendStrip{
     virtual void queryInterface() override{
       DEBUG_INFO("queryState %s",type.c_str());      
 
-      mixer->testCall();
+      MixerBase* activeMixer = getMixer();
+      if (activeMixer == nullptr) return;
+      activeMixer->testCall();
 
       // 1 . request name refresh
       //mixer->dropDSnameRequest(mixer->chNamesDS, select1ID-1);  // select1ID = chID
