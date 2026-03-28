@@ -196,7 +196,10 @@ public:
         }
       }
 
-      getBindings().push_back({interface, mixer});
+      Binding b;
+      b.device = interface;
+      b.mixer = mixer;
+      getBindings().push_back(b);
     }
 
   private:

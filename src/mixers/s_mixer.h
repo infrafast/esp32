@@ -12,8 +12,12 @@ class StripMixer{
   protected:
     Strip* baseStrip = nullptr;   // need a reference to the base class to access mixer methods & properties
     MixerBase* mixer = nullptr;
+
     DeviceInterface* boundInterface = nullptr;
 
+    /*
+      preserve the MixerBase abstraction and template-based MixerDevice<...> implementations, and safely resolve the concrete mixer instance used by a strip.
+    */
     MixerBase* getMixer(){
       if (baseStrip == nullptr || baseStrip->interface == nullptr){
         mixer = nullptr;
@@ -41,6 +45,12 @@ class SendStrip : public TwoSelectStrip, public StripMixer{
     SendStrip(StripSkeleton* s,bool debug=false):TwoSelectStrip(s,debug),StripMixer(this){}
 
     ~SendStrip(){};
+
+    /* MANDATORY !!! */
+    virtual bool init(){
+      MixerBase* activeMixer = getMixer();
+      return true;
+    }
   
     virtual void composeWidgets(uint8_t layout) override{      
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
@@ -82,9 +92,7 @@ class Input2MixbusStrip : public SendStrip{
     virtual void queryInterface() override{
       DEBUG_INFO("queryState %s",type.c_str());      
 
-      MixerBase* activeMixer = getMixer();
-      if (activeMixer == nullptr) return;
-      activeMixer->testCall();
+      mixer->testCall();
 
       // 1 . request name refresh
       //mixer->dropDSnameRequest(mixer->chNamesDS, select1ID-1);  // select1ID = chID

@@ -446,6 +446,8 @@ class Strip: public EventListener{
       }
     }
 
+    virtual bool init(){return true;}
+
     bool deserialize(String values){
 
       uint8_t n = getNumberOfProperties();
@@ -463,7 +465,7 @@ class Strip: public EventListener{
 
       //interface->stripCount++;              // et signale qu'il utilise l'interface
       interface->registerEventListener(this); // cela permettra d'annuler le comptage des strips ci dessus
-
+      init();
 
       type = jsonStrip[C_STRIPTYPE].as<String>();
       // set index; 
