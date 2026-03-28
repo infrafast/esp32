@@ -422,7 +422,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       return NetworkOSC::handleConnectService();
     }
 
-    /////////////////////////////////// MIXER RELATED REQUEST ////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////                                     ////////////////////////////
+    /////////////////////////////////// CORE FUNCTION MIXER RELATED REQUEST ////////////////////////////
+    ///////////////////////////////////                                     ////////////////////////////    
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
+
     virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override{
       // this method drop the request to get a name
 
@@ -445,6 +450,16 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       //DEBUG_INFO("🔄%s",path);
     }
     
+    virtual void dropCHMuteStateRequest(uint8_t index) override{}
+
+    virtual void dropBUSMuteStateRequest(uint8_t index) override{}
+
+    virtual void testCall() override{
+      DEBUG_INFO("testCall XMSeries successful");
+    }
+
+    /////////////////////////////////// UTILITIES ////////////////////////////
+
     //construit la chaîne en remplaçant les placeholders %d et %s
     void buildPathIndex(char* destination, size_t bufferSize, int index, const char* pattern) {
         snprintf(destination, bufferSize, pattern, index);

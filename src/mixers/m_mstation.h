@@ -596,8 +596,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
 
-
-    /////////////////////////////////// MIXER RELATED REQUEST ////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////                                     ////////////////////////////
+    /////////////////////////////////// CORE FUNCTION MIXER RELATED REQUEST ////////////////////////////
+    ///////////////////////////////////                                     ////////////////////////////    
+    ///////////////////////////////////////////////////////////////////////////////////////////////////
     virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override{
 
       if (dataset == chNamesDS) index += ((MSmixerDefinition*)mixerDef)->channelOffset;
@@ -613,6 +616,16 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       
 
     }
+
+    virtual void dropCHMuteStateRequest(uint8_t index) override{}
+
+    virtual void dropBUSMuteStateRequest(uint8_t index) override{}
+
+    virtual void testCall() override{
+      DEBUG_INFO("testCall MStation successful");
+    }
+
+    ////////////////////////////////////////
 
     // utility
     bool extractPath(const String& full, const String& base, String& remainder) {

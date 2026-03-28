@@ -7,12 +7,12 @@
 class StripMixer{
   public:
     
-    StripMixer(Strip* strip):baseStrip(strip){
+    StripMixer(Strip* strip){//:baseStrip(strip){
       mixer = (MixerBase*)strip->interface;
     }
 
   protected:
-    Strip* baseStrip = nullptr;   // need a reference to the base class to access mixer methods & properties
+    //Strip* baseStrip = nullptr;   // need a reference to the base class to access mixer methods & properties
     MixerBase* mixer = nullptr;
 };
 
@@ -62,7 +62,21 @@ class Input2MixbusStrip : public SendStrip{
     virtual void onEvent(const Event& evt) override{}
 
     virtual void queryInterface() override{
-      DEBUG_PRINT("\nqueryState %s",type.c_str());      
+      DEBUG_INFO("queryState %s",type.c_str());      
+
+      mixer->testCall();
+
+      // 1 . request name refresh
+      //mixer->dropDSnameRequest(mixer->chNamesDS, select1ID-1);  // select1ID = chID
+      //mixer->dropDSnameRequest(mixer->busNamesDS, select2ID-1);  // select2ID = busID 
+
+      // 2. request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
+      // 2.a mute
+      //mixer->dropCHMuteStateRequest(select1ID-1);  // select1ID = chID
+      //mixer->dropBUSMuteStateRequest(select2ID-1);  // select2ID = busID
+
+      // 2.b value
+
     }
 
     virtual float increaseCallback(unsigned long time,uint8_t trigger) override{

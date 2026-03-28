@@ -167,8 +167,10 @@ public:
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;    
 
     //// pure virtual mixer methods called by the strips ////
-    //virtual void queryCHname(uint8_t index) = 0;
     virtual void dropDSnameRequest(DataSetSynced*, uint8_t) = 0;    
+    virtual void dropCHMuteStateRequest(uint8_t index) = 0;
+    virtual void dropBUSMuteStateRequest(uint8_t index) = 0;
+    virtual void testCall()=0;
 };
 
 
