@@ -126,7 +126,7 @@ public:
   }
 
 
-  // Déqueue uniquement si 50 ms écoulées depuis le dernier envoi
+  // Déqueue uniquement si delayBetweenTwoSend ms écoulées depuis le dernier envoi = latency
   bool dequeue(OSCMessage& outMsg, int delayBetweenTwoSend) {
     if (!head){
       return false;
@@ -291,7 +291,8 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }
 
     bool send(OSCMessage& msg){
-      return queue.enqueue(msg);
+      //return queue.enqueue(msg);
+      return _sendOSCMessage(&msg);
     }
 
     virtual void process(){

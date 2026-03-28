@@ -624,7 +624,7 @@ class NetWorkService{
     }
 
 
-    virtual void setStateLocked(const char* led = "orange",const char* details = lang.getString("Reached maximum network device capacity. Disable other device(s) to enable this one.")->c_str()){
+    virtual void setStateLocked(const char* led = "orange",const char* details = lang.getString("Reached maximum device capacity. Disable other network device(s) to enable this one.")->c_str()){
       DEBUG_INFO("%s::setStateLocked()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_LOCKED;

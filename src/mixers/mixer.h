@@ -21,18 +21,23 @@ class Synchronizer{
 
     bool synced = false;
     bool syncRequestLocker = false;
-    uint8_t holdLoopCount = 0;
+    unsigned long lockStartTime = 0;    
 
     uint16_t totalToSync = 0;   // sum of items to be synced
     uint16_t syncedSoFar = 0;
     uint8_t  dsIndex = 0;       // which dataset we are currently synchronizing
 
     void reset();
-    int8_t update();
+    int8_t update(uint16_t latency);
 
     void add(DataSetSynced* ds){
        datasets.push_back(ds);
     }
+
+    void lockSyncRequest() {
+      syncRequestLocker = true;
+      lockStartTime = millis();
+    }    
 
     DataSetSynced* getCurrent(){
       if (syncRequestLocker) return nullptr;
@@ -95,13 +100,13 @@ class DataSetSynced : public DataSet {
       
       //{"dataSet":{"updateDataSets":[{"XMSeries":{"/ch/name/3":"toto"}}]}}
       String frame = concatStrings(
-        "{\"dataSet\":{\"updateDataSets\":[{\"",
+        "{\"updateDataSets\":[{\"",
         name,
         "\":{\"",
         String(addrBuf),
         "\":\"",
         values[index],
-        "\"}}]}}"
+        "\"}}]}"
       );
 
       app.broadCast(frame.c_str());
@@ -203,7 +208,7 @@ public:
       /////////// GESTION DE LA PROGRESSION DE SYNCHRO
       if (this->state.label == IF_STATE_DATASYNCING) {
         // call synchronizer update to return global progress and sets all sync index        
-        this->state.progress = synchronizer.update();
+        this->state.progress = synchronizer.update(this->destination.latency);    // wait latency between two request to avoid doub,ling them
         if (synchronizer.synced){
           // post sync action (like subscription)
           postSync();
@@ -213,7 +218,7 @@ public:
           DataSetSynced* dataset = synchronizer.getCurrent();   // return null if syncRequest is still locked
           if (dataset){
             dropDSnameRequest(dataset, dataset->syncStep);
-            synchronizer.syncRequestLocker = true;        // tells the synchroniser we are syncing
+            synchronizer.lockSyncRequest();
           }            
         }
       }
@@ -326,20 +331,19 @@ void Synchronizer::reset(){
   synced = false;
   dsIndex = 0;  
   syncRequestLocker = false; // allow to request a dataset
-  holdLoopCount = 0;          // release the locker after certain time (3 loops)
+  lockStartTime = 0;
    for (const auto& dataset : datasets){
     dataset->clearValues();
     totalToSync += dataset->size;
   }  
 }
     
-int8_t Synchronizer::update(){  
+
+int8_t Synchronizer::update(uint16_t latency){  
   
   //should we unlock (after 3 loop)?
-  holdLoopCount++;
-  if (holdLoopCount >= 3){
-    syncRequestLocker = false;   // autorise relance d'une requete
-    holdLoopCount = 0;
+  if (syncRequestLocker && (millis() - lockStartTime >= latency)) {
+    syncRequestLocker = false; // autorise relance d'une requête
   }
 
   DataSetSynced* dataset = datasets[dsIndex]; //sync in serial, next dataset  

@@ -293,7 +293,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           deviceInterface->state.details = destinationDetails();  // connexion details of mixing station
         }
       }
-      else if (strcmp(topState, MS_CONNECTING) == 0) {
+      else if (strcmp(topState, MS_CONNECTING) == 0 || strcmp(topState, MS_RECONNECTING) == 0) {
         if (strcmp(state, MS_SYNCING) == 0){
           if (deviceInterface->state.subState != IF_STATE_SYNCING){
             setStateSyncing(MS_SYNCING);      
@@ -314,11 +314,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         //ℹ       MixingStation::processState: msg:,progress:94,state:backgroundSync,topState:connected
         if (progress == 0) getMixerDefinition();
       }
-      else if (strcmp(topState, MS_RECONNECTING) == 0) {
+      /*else if (strcmp(topState, MS_RECONNECTING) == 0) {
         setStatePending("green medium",concatStrings(state).c_str());  
         deviceInterface->state.label = topState;
         deviceInterface->state.subState = state;      
-      }
+      }*/
       else{
         // we do not alter main state code, only report what we received
         setStatePending("green medium",concatStrings("UNHANDLED MS STATE:",state).c_str());
@@ -437,7 +437,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       #define OFFLINE "offline"
       IPAddress ip;
       ip.fromString(body["ipAddress"] | "");
-      String name   = body["name"]    | OFFLINE;
+      //String name   = body["name"]    | OFFLINE;        // name is the same as model, better to use manufacturer + model which is more unique and more relevant for the user
+      String name   = body["manufacturer"]    | OFFLINE;
       String model  = body["currentModel"] | "";
 
       if (name != OFFLINE){        
