@@ -153,6 +153,11 @@ DropDownAddress addressAUXname = DropDownAddress(ADDRESS_AUX_NAME);
 
 class MixerBase {
 public:
+    struct Binding {
+      DeviceInterface* device = nullptr;
+      MixerBase* mixer = nullptr;
+    };
+
     // properties that are synced
     DataSetSynced* chNamesDS;
     DataSetSynced* busNamesDS;  
@@ -171,6 +176,34 @@ public:
     virtual void dropCHMuteStateRequest(uint8_t index) = 0;
     virtual void dropBUSMuteStateRequest(uint8_t index) = 0;
     virtual void testCall()=0;
+
+    static MixerBase* fromDeviceInterface(DeviceInterface* interface){
+      if (interface == nullptr) return nullptr;
+      for (const Binding& binding : getBindings()){
+        if (binding.device == interface) return binding.mixer;
+      }
+      return nullptr;
+    }
+
+  protected:
+    static void bindDeviceInterface(DeviceInterface* interface, MixerBase* mixer){
+      if (interface == nullptr || mixer == nullptr) return;
+
+      for (Binding& binding : getBindings()){
+        if (binding.device == interface){
+          binding.mixer = mixer;
+          return;
+        }
+      }
+
+      getBindings().push_back({interface, mixer});
+    }
+
+  private:
+    static std::vector<Binding>& getBindings(){
+      static std::vector<Binding> bindings;
+      return bindings;
+    }
 };
 
 
@@ -187,6 +220,8 @@ public:
 
     template<typename... Args>
     MixerDevice(Args&&... args): NetworkBase(std::forward<Args>(args)...){
+      bindDeviceInterface(static_cast<DeviceInterface*>(this), static_cast<MixerBase*>(this));
+
       mixerID.model = "undef";
       mixerID.name = "offline";
       mixerID.ip = IPAddress(0,0,0,0);
