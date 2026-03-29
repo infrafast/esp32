@@ -324,6 +324,11 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     char pathBuffer[STRING_MAX_SIZE];
     int i1,i2;    // index
 
+        //////////////////////////////////////////////////////////////////////////////////////////////////
+       ////////////////////////////////                                       ///////////////////////////
+      ///////////////////////////////// READ INPUT OSC MESSAGE AND ROUTE THEM //////////////////////////
+     //////////////////////////////////                                       /////////////////////////    
+    //////////////////////////////////////////////////////////////////////////////////////////////////
     virtual void process() override {    
 
         const char* addr = oscIn.getAddress();        
@@ -412,21 +417,24 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
         match = matchProtocol(XM_CH_BUS_MIX_LEVEL, addr, m1, m2);
         if (match == MATCH_2INT) {
-          // Exemple futur :
-          // payload[0] = STRIP_CH_BUS_LEVEL;
-          // payload[1] = m1;
-          // payload[2] = m2;
-          // payload[3] = oscIn.getFloat(0);
-          // fireEvent(evtMix);
+          handleChBusMixLevel(m1, m2, oscIn.getFloat(0));
           return;
         }
     }
     /////////////////////////////////
     /// PRISE EN CHARGE DES ROUTES
     /////////////////////////////////
+    void handleChBusMixLevel(int ch, int bus, float level) {
+      payload[0] = STRIP_CH_BUS_MIX_LEVEL;
+      payload[1] = ch;
+      payload[2] = bus;
+      payload[3] = level;
+      fireEvent(evtMix);
+    }
+
     void handleNameRoute(DataSetSynced* ds, const char* label, int index) {
       oscIn.getString(0, pathBuffer);
-      DEBUG_INFO("%s(%d) = %s", label, index, pathBuffer);
+      //DEBUG_INFO("%s(%d) = %s", label, index, pathBuffer);
       ds->set(index - 1, pathBuffer);
     }
 
@@ -502,12 +510,14 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     /////////////////////////////////// CORE FUNCTION MIXER RELATED REQUEST ////////////////////////////
     ///////////////////////////////////                                     ////////////////////////////    
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-    /*
-      Puisque certains patterns peuvent avoir 0 argument, 1 argument, etc., tu peux aussi éviter d’envoyer un index inutile si le pattern est fixe :    
-    */
-    virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override {
+    
+    /////////////////////////////
+    ///////// GETTERS ///////////
+    /////////////////////////////
+    virtual void getDSname(DataSetSynced* dataset, uint8_t index) override {
+      /*
+        Puisque certains patterns peuvent avoir 0 argument, 1 argument, etc., tu peux aussi éviter d’envoyer un index inutile si le pattern est fixe :    
+      */
       index += 1; // Behringer starts at 1
 
       uint8_t protocolIndex = 0xFF;
@@ -529,30 +539,45 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         return;
       }
 
-      oscOut.empty();
-      oscOut.setAddress(pathBuffer);
-      send(oscOut);
+      sendOSC(pathBuffer);
     }
     
-    virtual void dropCHBUSMuteStateRequest(uint8_t chIndex, uint8_t busIndex) override{
+    virtual void getCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
       // this method drop the request to get a ch mute state on a bus, we need to find the right pattern and replace the 2 placeholders with chIndex and busIndex
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();      
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
 
-      oscOut.empty();
-      oscOut.setAddress(pathBuffer);   
-      send(oscOut);
+      sendOSC(pathBuffer);
     }
 
-    virtual void dropBUSMuteStateRequest(uint8_t index) override{
+    virtual void getBUSmute(uint8_t index) override{
       // this method drop the request to get a bus mute state, we need to find the right pattern and replace the placeholder with index
       const char* pattern = protocol[XM_BUS_MUTE].c_str();      
       buildPath1Int(pathBuffer, sizeof(pathBuffer), index, pattern);
 
-      oscOut.empty();
-      oscOut.setAddress(pathBuffer);   
-      send(oscOut);
+      sendOSC(pathBuffer);
     }
+
+    virtual void getCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
+      // this method drop the request to get a ch level on a bus, we need to find the right pattern and replace the 2 placeholders with chIndex and busIndex
+      const char* pattern = protocol[XM_CH_BUS_MIX_LEVEL].c_str();      
+      buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
+
+      sendOSC(pathBuffer);
+    }
+
+    /////////////////////////////
+    ///////// SETTERS ///////////
+    /////////////////////////////
+    virtual void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) override{
+      // this method sends the command to set a channel level on a bus
+      // we need to find the right pattern and replace the 2 placeholders
+      const char* pattern = protocol[XM_CH_BUS_MIX_LEVEL].c_str();
+      buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
+
+      sendOSC(pathBuffer, level);
+    }
+
 
   protected:
     /////////////////////////////////// UTILITIES ////////////////////////////
@@ -646,6 +671,21 @@ class XMSeries: public MixerDevice<NetworkOSC>{
           return MATCH_NONE;
       }
     }
+
+    ////////////////////////////
+    inline void sendOSC(const char* address) {
+      oscOut.empty();
+      oscOut.setAddress(address);
+      send(oscOut);
+    }    
+
+    template<typename T>
+    inline void sendOSC(const char* address, T value) {
+      oscOut.empty();
+      oscOut.setAddress(address);
+      oscOut.add(value);
+      send(oscOut);
+    }    
 
 };
 

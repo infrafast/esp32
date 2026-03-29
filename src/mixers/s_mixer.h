@@ -67,6 +67,13 @@ public:
   virtual void hasVisibility() override {
     StripMixer::becameVisible();
   }
+
+  // called when deserializing a Strip
+  virtual bool init() override {
+    MixerBase* activeMixer = getMixer();
+    return true;
+  }  
+
 };
 
 
@@ -74,16 +81,10 @@ public:
 class SendStrip : public StripMixerMixin<TwoSelectStrip> {
   public:
 
-      SendStrip(StripSkeleton* s, bool debug = false) : StripMixerMixin<TwoSelectStrip>(s, debug){}
+    SendStrip(StripSkeleton* s, bool debug = false) : StripMixerMixin<TwoSelectStrip>(s, debug){}
 
     ~SendStrip(){};
-
-    /* MANDATORY !!! */
-    virtual bool init(){
-      MixerBase* activeMixer = getMixer();
-      return true;
-    }
-  
+ 
     virtual void composeWidgets(uint8_t layout) override{      
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         push4x4hBar();
@@ -101,6 +102,7 @@ class SendStrip : public StripMixerMixin<TwoSelectStrip> {
    
   protected:
     String unitString="U";
+    char sendBuffer[64];
 
 };
 
@@ -143,6 +145,13 @@ class Input2MixbusStrip : public SendStrip{
             DEBUG_INFO("%s onEvent() STRIP_CH_MAIN_MUTE",type.c_str());            
           }
           break;        
+        case STRIP_CH_BUS_MIX_LEVEL:
+          // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
+          if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
+            value = evtData[3];  // level value
+            DEBUG_INFO("%s onEvent() STRIP_CH_BUS_MIX_LEVEL",type.c_str());
+          }
+          break;
       }
 
     }
@@ -151,18 +160,17 @@ class Input2MixbusStrip : public SendStrip{
       DEBUG_INFO("getConfig %s",type.c_str());      
 
       // 1 . request name refresh
-      mixer->dropDSnameRequest(mixer->chNamesDS, select1ID-1);  // select1ID = chID
-      mixer->dropDSnameRequest(mixer->busNamesDS, select2ID-1);  // select2ID = busID 
+      mixer->getDSname(mixer->chNamesDS, select1ID-1);  // select1ID = chID
+      mixer->getDSname(mixer->busNamesDS, select2ID-1);  // select2ID = busID 
 
       // 2. request mute state refresh
-      mixer->dropCHBUSMuteStateRequest(select1ID, select2ID);  // select1ID = chID, select2ID = busID
-      mixer->dropBUSMuteStateRequest(select2ID);  // select2ID = busID      
+      mixer->getCHBUSmute(select1ID, select2ID);  // select1ID = chID, select2ID = busID
+      mixer->getBUSmute(select2ID);  // select2ID = busID      
     }
 
     void getValues(){
-      DEBUG_INFO("getValues %s",type.c_str());      
+      mixer->getCHBUSlevel(select1ID, select2ID);  // select1ID = chID, select2ID = busID
     }
-
 
 
     virtual float increaseCallback(unsigned long time,uint8_t trigger) override{
@@ -178,19 +186,7 @@ class Input2MixbusStrip : public SendStrip{
     }      
 
     void setChBusLevel(){
-      /*char formattedCommandString[50];
-      String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHBUSVALUE];
-      uint8_t chID = dropDownIDtoInterfaceID(select1ID);
-      uint8_t busID = dropDownIDtoInterfaceID(select2ID);  
-      sprintf(formattedCommandString,addressTemplate.c_str(),chID,busID);
-
-      JsonDocument command;
-      JsonObject osc = command[EXEC_OSC].to<JsonObject>();
-
-      osc[EXEC_ADDRESS] = formattedCommandString ;
-      osc[EXEC_VALUE] = value;
-
-      mixerServer->mixerInterface->execute(command.as<JsonObject>());    */
+      mixer->setCHBUSlevel(select1ID, select2ID, value);  // select1ID = chID, select2ID = busID
     }    
 };
 

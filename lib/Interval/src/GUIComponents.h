@@ -1158,7 +1158,7 @@ class Toggle : public Widget{
 
         uint16_t fillColor, textColor;
 
-        if(*revert) {
+        if(!*revert) {
           //DEBUG_PRINT("\nFlip");
           fillColor    = TFT_RED;
           textColor    = TFT_WHITE;
@@ -1173,7 +1173,7 @@ class Toggle : public Widget{
         sprite->fillSmoothRoundRect(0,0 , width, height, height/5, GUI::luminance(fillColor,*brightness * GUI::screenBrightness * 255));
         
         uint16_t color = *bColor;
-        if (!*revert) sprite->drawRoundRect(0,0, width, height, height/5, GUI::luminance(color,*brightness * GUI::screenBrightness * 255));
+        if (*revert) sprite->drawRoundRect(0,0, width, height, height/5, GUI::luminance(color,*brightness * GUI::screenBrightness * 255));
 
         uint16_t transparent = TFT_TRANSPARENT;
         Label* label = new Label(text,Align::Center,&GUI::zero,&GUI::zero,height*1.4,TOGGLE_CHAR_MAX_LEN, &textColor,&transparent,  brightness, debug);

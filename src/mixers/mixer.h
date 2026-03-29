@@ -153,6 +153,7 @@ DropDownAddress addressAUXname = DropDownAddress(ADDRESS_AUX_NAME);
 enum{
   STRIP_CH_BUS_MUTE,
   STRIP_CH_MAIN_MUTE,
+  STRIP_CH_BUS_MIX_LEVEL
 };
 
 
@@ -182,9 +183,14 @@ public:
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;    
 
     //// pure virtual mixer methods called by the strips ////
-    virtual void dropDSnameRequest(DataSetSynced*, uint8_t) = 0;    
-    virtual void dropCHBUSMuteStateRequest(uint8_t chIndex, uint8_t busIndex) = 0;
-    virtual void dropBUSMuteStateRequest(uint8_t index) = 0;
+    // GETTERS
+    virtual void getDSname(DataSetSynced*, uint8_t) = 0;    
+    virtual void getCHBUSmute(uint8_t chIndex, uint8_t busIndex) = 0;
+    virtual void getBUSmute(uint8_t busIndex) = 0;
+    virtual void getCHBUSlevel(uint8_t chIndex, uint8_t busIndex) = 0;
+    // SETTERS
+    virtual void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) = 0;
+    //////////////////////////////////////////////////////
 
     static MixerBase* fromDeviceInterface(DeviceInterface* interface){
       if (interface == nullptr) return nullptr;
@@ -266,7 +272,7 @@ public:
         }else{          
           DataSetSynced* dataset = synchronizer.getCurrent();   // return null if syncRequest is still locked
           if (dataset){
-            dropDSnameRequest(dataset, dataset->syncStep);
+            getDSname(dataset, dataset->syncStep);
             synchronizer.lockSyncRequest();
           }            
         }

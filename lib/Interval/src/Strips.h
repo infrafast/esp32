@@ -187,8 +187,8 @@ class Strip: public EventListener{
     bool renderError;
     //bool redraw = false;
 
-    bool toggle1 = false;
-    bool toggle2 = false;
+    bool toggle1 = true;      // mute off
+    bool toggle2 = true;      // mute off
     //bool updated = false;
     uint16_t frontColor, backColor;    
 

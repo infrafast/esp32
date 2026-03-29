@@ -601,7 +601,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     /////////////////////////////////// CORE FUNCTION MIXER RELATED REQUEST ////////////////////////////
     ///////////////////////////////////                                     ////////////////////////////    
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override{
+    
+    ////////////////////////////////
+    /////////// GETTERS ///////////
+    ///////////////////////////////
+    virtual void getDSname(DataSetSynced* dataset, uint8_t index) override{
 
       if (dataset == chNamesDS) index += ((MSmixerDefinition*)mixerDef)->channelOffset;
       else if (dataset == busNamesDS) index += ((MSmixerDefinition*)mixerDef)->busOffset;
@@ -617,9 +621,24 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
-    virtual void dropCHBUSMuteStateRequest(uint8_t chIndex, uint8_t busIndex) override{}
+    virtual void getCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
 
-    virtual void dropBUSMuteStateRequest(uint8_t index) override{}
+    }
+
+    virtual void getBUSmute(uint8_t index) override{
+
+    }
+
+    virtual void getCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
+
+    }
+    //////////////////////////////////////
+    /////////////// SETTERS //////////////
+    //////////////////////////////////////
+    virtual void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level){
+
+    }
+
 
     ////////////////////////////////////////
 

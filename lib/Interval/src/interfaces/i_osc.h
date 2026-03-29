@@ -292,6 +292,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
     bool send(OSCMessage& msg){
       //return queue.enqueue(msg);
+      /*Event propagate = Event(&msg);
+      if (_sendOSCMessage(&msg)){
+        fireEvent(propagate);  // we inform the others that we sent an OSC message, so they can for example update the UI with the sent value
+        return true;
+      }
+      return false;*/
       return _sendOSCMessage(&msg);
     }
 
