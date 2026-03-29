@@ -55,8 +55,7 @@ class OSCStrip : public Strip{  // should inherit from MidiStrip before so metho
 
     }     
 
-
-    virtual void queryInterface(){ // this code is called by focus() to send a command that will be executed, 
+    virtual void queryConfig() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
 

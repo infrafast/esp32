@@ -224,7 +224,7 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       }
     }
 
-    virtual void queryInterface(){ // this code is called by pushToGUI() to send a command that will be executed, 
+    virtual void queryConfig() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
 
@@ -291,30 +291,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       }
     }    
 
-    /*virtual void update() override {
-      // --------------------------------------------------------------------
-      // Ancien mécanisme conservé temporairement pour compatibilité
-      // --------------------------------------------------------------------
-      if (!interface || !interface->data) return;
-
-      // On caste encore l'ancien buffer partagé tant que toute la migration
-      // n'est pas terminée.
-      MidiData* midiData = static_cast<MidiData*>(interface->data);
-
-      // On ne traite que les événements SysEx
-      if (midiData->type != MIDI_SYSEX) return;
-
-      // IMPORTANT :
-      // Dans l'ancien mécanisme, la longueur utile est encore portée par
-      // interface->available(), qui retourne dataAvailable.
-      const int availableBytes = interface->available();
-      if (availableBytes <= 0) {
-        value = 0;
-        return;
-      }
-    }*/
-
-    virtual void queryInterface(){ // this code is called by focus() to send a command that will be executed, 
+    virtual void queryConfig() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
 

@@ -60,7 +60,7 @@ class TextStrip : public Strip{
    
     
 
-    virtual void queryInterface(){ // this code is called by pushToGUI() to send a command that will be executed, 
+    virtual void queryConfig() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
 

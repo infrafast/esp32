@@ -617,13 +617,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
-    virtual void dropCHMuteStateRequest(uint8_t index) override{}
+    virtual void dropCHBUSMuteStateRequest(uint8_t chIndex, uint8_t busIndex) override{}
 
     virtual void dropBUSMuteStateRequest(uint8_t index) override{}
-
-    virtual void testCall() override{
-      DEBUG_INFO("testCall MStation successful");
-    }
 
     ////////////////////////////////////////
 

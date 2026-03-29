@@ -150,6 +150,12 @@ DropDownAddress addressFXname = DropDownAddress(ADDRESS_FX_NAME);
 #define ADDRESS_AUX_NAME "/auxname/%d"
 DropDownAddress addressAUXname = DropDownAddress(ADDRESS_AUX_NAME);
 
+enum{
+  STRIP_CH_BUS_MUTE,
+  STRIP_CH_MAIN_MUTE,
+};
+
+
 
 class MixerBase {
 public:
@@ -166,6 +172,10 @@ public:
 
     virtual ~MixerBase() {}
 
+    // event system to decouple mixer implementation from strip management
+    JsonDocument payload;                     // data from the mixer
+    Event evtMix = Event(&payload);
+
     //// pure virtual utilities ////
     //virtual void startMixerDataSync() = 0;
     virtual bool restoreMixerProfile() = 0;
@@ -173,9 +183,8 @@ public:
 
     //// pure virtual mixer methods called by the strips ////
     virtual void dropDSnameRequest(DataSetSynced*, uint8_t) = 0;    
-    virtual void dropCHMuteStateRequest(uint8_t index) = 0;
+    virtual void dropCHBUSMuteStateRequest(uint8_t chIndex, uint8_t busIndex) = 0;
     virtual void dropBUSMuteStateRequest(uint8_t index) = 0;
-    virtual void testCall()=0;
 
     static MixerBase* fromDeviceInterface(DeviceInterface* interface){
       if (interface == nullptr) return nullptr;

@@ -292,6 +292,7 @@ class GenericComponent{
 };
 
 enum EventType : uint8_t {
+  EVENT_MIDI,
   EVENT_SOCKET_OPEN,
   EVENT_SOCKET_CLOSE,
   EVENT_SOCKET_MESSAGE,
@@ -312,12 +313,14 @@ enum EventType : uint8_t {
   EVENT_OSC_MESSAGE,
   EVENT_WEBSOCKET_CLOSED,
   EVENT_TEXT_MESSAGE,
+  EVENT_USER,
   EVENT_COUNT
 };
 
 /* Table de noms des événements */
 #ifdef DEBUG
 static const char* const EVENT_NAMES[EVENT_COUNT] = {
+  "EVENT_MIDI",
   "EVENT_SOCKET_OPEN",
   "EVENT_SOCKET_CLOSE",
   "EVENT_SOCKET_MESSAGE",
@@ -337,7 +340,8 @@ static const char* const EVENT_NAMES[EVENT_COUNT] = {
   "EVENT_INTERFACE_DATA_READY",
   "EVENT_OSC_MESSAGE",
   "EVENT_WEBSOCKET_CLOSED",
-  "EVENT_TEXT_MESSAGE"
+  "EVENT_TEXT_MESSAGE",
+  "EVENT_USER"
 };
 #endif
 

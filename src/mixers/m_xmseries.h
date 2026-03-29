@@ -78,6 +78,9 @@ enum{
   XM_AUX_CONFIG_NAME,
   XM_FX_CONFIG_NAME,
   XM_CH_BUS_MIX_LEVEL,
+  XM_CH_BUS_MUTE,
+  XM_CH_LR_MUTE,
+  XM_BUS_MUTE,
   XM_PROOTCOL_COUNT
 };
 
@@ -90,7 +93,18 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     int connectMethod = CONNECT_DISCOVER;
     
     String protocolName ="xair";
+    /*
+      protocolArgCount[] intégré, pour que process() sache à l’avance si chaque entrée de protocol[] attend :
+
+      0 argument
+      1 argument
+      2 arguments
+
+      Ça évite de deviner à chaque appel. Le principe reste compatible avec le fait que protocol[] soit chargé séquentiellement depuis xair.osc ou x32.osc
+    */
+
     String protocol[XM_PROOTCOL_COUNT];         
+    uint8_t protocolArgCount[XM_PROOTCOL_COUNT] = {0};
 
     /* */
     #define DISCOVERY_PORT_COUNT 2 
@@ -223,13 +237,23 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         return false;
       }
 
+      /*
+        countPlaceholders pour que process() sache à l’avance si chaque entrée de protocol[] attend :
+        0 argument
+        1 argument
+        2 arguments
+        Ça évite de deviner à chaque appel.
+      */
       int index = 0;
       while (file.available() && index < XM_PROOTCOL_COUNT) {
         String line = file.readStringUntil('\n');
-        // Nettoyage des fins de ligne Windows (\r\n)
         line.trim();
+
         protocol[index] = line;
-        DEBUG_INFO("protocol[%d] = %s", index, protocol[index].c_str());
+        protocolArgCount[index] = countPlaceholders(line);
+
+        DEBUG_INFO("protocol[%d] = %s (args=%d)",index,protocol[index].c_str(),protocolArgCount[index]);
+
         index++;
       }
 
@@ -297,80 +321,131 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
     // used to extract values from the path    
     #define STRING_MAX_SIZE 64
-    char stringBuffer[STRING_MAX_SIZE];
-    int i1,i2;
-    float f1;
+    char pathBuffer[STRING_MAX_SIZE];
+    int i1,i2;    // index
 
-    virtual void process() override {
-      
+    virtual void process() override {    
 
-        // fonction principale de routage
         const char* addr = oscIn.getAddress();        
         if (!addr) return;
 
-     
-        // Routes fixes
+        int m1 = -1;
+        int m2 = -1;
+        int match = MATCH_NONE;
+
+        ////////////////////// PING ////////////////////////
         if (strEquals(addr, XMSERIES_PING_CMD)) {    
           IPAddress ip;
-          // in case we are in discovery mode, we need to retrieve the destination IP and port from the UDP connection established with the mixer
-          if (CONNECT_DISCOVER == connectMethod){
-            /* 1️⃣ retrieve mixer IP
-                method: DISCOVER => Always use the IP of the Mixer
-                method: MANUAL =>  if UDP IP differs from Mixer, use UDP IP
-            */
-            oscIn.getString(0, stringBuffer);         // index 0 = IP address
-            if (ip.fromString(stringBuffer)) {
-            // 2️⃣ if the IP returned from the mixer differs from the destinationIP (which is the one from UDP packet)
-            // this happens for instance when the mixer is on a different network (emulator on DSM for example)            
-            if (
-                ip[0] != destination.ip[0] || ip[1] != destination.ip[1] || ip[2] != destination.ip[2] || ip[3] != destination.ip[3]
-            ){
-                DEBUG_WARN("Mixer IP differs from UDP packet %s->%s",stringBuffer,UDPIP.toString());
-                // if we are on a different subnet, then we have to keep the destination ip we used to connect                  
-                //destination.ip = ip;
-            }
-            //DEBUG_PRINT("\nPinging Mixer (%s) to retrieve latency from dynamic IP",mixerIP.toString().c_str());
-            //blockingPing(mixerIP); // we retrieve the real latency, now that we have the mixer address      
+
+          if (CONNECT_DISCOVER == connectMethod) {
+            oscIn.getString(0, pathBuffer);   // index 0 = IP address
+            if (ip.fromString(pathBuffer)) {
+              if (
+                  ip[0] != destination.ip[0] || ip[1] != destination.ip[1] ||
+                  ip[2] != destination.ip[2] || ip[3] != destination.ip[3]
+              ){
+                  DEBUG_WARN("Mixer IP differs from UDP packet %s->%s", pathBuffer, UDPIP.toString());
+                  // destination.ip = ip;
+              }
             } else {
-                DEBUG_ERROR("String reçue mais IP invalide");
-            }   
-            
-            remotePort = UDPPort;               // we use the port from the UDP socket that successfully connected the mixer
+              DEBUG_ERROR("String reçue mais IP invalide");
+            }
 
-          }     
+            remotePort = UDPPort;
+          }
 
-          oscIn.getString(1, stringBuffer);     // index 1 = name
-          String name = stringBuffer;   // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
+          oscIn.getString(1, pathBuffer);   // mixer name
+          String name = pathBuffer;
 
-          oscIn.getString(2, stringBuffer);     // index 2 = model
-          String model = mapModelToSeries(stringBuffer);  // used by mixerHasChanged to perform the comparison against mixerID.name. Hence we can detect a change
+          oscIn.getString(2, pathBuffer);   // mixer model
+          String model = mapModelToSeries(pathBuffer);
 
-          setMixer(name,model,destination.ip);
-        
-        }else if (sscanf(addr, protocol[XM_CH_BUS_MIX_LEVEL].c_str(), &i1, &i2) == 2) {
-          f1 = oscIn.getFloat(0);
-          DEBUG_INFO("XM_CH_BUS_MIX_LEVEL(%d,%d) = %.2f",i1,i2,f1);
-          //fireEvent();
-        }else if (sscanf(addr, protocol[XM_CH_CONFIG_NAME].c_str(), &i1) == 1) {
-          oscIn.getString(0, stringBuffer);
-          DEBUG_INFO("XM_CH_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = channel id, stringBuffer = channel name
-          chNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
-        }else if (sscanf(addr, protocol[XM_BUS_CONFIG_NAME].c_str(), &i1) == 1) {
-          oscIn.getString(0, stringBuffer);
-          DEBUG_INFO("XM_BUS_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = bus id, stringBuffer = bus name
-          busNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
-        }else if (sscanf(addr, protocol[XM_AUX_CONFIG_NAME].c_str(), &i1) == 1) {
-          oscIn.getString(0, stringBuffer);
-          DEBUG_INFO("XM_AUX_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = aux id, stringBuffer = aux name
-          auxNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
-        }else if (sscanf(addr, protocol[XM_FX_CONFIG_NAME].c_str(), &i1) == 1) {
-          oscIn.getString(0, stringBuffer);
-          DEBUG_INFO("XM_FX_CONFIG_NAME(%d) = %s",i1,stringBuffer);   // i1 = fx id, stringBuffer = fx name
-          fxNamesDS->set(i1-1,stringBuffer);        // set the data, ID starts at 0 in datasets
+          setMixer(name, model, destination.ip);
+          return;
         }
-         
+
+        ////////////////////// CONFIG NAME ROUTES ////////////////////////
+
+        match = matchProtocol(XM_CH_CONFIG_NAME, addr, m1, m2);
+        if (match == MATCH_1INT) {
+          handleNameRoute(chNamesDS, "XM_CH_CONFIG_NAME", m1);
+          return;
+        }
+
+        match = matchProtocol(XM_BUS_CONFIG_NAME, addr, m1, m2);
+        if (match == MATCH_1INT) {
+          handleNameRoute(busNamesDS, "XM_BUS_CONFIG_NAME", m1);
+          return;
+        }
+
+        match = matchProtocol(XM_AUX_CONFIG_NAME, addr, m1, m2);
+        if (match == MATCH_1INT) {
+          handleNameRoute(auxNamesDS, "XM_AUX_CONFIG_NAME", m1);
+          return;
+        }
+        if (match == MATCH_EXACT) {
+          handleNameRoute(auxNamesDS, "XM_AUX_CONFIG_NAME", 1);   // path fixe XAir
+          return;
+        }
+
+        match = matchProtocol(XM_FX_CONFIG_NAME, addr, m1, m2);
+        if (match == MATCH_1INT) {
+          handleNameRoute(fxNamesDS, "XM_FX_CONFIG_NAME", m1);
+          return;
+        }
+
+        ////////////////////// MUTE STATE ROUTES ////////////////////////
+
+        match = matchProtocol(XM_CH_BUS_MUTE, addr, m1, m2);
+        if (match == MATCH_2INT) {
+          handleMuteEventChBus(m1, m2, oscIn.getInt(0));
+          return;
+        }
+
+        match = matchProtocol(XM_CH_LR_MUTE, addr, m1, m2);
+        if (match == MATCH_1INT) {
+          handleMuteEventChMain(m1, oscIn.getInt(0));
+          return;
+        }
+
+        ////////////////////// LEVEL ROUTES ////////////////////////
+
+        match = matchProtocol(XM_CH_BUS_MIX_LEVEL, addr, m1, m2);
+        if (match == MATCH_2INT) {
+          // Exemple futur :
+          // payload[0] = STRIP_CH_BUS_LEVEL;
+          // payload[1] = m1;
+          // payload[2] = m2;
+          // payload[3] = oscIn.getFloat(0);
+          // fireEvent(evtMix);
+          return;
+        }
+    }
+    /////////////////////////////////
+    /// PRISE EN CHARGE DES ROUTES
+    /////////////////////////////////
+    void handleNameRoute(DataSetSynced* ds, const char* label, int index) {
+      oscIn.getString(0, pathBuffer);
+      DEBUG_INFO("%s(%d) = %s", label, index, pathBuffer);
+      ds->set(index - 1, pathBuffer);
     }
 
+    void handleMuteEventChMain(int ch, int muteState) {
+      payload[0] = STRIP_CH_MAIN_MUTE;
+      payload[1] = ch;
+      payload[2] = muteState;
+      fireEvent(evtMix);
+    }
+
+    void handleMuteEventChBus(int ch, int bus, int muteState) {
+      payload[0] = STRIP_CH_BUS_MUTE;
+      payload[1] = ch;
+      payload[2] = bus;
+      payload[3] = muteState;
+      fireEvent(evtMix);
+    }
+
+    ////////////////////////////////
 
     #define XM32series "xm32"
     #define XMR18series "xmr18"
@@ -428,44 +503,149 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     ///////////////////////////////////                                     ////////////////////////////    
     ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-    virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override{
-      // this method drop the request to get a name
 
-      index += 1 ; // always starts at 1 for Behringer
+    /*
+      Puisque certains patterns peuvent avoir 0 argument, 1 argument, etc., tu peux aussi éviter d’envoyer un index inutile si le pattern est fixe :    
+    */
+    virtual void dropDSnameRequest(DataSetSynced* dataset, uint8_t index) override {
+      index += 1; // Behringer starts at 1
 
-      char path[64];
-      const char* pattern;      
+      uint8_t protocolIndex = 0xFF;
 
-      if (dataset == chNamesDS) pattern = protocol[XM_CH_CONFIG_NAME].c_str();
-      else if (dataset == busNamesDS) pattern = protocol[XM_BUS_CONFIG_NAME].c_str();
-      else if (dataset == auxNamesDS) pattern = protocol[XM_AUX_CONFIG_NAME].c_str();
-      else if (dataset == fxNamesDS) pattern = protocol[XM_FX_CONFIG_NAME].c_str();
+      if (dataset == chNamesDS) protocolIndex = XM_CH_CONFIG_NAME;
+      else if (dataset == busNamesDS) protocolIndex = XM_BUS_CONFIG_NAME;
+      else if (dataset == auxNamesDS) protocolIndex = XM_AUX_CONFIG_NAME;
+      else if (dataset == fxNamesDS) protocolIndex = XM_FX_CONFIG_NAME;
+      else return;
 
-      buildPathIndex(path, sizeof(path), index, pattern);
+      const char* pattern = protocol[protocolIndex].c_str();
+
+      if (protocolArgCount[protocolIndex] == 0) {
+        snprintf(pathBuffer, sizeof(pathBuffer), "%s", pattern);
+      } else if (protocolArgCount[protocolIndex] == 1) {
+        snprintf(pathBuffer, sizeof(pathBuffer), pattern, index);
+      } else {
+        DEBUG_ERROR("Unexpected arg count for dataset name request: %d", protocolArgCount[protocolIndex]);
+        return;
+      }
 
       oscOut.empty();
-      oscOut.setAddress(path);   // si disponible dans ta version
+      oscOut.setAddress(pathBuffer);
       send(oscOut);
-
-      //DEBUG_INFO("🔄%s",path);
     }
     
-    virtual void dropCHMuteStateRequest(uint8_t index) override{}
+    virtual void dropCHBUSMuteStateRequest(uint8_t chIndex, uint8_t busIndex) override{
+      // this method drop the request to get a ch mute state on a bus, we need to find the right pattern and replace the 2 placeholders with chIndex and busIndex
+      const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();      
+      buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
 
-    virtual void dropBUSMuteStateRequest(uint8_t index) override{}
-
-    virtual void testCall() override{
-      DEBUG_INFO("testCall XMSeries successful");
+      oscOut.empty();
+      oscOut.setAddress(pathBuffer);   
+      send(oscOut);
     }
 
+    virtual void dropBUSMuteStateRequest(uint8_t index) override{
+      // this method drop the request to get a bus mute state, we need to find the right pattern and replace the placeholder with index
+      const char* pattern = protocol[XM_BUS_MUTE].c_str();      
+      buildPath1Int(pathBuffer, sizeof(pathBuffer), index, pattern);
+
+      oscOut.empty();
+      oscOut.setAddress(pathBuffer);   
+      send(oscOut);
+    }
+
+  protected:
     /////////////////////////////////// UTILITIES ////////////////////////////
 
     //construit la chaîne en remplaçant les placeholders %d et %s
-    void buildPathIndex(char* destination, size_t bufferSize, int index, const char* pattern) {
+    void buildPath1Int(char* destination, size_t bufferSize, int index, const char* pattern) {
         snprintf(destination, bufferSize, pattern, index);
-    }    
+    }   
+    
+    void buildPath2Int(char* destination, size_t bufferSize, int index1, int index2, const char* pattern) {
+        snprintf(destination, bufferSize, pattern, index1, index2);
+    }       
 
-  protected:
+    /*
+      pré-analyser chaque pattern au chargement des protocoles
+      mémoriser si le pattern a 0, 1 ou 2 placeholders    
+    */
+    uint8_t countPlaceholders(const String& s) {
+      uint8_t count = 0;
+
+      for (size_t i = 0; i < s.length(); ++i) {
+        if (s[i] == '%') {
+          // ignorer %% éventuel
+          if ((i + 1) < s.length() && s[i + 1] == '%') {
+            ++i;
+            continue;
+          }
+          count++;
+        }
+      }
+
+      return count;
+    }
+
+    enum ProtocolMatchResult {
+      MATCH_NONE  = -1,
+      MATCH_EXACT = 0,
+      MATCH_1INT  = 1,
+      MATCH_2INT  = 2
+    };
+
+    /*
+        sscanf("/ch/01/mix/02/on", "/ch/%02d/config/name", &i1)
+
+        sscanf :
+
+        lit /ch/
+        lit %02d → i1 = 1
+        arrive sur /mix/02/on
+        attend /config/name
+        ça ne matche plus
+
+        Mais comme un champ a déjà été assigné, la valeur de retour est 1.
+        Du coup ton test :
+
+        if (sscanf(addr, protocol[XM_CH_CONFIG_NAME].c_str(), &i1) == 1)
+
+        passe à tort.
+
+      D'ou l'implementation  exigeant que toute la chaîne soit consommée et l'utilisation de %n pour vérifier que le pattern correspond à l'intégralité de la chaîne.
+    */
+    int matchProtocol(uint8_t protocolIndex, const char* addr, int& out1, int& out2) {
+      if (!addr) return MATCH_NONE;
+      if (protocolIndex >= XM_PROOTCOL_COUNT) return MATCH_NONE;
+
+      out1 = -1;
+      out2 = -1;
+
+      const char* pattern = protocol[protocolIndex].c_str();
+      int endPos = 0;
+
+      switch (protocolArgCount[protocolIndex]) {
+        case 0:
+          return strEquals(addr, pattern) ? MATCH_EXACT : MATCH_NONE;
+
+        case 1: {
+          String fmt = String(pattern) + "%n";
+          int n = sscanf(addr, fmt.c_str(), &out1, &endPos);
+          if (n == 1 && addr[endPos] == '\0') return MATCH_1INT;
+          return MATCH_NONE;
+        }
+
+        case 2: {
+          String fmt = String(pattern) + "%n";
+          int n = sscanf(addr, fmt.c_str(), &out1, &out2, &endPos);
+          if (n == 2 && addr[endPos] == '\0') return MATCH_2INT;
+          return MATCH_NONE;
+        }
+
+        default:
+          return MATCH_NONE;
+      }
+    }
 
 };
 

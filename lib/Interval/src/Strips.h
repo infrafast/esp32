@@ -414,7 +414,7 @@ class Strip: public EventListener{
     virtual bool actionCallback(uint8_t trigger)=0;
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;        
-    virtual void queryInterface() = 0; // this method is the one which is used to force poll data from the interface, 
+    virtual void queryConfig() = 0; // this method is the one which is used to force poll data from the interface when getting focus
     // it will usually drop a command to the interface which outcome be lately read by the process() method
     // is called from the focus() method so to force data to be updated in case some whre missed
     virtual const String* getTopLabel()=0;
@@ -440,6 +440,10 @@ class Strip: public EventListener{
         brightness = BRIGHTNESS_MAX;
         //DEBUG_PRINT(" has focus");
         visible = true;
+
+        // drop command to query strip state
+        if (interface->state.code == IF_READY) queryConfig();        
+
       }else{
         brightness = BRIGHTNESS_NOFOCUS;
         //DEBUG_PRINT(" lost focus");

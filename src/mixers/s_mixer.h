@@ -87,21 +87,46 @@ class Input2MixbusStrip : public SendStrip{
       return true;        
     }
 
-    virtual void onEvent(const Event& evt) override{}
+    virtual void onEvent(const Event& evt) override{
 
-    virtual void queryInterface() override{
+      // if strip is not visible, we can skip event processing as the state will be refreshed when getting the focus
+      if (!visible) return;
+
+      // handle events from the mixer (e.g. to update strip state on external changes not made through the interface)
+      JsonDocument evtData = evt.data != nullptr ? *((JsonDocument*)evt.data) : JsonDocument();
+      int action = evtData[0];
+    
+      switch (action){
+        case STRIP_CH_BUS_MUTE:
+          // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
+          if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
+            toggle1 = evtData[3];  // mute state
+            DEBUG_INFO("\n%s onEvent() STRIP_CH_BUS_MUTE",type.c_str());
+          }
+          break;
+        case STRIP_CH_MAIN_MUTE:
+          // chek if the event is for us based on select1ID which is representing the chID
+          if (evtData[1] == select1ID){  // evtData[1] = chID
+            toggle1 = evtData[2];  // mute state
+            DEBUG_INFO("\n%s onEvent() STRIP_CH_MAIN_MUTE",type.c_str());            
+          }
+          break;        
+      }
+
+    }
+
+    // called when strip get the focus
+    virtual void queryConfig() override{
       DEBUG_INFO("queryState %s",type.c_str());      
 
-      mixer->testCall();
-
       // 1 . request name refresh
-      //mixer->dropDSnameRequest(mixer->chNamesDS, select1ID-1);  // select1ID = chID
-      //mixer->dropDSnameRequest(mixer->busNamesDS, select2ID-1);  // select2ID = busID 
+      mixer->dropDSnameRequest(mixer->chNamesDS, select1ID-1);  // select1ID = chID
+      mixer->dropDSnameRequest(mixer->busNamesDS, select2ID-1);  // select2ID = busID 
 
       // 2. request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
       // 2.a mute
-      //mixer->dropCHMuteStateRequest(select1ID-1);  // select1ID = chID
-      //mixer->dropBUSMuteStateRequest(select2ID-1);  // select2ID = busID
+      mixer->dropCHBUSMuteStateRequest(select1ID, select2ID);  // select1ID = chID, select2ID = busID
+      mixer->dropBUSMuteStateRequest(select2ID);  // select2ID = busID
 
       // 2.b value
 
@@ -178,7 +203,7 @@ class inputGainStrip : public OneSelectStrip, public StripMixer{
 
     virtual void onEvent(const Event& evt) override{} 
 
-    virtual void queryInterface() override{
+    virtual void queryConfig() override{
       DEBUG_PRINT("\nqueryInterface %s",type.c_str());
     }
 

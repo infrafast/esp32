@@ -758,6 +758,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //Event::enableEventDump(EVENT_SOCKET_ERROR);
       //Event::enableEventDump(EVENT_SOCKET_CLOSE);
       //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
+      Event::enableEventDump(EVENT_USER);
 
 
       // *********************************
@@ -2672,7 +2673,7 @@ void setup() {
       targetStrip->focus(true);
 
       // drop command to query strip state
-      targetStrip->queryInterface();
+      //targetStrip->queryConfig();    inside focus()
 
       //DEBUG_PRINT("\n==> %s %p" ,targetBank->name.c_str(),targetStrip);
       if (stripHeader != nullptr) stripHeader->strip = targetStrip;
