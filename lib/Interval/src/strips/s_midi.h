@@ -224,9 +224,14 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       }
     }
 
-    virtual void queryConfig() override{ // this code is called by pushToGUI() to send a command that will be executed, 
+    virtual void hasFocus() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
+
+    virtual void hasVisibility() override{
+      // request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
+    }
+
 
     virtual bool actionCallback(uint8_t trigger){
       bool success = false;
@@ -291,9 +296,14 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       }
     }    
 
-    virtual void queryConfig() override{ // this code is called by pushToGUI() to send a command that will be executed, 
+    virtual void hasFocus() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
+
+    virtual void hasVisibility() override{
+      // request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
+    }
+
 
     virtual bool actionCallback(uint8_t trigger) {
       bool success = false;

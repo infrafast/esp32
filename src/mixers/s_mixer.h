@@ -36,13 +36,45 @@ class StripMixer{
       }
       return mixer;
     }
+
+    void gotFocus(){
+      if (boundInterface->state.code == IF_READY) getConfig();  // we get config when getting the focus to be sure to have the latest data from the interface, in case some change were made while not having the focus, this is important for instance for the color of the strip which may change based on the state of the interface (like for instance for a channel that is red when it is clipping) and we want to be sure to reflect this in the GUI as soon as possible when getting the focus, even if it is not visible yet (for instance in details layout where a strip can get the focus without being visible)
+    }
+    
+    void becameVisible(){
+      if (boundInterface->state.code == IF_READY) getValues();  // we get values when getting visible to be sure to have the latest data from the interface, in case some change were made while not visible, this is important for instance for the color of the strip which may change based on the state of the interface (like for instance for a channel that is red when it is clipping) and we want to be sure to reflect this in the GUI as soon as possible when the strip is visible, even if it does not have the focus yet (for instance in details layout where a strip can be visible without having the focus) 
+    }    
+
+  protected:
+    virtual void getConfig() = 0;
+    virtual void getValues() = 0;
+
 };
 
 
-class SendStrip : public TwoSelectStrip, public StripMixer{
+template <typename BaseStripT>
+class StripMixerMixin : public BaseStripT, public StripMixer {
+public:
+  template <typename... Args>
+  StripMixerMixin(StripSkeleton* s, Args&&... args)
+    : BaseStripT(s, std::forward<Args>(args)...),
+      StripMixer(static_cast<Strip*>(this)) {}
+
+  virtual void hasFocus() override {
+    StripMixer::gotFocus();
+  }
+
+  virtual void hasVisibility() override {
+    StripMixer::becameVisible();
+  }
+};
+
+
+
+class SendStrip : public StripMixerMixin<TwoSelectStrip> {
   public:
 
-    SendStrip(StripSkeleton* s,bool debug=false):TwoSelectStrip(s,debug),StripMixer(this){}
+      SendStrip(StripSkeleton* s, bool debug = false) : StripMixerMixin<TwoSelectStrip>(s, debug){}
 
     ~SendStrip(){};
 
@@ -66,7 +98,7 @@ class SendStrip : public TwoSelectStrip, public StripMixer{
         push4x1hBar();
       }
     }
-    
+   
   protected:
     String unitString="U";
 
@@ -101,36 +133,37 @@ class Input2MixbusStrip : public SendStrip{
           // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
           if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
             toggle1 = evtData[3];  // mute state
-            DEBUG_INFO("\n%s onEvent() STRIP_CH_BUS_MUTE",type.c_str());
+            DEBUG_INFO("%s onEvent() STRIP_CH_BUS_MUTE",type.c_str());
           }
           break;
         case STRIP_CH_MAIN_MUTE:
           // chek if the event is for us based on select1ID which is representing the chID
           if (evtData[1] == select1ID){  // evtData[1] = chID
             toggle1 = evtData[2];  // mute state
-            DEBUG_INFO("\n%s onEvent() STRIP_CH_MAIN_MUTE",type.c_str());            
+            DEBUG_INFO("%s onEvent() STRIP_CH_MAIN_MUTE",type.c_str());            
           }
           break;        
       }
 
     }
 
-    // called when strip get the focus
-    virtual void queryConfig() override{
-      DEBUG_INFO("queryState %s",type.c_str());      
+    void getConfig(){
+      DEBUG_INFO("getConfig %s",type.c_str());      
 
       // 1 . request name refresh
       mixer->dropDSnameRequest(mixer->chNamesDS, select1ID-1);  // select1ID = chID
       mixer->dropDSnameRequest(mixer->busNamesDS, select2ID-1);  // select2ID = busID 
 
-      // 2. request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
-      // 2.a mute
+      // 2. request mute state refresh
       mixer->dropCHBUSMuteStateRequest(select1ID, select2ID);  // select1ID = chID, select2ID = busID
-      mixer->dropBUSMuteStateRequest(select2ID);  // select2ID = busID
-
-      // 2.b value
-
+      mixer->dropBUSMuteStateRequest(select2ID);  // select2ID = busID      
     }
+
+    void getValues(){
+      DEBUG_INFO("getValues %s",type.c_str());      
+    }
+
+
 
     virtual float increaseCallback(unsigned long time,uint8_t trigger) override{
       float delta = Strip::increaseCallback(time,trigger);
@@ -169,19 +202,17 @@ Strip* sendStripConstructorCallback(){
 
 #define INPUGAINDB_MIN  -12
 #define INPUGAINDB_MAX  60
-class inputGainStrip : public OneSelectStrip, public StripMixer{
+class inputGainStrip : public StripMixerMixin<OneSelectStrip> {
   #define STRIP_INPUTGAIN "inputGain"
 
   public:
-    inputGainStrip(StripSkeleton* s,bool debug=false):OneSelectStrip(s,debug),StripMixer(this){
-      //select1PropertyAddress = ADDRESS_CH_NAME; 
-      
-      valueMin = INPUGAINDB_MIN;
-      valueMax = INPUGAINDB_MAX;
-      value = (valueMin + valueMax)/2;
-      unitString = "dB";
-      //icon = ICON_CHGAIN_STRIP;
-    }
+    inputGainStrip(StripSkeleton* s, bool debug = false)
+        : StripMixerMixin<OneSelectStrip>(s, debug) {
+        valueMin = INPUGAINDB_MIN;
+        valueMax = INPUGAINDB_MAX;
+        value = (valueMin + valueMax) / 2;
+        unitString = "dB";
+      }
 
     ~inputGainStrip(){};
 
@@ -203,8 +234,13 @@ class inputGainStrip : public OneSelectStrip, public StripMixer{
 
     virtual void onEvent(const Event& evt) override{} 
 
-    virtual void queryConfig() override{
-      DEBUG_PRINT("\nqueryInterface %s",type.c_str());
+    virtual void getConfig() override{
+      DEBUG_INFO("%s:getConfig %s",type.c_str());
+    }
+
+    virtual void getValues() override{
+      DEBUG_INFO("%s:getValues %s",type.c_str());
+      // request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
     }
 
     virtual float increaseCallback(unsigned long time,uint8_t trigger) override{

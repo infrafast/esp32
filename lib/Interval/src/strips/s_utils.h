@@ -60,9 +60,14 @@ class TextStrip : public Strip{
    
     
 
-    virtual void queryConfig() override{ // this code is called by pushToGUI() to send a command that will be executed, 
+    virtual void hasFocus() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
+
+    virtual void hasVisibility() override{
+      // request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
+    }
+
 
     virtual const String* getTopLabel(){return &type;}
     virtual const String* getBottomLabel(){return &emptyString;}  

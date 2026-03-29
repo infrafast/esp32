@@ -414,7 +414,8 @@ class Strip: public EventListener{
     virtual bool actionCallback(uint8_t trigger)=0;
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;        
-    virtual void queryConfig() = 0; // this method is the one which is used to force poll data from the interface when getting focus
+    virtual void hasFocus() = 0; // this method is the one which is used to force poll data from the interface when getting focus, it retrieve the config
+    virtual void hasVisibility() = 0; // this method is the one which is used to force poll data from the interface when it is visible, it retrieve the values 
     // it will usually drop a command to the interface which outcome be lately read by the process() method
     // is called from the focus() method so to force data to be updated in case some whre missed
     virtual const String* getTopLabel()=0;
@@ -442,8 +443,8 @@ class Strip: public EventListener{
         visible = true;
 
         // drop command to query strip state
-        if (interface->state.code == IF_READY) queryConfig();        
-
+        hasFocus();        
+       
       }else{
         brightness = BRIGHTNESS_NOFOCUS;
         //DEBUG_PRINT(" lost focus");
@@ -520,6 +521,9 @@ class Strip: public EventListener{
       
       visible = true;
       focus(false);
+
+      hasVisibility(); // we query values here to be sure to have the latest data from the interface before  rendering, this is important for instance for the color of the strip which may change based on the state of the interface (like for instance for a channel that is red when it is clipping) and we want to be sure to reflect this in the GUI as soon as possible when the strip is visible, even if it is not focused yet (for instance in case of a strip that is visible but not focused in details layout, we still want to reflect the color change in case of clipping for instance)
+
       renderError = false;
 
       if (!interface){
