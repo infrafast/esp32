@@ -615,7 +615,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           DEBUG_INFO("%s::CH_BUS_LEVEL ch=%d bus=%d lvl=%.3f",
                     interfaceName.c_str(), chIndex, busIndex, lvl);
 
-          // TODO: dataset/setter
+          fireChBusMixLevel(chIndex, busIndex, lvl);
           break;
         }
 
@@ -685,24 +685,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     /////////////////////////////////////////////
     // method which is called when sync is finished so we can perform action like subscribing mixer changes...
-    virtual void postSync(){
-      String path = MSDATA_CH_CONFIG_NAME;
-      path.replace("%d","*");
-      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(path.c_str(),"val")));  // forge a MS get json query
-
-      path = MSDATA_CH_BUS_MUTE;
-      path.replace("%d","*");
-      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(path.c_str(),"val")));  
-
-      path = MSDATA_BUS_MUTE;
-      path.replace("%d","*");
-      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(path.c_str(),"val")));       
-
-      path = MSDATA_CH_BUS_LVL;
-      path.replace("%d","*");
-      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(path.c_str(),"val")));         
+    virtual void postSync(){      
     }
-
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////                                     ////////////////////////////
@@ -722,31 +706,45 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       else if (dataset == mainNamesDS) index += msMixer->mainOffset;
       else if (dataset == dcaNamesDS) index += msMixer->DCAOffset;
 
-
-      snprintf(pathBuffer,  sizeof(pathBuffer), MSDATA_CH_CONFIG_NAME, index);
-      String path = concatStrings(PATH_MIXER_GET_DATA,"/",pathBuffer,"/val");
-      hwm.network->clientSocketSend(get(path.c_str()));  // forge a MS get json query with echoCommand as the path     
-      
-
-    }
-
-    virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
-      snprintf(pathBuffer,  sizeof(pathBuffer), MSDATA_CH_BUS_MUTE, chIndex+msMixer->channelOffset, busIndex);      // busIndex is not offseted as it is the same for all channels, we just have to use the channel index with offset to get the right path
-      String path = concatStrings(PATH_MIXER_GET_DATA,"/",pathBuffer,"/val");
-      hwm.network->clientSocketSend(get(path.c_str()));  // forge a MS get json query with echoCommand as the path     
+      snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_CH_CONFIG_NAME, index);
+      subscribe(pathBuffer);
     }
 
     virtual void requestBUSmute(uint8_t index) override{
-      snprintf(pathBuffer,  sizeof(pathBuffer), MSDATA_BUS_MUTE, index+msMixer->busOffset);
-      String path = concatStrings(PATH_MIXER_GET_DATA,"/",pathBuffer,"/val");
-      //hwm.network->clientSocketSend(get(path.c_str()));  // forge a MS get json query with echoCommand as the path
+      snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_BUS_MUTE, index + msMixer->busOffset);
+      subscribe(pathBuffer);
+    }
+
+    virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
+      snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_CH_BUS_MUTE,
+              chIndex + msMixer->channelOffset,
+              busIndex);      // bus index is not offseted for level and mute, only for the path to subscribe to the change of this data, which is a bit weird but that's how MS do it, we just adapt to their protocol
+
+      subscribe(pathBuffer);
     }
 
     virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
-      snprintf(pathBuffer,  sizeof(pathBuffer), MSDATA_CH_BUS_LVL, chIndex+msMixer->channelOffset, busIndex+msMixer->busOffset);
-      String path = concatStrings(PATH_MIXER_GET_DATA,"/",pathBuffer,"/val");
-      //hwm.network->clientSocketSend(get(path.c_str()));  // forge a MS get json query with echoCommand as the path
+      snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_CH_BUS_LVL,
+              chIndex + msMixer->channelOffset,
+              busIndex);      // bus index is not offseted for level and mute, only for the path to subscribe to the change of this data, which is a bit weird but that's how MS do it, we just adapt to their protocol
+
+      subscribe(pathBuffer,"norm");   // we want a 0.0 -> 1.0 return, hence we use norm
     }
+
+    ////// getters helpers
+    void subscribe(const char* pathBuffer, const char* format="val"){         
+      // drop the request to subscribe to a change of this data and get immediate value
+      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(pathBuffer,format)));  // forge a MS get json query
+
+    }    
+
+    /*
+    void query(const char* basePath, const char* pathBuffer) {        
+      // post a request to get a data value at certain path  
+      String path = concatStrings(basePath, "/", pathBuffer, "/val");
+      hwm.network->clientSocketSend(get(path.c_str()));
+    }        
+    */
 
     //////////////////////////////////////
     /////////////// SETTERS //////////////

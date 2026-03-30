@@ -158,6 +158,7 @@ class Input2MixbusStrip : public SendStrip{
       // 2. request mute state refresh
       mixer->requestCHBUSmute(select1ID, select2ID);  // select1ID = chID, select2ID = busID
       mixer->requestBUSmute(select2ID);  // select2ID = busID      
+      
     }
 
     void getValues(){
