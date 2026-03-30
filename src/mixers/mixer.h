@@ -55,8 +55,6 @@ class Synchronizer{
 class DataSetSynced : public DataSet {
   public:
     String names[MAX_SYNC_DS_SIZE];
-    bool mutes[MAX_SYNC_DS_SIZE]={};
-    float values[MAX_SYNC_DS_SIZE]={};
 
     uint16_t syncStep = 0;
     String defaultName = "";
@@ -86,8 +84,6 @@ class DataSetSynced : public DataSet {
     void clearValues() {
       for (uint16_t i = 0; i < size; ++i) {
         names[i] = concatStrings(UNSYNC_PATTERN, defaultName, i + 1);
-        mutes[i] = true;
-        values[i] = 0.0f;
       }
       syncStep = 0;
     }
@@ -198,14 +194,15 @@ public:
 
     //// pure virtual mixer methods called by the strips ////
     // GETTERS
-    virtual void getDSname(DataSetSynced*, uint8_t) = 0;    
-    virtual void getCHBUSmute(uint8_t chIndex, uint8_t busIndex) = 0;
-    virtual void getBUSmute(uint8_t busIndex) = 0;
-    virtual void getCHBUSlevel(uint8_t chIndex, uint8_t busIndex) = 0;
+    virtual void requestDSname(DataSetSynced*, uint8_t) = 0;    
+    virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) = 0;
+    virtual void requestBUSmute(uint8_t busIndex) = 0;
+    virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) = 0;
     // SETTERS
     virtual void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) = 0;
     virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) = 0;
-    //////////////////////////////////////////////////////
+
+    ////////////////////////////////////////////////////////////////
 
     static MixerBase* fromDeviceInterface(DeviceInterface* interface){
       if (interface == nullptr) return nullptr;
@@ -276,6 +273,48 @@ public:
     
     virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
 
+    ////////////////////////////////////////////////////// the setters always echo the command so other strips update themseleves
+    virtual void _setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) = 0;
+    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) = 0;
+    //////////////////////////////////////////////////////////////////////////////////////
+   
+    void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level){
+      _setCHBUSlevel(chIndex, busIndex, level);       
+      fireChBusMixLevel(chIndex, busIndex, level);      // echo command to strips so they can update themselves, we have to do it here because the level is needed to update the strip but it is not returned by the mixer as it is set (we could of course ask the mixer to return the new level after setting it but it would generate a lot of network traffic and we already have the right level at hand so let's just use it)
+    };
+
+    void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute){
+      _setCHBUSmute(chIndex, busIndex, mute);
+      fireChBusMute(chIndex, busIndex, mute);
+    };
+
+    ////////////////////////////////// EVENT TRANSMISSION TO STRIPS SO THEY CAN UPDATE THEMSELVES ///////////////////
+    void fireChBusMixLevel(int ch, int bus, float level) {
+      payload[0] = STRIP_CH_BUS_MIX_LEVEL;
+      payload[1] = ch;
+      payload[2] = bus;
+      payload[3] = level;
+      this->fireEvent(evtMix);
+    }  
+
+    void fireChMainMute(int ch, int muteState) {
+      payload[0] = STRIP_CH_MAIN_MUTE;
+      payload[1] = ch;
+      payload[2] = muteState;
+      this->fireEvent(evtMix);
+    }
+
+    void fireChBusMute(int ch, int bus, int muteState) {
+      payload[0] = STRIP_CH_BUS_MUTE;
+      payload[1] = ch;
+      payload[2] = bus;
+      payload[3] = muteState;
+      this->fireEvent(evtMix);
+    }
+
+    //////////////////////////////////
+
+
 
     virtual void postSync() = 0;
 
@@ -294,7 +333,7 @@ public:
         }else{          
           DataSetSynced* dataset = synchronizer.getCurrent();   // return null if syncRequest is still locked
           if (dataset){
-            getDSname(dataset, dataset->syncStep);
+            requestDSname(dataset, dataset->syncStep);
             synchronizer.lockSyncRequest();
           }            
         }
@@ -400,6 +439,8 @@ public:
       this->state.details =  "";    //mixerID.model;    // remove the default statement "interface is disabled"
     }
 
+
+
 };
 
 void Synchronizer::reset(){
@@ -420,6 +461,7 @@ void Synchronizer::reset(){
 
 int8_t Synchronizer::update(uint16_t latency){  
   
+  if (latency<20) latency = 20;   // minimum latency of 20ms to avoid too much request / flood
   //should we unlock (after 3 loop)?
   if (syncRequestLocker && (millis() - lockStartTime >= latency)) {
     syncRequestLocker = false; // autorise relance d'une requête

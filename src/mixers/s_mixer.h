@@ -100,17 +100,7 @@ class SendStrip : public StripMixerMixin<TwoSelectStrip> {
         push4x1hBar();
       }
     }
-
-    virtual void deserializeProperty(String property) override{    
-      
-      TwoSelectStrip::deserializeProperty(property);
-      
-      toggle1 = &mixer->inputNamesDS->mutes[select1ID-1];  // select1ID = chID
-      toggle2 = &mixer->mixbusNamesDS->mutes[select2ID-1];  // select2ID = busID
-
-      value = &mixer->inputNamesDS->values[select1ID-1];  // select1ID = chID
-    }
-   
+ 
   protected:
     String unitString="U";
 };
@@ -133,14 +123,27 @@ class Input2MixbusStrip : public SendStrip{
       int action = evtData[0];
     
       switch (action){
-        /*case STRIP_COMMAND:
+        case STRIP_CH_BUS_MUTE:
           // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
           if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
             toggle1 = evtData[3];  // mute state
             DEBUG_INFO("%s onEvent() STRIP_CH_BUS_MUTE",type.c_str());
           }
           break;
-          */
+        case STRIP_CH_MAIN_MUTE:
+          // chek if the event is for us based on select1ID which is representing the chID
+          if (evtData[1] == select1ID){  // evtData[1] = chID
+            toggle1 = evtData[2];  // mute state
+            DEBUG_INFO("%s onEvent() STRIP_CH_MAIN_MUTE",type.c_str());            
+          }
+          break;        
+        case STRIP_CH_BUS_MIX_LEVEL:
+          // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
+          if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
+            value = evtData[3];  // level value
+            DEBUG_INFO("%s onEvent() STRIP_CH_BUS_MIX_LEVEL",type.c_str());
+          }
+          break;
       }
 
     }
@@ -149,16 +152,16 @@ class Input2MixbusStrip : public SendStrip{
       DEBUG_INFO("getConfig %s",type.c_str());      
 
       // 1 . request name refresh
-      mixer->getDSname(mixer->inputNamesDS, select1ID-1);  // select1ID = chID
-      mixer->getDSname(mixer->mixbusNamesDS, select2ID-1);  // select2ID = busID 
+      mixer->requestDSname(mixer->inputNamesDS, select1ID-1);  // select1ID = chID
+      mixer->requestDSname(mixer->mixbusNamesDS, select2ID-1);  // select2ID = busID 
 
       // 2. request mute state refresh
-      mixer->getCHBUSmute(select1ID, select2ID);  // select1ID = chID, select2ID = busID
-      mixer->getBUSmute(select2ID);  // select2ID = busID      
+      mixer->requestCHBUSmute(select1ID, select2ID);  // select1ID = chID, select2ID = busID
+      mixer->requestBUSmute(select2ID);  // select2ID = busID      
     }
 
     void getValues(){
-      mixer->getCHBUSlevel(select1ID, select2ID);  // select1ID = chID, select2ID = busID
+      mixer->requestCHBUSlevel(select1ID, select2ID);  // select1ID = chID, select2ID = busID
     }
 
 
@@ -182,12 +185,12 @@ class Input2MixbusStrip : public SendStrip{
     }
 
     void setChBusLevel(){
-      mixer->setCHBUSlevel(select1ID, select2ID, *value);  // select1ID = chID, select2ID = busID
+      mixer->setCHBUSlevel(select1ID, select2ID, value);  // select1ID = chID, select2ID = busID
     }    
 
     void toggleCHBUSmute(){
-      *toggle1 = !(*toggle1);
-      mixer->setCHBUSmute(select1ID, select2ID, *toggle1 ? 1 : 0);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
+      toggle1 = !toggle1;
+      mixer->setCHBUSmute(select1ID, select2ID, toggle1 ? 1 : 0);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
     }
 };
 
@@ -207,7 +210,7 @@ class inputGainStrip : public StripMixerMixin<OneSelectStrip> {
         : StripMixerMixin<OneSelectStrip>(s, debug) {
         valueMin = INPUGAINDB_MIN;
         valueMax = INPUGAINDB_MAX;
-        *value = (valueMin + valueMax) / 2;
+        value = (valueMin + valueMax) / 2;
         unitString = "dB";
       }
 

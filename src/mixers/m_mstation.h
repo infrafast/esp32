@@ -14,6 +14,9 @@
 #define PATH_MIXER_GET_DATA "/console/data/get"
 
 #define MSDATA_CH_CONFIG_NAME  "ch.%d.cfg.name"
+#define MSDATA_CH_BUS_MUTE  "ch.%d.mix.sends.%d.on"
+#define MSDATA_BUS_MUTE  "ch.%d.mix.on"
+#define MSDATA_CH_BUS_LVL  "ch.%d.mix.sends.%d.lvl"
 
 #define MS_MIXER_PROFILE_FILENAME "/mixerDef.ms"
 
@@ -111,13 +114,17 @@ char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize
 #define INTERFACE_MIXINGSTATION "MixingStation"
 class MixingStation:  public MixerDevice<NetworkSocket>{
   public:
+
+    #define MS_PING_COMMAND PATH_MIXER_IDENTITY
   
-    MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,PATH_MIXER_IDENTITY,8887,8088,true){
+    MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_PING_COMMAND,8887,8088,true){
       //destination.host = "192.168.99.99";
       mixerID.name = "MSStation";
      
       mixerDef = new MSmixerDefinition();
       strcpy(((MSmixerDefinition*)mixerDef)->model, mixerID.model.c_str());
+
+      msMixer = (MSmixerDefinition*)mixerDef;
 
     }
 
@@ -163,6 +170,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }    
  
   protected: 
+    MSmixerDefinition* msMixer;
+
     ////////////////////////////////////////
     // JSON and ROUTE HANDLING DEFINITION
     ///////////////////////////////////////
@@ -170,7 +179,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     char rxBuf[RX_MAX];
 
     JsonDocument docHeader;
-    JsonDocument docFull;
+    JsonDocument docFull;    
 
     enum class RouteMode : uint8_t { JsonBody, RxMessage };
 
@@ -185,6 +194,10 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     };
 
     static const Route routes[];
+
+    // used to handle path templates and values
+    #define PATH_MAX_SIZE 64
+    char pathBuffer[PATH_MAX_SIZE];    
 
     #define ROUTES_COUNT 5
 
@@ -241,7 +254,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
       if (!docHeader["error"].isNull()) {
         const char* error = docHeader["error"];
-        DEBUG_ERROR("error:%s",error);        
+        DEBUG_ERROR("Path error:%s",error);        
         return;
       }
 
@@ -254,7 +267,10 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       }
 
       const Route* r = findRoute(path);
-      if (!r) return;
+      if (!r){
+        DEBUG_WARN("No route found for path:%s",path);
+        return;
+      }
 
       memcpy(rxBuf, message, length);
       rxBuf[length] = '\0';
@@ -268,7 +284,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         (this->*(r->fn.jh))(path,body);
       }
 
-      if (r->propagate) fireEvent(evtSock);                 // filter event propagation based on their flag
+      //if (r->propagate) fireEvent(evtSock);                 // filter event propagation based on their flag BECOME USELESS ?
     }  
 
     // ------------------ Path Handlers ------------------
@@ -463,6 +479,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       String model  = body["currentModel"] | "";
 
       if (name != OFFLINE){        
+        determineQoS();        
         setMixer(name,model,ip);                
       }else{
         hwm.network->clientSocketSend(get(PATH_APP_STATE));   // force getting the state as a backup in case mixerQuery didn't pass thru
@@ -500,61 +517,114 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
     void processDataGet(const char* path, JsonVariant body) {
-      // traitement de /console/data/get/*
+          /*
+          "path": "/console/data/get/DATAPATH",
+          "method": "GET",
+          "body": {
+            "format": "val",
+            "value": "Voc-Claude"
+          }*/
       String data;
 
-      /*
-      "path": "/console/data/get/DATAPATH",
-      "method": "GET",
-      "body": {
-        "format": "val",
-        "value": "Voc-Claude"
-      }*/
-      const char* value =  body["value"];     
+      if (!extractPath(path, PATH_MIXER_GET_DATA, data)) {
+        DEBUG_WARN("%s::data: extractPath failed for:%s", interfaceName.c_str(), path);
+        return;
+      }
 
-      if (extractPath(path,PATH_MIXER_GET_DATA,data)){
-        // data = /console/data/get/DATAPATH 
-        DEBUG_INFO("%s::data: %s \"%s\"",interfaceName.c_str(),data.c_str(),value);
-        int index = -1;
-        if (sscanf(data.c_str(), "/"MSDATA_CH_CONFIG_NAME, &index) == 1) {
-          // DATAPATH => ch.0.cfg.name/val
-          // now based on the index, we know which datasets we have to update          
-          MSmixerDefinition* msDef = (MSmixerDefinition*)mixerDef;
-          int type = getTypeFromIndex(msDef,index);          
+      String v = body["value"];
+
+      DEBUG_INFO("%s::data: %s \"%s\"", interfaceName.c_str(), data.c_str(), v.c_str());
+
+      MSPathMatch match;
+      if (!decodeMSDataPath(data.c_str(), match)) {
+        DEBUG_WARN("%s::data: unmatched path:%s", interfaceName.c_str(), data.c_str());
+        return;
+      }
+
+      DEBUG_INFO("%s::pattern matched: %s (argc=%u, a=%d, b=%d, c=%d)",
+                interfaceName.c_str(),
+                v.c_str(),
+                match.argCount,
+                match.values[0],
+                match.values[1],
+                match.values[2]);
+
+      switch (match.type) {
+
+        case MSDataPattern::ChConfigName: {
+          int index = match.values[0];
+          int type = getTypeFromIndex(msMixer, index);
+
+          const char* name = v.c_str();
+
           switch (type) {
-            case MS_TYPE_INPUT: // Channel / Input
-              inputNamesDS->set(index-msDef->channelOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
-            break;
-            case MS_TYPE_AUX: // Aux
-              auxNamesDS->set(index-msDef->auxOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
-            break;
-            case MS_TYPE_FXRETURN: // FX Return
-              fxNamesDS->set(index-msDef->fxOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
-            break;
-            case MS_TYPE_MIXBUS: // Bus
-              mixbusNamesDS->set(index-msDef->busOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
-            break;
-            case MS_TYPE_DCA: // DCA
-              dcaNamesDS->set(index-msDef->DCAOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
-            break;
-            case MS_TYPE_MAINLR: // Main L/R
-              mainNamesDS->set(index-msDef->mainOffset,value);        // store the data, index is index - offset as all datasets starts at zero and if we use the index from path we would be out of bound
-            break;
-            // Types présents mais non utilisés ici
-            case MS_TYPE_FXSEND: 
-            case MS_TYPE_GROUP: 
-            case MS_TYPE_MTX: 
-            case MS_TYPE_TALKBACK: 
+            case MS_TYPE_INPUT:
+              inputNamesDS->set(index - msMixer->channelOffset, name);
+              break;
+            case MS_TYPE_AUX:
+              auxNamesDS->set(index - msMixer->auxOffset, name);
+              break;
+            case MS_TYPE_FXRETURN:
+              fxNamesDS->set(index - msMixer->fxOffset, name);
+              break;
+            case MS_TYPE_MIXBUS:
+              mixbusNamesDS->set(index - msMixer->busOffset, name);
+              break;
+            case MS_TYPE_DCA:
+              dcaNamesDS->set(index - msMixer->DCAOffset, name);
+              break;
+            case MS_TYPE_MAINLR:
+              mainNamesDS->set(index - msMixer->mainOffset, name);
+              break;
             default:
-              DEBUG_WARN("processDataGet() unmanaged type: %s",MStypeToString(type));
-            break;
-          }          
-        }      
-      }  
+              DEBUG_WARN("%s::data: unmanaged cfg.name type=%s index=%d",
+                        interfaceName.c_str(), MStypeToString(type), index);
+              break;
+          }
+          break;
+        }
 
+        case MSDataPattern::ChBusMute: {
+          int chIndex  = match.values[0];
+          int busIndex = match.values[1];
 
-      //float value          =  body["value"]   | 0.0;
-    }
+          int mute = v=="true"? 1 : 0;
+          DEBUG_INFO("%s::CH_BUS_MUTE ch=%d bus=%d mute=%s",
+                    interfaceName.c_str(), chIndex, busIndex, mute ? "true" : "false");
+
+          break;
+        }
+
+        case MSDataPattern::BusMute: {
+          int busIndex = match.values[0];
+
+          int mute = v=="true"? 1 : 0;
+          DEBUG_INFO("%s::BUS_MUTE bus=%d mute=%s",
+                    interfaceName.c_str(), busIndex, mute ? "true" : "false");
+
+          // TODO: dataset/setter
+          break;
+        }
+
+        case MSDataPattern::ChBusLevel: {
+          int chIndex  = match.values[0];
+          int busIndex = match.values[1];
+
+          float lvl = v.toFloat();
+
+          DEBUG_INFO("%s::CH_BUS_LEVEL ch=%d bus=%d lvl=%.3f",
+                    interfaceName.c_str(), chIndex, busIndex, lvl);
+
+          // TODO: dataset/setter
+          break;
+        }
+
+        default:
+          DEBUG_WARN("%s::data: unsupported decoded path:%s", interfaceName.c_str(), data.c_str());
+          break;
+      }
+    }    
+
 
     //////////////////////////////////////////////////////////////
     ///                      DEVICE STATES                    ///
@@ -616,9 +686,21 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     /////////////////////////////////////////////
     // method which is called when sync is finished so we can perform action like subscribing mixer changes...
     virtual void postSync(){
-      String cfgNames = MSDATA_CH_CONFIG_NAME;
-      cfgNames.replace("%d","*");
-      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(cfgNames.c_str(),"val")));  // forge a MS get json query
+      String path = MSDATA_CH_CONFIG_NAME;
+      path.replace("%d","*");
+      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(path.c_str(),"val")));  // forge a MS get json query
+
+      path = MSDATA_CH_BUS_MUTE;
+      path.replace("%d","*");
+      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(path.c_str(),"val")));  
+
+      path = MSDATA_BUS_MUTE;
+      path.replace("%d","*");
+      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(path.c_str(),"val")));       
+
+      path = MSDATA_CH_BUS_LVL;
+      path.replace("%d","*");
+      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(path.c_str(),"val")));         
     }
 
 
@@ -631,43 +713,49 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     ////////////////////////////////
     /////////// GETTERS ///////////
     ///////////////////////////////
-    virtual void getDSname(DataSetSynced* dataset, uint8_t index) override{
+    virtual void requestDSname(DataSetSynced* dataset, uint8_t index) override{
+      
+      if      (dataset == inputNamesDS) index += msMixer->channelOffset;
+      else if (dataset == mixbusNamesDS) index += msMixer->busOffset;
+      else if (dataset == auxNamesDS) index += msMixer->auxOffset;
+      else if (dataset == fxNamesDS) index += msMixer->fxOffset;
+      else if (dataset == mainNamesDS) index += msMixer->mainOffset;
+      else if (dataset == dcaNamesDS) index += msMixer->DCAOffset;
 
-      if      (dataset == inputNamesDS) index += ((MSmixerDefinition*)mixerDef)->channelOffset;
-      else if (dataset == mixbusNamesDS) index += ((MSmixerDefinition*)mixerDef)->busOffset;
-      else if (dataset == auxNamesDS) index += ((MSmixerDefinition*)mixerDef)->auxOffset;
-      else if (dataset == fxNamesDS) index += ((MSmixerDefinition*)mixerDef)->fxOffset;
-      else if (dataset == mainNamesDS) index += ((MSmixerDefinition*)mixerDef)->mainOffset;
-      else if (dataset == dcaNamesDS) index += ((MSmixerDefinition*)mixerDef)->DCAOffset;
 
-      char data[64];  
-      snprintf(data,  sizeof(data), MSDATA_CH_CONFIG_NAME, index);
-      String path = concatStrings(PATH_MIXER_GET_DATA,"/",data,"/val");
-
+      snprintf(pathBuffer,  sizeof(pathBuffer), MSDATA_CH_CONFIG_NAME, index);
+      String path = concatStrings(PATH_MIXER_GET_DATA,"/",pathBuffer,"/val");
       hwm.network->clientSocketSend(get(path.c_str()));  // forge a MS get json query with echoCommand as the path     
       
 
     }
 
-    virtual void getCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
-
+    virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
+      snprintf(pathBuffer,  sizeof(pathBuffer), MSDATA_CH_BUS_MUTE, chIndex+msMixer->channelOffset, busIndex);      // busIndex is not offseted as it is the same for all channels, we just have to use the channel index with offset to get the right path
+      String path = concatStrings(PATH_MIXER_GET_DATA,"/",pathBuffer,"/val");
+      hwm.network->clientSocketSend(get(path.c_str()));  // forge a MS get json query with echoCommand as the path     
     }
 
-    virtual void getBUSmute(uint8_t index) override{
-
+    virtual void requestBUSmute(uint8_t index) override{
+      snprintf(pathBuffer,  sizeof(pathBuffer), MSDATA_BUS_MUTE, index+msMixer->busOffset);
+      String path = concatStrings(PATH_MIXER_GET_DATA,"/",pathBuffer,"/val");
+      //hwm.network->clientSocketSend(get(path.c_str()));  // forge a MS get json query with echoCommand as the path
     }
 
-    virtual void getCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
-
+    virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
+      snprintf(pathBuffer,  sizeof(pathBuffer), MSDATA_CH_BUS_LVL, chIndex+msMixer->channelOffset, busIndex+msMixer->busOffset);
+      String path = concatStrings(PATH_MIXER_GET_DATA,"/",pathBuffer,"/val");
+      //hwm.network->clientSocketSend(get(path.c_str()));  // forge a MS get json query with echoCommand as the path
     }
+
     //////////////////////////////////////
     /////////////// SETTERS //////////////
     //////////////////////////////////////
-    virtual void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level){
+    virtual void _setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) override{
 
     }
 
-    virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) override{    
+    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) override{    
 
     }
 
@@ -677,7 +765,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     bool extractPath(const String& full, const String& base, String& remainder) {
         if (full.startsWith(base)) {
             remainder = full.substring(base.length());
-            return true;
+
+          // Supprime "/val" à la fin si présent, il peut etre rajouté par certains getters pour indiquer le type
+          if (remainder.endsWith("/val")) { 
+              remainder = remainder.substring(0, remainder.length() - 4);
+          }
+
+          return true;
         }
         return false;
     }
@@ -686,67 +780,185 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     int getTypeFromIndex(MSmixerDefinition* mixerDef, int index) {
 
         if (index >= mixerDef->channelOffset &&
-            index < mixerDef->channelOffset + mixerDef->channelCount) {
+            index < mixerDef->channelOffset + mixerDef->channelCount)
             return MS_TYPE_INPUT;
-        }
 
         if (index >= mixerDef->auxOffset &&
-            index < mixerDef->auxOffset + mixerDef->auxCount) {
+            index < mixerDef->auxOffset + mixerDef->auxCount)
             return MS_TYPE_AUX;
-        }
 
         if (index >= mixerDef->fxSndOffset &&
-            index < mixerDef->fxSndOffset + mixerDef->fxSndOffset) {
-            return MS_TYPE_FXSEND;
-        }
+            index < mixerDef->fxSndOffset + mixerDef->fxSndCount)
+            return MS_TYPE_FXSEND;        
 
         if (index >= mixerDef->fxOffset &&
-            index < mixerDef->fxOffset + mixerDef->fxCount) {
+            index < mixerDef->fxOffset + mixerDef->fxCount)
             return MS_TYPE_FXRETURN;
-        }
 
         if (index >= mixerDef->busOffset &&
-            index < mixerDef->busOffset + mixerDef->busCount) {
+            index < mixerDef->busOffset + mixerDef->busCount)
             return MS_TYPE_MIXBUS;
-        }
 
         if (index >= mixerDef->groupOffset &&
-            index < mixerDef->groupOffset + mixerDef->groupCount) {
+            index < mixerDef->groupOffset + mixerDef->groupCount)
             return MS_TYPE_GROUP;
-        }
 
         if (index >= mixerDef->mainOffset &&
-            index < mixerDef->mainOffset + mixerDef->mainCount) {
+            index < mixerDef->mainOffset + mixerDef->mainCount)
             return MS_TYPE_MAINLR;
-        }
-
+        
         if (index >= mixerDef->mtxOffset &&
-            index < mixerDef->mtxOffset + mixerDef->mtxCount) {
+            index < mixerDef->mtxOffset + mixerDef->mtxCount) 
             return MS_TYPE_MTX;
-        }        
-
+        
         if (index >= mixerDef->DCAOffset &&
-            index < mixerDef->DCAOffset + mixerDef->DCAcount) {
+            index < mixerDef->DCAOffset + mixerDef->DCAcount)
             return MS_TYPE_DCA;
-        }        
 
         if (index >= mixerDef->talkbackOffset &&
-            index < mixerDef->DCAOffset + mixerDef->talkbackCount) {
+            index < mixerDef->talkbackOffset + mixerDef->talkbackCount)
             return MS_TYPE_TALKBACK;
-        }   
 
         return MS_TYPE_UNDEF; // ou un type INVALID si tu en as un
     }
 
-  
+    //**************** PATTERN MATCHING FOR DATA PATHS *****************
+    enum class MSDataPattern : uint8_t {
+      None = 0,
+      ChConfigName,
+      ChBusMute,
+      BusMute,
+      ChBusLevel
+    };
+
+    struct MSPathSpec {
+      MSDataPattern type;
+      const char* pattern;
+      uint8_t argCount;   // nombre de %d attendus
+    };
+
+    struct MSPathMatch {
+      MSDataPattern type = MSDataPattern::None;
+      int values[3] = { -1, -1, -1 };
+      uint8_t argCount = 0;
+    };
+
+    static const MSPathSpec msPathSpecs[];
+    static constexpr size_t msPathSpecsCount = 4;
+
+
+    bool matchDataPathExact(const char* dataPath, const char* pattern, uint8_t argCount, int* outValues) {
+      if (!dataPath || !pattern) return false;
+      if (argCount > 3) return false;
+
+      char fmt[128];
+      int consumed = 0;
+
+      snprintf(fmt, sizeof(fmt), "/%s%%n", pattern);
+
+      int a = -1, b = -1, c = -1;
+      int matched = 0;
+
+      switch (argCount) {
+        case 0:
+          matched = sscanf(dataPath, fmt, &consumed);
+          return (matched == 0 && consumed == (int)strlen(dataPath));
+
+        case 1:
+          matched = sscanf(dataPath, fmt, &a, &consumed);
+          if (matched == 1 && consumed == (int)strlen(dataPath)) {
+            outValues[0] = a;
+            return true;
+          }
+          return false;
+
+        case 2:
+          matched = sscanf(dataPath, fmt, &a, &b, &consumed);
+          if (matched == 2 && consumed == (int)strlen(dataPath)) {
+            outValues[0] = a;
+            outValues[1] = b;
+            return true;
+          }
+          return false;
+
+        case 3:
+          matched = sscanf(dataPath, fmt, &a, &b, &c, &consumed);
+          if (matched == 3 && consumed == (int)strlen(dataPath)) {
+            outValues[0] = a;
+            outValues[1] = b;
+            outValues[2] = c;
+            return true;
+          }
+          return false;
+      }
+
+      return false;
+    }
+
+    bool decodeMSDataPath(const char* dataPath, MSPathMatch& out) {
+      if (!dataPath) return false;
+
+      for (size_t i = 0; i < msPathSpecsCount; ++i) {
+        const MSPathSpec& spec = msPathSpecs[i];
+
+        int values[3] = { -1, -1, -1 };
+        if (matchDataPathExact(dataPath, spec.pattern, spec.argCount, values)) {
+          out.type = spec.type;
+          out.argCount = spec.argCount;
+          out.values[0] = values[0];
+          out.values[1] = values[1];
+          out.values[2] = values[2];
+          return true;
+        }
+      }
+
+      out.type = MSDataPattern::None;
+      out.argCount = 0;
+      out.values[0] = -1;
+      out.values[1] = -1;
+      out.values[2] = -1;
+      return false;
+    }
+
+    void determineQoS(){      
+      calculateLatencyAndJitter();
+
+      // Sécurité bornes
+      if (destination.latency > 500) destination.latency = 500;
+      
+      if (destination.latency <= 15 && destination.jitter <= 5)
+        state.qualityColor = GUI::green;    
+      else if (destination.latency <= 30 && destination.jitter <= 5)
+        state.qualityColor = GUI::blue;    
+      else if (destination.latency <= 50 && destination.jitter <= 20)
+        state.qualityColor = GUI::yellow;    
+      // Au-delà : problème réseau
+      else
+        state.qualityColor = GUI::red;    
+    }       
+        
+    
 };
 
+
+
+
+/////////////// Table de routage haut niveau pour faire le lien entre les paths de MS et les handlers de notre code, avec support des wildcards et extraction des arguments
 const MixingStation::Route MixingStation::routes[ROUTES_COUNT] = {
   { PATH_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState },           false },
   { PATH_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity },   false },  
   { PATH_MIXER_DEFINITION,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixerDefinition }, false },  
   { PATH_MIXERS_AVAILABLE,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }, false },
   { PATH_MIXER_GET_DATA"/*",   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet },         true },
+};
+
+
+////////////// Table de routage des datas
+const MixingStation::MSPathSpec MixingStation::msPathSpecs[MixingStation::msPathSpecsCount] = {
+  { MSDataPattern::ChConfigName, MSDATA_CH_CONFIG_NAME, 1 },
+  { MSDataPattern::ChBusMute,    MSDATA_CH_BUS_MUTE,    2 },
+  { MSDataPattern::BusMute,      MSDATA_BUS_MUTE,       1 },
+  { MSDataPattern::ChBusLevel,   MSDATA_CH_BUS_LVL,     2 },
 };
 
 #endif

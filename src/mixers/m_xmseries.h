@@ -321,9 +321,9 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       if (state.enabled) handleConnectService();
     }    
 
-    // used to extract values from the path    
-    #define STRING_MAX_SIZE 64
-    char pathBuffer[STRING_MAX_SIZE];
+    // used to handle path templates and values
+    #define PATH_MAX_SIZE 64
+    char pathBuffer[PATH_MAX_SIZE];
     int i1,i2;    // index
 
         //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -417,13 +417,13 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
         match = matchProtocol(XM_CH_BUS_MUTE, addr, m1, m2);
         if (match == MATCH_2INT) {
-          handleMuteEventChBus(m1, m2, oscIn.getInt(0));
+          fireChBusMute(m1, m2, oscIn.getInt(0));
           return;
         }
 
         match = matchProtocol(XM_CH_LR_MUTE, addr, m1, m2);
         if (match == MATCH_1INT) {
-          handleMuteEventChMain(m1, oscIn.getInt(0));
+          fireChMainMute(m1, oscIn.getInt(0));
           return;
         }
 
@@ -431,53 +431,19 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
         match = matchProtocol(XM_CH_BUS_MIX_LEVEL, addr, m1, m2);
         if (match == MATCH_2INT) {
-          handleChBusMixLevel(m1, m2, oscIn.getFloat(0));
+          fireChBusMixLevel(m1, m2, oscIn.getFloat(0));
           return;
         }
     }
     /////////////////////////////////
     /// PRISE EN CHARGE DES ROUTES
     /////////////////////////////////
-    void handleChBusMixLevel(int ch, int bus, float level) {
-      /*payload[0] = STRIP_CH_BUS_MIX_LEVEL;
-      payload[1] = ch;
-      payload[2] = bus;
-      payload[3] = level;
-      fireEvent(evtMix);*/
-      inputNamesDS->values[ch-1] = level;   // update the ch level on the bus in the dataset, the strip will capture this change and update the fader level
-    }
 
     void handleNameRoute(DataSetSynced* ds, const char* label, int index) {
       oscIn.getString(0, pathBuffer);
       //DEBUG_INFO("%s(%d) = %s", label, index, pathBuffer);
       ds->set(index - 1, pathBuffer);
     }
-
-    void handleMuteEventChMain(int ch, int muteState) {
-      /*payload[0] = STRIP_CH_MAIN_MUTE;
-      payload[1] = ch;
-      payload[2] = muteState;
-      fireEvent(evtMix);*/
-      mainNamesDS->mutes[ch-1] = muteState;   // update the ch mute state on the main in the dataset, the strip will capture this change and update the toggle state
-    }
-
-    void handleMuteEventChBus(int ch, int bus, int muteState) {
-      /*payload[0] = STRIP_CH_BUS_MUTE;
-      payload[1] = ch;
-      payload[2] = bus;
-      payload[3] = muteState;
-      fireEvent(evtMix);*/
-      inputNamesDS->mutes[ch-1] = muteState;   // update the ch mute state on the bus in the dataset, the strip will capture this change and update the toggle state
-    }
-
-    // event based template
-    void handleCOMMAND(int index, int value) {
-      /*payload[0] = STRIP_COMMAND;
-      payload[1] = index;
-      payload[2] = value;
-      fireEvent(evtMix);*/
-    }
-
 
     ////////////////////////////////
 
@@ -540,7 +506,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     /////////////////////////////
     ///////// GETTERS ///////////
     /////////////////////////////
-    virtual void getDSname(DataSetSynced* dataset, uint8_t index) override {
+    virtual void requestDSname(DataSetSynced* dataset, uint8_t index) override {
       /*
         Puisque certains patterns peuvent avoir 0 argument, 1 argument, etc., tu peux aussi éviter d’envoyer un index inutile si le pattern est fixe :    
       */
@@ -570,7 +536,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer);
     }
     
-    virtual void getCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
+    virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
       // this method drop the request to get a ch mute state on a bus, we need to find the right pattern and replace the 2 placeholders with chIndex and busIndex
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();      
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
@@ -578,7 +544,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer);
     }
 
-    virtual void getBUSmute(uint8_t index) override{
+    virtual void requestBUSmute(uint8_t index) override{
       // this method drop the request to get a bus mute state, we need to find the right pattern and replace the placeholder with index
       const char* pattern = protocol[XM_BUS_MUTE].c_str();      
       buildPath1Int(pathBuffer, sizeof(pathBuffer), index, pattern);
@@ -586,7 +552,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer);
     }
 
-    virtual void getCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
+    virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
       // this method drop the request to get a ch level on a bus, we need to find the right pattern and replace the 2 placeholders with chIndex and busIndex
       const char* pattern = protocol[XM_CH_BUS_MIX_LEVEL].c_str();      
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
@@ -597,21 +563,19 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     /////////////////////////////
     ///////// SETTERS ///////////
     /////////////////////////////
-    virtual void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) override{
+    virtual void _setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) override{
       // this method sends the command to set a channel level on a bus
       // we need to find the right pattern and replace the 2 placeholders
       const char* pattern = protocol[XM_CH_BUS_MIX_LEVEL].c_str();
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
-
       sendOSC(pathBuffer, level);
     }
 
-    virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) override{
+    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) override{
       // this method sends the command to set a channel mute state on a bus
       // we need to find the right pattern and replace the 2 placeholders
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
-
       sendOSC(pathBuffer, mute ? 1 : 0);
     }
 

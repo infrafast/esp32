@@ -256,16 +256,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         connectAttemptCount = 0;                                  // reset attempt counter                
 
         const char* addr = oscIn.getAddress();
-
-        // now filter events we keep for our internal use
-        if ( destination.echoCommand == addr ){
-          // see if it's a ping, we measure
-          determineQoS();
-          // store remote UDP port and IP as utilities information
-          UDPIP = udp->remoteIP();
-          UDPPort = udp->remotePort();
-        }
-        
+       
         // before pushing to the derived class, we may filter by addr
         process();      // we now treat the osc data
         return;         // job done                                   
@@ -333,9 +324,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
               // see if it's a ping, we measure
               if ( destination.echoCommand == addr ){
-                destination.ip = udp->remoteIP();           
-                determineQoS();             
+                determineQoS();
+                // store remote UDP port and IP as utilities information
+                UDPIP = udp->remoteIP();
+                UDPPort = udp->remotePort();          
               }
+
 
               #ifdef DEBUG
                 dump(oscIn, oscDump, sizeof(oscDump));              
@@ -416,34 +410,8 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }
 
     void determineQoS(){      
-      /* we got a echoCommand echo, so we calculate the latency
-      Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
-      ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
-      */
-      unsigned long rawLatency = millis() - destination.lastQueryTime;
-
-      // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
-      if (rawLatency < 500){
-        // α entre 0.1 (très lisse) et 0.3 (réactif)
-        #define LAT_ALPHA 0.2f                                 
-
-        if (rawLatency < 500) {
-            destination.latency =
-                destination.latency * (1.0f - LAT_ALPHA) +
-                rawLatency * LAT_ALPHA;
-
-            destination.latency = (uint16_t)destination.latency;
-
-            float delta = abs((int)rawLatency - (int)destination.latency);
-
-            destination.jitter =
-                destination.jitter * 0.75f +
-                delta * 0.25f;                      
-            }                  
-
-      }
-
-      DEBUG_PRINT("\t(latency: %i, jitter:%i)",destination.latency,destination.jitter);      
+      // we determine latency and jitter based on the ping response time, we use an EWMA to smooth the values and avoid spikes, we also set a max latency of 500ms to avoid crazy values in case of network issues
+      calculateLatencyAndJitter();
 
       // Sécurité bornes
       if (destination.latency > 500) destination.latency = 500;
