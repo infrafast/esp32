@@ -58,10 +58,11 @@ class DataSetSynced : public DataSet {
     uint16_t syncStep = 0;
     String defaultName = "";
     uint16_t size = 0;
+    uint16_t maxSize = 0;
 
-    DataSetSynced(Address* adress, String name, String defVal, Synchronizer* synchronizer)
-      : DataSet(adress, name, &dataRepo), defaultName(defVal) {
-      init(1);                  // one data by default
+    DataSetSynced(Address* adress, String name, String defVal, uint8_t _maxSize, Synchronizer* synchronizer)
+      : DataSet(adress, name, &dataRepo), defaultName(defVal), maxSize(_maxSize) {
+      init(maxSize);                  // one data by default
       synchronizer->add(this);  // self registration
     }
 
@@ -150,6 +151,12 @@ DropDownAddress addressFXname = DropDownAddress(ADDRESS_FX_NAME);
 #define ADDRESS_AUX_NAME "/auxname/%d"
 DropDownAddress addressAUXname = DropDownAddress(ADDRESS_AUX_NAME);
 
+#define ADDRESS_MAIN_NAME "/mainname/%d"
+DropDownAddress addressMAINname = DropDownAddress(ADDRESS_MAIN_NAME);
+
+#define ADDRESS_DCA_NAME "/dcaname/%d"
+DropDownAddress addressDCAname = DropDownAddress(ADDRESS_DCA_NAME);  
+
 enum{
   STRIP_CH_BUS_MUTE,
   STRIP_CH_MAIN_MUTE,
@@ -166,10 +173,12 @@ public:
     };
 
     // properties that are synced
-    DataSetSynced* chNamesDS;
-    DataSetSynced* busNamesDS;  
+    DataSetSynced* inputNamesDS;
+    DataSetSynced* mixbusNamesDS;  
     DataSetSynced* auxNamesDS;  
     DataSetSynced* fxNamesDS;
+    DataSetSynced* mainNamesDS;
+    DataSetSynced* dcaNamesDS;
 
     virtual ~MixerBase() {}
 
@@ -245,11 +254,18 @@ public:
       mixerID.ip = IPAddress(0,0,0,0);
 
       // SyncDataSet auto register themelves to the overall synchroniser
-      chNamesDS = new DataSetSynced(&addressCHname,this->interfaceName,"CH", &synchronizer); 
-      busNamesDS = new DataSetSynced(&addressBUSname,this->interfaceName,"BUS", &synchronizer);
-      auxNamesDS = new DataSetSynced(&addressAUXname,this->interfaceName,"AUX", &synchronizer);
-      fxNamesDS = new DataSetSynced(&addressFXname,this->interfaceName, "FX", &synchronizer);
-
+      #define MAX_INPUT 48
+      #define MAX_BUSES 32
+      #define MAX_AUX 16
+      #define MAX_FX 16      
+      #define MAX_MAIN 4
+      #define MAX_DCA 8
+      inputNamesDS = new DataSetSynced(&addressCHname,this->interfaceName,"CH", MAX_INPUT, &synchronizer); 
+      mixbusNamesDS = new DataSetSynced(&addressBUSname,this->interfaceName,"BUS", MAX_BUSES, &synchronizer);
+      auxNamesDS = new DataSetSynced(&addressAUXname,this->interfaceName,"AUX", MAX_AUX, &synchronizer);
+      fxNamesDS = new DataSetSynced(&addressFXname,this->interfaceName, "FX", MAX_FX, &synchronizer);
+      mainNamesDS = new DataSetSynced(&addressMAINname,this->interfaceName, "MAIN", MAX_MAIN, &synchronizer);
+      dcaNamesDS = new DataSetSynced(&addressDCAname,this->interfaceName, "DCA", MAX_DCA, &synchronizer);
     }
     
     virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
@@ -330,10 +346,12 @@ public:
       DEBUG_INFO("%s:initDatasets()",this->interfaceName.c_str());
       
       // setting up the data size and flag their value as not synchronized using the defaultvalue 
-      chNamesDS->init(mixerDef->channelCount);
-      busNamesDS->init(mixerDef->busCount);
+      inputNamesDS->init(mixerDef->channelCount);
+      mixbusNamesDS->init(mixerDef->busCount);
       auxNamesDS->init(mixerDef->auxCount);
       fxNamesDS->init(mixerDef->fxCount);
+      mainNamesDS->init(mixerDef->mainCount);
+      dcaNamesDS->init(mixerDef->DCAcount); 
       
       // clear all counters
       synchronizer.reset();

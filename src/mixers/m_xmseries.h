@@ -373,13 +373,13 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
         match = matchProtocol(XM_CH_CONFIG_NAME, addr, m1, m2);
         if (match == MATCH_1INT) {
-          handleNameRoute(chNamesDS, "XM_CH_CONFIG_NAME", m1);
+          handleNameRoute(inputNamesDS, "XM_CH_CONFIG_NAME", m1);
           return;
         }
 
         match = matchProtocol(XM_BUS_CONFIG_NAME, addr, m1, m2);
         if (match == MATCH_1INT) {
-          handleNameRoute(busNamesDS, "XM_BUS_CONFIG_NAME", m1);
+          handleNameRoute(mixbusNamesDS, "XM_BUS_CONFIG_NAME", m1);
           return;
         }
 
@@ -522,8 +522,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
       uint8_t protocolIndex = 0xFF;
 
-      if (dataset == chNamesDS) protocolIndex = XM_CH_CONFIG_NAME;
-      else if (dataset == busNamesDS) protocolIndex = XM_BUS_CONFIG_NAME;
+      if (dataset == inputNamesDS) protocolIndex = XM_CH_CONFIG_NAME;
+      else if (dataset == mixbusNamesDS) protocolIndex = XM_BUS_CONFIG_NAME;
       else if (dataset == auxNamesDS) protocolIndex = XM_AUX_CONFIG_NAME;
       else if (dataset == fxNamesDS) protocolIndex = XM_FX_CONFIG_NAME;
       else return;

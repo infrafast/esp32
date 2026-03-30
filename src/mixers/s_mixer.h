@@ -160,8 +160,8 @@ class Input2MixbusStrip : public SendStrip{
       DEBUG_INFO("getConfig %s",type.c_str());      
 
       // 1 . request name refresh
-      mixer->getDSname(mixer->chNamesDS, select1ID-1);  // select1ID = chID
-      mixer->getDSname(mixer->busNamesDS, select2ID-1);  // select2ID = busID 
+      mixer->getDSname(mixer->inputNamesDS, select1ID-1);  // select1ID = chID
+      mixer->getDSname(mixer->mixbusNamesDS, select2ID-1);  // select2ID = busID 
 
       // 2. request mute state refresh
       mixer->getCHBUSmute(select1ID, select2ID);  // select1ID = chID, select2ID = busID
