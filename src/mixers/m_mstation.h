@@ -315,9 +315,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         //ℹ       MixingStation::processState: msg:,progress:94,state:backgroundSync,topState:connected
         // we wait that any background sync or progress is finished before querying the mixer definition, otherwise we would create a mess in the capacity with all the incoming data while we are syncing
         if (strcmp(state, MS_BGSYNC) == 0){
-          if (progress == 1) setStateBGSyncing();
-          else if (progress == 99) setStateLive(); // we are live when background sync is finished, even if we are not fully synced yet, as we receive data and can already start working, the mixer definition will be updated when progress is at 100% and then we will be fully synced
-          else deviceInterface->state.progress = progress;  // we just update the progress and wait for the next state update to query the mixer definition when progress is at 100% (when background sync is finished)        
+          if (progress >= 99) setStateLive(); // we are live when background sync is finished, even if we are not fully synced yet, as we receive data and can already start working, the mixer definition will be updated when progress is at 100% and then we will be fully synced
+          else{
+            if (deviceInterface->state.subState != MS_BGSYNC) setStateBGSyncing();
+            deviceInterface->state.progress = progress;  // we just update the progress and wait for the next state update to query the mixer definition when progress is at 100% (when background sync is finished)                      
+          }
         }else if (progress == 0) getMixerDefinition();  // if progress is 0 it means that we are just connected and not syncing, so we can directly query the mixer definition, otherwise if progress is > 0 it means that we are already syncing and we will query the mixer definition when syncing is finished (when progress is at 100%)
       }
       /*else if (strcmp(topState, MS_RECONNECTING) == 0) {
@@ -337,6 +339,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     void setStateBGSyncing(){
       DEBUG_INFO("%s: setStateBGSyncing()",deviceInterface->interfaceName.c_str());
       setStateLive();
+      deviceInterface->state.subState = MS_BGSYNC ;
       deviceInterface->state.details = concatStrings("Background Syncing... ", deviceInterface->state.details);
     } 
 

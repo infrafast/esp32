@@ -255,7 +255,7 @@ public:
     MixerDevice(Args&&... args): NetworkBase(std::forward<Args>(args)...){
       bindDeviceInterface(static_cast<DeviceInterface*>(this), static_cast<MixerBase*>(this));
 
-      mixerID.model = "undef";
+      mixerID.model = "not synced";
       mixerID.name = "offline";
       mixerID.ip = IPAddress(0,0,0,0);
 
