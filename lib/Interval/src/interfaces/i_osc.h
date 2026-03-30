@@ -292,12 +292,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
     bool send(OSCMessage& msg){
       //return queue.enqueue(msg);
-      /*Event propagate = Event(&msg);
-      if (_sendOSCMessage(&msg)){
-        fireEvent(propagate);  // we inform the others that we sent an OSC message, so they can for example update the UI with the sent value
-        return true;
-      }
-      return false;*/
       return _sendOSCMessage(&msg);
     }
 
@@ -476,7 +470,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       
       bool success = false;
 
-      DEBUG_INFO(">>%s(%s,%i->%i) ",msg->getAddress(),destination.ip.toString().c_str(),localPort, remotePort);
+      dumpOSCMessage(*msg);
 
       UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
 
@@ -498,6 +492,66 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
       return success;          
     }
+
+
+      void dumpOSCMessage(OSCMessage& msg){
+        #ifdef DEBUG
+          int argCount = msg.size();
+          
+          DEBUG_INFO(">>(%s,%i->%i) %s",destination.ip.toString().c_str(),localPort, remotePort, msg.getAddress());
+
+          //DEBUG_PRINT(" | args:%d ", argCount);
+
+          for (int i = 0; i < argCount; i++) {
+
+            char type = msg.getType(i);
+
+            switch(type) {
+
+              case 'i': { // int32
+                int32_t v = msg.getInt(i);
+                DEBUG_PRINT("[i:%ld] ", (long)v);
+                break;
+              }
+
+              case 'f': { // float
+                float v = msg.getFloat(i);
+                DEBUG_PRINT("[f:%f] ", v);
+                break;
+              }
+
+              case 's': { // string
+                char buffer[64];
+                msg.getString(i, buffer, sizeof(buffer));
+                DEBUG_PRINT("[s:%s] ", buffer);
+                break;
+              }
+
+              case 'b': { // blob
+                int size = msg.getBlobLength(i);
+                const uint8_t* data = msg.getBlob(i);
+                DEBUG_PRINT("[b:%d bytes] ", size);
+                break;
+              }
+
+              case 'd': { // double
+                double v = msg.getDouble(i);
+                DEBUG_PRINT("[d:%f] ", v);
+                break;
+              }
+
+              case 'T': DEBUG_PRINT("[T:true] "); break;
+              case 'F': DEBUG_PRINT("[F:false] "); break;
+              case 'N': DEBUG_PRINT("[N:nil] "); break;
+              case 'I': DEBUG_PRINT("[I:inf] "); break;
+
+              default:
+                DEBUG_PRINT("[?:%c] ", type);
+                break;
+            }
+          }
+        #endif    
+      }
 
 
 };

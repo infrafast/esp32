@@ -468,9 +468,16 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       payload[3] = muteState;
       fireEvent(evtMix);*/
       inputNamesDS->mutes[ch-1] = muteState;   // update the ch mute state on the bus in the dataset, the strip will capture this change and update the toggle state
-
-
     }
+
+    // event based template
+    void handleCOMMAND(int index, int value) {
+      /*payload[0] = STRIP_COMMAND;
+      payload[1] = index;
+      payload[2] = value;
+      fireEvent(evtMix);*/
+    }
+
 
     ////////////////////////////////
 
@@ -599,6 +606,14 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer, level);
     }
 
+    virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) override{
+      // this method sends the command to set a channel mute state on a bus
+      // we need to find the right pattern and replace the 2 placeholders
+      const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();
+      buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
+
+      sendOSC(pathBuffer, mute ? 1 : 0);
+    }
 
   protected:
     /////////////////////////////////// UTILITIES ////////////////////////////

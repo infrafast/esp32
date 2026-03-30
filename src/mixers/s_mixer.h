@@ -123,13 +123,6 @@ class Input2MixbusStrip : public SendStrip{
       unitString = "dB";
     }
 
-    virtual bool actionCallback(uint8_t trigger) override{
-      // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
-      //mute/unmute
-      DEBUG_PRINT("\n%s actionCallback() ",type.c_str());
-      return true;        
-    }
-
     virtual void onEvent(const Event& evt) override{
 
       // if strip is not visible, we can skip event processing as the state will be refreshed when getting the focus
@@ -140,25 +133,11 @@ class Input2MixbusStrip : public SendStrip{
       int action = evtData[0];
     
       switch (action){
-        /*case STRIP_CH_BUS_MUTE:
+        /*case STRIP_COMMAND:
           // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
           if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
             toggle1 = evtData[3];  // mute state
             DEBUG_INFO("%s onEvent() STRIP_CH_BUS_MUTE",type.c_str());
-          }
-          break;
-        case STRIP_CH_MAIN_MUTE:
-          // chek if the event is for us based on select1ID which is representing the chID
-          if (evtData[1] == select1ID){  // evtData[1] = chID
-            toggle1 = evtData[2];  // mute state
-            DEBUG_INFO("%s onEvent() STRIP_CH_MAIN_MUTE",type.c_str());            
-          }
-          break;        
-        case STRIP_CH_BUS_MIX_LEVEL:
-          // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
-          if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
-            value = evtData[3];  // level value
-            DEBUG_INFO("%s onEvent() STRIP_CH_BUS_MIX_LEVEL",type.c_str());
           }
           break;
           */
@@ -195,9 +174,21 @@ class Input2MixbusStrip : public SendStrip{
       return delta;
     }      
 
+    virtual bool actionCallback(uint8_t trigger) override{
+      // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
+      //mute/unmute
+      toggleCHBUSmute();
+      return true;        
+    }
+
     void setChBusLevel(){
       mixer->setCHBUSlevel(select1ID, select2ID, *value);  // select1ID = chID, select2ID = busID
     }    
+
+    void toggleCHBUSmute(){
+      *toggle1 = !(*toggle1);
+      mixer->setCHBUSmute(select1ID, select2ID, *toggle1 ? 1 : 0);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
+    }
 };
 
 StripSkeleton* stripInput2mixbusSkel;

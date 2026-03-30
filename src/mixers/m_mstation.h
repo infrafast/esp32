@@ -652,6 +652,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
+    virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) override{    
+
+    }
 
     ////////////////////////////////////////
 

@@ -204,6 +204,7 @@ public:
     virtual void getCHBUSlevel(uint8_t chIndex, uint8_t busIndex) = 0;
     // SETTERS
     virtual void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) = 0;
+    virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) = 0;
     //////////////////////////////////////////////////////
 
     static MixerBase* fromDeviceInterface(DeviceInterface* interface){
