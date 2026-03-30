@@ -391,7 +391,7 @@ public:
       this->setStateConnected();
       DEBUG_INFO("%s:setStateLive()🟢",this->interfaceName.c_str());
       this->state.label = IF_STATE_LIVE;      
-      setMixerDetails();
+      setMixerDetails();      
     }    
 
     virtual void setStateDisabled() override{
