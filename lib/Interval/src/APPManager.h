@@ -227,8 +227,8 @@ class StripHeaderWidget: public Top2Toggles{
       setPointers(
         strip->getTopLabel(),
         strip->getBottomLabel(),
-        &strip->toggle1,
-        &strip->toggle2,
+        strip->toggle1,
+        strip->toggle2,
         &strip->frontColor,
         &strip->backColor
       );

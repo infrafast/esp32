@@ -54,7 +54,10 @@ class Synchronizer{
 #define MAX_SYNC_DS_SIZE 48
 class DataSetSynced : public DataSet {
   public:
-    String values[MAX_SYNC_DS_SIZE];
+    String names[MAX_SYNC_DS_SIZE];
+    bool mutes[MAX_SYNC_DS_SIZE]={};
+    float values[MAX_SYNC_DS_SIZE]={};
+
     uint16_t syncStep = 0;
     String defaultName = "";
     uint16_t size = 0;
@@ -71,7 +74,7 @@ class DataSetSynced : public DataSet {
     }
 
     virtual const String* getValuePtr(uint16_t i) override {
-      if (i < size) return &values[i];
+      if (i < size) return &names[i];
       return &errorDatasetOOR;
     }
 
@@ -82,7 +85,9 @@ class DataSetSynced : public DataSet {
 
     void clearValues() {
       for (uint16_t i = 0; i < size; ++i) {
-        values[i] = concatStrings(UNSYNC_PATTERN, defaultName, i + 1);
+        names[i] = concatStrings(UNSYNC_PATTERN, defaultName, i + 1);
+        mutes[i] = true;
+        values[i] = 0.0f;
       }
       syncStep = 0;
     }
@@ -92,9 +97,9 @@ class DataSetSynced : public DataSet {
 
       String newValue = (value == "") ? concatStrings(defaultName, index + 1) : value;
 
-      if (values[index] == newValue) return;
+      if (names[index] == newValue) return;
 
-      values[index] = newValue;
+      names[index] = newValue;
 
       char addrBuf[64];
       snprintf(addrBuf, sizeof(addrBuf), address->pattern.c_str(), index + 1); // addresses start at 1
@@ -106,7 +111,7 @@ class DataSetSynced : public DataSet {
         "\":{\"",
         String(addrBuf),
         "\":\"",
-        values[index],
+        names[index],
         "\"}}]}"
       );
 

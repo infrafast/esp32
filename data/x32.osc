@@ -1,3 +1,5 @@
+/main/st/config/name
+/dca/%d/config/name
 /ch/%02d/config/name
 /bus/%02d/config/name
 /auxin/%02d/config/name

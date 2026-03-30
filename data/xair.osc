@@ -1,3 +1,5 @@
+/lr/config/name
+/dca/%d/config/name
 /ch/%02d/config/name
 /bus/%d/config/name
 /rtn/aux/config/name

@@ -73,6 +73,8 @@ class XMmixerModelDS : public DataSet{
 };
 
 enum{
+  XM_MAIN_CONFIG_NAME,
+  XM_DCA_CONFIG_NAME,
   XM_CH_CONFIG_NAME,
   XM_BUS_CONFIG_NAME,
   XM_AUX_CONFIG_NAME,
@@ -399,6 +401,18 @@ class XMSeries: public MixerDevice<NetworkOSC>{
           return;
         }
 
+        match = matchProtocol(XM_MAIN_CONFIG_NAME, addr, m1, m2);
+        if (match == MATCH_EXACT) {
+          handleNameRoute(mainNamesDS, "XM_MAIN_CONFIG_NAME", 1);   // path fixe XAir/X32
+          return;
+        }
+
+        match = matchProtocol(XM_DCA_CONFIG_NAME, addr, m1, m2);
+        if (match == MATCH_1INT) {
+          handleNameRoute(dcaNamesDS, "XM_DCA_CONFIG_NAME", m1);   
+          return;
+        }
+
         ////////////////////// MUTE STATE ROUTES ////////////////////////
 
         match = matchProtocol(XM_CH_BUS_MUTE, addr, m1, m2);
@@ -425,11 +439,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     /// PRISE EN CHARGE DES ROUTES
     /////////////////////////////////
     void handleChBusMixLevel(int ch, int bus, float level) {
-      payload[0] = STRIP_CH_BUS_MIX_LEVEL;
+      /*payload[0] = STRIP_CH_BUS_MIX_LEVEL;
       payload[1] = ch;
       payload[2] = bus;
       payload[3] = level;
-      fireEvent(evtMix);
+      fireEvent(evtMix);*/
+      inputNamesDS->values[ch-1] = level;   // update the ch level on the bus in the dataset, the strip will capture this change and update the fader level
     }
 
     void handleNameRoute(DataSetSynced* ds, const char* label, int index) {
@@ -439,18 +454,22 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     }
 
     void handleMuteEventChMain(int ch, int muteState) {
-      payload[0] = STRIP_CH_MAIN_MUTE;
+      /*payload[0] = STRIP_CH_MAIN_MUTE;
       payload[1] = ch;
       payload[2] = muteState;
-      fireEvent(evtMix);
+      fireEvent(evtMix);*/
+      mainNamesDS->mutes[ch-1] = muteState;   // update the ch mute state on the main in the dataset, the strip will capture this change and update the toggle state
     }
 
     void handleMuteEventChBus(int ch, int bus, int muteState) {
-      payload[0] = STRIP_CH_BUS_MUTE;
+      /*payload[0] = STRIP_CH_BUS_MUTE;
       payload[1] = ch;
       payload[2] = bus;
       payload[3] = muteState;
-      fireEvent(evtMix);
+      fireEvent(evtMix);*/
+      inputNamesDS->mutes[ch-1] = muteState;   // update the ch mute state on the bus in the dataset, the strip will capture this change and update the toggle state
+
+
     }
 
     ////////////////////////////////
@@ -526,6 +545,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       else if (dataset == mixbusNamesDS) protocolIndex = XM_BUS_CONFIG_NAME;
       else if (dataset == auxNamesDS) protocolIndex = XM_AUX_CONFIG_NAME;
       else if (dataset == fxNamesDS) protocolIndex = XM_FX_CONFIG_NAME;
+      else if (dataset == mainNamesDS) protocolIndex = XM_MAIN_CONFIG_NAME;   // no pattern for main, we use the aux one with fixed index 1
+      else if (dataset == dcaNamesDS) protocolIndex = XM_DCA_CONFIG_NAME;    // no pattern for dca, we use the aux one with fixed index 1
       else return;
 
       const char* pattern = protocol[protocolIndex].c_str();
