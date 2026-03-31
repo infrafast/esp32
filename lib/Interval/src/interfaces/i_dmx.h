@@ -31,11 +31,11 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkService {
       state.switchable = false;
     }
 
-    virtual void monitor(){     
-      monitorNetwork();
+    virtual bool monitor() override{     
+      return monitorNetwork();
     }
     
-    virtual void monitorService(){}
+    virtual bool monitorService() override{return false;}
     virtual bool handleConnectService(){return false;}
     virtual bool handleDisconnectService(){return false;}
         
@@ -52,7 +52,8 @@ class ThreePinDMXInterface: public DMXInterface{
       state.switchable = false;
     }
 
-    virtual void monitor(){
+    virtual bool monitor() override{
+      return false;
     } 
     
 };

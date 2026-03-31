@@ -26,12 +26,15 @@ class NetworkSocket: public NetworkDevice{
 
     virtual void route(const char *message,uint16_t length) = 0;
 
-    virtual void monitorService(){   
+    virtual bool monitorService() override{   
+
+      bool dataProcessed = false;
 
       if (dataAvailable){
         // recupere la donnée reçue et stockée  
         route(socketCopy.message,socketCopy.length);      // informe qui de droit          
         dataAvailable = false;
+        dataProcessed = true;
       }
 
       #define PULSE_CHECK_DELAY kTimeoutInterval*1.1        // kTimeoutInterval is the timeout of opening a socket from 
@@ -47,7 +50,10 @@ class NetworkSocket: public NetworkDevice{
             if (handleConnectService()) setStatePending();
             else  setStateError("Thread socket-open failed");
           }        
-      }                                                                   
+      }    
+      
+      return dataProcessed;
+      
     }
   
 

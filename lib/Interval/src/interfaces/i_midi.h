@@ -79,9 +79,7 @@ class MIDIInterface: public DeviceInterface{
 
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
       evtMidi.type = EVENT_MIDI; // we set the type here because midiDataCopy needs to be initialized first and we want evtMidi to be initialized with the correct pointer to midiDataCopy  
-    }
-   
-    
+    }     
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
@@ -99,11 +97,13 @@ class MIDIInterface: public DeviceInterface{
         }      
     }
 
-    virtual void monitor(){  
+    virtual bool monitor() override{  
       if (dataAvailable){
         fireEvent(evtMidi);
         dataAvailable = false;
+        return true;  // we have processed data
       }
+      return false; // no data processed
     }
 
     virtual void handleChangeControl(byte channel, byte number, byte value){
@@ -185,10 +185,10 @@ class BLEMIDIInterface: public MIDIInterface{
       return &emptyString;
     }
 
-    virtual void monitor(){     
-      MIDIInterface::monitor();
+    virtual bool monitor() override{           
       if (state.label == IF_STATE_CONNECTED) 
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
+      return MIDIInterface::monitor();
     }
 
     virtual bool begin(){
@@ -309,8 +309,8 @@ class USBMIDIInterface: public MIDIInterface{
       icon = ICON_USBMIDI;  
     }
 
-    virtual void monitor() override{
-      MIDIInterface::monitor();
+    virtual bool monitor() override{
+      
       if (useUSBMidi){  // only if USB is active
         #define USB_POLL_DELAY  1000
         if (millis()-lastPoll > USB_POLL_DELAY){  
@@ -327,6 +327,9 @@ class USBMIDIInterface: public MIDIInterface{
         }
         usbMIDI.read();
       }
+
+      return MIDIInterface::monitor();
+
     }
 
     void setStateRestart(){
@@ -389,8 +392,8 @@ class DINMIDIInterface: public MIDIInterface{
       return true;
     };        
 
-    virtual void monitor() override{
-      MIDIInterface::monitor();      
+    virtual bool monitor() override{
+      return MIDIInterface::monitor();      
     }
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override {return false;}
@@ -758,13 +761,14 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       return changed;
     }      
 
-    virtual void monitor() override{     
-      MIDIInterface::monitor();      
-      monitorNetwork();      
+    virtual bool monitor() override{
+      bool dataProcessed = MIDIInterface::monitor();      
+      dataProcessed |= monitorNetwork();      
+      return dataProcessed;
     }
 
     #define MIDI_MONITORING_DELAY 15000   // should be bigger than the timeout of invite()
-    virtual void monitorService(){
+    virtual bool monitorService() override{
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;  
       
       if (appleMidiClient != nullptr){
@@ -778,7 +782,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
             startSession();
           }
         }              
-      }            
+      } 
+      
+      return dataAvailable;
+      
     }
     
     // Méthode de l'instance réellement appelée

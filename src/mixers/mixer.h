@@ -256,6 +256,8 @@ public:
       mixerID.name = "offline";
       mixerID.ip = IPAddress(0,0,0,0);
 
+      evtMix.type = EVENT_STRIP_DATA;
+
       // SyncDataSet auto register themelves to the overall synchroniser
       #define MAX_INPUT 48
       #define MAX_BUSES 32
@@ -318,8 +320,7 @@ public:
 
     virtual void postSync() = 0;
 
-    virtual void monitor() override{           
-      NetworkBase::monitorNetwork();
+    virtual bool monitor() override{                 
       
       /////////// GESTION DE LA PROGRESSION DE SYNCHRO
       if (this->state.label == IF_STATE_DATASYNCING) {
@@ -338,6 +339,9 @@ public:
           }            
         }
       }
+
+      return NetworkBase::monitorNetwork();
+
     }  
 
 

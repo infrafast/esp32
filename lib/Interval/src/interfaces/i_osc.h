@@ -238,7 +238,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       return changed | NetworkDevice::restoreProperty(property);
     }        
 
-     virtual void monitorService(){
+     virtual bool monitorService() override{
 
       // envoit si message dans la queue
       OSCMessage msgOut;
@@ -259,7 +259,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
        
         // before pushing to the derived class, we may filter by addr
         process();      // we now treat the osc data
-        return;         // job done                                   
+        return true;         // job done, inform we have process data by returning true
       }
 
       if (dataAvailable == -1){                                     // UDP not replying
@@ -278,7 +278,10 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         }else{          
           if (!ping()) handleConnectService();     // as ping failed, it means no socket are available, hence we have to connect it
         }                                                                 
-      }                                                                   
+      }    
+      
+      return false;   // we didn't received and processed any data
+
     }
 
     bool send(OSCMessage& msg){

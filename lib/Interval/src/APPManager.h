@@ -383,6 +383,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     int16_t overlayIconY = TFT_HEIGHT-OVERLAY_ICON_SIZE, apIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE*2;
     int16_t batIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE;
+    int16_t iconRow2 = OVERLAY_ICON_SIZE;
 
     float pendingBarWidth = TFT_WIDTH;
 
@@ -418,7 +419,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     uint16_t menuActiveIconColor;
 
     #define TWOFRAMEICON 2
-    String iconRolling[TWOFRAMEICON] = {ICON_ROLLING1,ICON_ROLLING2};
     String iconPending[TWOFRAMEICON];
 
     const char* quitMenuString ={ICON_QUIT":QUIT"};
@@ -642,16 +642,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    void rollingIcon(bool on){
-      if (on){
-        iconRolling[0]=ICON_ROLLING1;
-        iconRolling[1]=ICON_ROLLING2;
-      }else{
-        iconRolling[0]=" ";
-        iconRolling[1]=" ";
-      }
-    }
-
     void setiFconnectivityColor(){
       if (hwm->network->state == CONNECTED){
         iFconnectivityIconGlowingRedColor.value = &GUI::unUsedColor;
@@ -758,7 +748,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //Event::enableEventDump(EVENT_SOCKET_ERROR);
       //Event::enableEventDump(EVENT_SOCKET_CLOSE);
       //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
-      Event::enableEventDump(EVENT_USER);
+      Event::enableEventDump(EVENT_STRIP_DATA);
 
 
       // *********************************
@@ -1009,11 +999,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           stopInterfaces();
         break;
         case EVENT_NETWORK_CONNECTED:
-          // discover RTP services available on the network
-          //startDirectoryServiceDiscovery();
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well
-          // network has refreshed so we shift to appropriate configMedia
+          
           if (hwm->network->media == WIFI_MEDIA){
             //we set last used Wifi SSID (id) and save config, hence keep WIFI_MEDIA credential
             //DEBUG_PRINT("\n------> SAVING SSID");
@@ -1025,11 +1013,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             "ssid3": "pass3"
             */
           }
+
           if (!webAppConnected){
             // there is no connection to any application, therefore, we prefer to use the network as the one to configure the application
             //if (debug) DEBUG_PRINT("\n\tsetting the configMedia to WiFiEth");
             hwm->configMedia = hwm->network;    // since the normal network gets reconnected,
           }
+
         break;
         case EVENT_NETWORK_CONNECTION_CHANGED:
           setiFconnectivityColor();
@@ -1847,31 +1837,28 @@ void setup() {
       // MANAGE INTERFACE
       //
       //------------------
-      bool interfaceChangedState = false;
+      bool dataProcessed = false;
 
       for (const auto& interface : interfaceRepo.interfaces){
+        
+        dataProcessed |= interface->update();      // drive the icon to indicate data being processed
+        // we could also test the focused strip in terface and compare it to the interface to only show icon for the active strip
 
-        #ifdef PROD
-        if (interface->stripCount == 0){
-          //continue;
-          // // optimization  WARNING: to activate that you need to implement the feature of greying out the interface panel as they will not
-          // be updated unless a strip is dropped in a bank
-        }
-        #endif
-
-        //DEBUG_PRINT("\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t%s...",interface->interfaceName.c_str());
-
-        interface->update();
+        
         if (interface->state.broadcastState){
           broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
           interface->state.broadcastState = false; // acknowledged
         }
+        
         if (interface->state.broadcastConfig){
           broadcastIFconfig(interface);
           interface->state.broadcastConfig = false; // acknowledged
         }
+
       }
 
+      // we could also test the focused strip in terface and compare it to the interface to only show icon for the active strip
+      if (dataProcessed){ /*manage icon */}
 
       processBroadcastQueue();
 

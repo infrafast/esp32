@@ -137,16 +137,19 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       // do nothing
     }
 
-    virtual void monitorService() override{
-      NetworkOSC::monitorService();
-      unsigned long now = millis();
+    virtual bool monitorService() override{
 
+      unsigned long now = millis();
+      // periodic command to keep mixer sending updates
       if (now - lastXremote >= XREMOTE_INTERVAL) {
         oscOut.empty();
         oscOut.setAddress(XMSERIES_XREMOTE_CMD);   // si disponible dans ta version
         send(oscOut);    
         lastXremote = now;
       }      
+
+      return NetworkOSC::monitorService();
+
     }
 
     virtual bool begin() override{

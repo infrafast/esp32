@@ -38,7 +38,9 @@ class SystemInterface: public DeviceInterface, public DataProvider{
         return true;
       } 
 
-    virtual void monitor(){}
+    virtual bool monitor() override{
+      return false;
+    }
     
     virtual void* read(){return nullptr;}
     
@@ -138,12 +140,13 @@ class DirectoryInterface: public NetworkDevice{
         return true;
       }           
 
-      virtual void monitorService(){
+      virtual bool monitorService() override{
         if (hwm.network->media == CABLE_MEDIA){
           EthernetBonjour.run();
         }else if (hwm.network->media == WIFI_MEDIA){
           //Sur ESP32, mDNS n’a PAS besoin d’être appelé dans loop() une fois qu’il est démarré.
-        }               
+        }          
+        return false;     
       }
      
       virtual bool handleConnectService(){
@@ -378,9 +381,9 @@ class WebApplicationService: public NetworkDevice{
       return true;
     }
 
-    virtual void monitorService() override{
-      handleWeb();
+    virtual bool monitorService() override{
       monitorInactivityTimeout();
+      return handleWeb(); // report if we processed any data
     }
 
     virtual bool ping() override{return true;}
@@ -428,8 +431,10 @@ class WebApplicationService: public NetworkDevice{
       reportActivity();
     }
 
-    void handleWeb(){
+    bool handleWeb(){
       Network* configMedia = hwm.configMedia;
+
+      bool processedData = false;
 
       if (configMedia != nullptr && configMedia->state == CONNECTED){
         if(webServer != nullptr){
@@ -438,17 +443,22 @@ class WebApplicationService: public NetworkDevice{
             if (newEthClient) {
               webServer->process(&newEthClient);
               newEthClient.stop();
+              processedData = true;
             }
           }else if (configMedia->media == WIFI_MEDIA){
             WiFiClient newWiFiClient = ((WiFiServer*)configMedia->server)->available();
             if (newWiFiClient.connected()) {
               webServer->process(&newWiFiClient);
               newWiFiClient.stop();
+              processedData = true;
             }
           }
         }
         if (wss != nullptr) wss->listen();
       }
+
+      return processedData;
+
     }
 
     bool startWebApp(){

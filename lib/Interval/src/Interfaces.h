@@ -57,7 +57,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
 
-    void onEvent(const Event& evt) override {}
+    void onEvent(const Event& evt) override {
+
+    }
 
     virtual bool _begin(){     // called by init()
       DEBUG_INFO("%s::_begin() void",interfaceName.c_str());
@@ -69,15 +71,15 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       return true;
     }    
 
-    virtual bool end(){         // called to shutdown completely
+    virtual bool end(){       // called to shutdown completely
       DEBUG_INFO("%s::end() void",interfaceName.c_str());
       return true;
     };          
-    virtual bool stop(){          // called to stop (ex. disconnect the network for network interface) require a begin() to start again
+
+    virtual bool stop(){      // called to stop (ex. disconnect the network for network interface) require a begin() to start again
       DEBUG_INFO("%s::stop() void",interfaceName.c_str());
       return true;
     };           
-
 
     virtual const String& getProviderNameForData(){ return group;}
 
@@ -218,8 +220,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     }
 
-    virtual void update(){      // return a boolean indicatin if the interface has changed its state
-      // reset change state
+    virtual bool update(){      // return a boolean indicatin if the interface has processed some data
       state.changed = false;
 
       // report if state has changed
@@ -265,10 +266,10 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       }
 
       if (state.enabled){      
-        monitor();
+        return monitor();
       } 
      
-      
+      return false;
     }
 
     bool isSwitchable(){
@@ -411,7 +412,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       return false;
     } 
     
-    virtual void monitor() = 0; 
+    virtual bool monitor() = 0; 
 
     virtual void handlePropertyChange(){DEBUG_INFO("%s::handlePropertyChange() : void",name.c_str());} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
 
@@ -436,7 +437,7 @@ class NetWorkService{
     static std::vector<NetWorkService*> inventory;
     static int8_t enabledServicesWeightSum;
   
-    virtual void monitorService()=0;
+    virtual bool monitorService()=0;
     virtual bool handleConnectService()=0;
     virtual bool handleDisconnectService()=0;
 
@@ -600,16 +601,18 @@ class NetWorkService{
       //DEBUG_INFO("After %s disable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
-    void monitorNetwork(){
+    bool monitorNetwork(){
 
-      if (!deviceInterface) return;  
+      if (!deviceInterface) return false;  
 
       if (hwm.network->state == DISCONNECTED){
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
         deviceInterface->state.subState = hwm.network->SSID;
       }else if (!serviceLocked){
-        monitorService();
+        return monitorService();
       }
+
+      return false;   // no data processed
     }
     
     void setNetworkStateDown(){
@@ -736,8 +739,8 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       return begin();    // derived class call   
     };        
 
-    virtual void monitor() override{           
-      monitorNetwork();      
+    virtual bool monitor() override{           
+      return monitorNetwork();      
     }    
 
     virtual void switchDevice(bool _enabled) override{

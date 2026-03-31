@@ -794,78 +794,180 @@ enum{
   ANIMATE_PING_PONG,
 };
 
-class AnimatedIcon : public Icon{
+class AnimatedIcon : public Icon {
+public:
+  AnimatedIcon(const String* frames,
+               uint8_t nbFrames,
+               Align a,
+               const int16_t* posX,
+               const int16_t* posY,
+               uint8_t size,
+               uint8_t animType = ANIMATE_REPEAT,
+               uint16_t animDelay = 500,
+               const uint16_t* fC = &GUI::defaultFcolor,
+               const uint16_t* bC = &GUI::defaultBcolor,
+               const float* _brightness = &GUI::fullBrightness,
+               bool d = false)
+  : Icon(&currentIcon, a, posX, posY, size, fC, bC, _brightness, d)
+  {
+    id = concatStrings("AnimatedIcon", *posX, "x", *posY);
 
-  public:
-    AnimatedIcon(const String* stringArray, uint8_t nb, Align a, const int16_t* posX, const int16_t* posY, uint8_t size, uint8_t at=ANIMATE_REPEAT, uint16_t ad=500, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,const float* _brightness = &GUI::fullBrightness, bool d=false):Icon(&currentIcon, a, posX, posY, size, fC , bC , _brightness, d){
-      id = concatStrings("AnimatedIcon", *posX, "x", *posY);
-      numberOfFrames = nb;
-      //DEBUG_PRINT("\n%s contains %i frames",id.c_str(),numberOfFrames);
-      iconArray = stringArray;      
-      animateType = at; 
-      animateDelay = ad;
-      currentIcon = stringArray[0];
-    };
+    iconArray      = frames;
+    numberOfFrames = nbFrames;
+    animateType    = animType;
+    animateDelay   = animDelay;
 
-    virtual bool refresh(bool force=false){
-      refreshed = force;
+    oldIconArray = nullptr;
+    lastTick     = 0;
+    frame        = 0;
+    inc          = 1;
+    running      = true;
 
-      if (oldIconArray != iconArray){
-        //if (debug){DEBUG_PRINT("\n%s changed value to <%s>", id.c_str(), iconArray[0].c_str());}
-        refreshed = true;
-        oldIconArray = iconArray;
-      }      
+    // Sécurisation
+    if (iconArray == nullptr || numberOfFrames == 0) {
+      numberOfFrames = 0;
+      currentIcon = "";
+    } else {
+      currentIcon = iconArray[0];
+    }
+  }
 
-      if (wait() && !refreshed) return false;
+  virtual bool refresh(bool force = false) override {
+    refreshed = force;
 
-      //Icon::setText(&iconArray[frame]);
-      currentIcon = iconArray[frame];
-      Icon::refresh(refreshed);    
-      if (refreshed){
-        //if (debug) DEBUG_PRINT("%s frame:%i",id.c_str(),frame);
-      }
-          
-
-      switch (animateType){
-        case ANIMATE_ONCE:
-          if (frame == numberOfFrames-1) break;
-          else frame++;
-        break;
-        case ANIMATE_REPEAT:
-          frame = (frame + 1) % numberOfFrames;
-        break;
-        case ANIMATE_PING_PONG:
-          frame += inc;
-          if (frame == -1){
-            frame = 0;
-            inc = 1;
-          }else if (frame == numberOfFrames){
-            frame = numberOfFrames-1;
-            inc = -1;
-          }                
-        break;      
-      }
-
-      return refreshed;
-    }    
-
-    bool wait(){
-      if(millis()-lastTick<animateDelay) return true;
-      else{
-        lastTick = millis();
-        return false;
-      }
+    // Rien à afficher
+    if (iconArray == nullptr || numberOfFrames == 0) {
+      currentIcon = "";
+      return Icon::refresh(true);
     }
 
-  private:
-    int8_t frame = 0;
-    uint8_t inc = -1;
-    uint8_t numberOfFrames,animateType;
-    uint16_t animateDelay;
-    const String* iconArray;
-    const String* oldIconArray;
-    unsigned long lastTick=0;
-    String currentIcon = "";
+    // Si le tableau a changé, on repart proprement
+    if (oldIconArray != iconArray) {
+      oldIconArray = iconArray;
+      reset();
+      refreshed = true;
+    }
+
+    // Mettre à jour l’icône courante avant affichage
+    currentIcon = iconArray[frame];
+
+    // On affiche si forcé ou si le timer est arrivé
+    bool timeToAdvance = shouldAdvance();
+    bool didDraw = Icon::refresh(refreshed || timeToAdvance);
+
+    if (timeToAdvance && running) {
+      advanceFrame();
+      return true;
+    }
+
+    return didDraw;
+  }
+
+  void reset() {
+    frame = 0;
+    inc = 1;
+    lastTick = millis();
+    if (iconArray != nullptr && numberOfFrames > 0) {
+      currentIcon = iconArray[0];
+    } else {
+      currentIcon = "";
+    }
+  }
+
+  void start() {
+    running = true;
+    lastTick = millis();
+  }
+
+  void stop() {
+    running = false;
+  }
+
+  void setDelay(uint16_t newDelay) {
+    animateDelay = newDelay;
+  }
+
+  void setFrames(const String* newFrames, uint8_t nbFrames) {
+    iconArray = newFrames;
+    numberOfFrames = nbFrames;
+
+    if (iconArray == nullptr || numberOfFrames == 0) {
+      numberOfFrames = 0;
+      currentIcon = "";
+      frame = 0;
+    } else {
+      if (frame >= numberOfFrames) frame = 0;
+      currentIcon = iconArray[frame];
+    }
+
+    oldIconArray = nullptr; // force reset logique au prochain refresh
+  }
+
+private:
+  int8_t frame = 0;
+  int8_t inc = 1;
+
+  uint8_t numberOfFrames = 0;
+  uint8_t animateType = ANIMATE_REPEAT;
+  uint16_t animateDelay = 500;
+
+  const String* iconArray = nullptr;
+  const String* oldIconArray = nullptr;
+
+  unsigned long lastTick = 0;
+  bool running = true;
+
+  String currentIcon = "";
+
+  bool shouldAdvance() {
+    if (!running) return false;
+    if (animateDelay == 0) return true;
+
+    unsigned long now = millis();
+    if ((unsigned long)(now - lastTick) >= animateDelay) {
+      lastTick = now;
+      return true;
+    }
+    return false;
+  }
+
+  void advanceFrame() {
+    if (numberOfFrames <= 1) {
+      frame = 0;
+      return;
+    }
+
+    switch (animateType) {
+      case ANIMATE_ONCE:
+        if (frame < (int8_t)(numberOfFrames - 1)) {
+          frame++;
+        }
+        break;
+
+      case ANIMATE_REPEAT:
+        frame++;
+        if (frame >= (int8_t)numberOfFrames) {
+          frame = 0;
+        }
+        break;
+
+      case ANIMATE_PING_PONG:
+        frame += inc;
+
+        if (frame >= (int8_t)numberOfFrames) {
+          frame = numberOfFrames - 2;
+          inc = -1;
+        } else if (frame < 0) {
+          frame = 1;
+          inc = 1;
+        }
+        break;
+
+      default:
+        frame = 0;
+        break;
+    }
+  }
 };
 
 class FromToWidget : public Widget {

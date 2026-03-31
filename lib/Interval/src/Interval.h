@@ -313,7 +313,7 @@ enum EventType : uint8_t {
   EVENT_OSC_MESSAGE,
   EVENT_WEBSOCKET_CLOSED,
   EVENT_TEXT_MESSAGE,
-  EVENT_USER,
+  EVENT_STRIP_DATA,
   EVENT_COUNT
 };
 
@@ -341,7 +341,7 @@ static const char* const EVENT_NAMES[EVENT_COUNT] = {
   "EVENT_OSC_MESSAGE",
   "EVENT_WEBSOCKET_CLOSED",
   "EVENT_TEXT_MESSAGE",
-  "EVENT_USER"
+  "EVENT_STRIP_DATA"
 };
 #endif
 
@@ -2427,7 +2427,7 @@ void baseOverLayBuilder(uint8_t id){
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor));                  
   gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor));          
   //gui.add (new PendingBar(&app.pendingBarWidth /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &GUI::zero /*y*/, TFT_WIDTH /*w*/, 1 /*h*/, /*pingpong*/ false, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/, 30, 4));                    
-  app.rollingIcon(false);
+  //app.rollingIcon(false);
 }
 
 float testV = 76;
