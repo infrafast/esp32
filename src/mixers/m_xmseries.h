@@ -152,9 +152,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
     }
 
-    virtual bool begin() override{
-      MixerDevice<NetworkOSC>::begin();
-      DEBUG_INFO("%s::begin() => user setting up XMmixerModelDS/model and dataset pattern",interfaceName.c_str());            
+    virtual void beginMixer() override{
+      DEBUG_INFO("%s::beginMixer() => user setting up XMmixerModelDS/model and dataset pattern",interfaceName.c_str());                  
       mixerModelDS.populate();        // feeding the list of available mixer definitions for when we are offline and want to select a mixer      
       // check if mixerID.model is in the list, otherwise set it to the first item from it
       if (!mixerModelDS.contains(mixerID.model)){
@@ -162,7 +161,6 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         DEBUG_WARN("%s is not a valid model, use %s as default",mixerID.model,firstValidModel);
         setModel(firstValidModel);
       }else setModel(mixerID.model.c_str());       // setting up the last connected mixer
-      return true;
     }
 
     virtual void serializeProperties(JsonArray& properties) override{

@@ -143,11 +143,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       return deserializeMixerDefinitionFromFile(MS_MIXER_PROFILE_FILENAME);
     }    
 
-    virtual bool begin() override{
-      MixerDevice<NetworkSocket>::begin();
-      DEBUG_INFO("%s::begin() => setting model and dataset pattern",interfaceName.c_str());            
+    virtual void beginMixer() override{
+      DEBUG_INFO("%s::beginMixer() => setting model and dataset pattern",interfaceName.c_str());            
       setModel("virtual");      // "virtual" is different than default value "offline" and this forces setModel to reload and set the model from the definition file
-      return true;
     }
 
     virtual bool end() override{

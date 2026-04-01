@@ -285,6 +285,8 @@ public:
     virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) = 0;
     //////////////////////////////////////////////////////////////////////////////////////
    
+    virtual void beginMixer() = 0;   // 
+
     //
     bool begin() override {
       // NOTE:
@@ -295,11 +297,10 @@ public:
       //
       // Network bootstrap is already driven by NetworkDevice::_begin(), which
       // dispatches to the most-derived begin() implementation.
-      bool networkOk = true;
-
       DEBUG_INFO("%s::_begin() => self registering to webAppService event",this->deviceInterface->interfaceName.c_str());      
-      webAppService->registerEventListener(this);   // we listen to web app event to start the synchronization when it is ready
-      return networkOk;
+      //webAppService->registerEventListener(this);   // we listen to web app event to start the synchronization when it is ready
+      beginMixer();  // call the mixer specific begin method to setup model and dataset pattern, we do it here in the generic begin method because it is the one called by the NetworkDevice::_begin() and this way we are sure it is called at the right moment in the connection process (for example if we do it in the constructor it may be too early and if we do it in onEvent when receiving EVENT_WEBAPP_STARTED it may be too late if the web app is already started by then)
+      return true;
     }
 
     void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level){
