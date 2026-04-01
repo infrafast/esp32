@@ -220,6 +220,12 @@ class BLEMIDIInterface: public MIDIInterface{
       return true;
     }
 
+    virtual bool end() override{
+      DEBUG_INFO("%s::end()",interfaceName.c_str());          
+      //setStateRestart();  // as we cant really stop the BLE MIDI, we just set the state to not ready and ask the user to connect the BLE MIDI to make it work again, this is not ideal but at least it avoid having a wrong state until the next connection attempt
+      return true;
+    }
+
     virtual bool stop() override{
       DEBUG_INFO("%s::stop()",interfaceName.c_str());          
       auto transport = bleMIDI.getTransport();  // ✅ On récupère le transport BLE
@@ -354,6 +360,12 @@ class USBMIDIInterface: public MIDIInterface{
       return true;
     }
 
+    virtual bool end() override{
+      DEBUG_INFO("%s::end()",interfaceName.c_str());
+      //setStateRestart();  // as we cant really stop the USB MIDI, we just set the state to not ready and ask the user to plugin the USB MIDI to make it work again, this is not ideal but at least it avoid having a wrong state until the next connection attempt
+      return true;
+    }
+
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){      
       usbMIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);
       return true;
@@ -389,6 +401,12 @@ class DINMIDIInterface: public MIDIInterface{
       setStateNotImplemented();
       return true;
     };        
+
+    virtual bool end() override{
+      DEBUG_INFO("%s::end()",interfaceName.c_str());          
+      //setStateRestart();  // as we cant really stop the DIN MIDI, we just set the state to not ready and ask the user to connect the DIN MIDI to make it work again, this is not ideal but at least it avoid having a wrong state until the next connection attempt
+      return true;
+    };
 
     virtual bool monitor() override{
       return MIDIInterface::monitor();      

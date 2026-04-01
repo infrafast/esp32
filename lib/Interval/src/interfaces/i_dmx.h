@@ -31,6 +31,16 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkService {
       state.switchable = false;
     }
 
+    virtual bool begin(){
+      DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+      return true;
+    }
+
+    virtual bool end(){
+      DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+      return true;
+    }
+
     virtual bool monitor() override{     
       return monitorNetwork();
     }
@@ -50,6 +60,16 @@ class ThreePinDMXInterface: public DMXInterface{
     ThreePinDMXInterface(bool _configurable):DMXInterface(THREEEPINDMX_INTERFACE,GROUP_INTERFACE_DMX, _configurable){
       icon = "a";
       state.switchable = false;
+    }
+
+    virtual bool begin(){
+      DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+      return true;
+    }
+
+    virtual bool end(){
+      DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+      return true;
     }
 
     virtual bool monitor() override{

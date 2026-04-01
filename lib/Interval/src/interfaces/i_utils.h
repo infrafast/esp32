@@ -18,13 +18,23 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     #define SYSTEM_INTERFACE "system"
     public:    
 
-    SerializableParameters systemDS = SerializableParameters(SYSTEM_INTERFACE, GROUP_INTERFACE_UTILS, &dataRepo);   // one instance
-        
-    DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_STRING),this);  // create as many parameters as required
+      SerializableParameters systemDS = SerializableParameters(SYSTEM_INTERFACE, GROUP_INTERFACE_UTILS, &dataRepo);   // one instance
+          
+      DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_STRING),this);  // create as many parameters as required
 
-    SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_UTILS,_configurable),DataProvider(getProviderNameForData()){
-      state.code = IF_READY;     
-    }
+      SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_UTILS,_configurable),DataProvider(getProviderNameForData()){
+        state.code = IF_READY;     
+      }
+
+      virtual bool begin(){
+        DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+        return true;
+      }
+
+      virtual bool end(){
+        DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+        return true;
+      }    
   
       virtual void load() override{
         DEBUG_INFO("%s::load() default ignored => 🚫DISABLED", interfaceName.c_str()); 
@@ -120,6 +130,17 @@ class DirectoryInterface: public NetworkDevice{
         unregisterDataSetAddress(&addressIP);              // we un-expose the ping parameter as user should not modify it 
         unregisterDataSetAddress(&addressPort);              // we un-expose the ping parameter as user should not modify it 
       }
+
+      virtual bool begin(){
+        DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+        return true;
+      }
+
+      virtual bool end(){
+        DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+        return true;
+      }      
+
 
       virtual void load() override{
         DEBUG_INFO("%s::load() default ignored => ENABLE", interfaceName.c_str()); 
@@ -373,10 +394,15 @@ class WebApplicationService: public NetworkDevice{
       hasStrip = false;
     }
 
-    /*virtual bool _begin() override{
-      DEBUG_INFO("%s::begin()", interfaceName.c_str());
-      return NetworkDevice::begin();
-    }*/
+    virtual bool begin(){
+      DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+      return true;
+    }
+
+    virtual bool end(){
+      DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+      return true;
+    }
 
     virtual bool save() override{
       DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str());

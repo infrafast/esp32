@@ -68,15 +68,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       return true;
     };        
 
-    virtual bool begin(){     // called by _begin() and let user define its own begin in derived class. Curently only in user with NetworkDevice
-      DEBUG_INFO("DeviceInterface(%s)::begin() => default void",interfaceName.c_str());
-      return true;
-    }    
-
-    virtual bool end(){       // called to shutdown completely
-      DEBUG_INFO("%s::end() void",interfaceName.c_str());
-      return true;
-    };          
+    virtual bool begin() = 0;       // called to start the interface, require a end() to stop it
+    virtual bool end() = 0;       // called to stop the interface, require a begin() to start again
 
     virtual bool stop(){      // called to stop (ex. disconnect the network for network interface) require a begin() to start again
       DEBUG_INFO("%s::stop() void",interfaceName.c_str());

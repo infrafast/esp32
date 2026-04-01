@@ -215,6 +215,16 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     ~NetworkOSC(){
     }
 
+    virtual bool begin(){
+      DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+      return true;
+    }
+
+    virtual bool end(){
+      DEBUG_INFO("%s::end() calling stop()",interfaceName.c_str());            
+      return stop();
+    }
+
     virtual void serializeProperties(JsonArray& properties) override{
       NetworkDevice::serializeProperties(properties);
       
