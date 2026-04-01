@@ -287,8 +287,15 @@ public:
    
     //
     bool begin() override {
-      bool networkOk = NetworkBase::begin();      //=> link error
-      //bool networkOk = this->deviceInterface->begin();    => crash
+      // NOTE:
+      // In this template hierarchy, NetworkBase can be an abstract transport
+      // class (e.g. NetworkSocket) that does not implement begin().
+      // Calling NetworkBase::begin() with qualified lookup forces that symbol
+      // and can trigger link errors.
+      //
+      // Network bootstrap is already driven by NetworkDevice::_begin(), which
+      // dispatches to the most-derived begin() implementation.
+      bool networkOk = true;
 
       DEBUG_INFO("%s::_begin() => self registering to webAppService event",this->deviceInterface->interfaceName.c_str());      
       webAppService->registerEventListener(this);   // we listen to web app event to start the synchronization when it is ready
