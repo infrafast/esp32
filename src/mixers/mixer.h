@@ -290,6 +290,7 @@ public:
       bool networkOk = NetworkBase::begin();
       DEBUG_INFO("%s::_begin() => self registering to webAppService event",this->deviceInterface->interfaceName.c_str());      
       webAppService->registerEventListener(this);   // we listen to web app event to start the synchronization when it is ready
+      return networkOk;
     }
 
     void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level){
