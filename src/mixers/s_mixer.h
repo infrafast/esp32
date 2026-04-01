@@ -127,21 +127,21 @@ class Input2MixbusStrip : public SendStrip{
           // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
           if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
             toggle1 = evtData[3];  // mute state
-            DEBUG_INFO("%s onEvent() STRIP_CH_BUS_MUTE",type.c_str());
+            DEBUG_INFO("%s onEvent() STRIP_CH(%i)_BUS(%i)_MUTE %d",type.c_str(), select1ID, select2ID, toggle1);
           }
           break;
         case STRIP_CH_MAIN_MUTE:
           // chek if the event is for us based on select1ID which is representing the chID
           if (evtData[1] == select1ID){  // evtData[1] = chID
             toggle1 = evtData[2];  // mute state
-            DEBUG_INFO("%s onEvent() STRIP_CH_MAIN_MUTE",type.c_str());            
+            DEBUG_INFO("%s onEvent() STRIP_CH(%i)_MAIN_MUTE %d",type.c_str(), select1ID, toggle1);
           }
           break;        
         case STRIP_CH_BUS_MIX_LEVEL:
           // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
           if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
             value = evtData[3];  // level value
-            DEBUG_INFO("%s onEvent() STRIP_CH_BUS_MIX_LEVEL",type.c_str());
+            DEBUG_INFO("%s onEvent() STRIP_CH(%i)_BUS(%i)_MIX_LEVEL %.2f",type.c_str(), select1ID, select2ID, value);
           }
           break;
       }
@@ -152,8 +152,8 @@ class Input2MixbusStrip : public SendStrip{
       DEBUG_INFO("getConfig %s",type.c_str());      
 
       // 1 . request name refresh
-      mixer->requestDSname(mixer->inputNamesDS, select1ID-1);  // select1ID = chID
-      mixer->requestDSname(mixer->mixbusNamesDS, select2ID-1);  // select2ID = busID 
+      mixer->requestCHname(select1ID);  // select1ID = chID
+      mixer->requestBUSname(select2ID);  // select2ID = busID
 
       // 2. request mute state refresh
       mixer->requestCHBUSmute(select1ID, select2ID);  // select1ID = chID, select2ID = busID

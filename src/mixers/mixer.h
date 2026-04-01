@@ -193,7 +193,18 @@ public:
 
     //// pure virtual mixer methods called by the strips ////
     // GETTERS
-    virtual void requestDSname(DataSetSynced*, uint8_t) = 0;    
+    virtual void requestDSname(DataSetSynced*, uint8_t) = 0;          // used by datasync
+    
+    // the following two one is the exception
+    void requestCHname(uint8_t chIndex){
+      requestDSname(inputNamesDS, chIndex-1);  // only -1 for requestDSname which is generic and expect index starting at 0
+    }
+
+    void requestBUSname(uint8_t busIndex){
+      requestDSname(mixbusNamesDS, busIndex-1);  // only -1 for requestDSname which is generic and expect index starting at 0
+    };
+
+
     virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) = 0;
     virtual void requestBUSmute(uint8_t busIndex) = 0;
     virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) = 0;

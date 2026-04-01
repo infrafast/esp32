@@ -507,10 +507,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     /////////////////////////////
     ///////// GETTERS ///////////
     /////////////////////////////
+
     virtual void requestDSname(DataSetSynced* dataset, uint8_t index) override {
-      /*
-        Puisque certains patterns peuvent avoir 0 argument, 1 argument, etc., tu peux aussi éviter d’envoyer un index inutile si le pattern est fixe :    
-      */
       index += 1; // Behringer starts at 1
 
       uint8_t protocolIndex = 0xFF;

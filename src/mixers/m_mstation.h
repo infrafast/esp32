@@ -194,7 +194,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       const char* path;
       RouteMode mode;
       union { JsonHandler jh; RxHandler rh; } fn;
-      bool propagate;
     };
 
     static const Route routes[];
@@ -288,7 +287,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         (this->*(r->fn.jh))(path,body);
       }
 
-      //if (r->propagate) fireEvent(evtSock);                 // filter event propagation based on their flag BECOME USELESS ?
     }  
 
     // ------------------ Path Handlers ------------------
@@ -537,7 +535,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
       String v = body["value"];
 
-      DEBUG_INFO("%s::data: %s \"%s\"", interfaceName.c_str(), data.c_str(), v.c_str());
+      DEBUG_INFO("%s::data: %s <%s>", interfaceName.c_str(), data.c_str(), v.c_str());
 
       MSPathMatch match;
       if (!decodeMSDataPath(data.c_str(), match)) {
@@ -593,8 +591,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           int busIndex = match.values[1];
 
           int mute = v=="true"? 1 : 0;
-          DEBUG_INFO("%s::CH_BUS_MUTE ch=%d bus=%d mute=%s",
-                    interfaceName.c_str(), chIndex, busIndex, mute ? "true" : "false");
+          DEBUG_INFO("%s::CH_BUS_MUTE ch=%d bus=%d mute=%s",interfaceName.c_str(), chIndex, busIndex, mute ? "true" : "false");
+
+          fireChBusMute(chIndex+1, busIndex+1, mute);      // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
 
           break;
         }
@@ -603,8 +602,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           int busIndex = match.values[0];
 
           int mute = v=="true"? 1 : 0;
-          DEBUG_INFO("%s::BUS_MUTE bus=%d mute=%s",
-                    interfaceName.c_str(), busIndex, mute ? "true" : "false");
+          DEBUG_INFO("%s::BUS_MUTE bus=%d mute=%s",interfaceName.c_str(), busIndex, mute ? "true" : "false");
 
           // TODO: dataset/setter
           break;
@@ -616,10 +614,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
           float lvl = v.toFloat();
 
-          DEBUG_INFO("%s::CH_BUS_LEVEL ch=%d bus=%d lvl=%.3f",
-                    interfaceName.c_str(), chIndex, busIndex, lvl);
+          //DEBUG_INFO("%s::CH_BUS_LEVEL ch=%d bus=%d lvl=%.3f",interfaceName.c_str(), chIndex, busIndex, lvl);
 
-          fireChBusMixLevel(chIndex, busIndex, lvl);
+          fireChBusMixLevel(chIndex+1, busIndex+1, lvl);      // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
           break;
         }
 
@@ -701,8 +698,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     ////////////////////////////////
     /////////// GETTERS ///////////
     ///////////////////////////////
+
     virtual void requestDSname(DataSetSynced* dataset, uint8_t index) override{
-      
+            
       if      (dataset == inputNamesDS) index += msMixer->channelOffset;
       else if (dataset == mixbusNamesDS) index += msMixer->busOffset;
       else if (dataset == auxNamesDS) index += msMixer->auxOffset;
@@ -721,13 +719,17 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
       snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_CH_BUS_MUTE,
-              chIndex + msMixer->channelOffset,
-              busIndex);      // bus index is not offseted for level and mute, only for the path to subscribe to the change of this data, which is a bit weird but that's how MS do it, we just adapt to their protocol
+              chIndex + msMixer->channelOffset -1,      // requestCHBUSmute is called from strip with Select1ID as the parameter which starts at 1, hence we deduct 1 since MS channel starts at 0
+              busIndex - 1);      // bus index is not offseted for level and mute, we only deduct one which is the offset of the select2id dropdownm value
 
       subscribe(pathBuffer);
     }
 
     virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
+
+      chIndex -= 1; // the requestCHBUSlevel is called from a strip which provide its selectID , since they starts at 1 but MS staation channels starts at zero, we have to deduct 1
+      busIndex -= 1; // same for bus index, we have to deduct 1 to match MS station protocol
+
       snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_CH_BUS_LVL,
               chIndex + msMixer->channelOffset,
               busIndex);      // bus index is not offseted for level and mute, only for the path to subscribe to the change of this data, which is a bit weird but that's how MS do it, we just adapt to their protocol
@@ -947,11 +949,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
 /////////////// Table de routage haut niveau pour faire le lien entre les paths de MS et les handlers de notre code, avec support des wildcards et extraction des arguments
 const MixingStation::Route MixingStation::routes[ROUTES_COUNT] = {
-  { PATH_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState },           false },
-  { PATH_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity },   false },  
-  { PATH_MIXER_DEFINITION,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixerDefinition }, false },  
-  { PATH_MIXERS_AVAILABLE,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }, false },
-  { PATH_MIXER_GET_DATA"/*",   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet },         true },
+  { PATH_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState }            },
+  { PATH_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity }    },  
+  { PATH_MIXER_DEFINITION,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixerDefinition }  },  
+  { PATH_MIXERS_AVAILABLE,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }  },
+  { PATH_MIXER_GET_DATA"/*",   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet }          },
 };
 
 

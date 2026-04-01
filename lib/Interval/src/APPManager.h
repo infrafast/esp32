@@ -749,7 +749,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //Event::enableEventDump(EVENT_SOCKET_CLOSE);
       //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
       //Event::enableEventDump(EVENT_INTERFACE_MESSAGE);
-      Event::enableEventDump(EVENT_WEBAPP_STARTED);
+      //Event::enableEventDump(EVENT_WEBAPP_STARTED);
 
 
       // *********************************
@@ -1843,8 +1843,12 @@ void setup() {
 
       for (const auto& interface : interfaceRepo.interfaces){
         
-        dataProcessed |= interface->update();      // drive the icon to indicate data being processed
-        if ()
+        dataProcessed |= interface->update();      // return value drive the icon to indicate data being processed
+        
+        Strip* currentStrip = getSelectedStrip();
+        if (currentStrip != nullptr && currentStrip->interface == interface && dataProcessed){
+          //DEBUG_PRINT("❄");    // simulate the blinking of an icon indicating some data are being processed for the current focused strip
+        }
 
         
         if (interface->state.broadcastState){
