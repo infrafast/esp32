@@ -117,7 +117,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     #define MS_PING_COMMAND PATH_MIXER_IDENTITY
   
-    MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION,GROUP_INTERFACE_MIXER,MS_PING_COMMAND,8887,8088,true){
+    MixingStation(WebApplicationService* webAppService):MixerDevice<NetworkSocket>(webAppService, INTERFACE_MIXINGSTATION, GROUP_INTERFACE_MIXER, MS_PING_COMMAND, 8887, 8088, true){
       //destination.host = "192.168.99.99";
       mixerID.name = "MSStation";
      

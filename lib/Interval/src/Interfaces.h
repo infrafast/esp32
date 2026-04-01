@@ -44,6 +44,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     String group = "undef"; // used by the strip to define which deviceinterface they can connect
 
+    Event message;
+
 
     DeviceInterface(const String&, const String&, bool);
     ~DeviceInterface();
@@ -693,6 +695,7 @@ DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _
   interfaceRepo.interfaces.push_back(this);
   interfaceName = name;
   group = _group;
+  message.type = EVENT_INTERFACE_MESSAGE;   // an interface sends message to strip and not to the application manager, so we set a specific type for that
 }
 
 DeviceInterface::~DeviceInterface(){

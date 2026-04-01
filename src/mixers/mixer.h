@@ -185,7 +185,6 @@ public:
 
     // event system to decouple mixer implementation from strip management
     JsonDocument payload;                     // data from the mixer
-    Event evtMix = Event(&payload);
 
     //// pure virtual utilities ////
     //virtual void startMixerDataSync() = 0;
@@ -248,15 +247,18 @@ public:
     // this classes does all the work
     Synchronizer synchronizer;
 
+    WebApplicationService* webAppService;
+
     template<typename... Args>
-    MixerDevice(Args&&... args): NetworkBase(std::forward<Args>(args)...){
-      bindDeviceInterface(static_cast<DeviceInterface*>(this), static_cast<MixerBase*>(this));
+    MixerDevice(WebApplicationService* webApp, Args&&... args)      // a MixerDevice need a webAppService to listen to event EVENT_WEBAPP_STARTED to start the synchronization process, so we inject it in the constructor and store a pointer to it
+        : NetworkBase(std::forward<Args>(args)...),
+          webAppService(webApp) {
+        bindDeviceInterface(static_cast<DeviceInterface*>(this),
+                            static_cast<MixerBase*>(this));
 
       mixerID.model = "not synced";
       mixerID.name = "offline";
       mixerID.ip = IPAddress(0,0,0,0);
-
-      evtMix.type = EVENT_STRIP_DATA;
 
       // SyncDataSet auto register themelves to the overall synchroniser
       #define MAX_INPUT 48
@@ -271,6 +273,9 @@ public:
       fxNamesDS = new DataSetSynced(&addressFXname,this->interfaceName, "FX", MAX_FX, &synchronizer);
       mainNamesDS = new DataSetSynced(&addressMAINname,this->interfaceName, "MAIN", MAX_MAIN, &synchronizer);
       dcaNamesDS = new DataSetSynced(&addressDCAname,this->interfaceName, "DCA", MAX_DCA, &synchronizer);
+
+      this->message.attachData(&payload); // this interface is sending json payload directly to the strip so we attach the payload to the message event, this way we can reuse the same event for all kind of messages and just check the content of the payload to know what to do with it in the strip (for example if it is a mix level update or a main mute update)
+
     }
     
     virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
@@ -280,6 +285,13 @@ public:
     virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) = 0;
     //////////////////////////////////////////////////////////////////////////////////////
    
+    //
+    bool begin() override {
+      bool networkOk = NetworkBase::begin();
+      DEBUG_INFO("%s::_begin() => self registering to webAppService event",this->deviceInterface->interfaceName.c_str());      
+      webAppService->registerEventListener(this);   // we listen to web app event to start the synchronization when it is ready
+    }
+
     void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level){
       _setCHBUSlevel(chIndex, busIndex, level);       
       fireChBusMixLevel(chIndex, busIndex, level);      // echo command to strips so they can update themselves, we have to do it here because the level is needed to update the strip but it is not returned by the mixer as it is set (we could of course ask the mixer to return the new level after setting it but it would generate a lot of network traffic and we already have the right level at hand so let's just use it)
@@ -296,14 +308,14 @@ public:
       payload[1] = ch;
       payload[2] = bus;
       payload[3] = level;
-      this->fireEvent(evtMix);
+      this->fireEvent(this->message);
     }  
 
     void fireChMainMute(int ch, int muteState) {
       payload[0] = STRIP_CH_MAIN_MUTE;
       payload[1] = ch;
       payload[2] = muteState;
-      this->fireEvent(evtMix);
+      this->fireEvent(this->message);
     }
 
     void fireChBusMute(int ch, int bus, int muteState) {
@@ -311,12 +323,23 @@ public:
       payload[1] = ch;
       payload[2] = bus;
       payload[3] = muteState;
-      this->fireEvent(evtMix);
+      this->fireEvent(this->message);
     }
 
     //////////////////////////////////
 
+    void onEvent(const Event& event) override {
+      NetworkBase::onEvent(event);   // call parent to handle network events
 
+      if (event.type == EVENT_WEBAPP_STARTED) {
+        // when web app has started we launch the data synchronization
+        if (!synchronizer.synced) {
+          setStatePendingDataSync();
+        }
+      }
+    }
+      
+    /////////////////////////////////
 
     virtual void postSync() = 0;
 
@@ -367,11 +390,11 @@ public:
 
       if (offlineTooLong || mixerChanged) synchronizer.reset();
 
-      if (!synchronizer.synced){
+      /*if (!synchronizer.synced){
         setStatePendingDataSync();
-      }else{
+      }else*/
         if (this->state.label != IF_STATE_LIVE) setStateLive();
-      }
+    
 
     }
 

@@ -748,7 +748,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //Event::enableEventDump(EVENT_SOCKET_ERROR);
       //Event::enableEventDump(EVENT_SOCKET_CLOSE);
       //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
-      Event::enableEventDump(EVENT_STRIP_DATA);
+      //Event::enableEventDump(EVENT_INTERFACE_MESSAGE);
+      Event::enableEventDump(EVENT_WEBAPP_STARTED);
 
 
       // *********************************
@@ -792,7 +793,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       threePinDMXInterface = new ThreePinDMXInterface(true);
       // RTPMIDI
       appleMIDIInterface = new AppleMIDIInterface(true);
-      webAppService = &gWebApplicationService;
+      // WEB APP
+      webAppService = new WebApplicationService(false);    // internal web app lifecycle service
       webAppService->setWebServerHandler(commonFileServerWrapper);
       webAppService->setWebSocketHandler(socketConnectionCallback);
 

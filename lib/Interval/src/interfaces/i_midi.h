@@ -73,12 +73,10 @@ class MIDIInterface: public DeviceInterface{
       unsigned length;  
     }midiDataCopy;
 
-    Event evtMidi = Event(&midiDataCopy);
-
     bool dataAvailable = false;
 
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
-      evtMidi.type = EVENT_MIDI; // we set the type here because midiDataCopy needs to be initialized first and we want evtMidi to be initialized with the correct pointer to midiDataCopy  
+      message.attachData(&midiDataCopy); // this interface is sending midi data directly to the strip so we attach the midiDataCopy to the message event, this way we can reuse the same event for all kind of midi messages and just check the content of the midiDataCopy to know what to do with it in the strip (for example if it is a note on or a sysex)  
     }     
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
@@ -99,7 +97,7 @@ class MIDIInterface: public DeviceInterface{
 
     virtual bool monitor() override{  
       if (dataAvailable){
-        fireEvent(evtMidi);
+        fireEvent(message);     // will be processed by strip that are registered to this interface event
         dataAvailable = false;
         return true;  // we have processed data
       }

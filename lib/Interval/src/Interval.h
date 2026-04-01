@@ -292,7 +292,8 @@ class GenericComponent{
 };
 
 enum EventType : uint8_t {
-  EVENT_MIDI,
+  EVENT_WEBAPP_STARTED,
+  EVENT_WEBAPP_STOPPED,
   EVENT_SOCKET_OPEN,
   EVENT_SOCKET_CLOSE,
   EVENT_SOCKET_MESSAGE,
@@ -313,14 +314,15 @@ enum EventType : uint8_t {
   EVENT_OSC_MESSAGE,
   EVENT_WEBSOCKET_CLOSED,
   EVENT_TEXT_MESSAGE,
-  EVENT_STRIP_DATA,
+  EVENT_INTERFACE_MESSAGE,
   EVENT_COUNT
 };
 
 /* Table de noms des événements */
 #ifdef DEBUG
 static const char* const EVENT_NAMES[EVENT_COUNT] = {
-  "EVENT_MIDI",
+  "EVENT_WEBAPP_STARTED",
+  "EVENT_WEBAPP_STOPPED",
   "EVENT_SOCKET_OPEN",
   "EVENT_SOCKET_CLOSE",
   "EVENT_SOCKET_MESSAGE",
@@ -341,7 +343,7 @@ static const char* const EVENT_NAMES[EVENT_COUNT] = {
   "EVENT_OSC_MESSAGE",
   "EVENT_WEBSOCKET_CLOSED",
   "EVENT_TEXT_MESSAGE",
-  "EVENT_STRIP_DATA"
+  "EVENT_INTERFACE_MESSAGE"
 };
 #endif
 
@@ -354,6 +356,10 @@ public:
   EventType type;
 
   void* data;
+
+  void attachData(void* _data){
+    data=_data;
+  }
 
   virtual const char* name() const {
     return getEventName(type);

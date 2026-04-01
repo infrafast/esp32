@@ -354,6 +354,8 @@ class WebApplicationService: public NetworkDevice{
     using WebServerHandler = void (*)(Request&, Response&);
     using WebSocketHandler = void (*)(IWebSocket&);
 
+    Event evtWebApp = Event();  //no payload/data
+
     Application* webServer = nullptr;
     IWebSocketServer* wss = nullptr;
 
@@ -390,12 +392,21 @@ class WebApplicationService: public NetworkDevice{
 
     virtual bool handleConnectService() override{
       bool started = startWebApp();
-      if (started) setStateReady();
+      if (started){
+        setStateReady();
+        evtWebApp.type = EVENT_WEBAPP_STARTED; // notifies listeners that the webapp is started, so they can for example publish their API documentation on it
+        fireEvent(evtWebApp);           
+      }
       return started;
     }
 
     virtual bool handleDisconnectService() override{
       stopWebApp();
+
+      evtWebApp.type =  EVENT_WEBAPP_STOPPED;  
+      fireEvent(evtWebApp);           
+
+
       setStateDisconnected();
       return true;
     }
@@ -540,8 +551,5 @@ class WebApplicationService: public NetworkDevice{
       }
     }
 };
-
-WebApplicationService gWebApplicationService(false);    // internal web app lifecycle service
-
 
 #endif
