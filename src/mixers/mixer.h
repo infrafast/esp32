@@ -260,6 +260,10 @@ public:
 
     WebApplicationService* webAppService;
 
+    // used to handle path templates and values
+    #define PATH_MAX_SIZE 64
+    char pathBuffer[PATH_MAX_SIZE];        
+
     template<typename... Args>
     MixerDevice(Args&&... args)      
         : NetworkBase(std::forward<Args>(args)...){
@@ -292,7 +296,7 @@ public:
 
     ////////////////////////////////////////////////////// the setters always echo the command so other strips update themseleves
     virtual void _setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) = 0;
-    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) = 0;
+    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) = 0;
     //////////////////////////////////////////////////////////////////////////////////////
    
     virtual void beginMixer() = 0;   // 
@@ -346,6 +350,17 @@ public:
       payload[3] = muteState;
       this->fireEvent(this->message);
     }
+
+    ///////////// helpers to build command path from id on template /////////////
+    //construit la chaîne en remplaçant les placeholders %d et %s
+    void buildPath1Int(char* destination, size_t bufferSize, int index, const char* pattern) {
+        snprintf(destination, bufferSize, pattern, index);
+    }   
+    
+    void buildPath2Int(char* destination, size_t bufferSize, int index1, int index2, const char* pattern) {
+        snprintf(destination, bufferSize, pattern, index1, index2);
+    }      
+
 
     //////////////////////////////////
 

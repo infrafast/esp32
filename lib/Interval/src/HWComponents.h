@@ -346,6 +346,7 @@ enum EventID {
   BUTTON_SIMPLE_CLIC = 1,
   BUTTON_DOUBLE_CLIC,
   BUTTON_LONG_CLIC,
+  BUTTON_ENTER_HOLD,  
   BUTTON_HOLD,
   BUTTON_RELEASE_HOLD,
 };
@@ -401,9 +402,9 @@ public:
           pendingDoubleClicDetection = false;
 
           if (!doubleClic) {
-            if (pushedTime > push_reactivity) {
+            if (holdEntered) {
               emitButtonEvent(BUTTON_RELEASE_HOLD, pushedTime - push_reactivity);
-            } else if (pushedTime > push_reactivity / 3) {
+            }else if (pushedTime > push_reactivity / 3) {
               emitButtonEvent(BUTTON_LONG_CLIC, pushedTime);
             } else {
               emitButtonEvent(BUTTON_SIMPLE_CLIC, pushedTime);
@@ -417,16 +418,12 @@ public:
 
       } else { // pressed
         doubleClic = false;
+        holdEntered = false;
         startPushTime = millis();
 
         if (pendingDoubleClicDetection) {
           doubleClic = true;
           emitButtonEvent(BUTTON_DOUBLE_CLIC, millis() - startTimeBetween2Clics);
-          /*
-          if (usesLed) {
-            ledcWrite(0, 0);
-          }
-          */
         }
       }
 
@@ -435,6 +432,11 @@ public:
         pushedTime = millis() - startPushTime;
 
         if (pushedTime > push_reactivity) {
+          if (!holdEntered) {
+            holdEntered = true;
+            emitButtonEvent(BUTTON_ENTER_HOLD, pushedTime - push_reactivity);
+          }
+
           emitButtonEvent(BUTTON_HOLD, pushedTime - push_reactivity);
 
           if (usesLed) {
@@ -445,7 +447,6 @@ public:
           uint8_t dutyCycle = map(pushedTime, 0, push_reactivity, 0, 255);
           ledcWrite(0, dutyCycle);
         }
-
       } else {
         pushedTime = 0;
 
@@ -476,6 +477,7 @@ protected:
 
 private:
   int edge;
+  bool holdEntered = false;
   bool pendingDoubleClicDetection = false;
   unsigned long startTimeBetween2Clics = 0;
   unsigned long startPushTime = 0;

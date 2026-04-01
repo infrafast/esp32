@@ -6,12 +6,14 @@
 
 
 // that the protocol
-#define PATH_APP_STATE "/app/state"
-#define PATH_MIXER_IDENTITY "/app/mixers/current"                   // mixer name, model, address IP
-#define PATH_MIXER_DEFINITION "/console/information"                // mixer attributes like  number of channel...
-#define PATH_SUBSCRIBE "/console/data/subscribe"
-#define PATH_MIXERS_AVAILABLE "/app/mixers/available"
-#define PATH_MIXER_GET_DATA "/console/data/get"
+#define MSPATH_APP_STATE "/app/state"
+#define MSPATH_MIXER_IDENTITY "/app/mixers/current"                   // mixer name, model, address IP
+#define MSPATH_MIXER_DEFINITION "/console/information"                // mixer attributes like  number of channel...
+#define MSPATH_SUBSCRIBE "/console/data/subscribe"
+#define MSPATH_UNSUBSCRIBE "/console/data/unsubscribe"
+#define MSPATH_MIXERS_AVAILABLE "/app/mixers/available"
+#define MSPATH_MIXER_GET_DATA "/console/data/get"
+#define MSPATH_MIXER_SET_DATA "/console/data/set"
 
 #define MSDATA_CH_CONFIG_NAME  "ch.%d.cfg.name"
 #define MSDATA_CH_BUS_MUTE  "ch.%d.mix.sends.%d.on"
@@ -115,7 +117,7 @@ char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize
 class MixingStation:  public MixerDevice<NetworkSocket>{
   public:
 
-    #define MS_PING_COMMAND PATH_MIXER_IDENTITY
+    #define MS_PING_COMMAND MSPATH_MIXER_IDENTITY
   
     MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION, GROUP_INTERFACE_MIXER, MS_PING_COMMAND, 8887, 8088, true){
       //destination.host = "192.168.99.99";
@@ -134,7 +136,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
     virtual void onSocketConnected() override{
-      hwm.network->clientSocketSend(get(PATH_APP_STATE));  // forge a MS get json query with echoCommand as the path
+      hwm.network->clientSocketSend(get(MSPATH_APP_STATE));  // forge a MS get json query with echoCommand as the path
     }
  
     virtual bool restoreMixerProfile(){
@@ -197,10 +199,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     };
 
     static const Route routes[];
-
-    // used to handle path templates and values
-    #define PATH_MAX_SIZE 64
-    char pathBuffer[PATH_MAX_SIZE];    
 
     #define ROUTES_COUNT 5
 
@@ -363,7 +361,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
 
     void getMixerDefinition(){      
-      hwm.network->clientSocketSend(get(PATH_MIXER_DEFINITION)); // retrieve name, etc...            
+      hwm.network->clientSocketSend(get(MSPATH_MIXER_DEFINITION)); // retrieve name, etc...            
     }
 
     void processMixerDefinition(char* rx, size_t len) {
@@ -466,7 +464,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       saveMixerDefinition();
 
       // now get the mixer identity
-      hwm.network->clientSocketSend(get(PATH_MIXER_IDENTITY)); // retrieve name, etc...            
+      hwm.network->clientSocketSend(get(MSPATH_MIXER_IDENTITY)); // retrieve name, etc...            
 
     }
 
@@ -484,7 +482,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         determineQoS();        
         setMixer(name,model,ip);                
       }else{
-        hwm.network->clientSocketSend(get(PATH_APP_STATE));   // force getting the state as a backup in case mixerQuery didn't pass thru
+        hwm.network->clientSocketSend(get(MSPATH_APP_STATE));   // force getting the state as a backup in case mixerQuery didn't pass thru
       }
 
     }
@@ -528,7 +526,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           }*/
       String data;
 
-      if (!extractPath(path, PATH_MIXER_GET_DATA, data)) {
+      if (!extractPath(path, MSPATH_MIXER_GET_DATA, data)) {
         DEBUG_WARN("%s::data: extractPath failed for:%s", interfaceName.c_str(), path);
         return;
       }
@@ -644,18 +642,18 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       if (body == nullptr){
         snprintf(buffer, sizeof(buffer),
           "{"
-          "\"path\":\"%s\","
-          "\"method\":\"%s\","
-          "\"body\":null"
+            "\"path\":\"%s\","
+            "\"method\":\"%s\","
+            "\"body\":null"
           "}",
           path, method);
 
       }else{
         snprintf(buffer, sizeof(buffer),
           "{"
-          "\"path\":\"%s\","
-          "\"method\":\"%s\","
-          "\"body\":%s"
+            "\"path\":\"%s\","
+            "\"method\":\"%s\","
+            "\"body\":%s"
           "}",
           path, method,body);
 
@@ -671,7 +669,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       return build(path, "POST",body);
     }    
 
-    const char* bodyPathFormat(const char* path, const char* format) {
+    const char* bodyPathFormat(const char* path, const char* format="val") {
         static char buffer[160];
 
         snprintf(buffer, sizeof(buffer),
@@ -682,7 +680,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
                 path, format);
 
         return buffer;
-    }    
+    }        
 
     /////////////////////////////////////////////
     // method which is called when sync is finished so we can perform action like subscribing mixer changes...
@@ -709,12 +707,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       else if (dataset == dcaNamesDS) index += msMixer->DCAOffset;
 
       snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_CH_CONFIG_NAME, index);
-      subscribe(pathBuffer);
+      subscribeQuery(pathBuffer);
     }
 
     virtual void requestBUSmute(uint8_t index) override{
       snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_BUS_MUTE, index + msMixer->busOffset);
-      subscribe(pathBuffer);
+      subscribeQuery(pathBuffer);
     }
 
     virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
@@ -722,7 +720,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
               chIndex + msMixer->channelOffset -1,      // requestCHBUSmute is called from strip with Select1ID as the parameter which starts at 1, hence we deduct 1 since MS channel starts at 0
               busIndex - 1);      // bus index is not offseted for level and mute, we only deduct one which is the offset of the select2id dropdownm value
 
-      subscribe(pathBuffer);
+      subscribeQuery(pathBuffer);
     }
 
     virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
@@ -732,36 +730,68 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
       snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_CH_BUS_LVL,
               chIndex + msMixer->channelOffset,
-              busIndex);      // bus index is not offseted for level and mute, only for the path to subscribe to the change of this data, which is a bit weird but that's how MS do it, we just adapt to their protocol
+              busIndex);      // bus index is not offseted for level and mute, only for the path to subscribeQuery to the change of this data, which is a bit weird but that's how MS do it, we just adapt to their protocol
 
-      subscribe(pathBuffer,"norm");   // we want a 0.0 -> 1.0 return, hence we use norm
+      subscribeQuery(pathBuffer,"norm");   // we want a 0.0 -> 1.0 return, hence we use norm
     }
 
     ////// getters helpers
-    void subscribe(const char* pathBuffer, const char* format="val"){         
-      // drop the request to subscribe to a change of this data and get immediate value
-      hwm.network->clientSocketSend(post(PATH_SUBSCRIBE,bodyPathFormat(pathBuffer,format)));  // forge a MS get json query
-
+    /*
+      {
+        "path": "/console/data/subscribe",
+        "method": "POST",
+        "body": {
+          "path": "ch.0.mix.sends.0.lvl",
+          "format": "val"
+        }
+      }    
+    */
+    void subscribeQuery(const char* path, const char* format="val"){         
+      // drop the request to subscribeQuery to a change of this data and get immediate value
+      hwm.network->clientSocketSend(post(MSPATH_SUBSCRIBE,bodyPathFormat(path,format)));  // forge a MS get json query
     }    
 
-    /*
-    void query(const char* basePath, const char* pathBuffer) {        
-      // post a request to get a data value at certain path  
-      String path = concatStrings(basePath, "/", pathBuffer, "/val");
-      hwm.network->clientSocketSend(get(path.c_str()));
-    }        
-    */
+
+    void unsubscribeQuery(const char* path, const char* format="val"){         
+      // drop the request to subscribeQuery to a change of this data and get immediate value
+      hwm.network->clientSocketSend(post(MSPATH_UNSUBSCRIBE,bodyPathFormat(path,format)));  // forge a MS get json query
+    } 
 
     //////////////////////////////////////
     /////////////// SETTERS //////////////
     //////////////////////////////////////
-    virtual void _setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) override{
-
+    virtual void _setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) override{      
+      buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex-1, busIndex-1, MSDATA_CH_BUS_LVL);     // -1 because parameters comes from the strip dropdown which values starts at 1 once ms station index
+      setdataQuery(pathBuffer,level);        // forge a MS json query
     }
 
-    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) override{    
-
+    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override{    
+      buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex-1, busIndex-1, MSDATA_CH_BUS_MUTE);     // -1 because parameters comes from the strip dropdown which values starts at 1 once ms station index
+      setdataQuery(pathBuffer, mute);
     }
+
+    ////// setters helpers
+    template<typename T>
+    void setdataQuery(const char* path, T value) {
+      /*
+      {
+        "path": "/console/data/set/path/val",
+        "method": "POST",
+        "body": {
+          "value": value
+        }
+      }
+      */
+      String fullPath = concatStrings(MSPATH_MIXER_SET_DATA "/", path, "/val");
+
+      JsonDocument body;
+      body["value"] = value;
+
+      char bodyBuffer[64];
+      serializeJson(body, bodyBuffer, sizeof(bodyBuffer));
+
+      hwm.network->clientSocketSend(post(fullPath.c_str(), bodyBuffer));
+    }    
 
     ////////////////////////////////////////
 
@@ -949,11 +979,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
 /////////////// Table de routage haut niveau pour faire le lien entre les paths de MS et les handlers de notre code, avec support des wildcards et extraction des arguments
 const MixingStation::Route MixingStation::routes[ROUTES_COUNT] = {
-  { PATH_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState }            },
-  { PATH_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity }    },  
-  { PATH_MIXER_DEFINITION,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixerDefinition }  },  
-  { PATH_MIXERS_AVAILABLE,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }  },
-  { PATH_MIXER_GET_DATA"/*",   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet }          },
+  { MSPATH_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState }            },
+  { MSPATH_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity }    },  
+  { MSPATH_MIXER_DEFINITION,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixerDefinition }  },  
+  { MSPATH_MIXERS_AVAILABLE,     RouteMode::RxMessage,  { .rh = &MixingStation::processMixersAvailable }  },
+  { MSPATH_MIXER_GET_DATA"/*",   RouteMode::JsonBody,   { .jh = &MixingStation::processDataGet }          },
 };
 
 

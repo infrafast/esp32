@@ -1064,6 +1064,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         case BUTTON_SIMPLE_CLIC:
           simpleClicCallBack(btData->buttonId,btData->time);
         break;
+        case BUTTON_ENTER_HOLD:
+          enterHoldCallback(btData->buttonId,btData->time);
+        break;
       }
     }
 
@@ -1390,6 +1393,30 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
+    void enterHoldCallback(uint8_t buttonID, unsigned long time){
+      switch(screen.id){
+        case SCREEN_STARTUP:
+
+        break;
+        case SCREEN_WIZARD:
+
+        break;
+        case SCREEN_MENU:
+
+        break;
+        case SCREEN_PROMPT:
+
+        break;
+        case SCREEN_UTILS:
+
+        break;
+        case SCREEN_BANK:
+          moduleEnterholdClic(buttonID, time);
+        break;
+      }
+    }
+
+
   //////////////////////////////////////////////////////////////
   ////                BUTTONS CALLBACKS UTILITIES        ///////
   //////////////////////////////////////////////////////////////
@@ -1473,6 +1500,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // at the moment, this is hard coded
     stripChangeValue(buttonID, time, BUTTON_HOLD);
   }
+
+  void moduleEnterholdClic(uint8_t buttonID, unsigned long time){
+    // perform the behaviour defined in the config file
+    // at the moment, this is hard coded
+    stripEnterHold(buttonID, time, BUTTON_HOLD);
+  }
+
 
   void moduleReleaseClic(uint8_t buttonID, unsigned long time){
     stripReleaseHold(buttonID, time, BUTTON_HOLD);
@@ -2749,12 +2783,17 @@ void setup() {
 
     }
 
+    void stripEnterHold(uint8_t direction, unsigned long time, uint8_t trigger){
+      DEBUG_WARN("\n\n\n                 ENTER HOLD STRIP              \n\n\n");
+    }
+
     void stripReleaseHold(uint8_t direction, unsigned long time, uint8_t trigger){
+      DEBUG_WARN("\n\n\n                 RELEASE HOLD STRIP              \n\n\n");   
       IntervalBank* bank = banks[screen.state];
       if (bank != nullptr){
         Strip* strip = bank->getStrip(bank->selector);
         if (strip != nullptr) return strip->onButtonReleased();
-      }
+      }         
     }
 
 

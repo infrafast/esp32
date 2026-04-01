@@ -322,9 +322,6 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       if (state.enabled) handleConnectService();
     }    
 
-    // used to handle path templates and values
-    #define PATH_MAX_SIZE 64
-    char pathBuffer[PATH_MAX_SIZE];
     int i1,i2;    // index
 
         //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -570,7 +567,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer, level);
     }
 
-    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) override{
+    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override{
       // this method sends the command to set a channel mute state on a bus
       // we need to find the right pattern and replace the 2 placeholders
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();
@@ -578,17 +575,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer, mute ? 1 : 0);
     }
 
-  protected:
-    /////////////////////////////////// UTILITIES ////////////////////////////
-
-    //construit la chaîne en remplaçant les placeholders %d et %s
-    void buildPath1Int(char* destination, size_t bufferSize, int index, const char* pattern) {
-        snprintf(destination, bufferSize, pattern, index);
-    }   
-    
-    void buildPath2Int(char* destination, size_t bufferSize, int index1, int index2, const char* pattern) {
-        snprintf(destination, bufferSize, pattern, index1, index2);
-    }       
+  protected:    
 
     /*
       pré-analyser chaque pattern au chargement des protocoles
