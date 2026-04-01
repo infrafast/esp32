@@ -119,8 +119,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     ConnectMethodDS connectMethodDS = ConnectMethodDS(new DropDownAddress(ADDRESS_CONNECT_METHOD));
     XMmixerModelDS mixerModelDS = XMmixerModelDS(new DropDownAddress(ADDRESS_MIXER_MODEL));
     
-    XMSeries(WebApplicationService* webApp):MixerDevice<NetworkOSC>(webApp, INTERFACE_XMSeries, 8888, "192.168.0.1", 10023, XMSERIES_PING_CMD, true, GROUP_INTERFACE_MIXER){
-      
+    XMSeries():MixerDevice<NetworkOSC>(INTERFACE_XMSeries, 8888, "192.168.0.1", 10023, XMSERIES_PING_CMD, true, GROUP_INTERFACE_MIXER){      
         unregisterDataSetAddress(&addressPing);              // we un-expose the ping parameter as user should not modify it 
 
         registerDataSetAddress(connectMethodDS.address);    // add a connect method parameter

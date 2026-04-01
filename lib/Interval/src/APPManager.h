@@ -1844,7 +1844,7 @@ void setup() {
       for (const auto& interface : interfaceRepo.interfaces){
         
         dataProcessed |= interface->update();      // drive the icon to indicate data being processed
-        // we could also test the focused strip in terface and compare it to the interface to only show icon for the active strip
+        if ()
 
         
         if (interface->state.broadcastState){
@@ -1858,9 +1858,6 @@ void setup() {
         }
 
       }
-
-      // we could also test the focused strip in terface and compare it to the interface to only show icon for the active strip
-      if (dataProcessed){ /*manage icon */}
 
       processBroadcastQueue();
 

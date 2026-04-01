@@ -250,9 +250,8 @@ public:
     WebApplicationService* webAppService;
 
     template<typename... Args>
-    MixerDevice(WebApplicationService* webApp, Args&&... args)      // a MixerDevice need a webAppService to listen to event EVENT_WEBAPP_STARTED to start the synchronization process, so we inject it in the constructor and store a pointer to it
-        : NetworkBase(std::forward<Args>(args)...),
-          webAppService(webApp) {
+    MixerDevice(Args&&... args)      
+        : NetworkBase(std::forward<Args>(args)...){
         bindDeviceInterface(static_cast<DeviceInterface*>(this),
                             static_cast<MixerBase*>(this));
 
@@ -298,7 +297,7 @@ public:
       // Network bootstrap is already driven by NetworkDevice::_begin(), which
       // dispatches to the most-derived begin() implementation.
       DEBUG_INFO("%s::_begin() => self registering to webAppService event",this->deviceInterface->interfaceName.c_str());      
-      //webAppService->registerEventListener(this);   // we listen to web app event to start the synchronization when it is ready
+            
       beginMixer();  // call the mixer specific begin method to setup model and dataset pattern, we do it here in the generic begin method because it is the one called by the NetworkDevice::_begin() and this way we are sure it is called at the right moment in the connection process (for example if we do it in the constructor it may be too early and if we do it in onEvent when receiving EVENT_WEBAPP_STARTED it may be too late if the web app is already started by then)
       return true;
     }
@@ -339,16 +338,11 @@ public:
 
     //////////////////////////////////
 
-    void onEvent(const Event& event) override {
+    /*void onEvent(const Event& event) override {
       NetworkBase::onEvent(event);   // call parent to handle network events
-
-      if (event.type == EVENT_WEBAPP_STARTED) {
-        // when web app has started we launch the data synchronization
-        if (!synchronizer.synced) {
-          setStatePendingDataSync();
-        }
+      if (event.type == EVENT_TYPE) {
       }
-    }
+    }*/
       
     /////////////////////////////////
 
@@ -401,9 +395,9 @@ public:
 
       if (offlineTooLong || mixerChanged) synchronizer.reset();
 
-      /*if (!synchronizer.synced){
+      if (!synchronizer.synced && app.webAppConnected){
         setStatePendingDataSync();
-      }else*/
+      }else
         if (this->state.label != IF_STATE_LIVE) setStateLive();
     
 

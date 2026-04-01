@@ -12,8 +12,8 @@ XMSeries* xmMixer;
 
 void setup(){
     
-    msMixer = new MixingStation(app.webAppService);    // a mixer has to be notified when webapp is started so it starts synchronisationo of data
-    xmMixer = new XMSeries(app.webAppService);
+    msMixer = new MixingStation();    // a mixer has to be notified when webapp is started so it starts synchronisationo of data
+    xmMixer = new XMSeries();
 
     stripInput2mixbusSkel = new StripSkeleton(STRIP_INPUT2MIXBUS,GROUP_INTERFACE_MIXER,sendStripConstructorCallback,'*');
         stripInput2mixbusSkel->registerDataSetAddress(&addressCHname);
