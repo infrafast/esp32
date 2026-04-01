@@ -154,6 +154,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
     virtual bool begin() override{
       DEBUG_INFO("%s::begin() => user setting up XMmixerModelDS/model and dataset pattern",interfaceName.c_str());      
+      MixerDevice<NetworkOSC>::begin();
       mixerModelDS.populate();        // feeding the list of available mixer definitions for when we are offline and want to select a mixer      
       // check if mixerID.model is in the list, otherwise set it to the first item from it
       if (!mixerModelDS.contains(mixerID.model)){

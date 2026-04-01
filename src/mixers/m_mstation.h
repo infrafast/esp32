@@ -145,6 +145,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     virtual bool begin() override{
       DEBUG_INFO("%s::begin() => setting model and dataset pattern",interfaceName.c_str());      
+      MixerDevice<NetworkSocket>::begin();
       setModel("virtual");      // "virtual" is different than default value "offline" and this forces setModel to reload and set the model from the definition file
       return true;
     }
