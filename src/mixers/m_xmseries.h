@@ -349,7 +349,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
                   ip[0] != destination.ip[0] || ip[1] != destination.ip[1] ||
                   ip[2] != destination.ip[2] || ip[3] != destination.ip[3]
               ){
-                  DEBUG_WARN("Mixer IP differs from UDP packet %s->%s", pathBuffer, UDPIP.toString());
+                  //DEBUG_WARN("Mixer IP differs from UDP packet %s->%s", pathBuffer, UDPIP.toString());
                   // destination.ip = ip;
               }
             } else {
@@ -412,16 +412,23 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         }
 
         ////////////////////// MUTE STATE ROUTES ////////////////////////
+        match = matchProtocol(XM_BUS_MUTE,addr,m1,m2);
+        if (match == MATCH_1INT){
+          handleBusMute(m1,oscIn.getInt(0));
+          return;
+        }
 
         match = matchProtocol(XM_CH_BUS_MUTE, addr, m1, m2);
         if (match == MATCH_2INT) {
-          fireChBusMute(m1, m2, oscIn.getInt(0));
+          //fireChBusMute(m1, m2, oscIn.getInt(0));
+          handleChBusMute(m1, m2, oscIn.getInt(0));
           return;
         }
 
         match = matchProtocol(XM_CH_LR_MUTE, addr, m1, m2);
         if (match == MATCH_1INT) {
-          fireChMainMute(m1, oscIn.getInt(0));
+          //fireChMainMute(m1, oscIn.getInt(0));
+          handleChMainMute(m1, oscIn.getInt(0));
           return;
         }
 
@@ -429,7 +436,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
         match = matchProtocol(XM_CH_BUS_MIX_LEVEL, addr, m1, m2);
         if (match == MATCH_2INT) {
-          fireChBusMixLevel(m1, m2, oscIn.getFloat(0));
+          //fireChBusMixLevel(m1, m2, oscIn.getFloat(0));
+          handleChBusMixLevel(m1,m2,oscIn.getFloat(0));
           return;
         }
     }
@@ -536,7 +544,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       // this method drop the request to get a ch mute state on a bus, we need to find the right pattern and replace the 2 placeholders with chIndex and busIndex
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();      
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
-
+      DEBUG_INFO("%s requestCHBUSmute(%i,%i)",this->interfaceName.c_str(),chIndex,busIndex);
       sendOSC(pathBuffer);
     }
 
@@ -559,7 +567,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     /////////////////////////////
     ///////// SETTERS ///////////
     /////////////////////////////
-    virtual void _setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) override{
+    virtual void setCHBUSlevel(int chIndex, int busIndex, float level) override{
       // this method sends the command to set a channel level on a bus
       // we need to find the right pattern and replace the 2 placeholders
       const char* pattern = protocol[XM_CH_BUS_MIX_LEVEL].c_str();
@@ -567,7 +575,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer, level);
     }
 
-    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override{
+    virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override{
       // this method sends the command to set a channel mute state on a bus
       // we need to find the right pattern and replace the 2 placeholders
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();

@@ -264,9 +264,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         if (state.code != IF_READY) setStateConnected();          // set the device to connected
         destination.lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
         connectAttemptCount = 0;                                  // reset attempt counter                
-
-        const char* addr = oscIn.getAddress();
-       
+               
         // before pushing to the derived class, we may filter by addr
         process();      // we now treat the osc data
         return true;         // job done, inform we have process data by returning true
@@ -295,8 +293,8 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }
 
     bool send(OSCMessage& msg){
-      //return queue.enqueue(msg);
-      return _sendOSCMessage(&msg);
+      return queue.enqueue(msg);            // queued send
+      //return _sendOSCMessage(&msg);       // direct send
     }
 
     virtual void process(){

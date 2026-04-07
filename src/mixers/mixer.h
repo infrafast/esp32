@@ -13,6 +13,15 @@
 
 #define MIXER_DEFINITION_PATH "/"
 
+
+/*
+values shared between strips and mixers
+*/
+TwoIndexValueList allInput2MixbusValues;
+
+OneIndexValueList allBusMixValues,
+                  allChMainValues;
+
 class DataSetSynced;
 
 class Synchronizer{
@@ -210,8 +219,8 @@ public:
     virtual void requestBUSmute(uint8_t busIndex) = 0;
     virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) = 0;
     // SETTERS
-    virtual void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) = 0;
-    virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, bool mute) = 0;
+    virtual void setCHBUSlevel(int chIndex, int busIndex, float level) = 0;
+    virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) = 0;
 
     ////////////////////////////////////////////////////////////////
 
@@ -295,9 +304,9 @@ public:
     
     virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
 
-    ////////////////////////////////////////////////////// the setters always echo the command so other strips update themseleves
-    virtual void _setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) = 0;
-    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) = 0;
+    ////////////////////////////////////////////////////// the setters always echo the command so other strips update themseleves using events
+    /*virtual void setCHBUSlevel(int chIndex, int busIndex, float level) = 0;
+    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) = 0;*/
     //////////////////////////////////////////////////////////////////////////////////////
    
     virtual void beginMixer() = 0;   // 
@@ -318,7 +327,7 @@ public:
       return true;
     }
 
-    void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level){
+    /*void setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level){
       _setCHBUSlevel(chIndex, busIndex, level);       
       fireChBusMixLevel(chIndex, busIndex, level);      // echo command to strips so they can update themselves, we have to do it here because the level is needed to update the strip but it is not returned by the mixer as it is set (we could of course ask the mixer to return the new level after setting it but it would generate a lot of network traffic and we already have the right level at hand so let's just use it)
     };
@@ -329,13 +338,13 @@ public:
     };
 
     ////////////////////////////////// EVENT TRANSMISSION TO STRIPS SO THEY CAN UPDATE THEMSELVES ///////////////////
-    void fireChBusMixLevel(int ch, int bus, float level) {
+    /*void fireChBusMixLevel(int ch, int bus, float level) {
       payload[0] = STRIP_CH_BUS_MIX_LEVEL;
       payload[1] = ch;
       payload[2] = bus;
       payload[3] = level;
       this->fireEvent(this->message);
-    }  
+    }
 
     void fireChMainMute(int ch, int muteState) {
       payload[0] = STRIP_CH_MAIN_MUTE;
@@ -350,7 +359,36 @@ public:
       payload[2] = bus;
       payload[3] = muteState;
       this->fireEvent(this->message);
+    }*/
+
+    /////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////// incoming data handlers ////////////////////////
+    // called by the mixers when data arrive and generically modify the values //
+    /////////////////////////////////////////////////////////////////////////////
+    void handleChBusMixLevel(int ch, int bus, float level) {
+      TwoIndexValue* chBus = allInput2MixbusValues.get(ch,bus);       // retrieve the value based on the ch+bus key tupple
+      if (chBus != nullptr) chBus->value = level;
+      DEBUG_INFO("%s->handleChBusMixLevel(%i,%i,%.2f)",this->interfaceName.c_str(),ch,bus,level);      
+    }       
+
+    void handleChBusMute(int ch, int bus, int on){
+      TwoIndexValue* chBus = allInput2MixbusValues.get(ch,bus);
+      if (chBus != nullptr) chBus->toggle = on;
+      DEBUG_INFO("%s->handleChBusMute(%i,%i,%i)",this->interfaceName.c_str(),ch,bus,on);      
     }
+
+    void  handleBusMute(int bus, int on){
+      OneIndexValue* chBus = allBusMixValues.get(bus);
+      if (chBus != nullptr) chBus->toggle = on;
+      DEBUG_INFO("%s->handleBusMute(%i,%i)",this->interfaceName.c_str(),bus,on);      
+    }
+
+    void  handleChMainMute(int ch, int on){
+      OneIndexValue* chMain = allChMainValues.get(ch);
+      if (chMain != nullptr) chMain->toggle = on;
+      DEBUG_INFO("%s->handleMainMute(%i,%i)",this->interfaceName.c_str(),ch,on);           
+    }
+
 
     ///////////// helpers to build command path from id on template /////////////
     //construit la chaîne en remplaçant les placeholders %d et %s
@@ -401,14 +439,14 @@ public:
 
 
     void setMixer(String& name, String&model, IPAddress& ip) {
-      DEBUG_INFO("%s:setMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
+      //DEBUG_INFO("%s:setMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
 
       MixerIdentity newID { name, model, ip };
 
       bool mixerChanged = !mixerID.equals(newID);
       
       if (mixerChanged){
-        DEBUG_PRINT("\t%s",mixerChanged?"yes✅":"no");
+        //DEBUG_PRINT("\t%s",mixerChanged?"yes✅":"no");
         newMixer(newID);
       }           
       
@@ -417,7 +455,7 @@ public:
       if (this->offlineStart > 0 ){
         unsigned long  elpasedOffline = millis() - this->offlineStart;
         offlineTooLong = (elpasedOffline > 10000);
-        DEBUG_PRINT("\t%s 🕒 elpasedOffline:%i",offlineTooLong?"offline too long⌛":"",elpasedOffline);        
+        //DEBUG_PRINT("\t%s 🕒 elpasedOffline:%i",offlineTooLong?"offline too long⌛":"",elpasedOffline);        
       }
 
       if (offlineTooLong || mixerChanged) synchronizer.reset();

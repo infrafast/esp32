@@ -439,7 +439,7 @@ class Font : public Widget{
         oldValuePtr = value;
       }
 
-      if(Widget::refresh(force || valuePointerChanged) || valuePointerChanged || *value != oldValue){       
+      if(Widget::refresh(force || valuePointerChanged) || *value != oldValue){       
         if (debug){
           //if (*value != oldValue) DEBUG_PRINT("\n%s changed value from '%s' to '%s'", this->id.c_str(), oldValue.c_str(), value->c_str());
         }

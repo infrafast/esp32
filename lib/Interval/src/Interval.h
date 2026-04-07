@@ -11,6 +11,7 @@
 0.22 - interfaces refactor + better state management
 0.23 - event and data handing, implementation of interfaces
 0.24 - starting sync data implementation
+0.xx - mixer value based on dedicated shared struct
 */
 
 

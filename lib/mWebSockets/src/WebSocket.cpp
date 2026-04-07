@@ -8,7 +8,7 @@ void generateSecKey(char output[]) {
   constexpr auto kLength = 16;
   char temp[kLength + 1]{};
 
-  randomSeed(analogRead(0));
+  randomSeed(micros()); //randomSeed(analogRead(0));
   for (uint8_t i{0}; i < kLength; ++i)
     temp[i] = static_cast<char>(random(0xFF));
 
@@ -32,7 +32,7 @@ void encodeSecKey(const char *key, char output[]) {
 }
 
 void generateMask(char output[]) {
-  randomSeed(analogRead(0));
+  randomSeed(micros()); //randomSeed(analogRead(0));
   for (uint8_t i{0}; i < 4; ++i)
     output[i] = static_cast<char>(random(0xFF));
 }

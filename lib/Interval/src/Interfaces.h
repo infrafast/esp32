@@ -771,7 +771,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
             }                  
 
       }
-      DEBUG_INFO("%s latency: %i, jitter:%i",interfaceName.c_str(),destination.latency,destination.jitter);    
+      //DEBUG_INFO("%s latency: %i, jitter:%i",interfaceName.c_str(),destination.latency,destination.jitter);    
     }      
 
     void onEvent(const Event& evt) override {

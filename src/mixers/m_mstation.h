@@ -189,13 +189,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     enum class RouteMode : uint8_t { JsonBody, RxMessage };
 
-    using JsonHandler = void (MixingStation::*)(const char* path,JsonVariant body);
-    using RxHandler   = void (MixingStation::*)(char* rx, size_t len);
+    using JsonRouteHandler = void (MixingStation::*)(const char* path,JsonVariant body);
+    using RxRouteHandler   = void (MixingStation::*)(char* rx, size_t len);
 
     struct Route {
       const char* path;
       RouteMode mode;
-      union { JsonHandler jh; RxHandler rh; } fn;
+      union { JsonRouteHandler jh; RxRouteHandler rh; } fn;
     };
 
     static const Route routes[];
@@ -301,7 +301,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       int progress         = body["progress"] | 0;
       const char* state    = body["state"]    | "";
       const char* topState = body["topState"] | "";
-      DEBUG_INFO("%s::processState: msg:%s,progress:%i,state:%s,topState:%s",interfaceName.c_str(),msg,progress,state,topState);
+      //DEBUG_INFO("%s::processState: msg:%s,progress:%i,state:%s,topState:%s",interfaceName.c_str(),msg,progress,state,topState);
 
       if (strcmp(topState, MS_IDLE) == 0) {
         if (deviceInterface->state.label = MS_IDLE){
@@ -533,7 +533,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
       String v = body["value"];
 
-      DEBUG_INFO("%s::data: %s <%s>", interfaceName.c_str(), data.c_str(), v.c_str());
+      //DEBUG_INFO("%s::data: %s <%s>", interfaceName.c_str(), data.c_str(), v.c_str());
 
       MSPathMatch match;
       if (!decodeMSDataPath(data.c_str(), match)) {
@@ -541,13 +541,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         return;
       }
 
-      DEBUG_INFO("%s::pattern matched: %s (argc=%u, a=%d, b=%d, c=%d)",
+      /*DEBUG_INFO("%s::pattern matched: %s (argc=%u, a=%d, b=%d, c=%d)",
                 interfaceName.c_str(),
                 v.c_str(),
                 match.argCount,
                 match.values[0],
                 match.values[1],
-                match.values[2]);
+                match.values[2]);*/
 
       switch (match.type) {
 
@@ -590,19 +590,18 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
           int mute = v=="true"? 1 : 0;
           DEBUG_INFO("%s::CH_BUS_MUTE ch=%d bus=%d mute=%s",interfaceName.c_str(), chIndex, busIndex, mute ? "true" : "false");
-
-          fireChBusMute(chIndex+1, busIndex+1, mute);      // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
-
+          //fireChBusMute(chIndex+1, busIndex+1, mute);      // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
+          handleChBusMute(chIndex+1, busIndex+1, mute);       // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
           break;
         }
 
         case MSDataPattern::BusMute: {
           int busIndex = match.values[0];
+          busIndex -= msMixer->busOffset;     
 
           int mute = v=="true"? 1 : 0;
           DEBUG_INFO("%s::BUS_MUTE bus=%d mute=%s",interfaceName.c_str(), busIndex, mute ? "true" : "false");
-
-          // TODO: dataset/setter
+          handleBusMute(busIndex+1,mute); // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
           break;
         }
 
@@ -613,8 +612,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           float lvl = v.toFloat();
 
           //DEBUG_INFO("%s::CH_BUS_LEVEL ch=%d bus=%d lvl=%.3f",interfaceName.c_str(), chIndex, busIndex, lvl);
-
-          fireChBusMixLevel(chIndex+1, busIndex+1, lvl);      // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
+          //fireChBusMixLevel(chIndex+1, busIndex+1, lvl);      // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
+          handleChBusMixLevel(chIndex+1,busIndex+1,lvl);        // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
           break;
         }
 
@@ -710,15 +709,20 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       subscribeQuery(pathBuffer);
     }
 
-    virtual void requestBUSmute(uint8_t index) override{
-      snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_BUS_MUTE, index + msMixer->busOffset);
+    virtual void requestBUSmute(uint8_t busIndex) override{
+      busIndex -= 1; // index of mixing station starts at 0
+
+      snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_BUS_MUTE, busIndex + msMixer->busOffset );  
       subscribeQuery(pathBuffer);
     }
 
     virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
+      chIndex -= 1; // the requestCHBUSlevel is called from a strip which provide its selectID , since they starts at 1 but MS staation channels starts at zero, we have to deduct 1
+      busIndex -= 1; // same for bus index, we have to deduct 1 to match MS station protocol
+
       snprintf(pathBuffer, sizeof(pathBuffer), MSDATA_CH_BUS_MUTE,
-              chIndex + msMixer->channelOffset -1,      // requestCHBUSmute is called from strip with Select1ID as the parameter which starts at 1, hence we deduct 1 since MS channel starts at 0
-              busIndex - 1);      // bus index is not offseted for level and mute, we only deduct one which is the offset of the select2id dropdownm value
+              chIndex + msMixer->channelOffset,      // requestCHBUSmute is called from strip with Select1ID as the parameter which starts at 1, hence we deduct 1 since MS channel starts at 0
+              busIndex );      // bus index is not offseted for level and mute, we only deduct one which is the offset of the select2id dropdownm value
 
       subscribeQuery(pathBuffer);
     }
@@ -760,12 +764,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     //////////////////////////////////////
     /////////////// SETTERS //////////////
     //////////////////////////////////////
-    virtual void _setCHBUSlevel(uint8_t chIndex, uint8_t busIndex, float level) override{      
+    virtual void setCHBUSlevel(int chIndex, int busIndex, float level) override{      
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex-1, busIndex-1, MSDATA_CH_BUS_LVL);     // -1 because parameters comes from the strip dropdown which values starts at 1 once ms station index
       setdataQuery(pathBuffer,level);        // forge a MS json query
     }
 
-    virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override{    
+    virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override{    
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex-1, busIndex-1, MSDATA_CH_BUS_MUTE);     // -1 because parameters comes from the strip dropdown which values starts at 1 once ms station index
       setdataQuery(pathBuffer, mute);
     }

@@ -187,9 +187,11 @@ class Strip: public EventListener{
     bool renderError;
     //bool redraw = false;
 
-    bool toggle1 = true;      // mute off
-    bool toggle2 = true;      // mute off
-    float value = 0.5f; 
+    bool* toggle1 = &GUI::on;      // mute off
+    bool* toggle2 =  &GUI::on;      // mute off
+    
+    float innerValue = 0.5f;  // default value that need to be overriden by derived strip
+    float* value = &innerValue; 
     
     
     //bool updated = false;
@@ -345,14 +347,14 @@ class Strip: public EventListener{
         float step = amp * cfg.clickStepRatio;
         if (step <= 0.0f) return 0.0f;
 
-        float newValue = value + (float)dir * step;
+        float newValue = *value + (float)dir * step;
         if (newValue > valueMax) newValue = valueMax;
         if (newValue < valueMin) newValue = valueMin;
 
-        float delta = newValue - value;
+        float delta = newValue - *value;
         if (delta == 0.0f) return 0.0f;
 
-        value = newValue;
+        *value = newValue;
         return fabsf(delta); // delta positif comme ton code
       }
 
@@ -361,7 +363,7 @@ class Strip: public EventListener{
       if (!holdArmed || holdDir != dir){
         holdArmed = true;
         holdDir = dir;
-        holdStartValue = value;
+        holdStartValue = *value;
         holdStartMillis = now;
         lastHoldUpdate = 0; // update immédiat
       }
@@ -385,14 +387,14 @@ class Strip: public EventListener{
       if (newValue > valueMax) newValue = valueMax;
       if (newValue < valueMin) newValue = valueMin;
 
-      float delta = newValue - value;
+      float delta = newValue - *value;
       if (delta == 0.0f) return 0.0f;
 
       if (cfg.minDeltaToApply > 0.0f && fabsf(delta) < cfg.minDeltaToApply) {
         return 0.0f;
       }
 
-      value = newValue;
+      *value = newValue;
       return fabsf(delta);
     }
 
@@ -455,7 +457,7 @@ class Strip: public EventListener{
     }
 
     virtual bool init(){
-      value = (valueMax-valueMin)/2;               
+      *value = (valueMax-valueMin)/2;               
       return true;
     }
 
@@ -684,7 +686,7 @@ class Strip: public EventListener{
       if (!interface) return;
       gui.add(new Label(&interface->state.label, Align::Center,&GUI::midScreenHoriz, &GUI::topTextY,CONFIG_TEXTAREA_MESSAGE_SIZE,32, &GUI::gold,&GUI::defaultBcolor));    
       gui.add(new Led(&GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20, &interface->state.led));      
-      gui.add(new Arc(&interface->state.progress, 0,1.0 , &GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20+10, &GUI::gold, &GUI::transparentColor,0));
+      gui.add(new Arc(&interface->state.progress, 0,100.0 , &GUI::vquarter1xPos, &GUI::midScreenVertical, SIZE_20+10, &GUI::gold, &GUI::transparentColor,0));
       gui.add(new Icon(interface->getIcon(),Align::Right,&GUI::rightMenuIconXpos, &GUI::iconY,MEDIUM_ICON_SIZE,&GUI::gold,&GUI::defaultBcolor));   
       gui.add(new TextArea(&interface->state.details,TFT_WIDTH/2.3 ,Align::Left,Align::Center,&GUI::midScreenHoriz,&GUI::iconY,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));           
       gui.add(new Label(lang.getString("Double clic on/off to toggle offline"), Align::Center,&GUI::midScreenHoriz, &GUI::belowBottomTexty,SIZE_14,40,&GUI::green,&GUI::transparentColor));          
@@ -733,14 +735,14 @@ class Strip: public EventListener{
     void push4x4hBar(){      
       h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
       w = WIDGET4X4W-GUI::three*2;      
-      gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &GUI::three /*x*/, &GUI::midScreenHoriz /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));      
+      gui.add(new ProgressBarH(value /*v*/, valueMin /*min*/,valueMax /*max*/, &GUI::three /*x*/, &GUI::midScreenHoriz /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));      
     }
 
     void push1x4vBar(){
       w = WIDGET1X4W/1.9;   // width of the bar is 2 time less big than the full width of the cell
       h = WIDGET1X4H;
       topLeftX += w/2;           
-      gui.add(new ProgressBarV(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topLeftX /*x*/, &topLeftY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+      gui.add(new ProgressBarV(value /*v*/, valueMin /*min*/,valueMax /*max*/, &topLeftX /*x*/, &topLeftY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 0 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
     }
 
     void push2x2RingMeter(){
@@ -748,21 +750,21 @@ class Strip: public EventListener{
       h = WIDGET2X2H;
       topLeftX += w/2;   
       topLeftY += h/2;      
-      RingMeter* ringMeter = new RingMeter(&value, valueMin, valueMax, 1, &topLeftX,&topLeftY, h/2, &unitString,&GUI::blue,&GUI::transparentColor,&brightness);
+      RingMeter* ringMeter = new RingMeter(value, valueMin, valueMax, 1, &topLeftX,&topLeftY, h/2, &unitString,&GUI::blue,&GUI::transparentColor,&brightness);
       gui.add(ringMeter);
     }
 
     void push4x1hBar(){
       h = WIDGET4X1H/2;   // height of the bar is 2 time less big than the full height of the cell
       w = WIDGET4X1W;
-      gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topLeftX /*x*/, &topLeftY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+      gui.add(new ProgressBarH(value /*v*/, valueMin /*min*/,valueMax /*max*/, &topLeftX /*x*/, &topLeftY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
     }
 
     void push2x2hBar(){
       h = WIDGET2X2H/2;   // height of the bar is 2 time less big than the full height of the cell          
       uint8_t widthOffset = WIDGET2X2H/10;
       w = WIDGET2X2W-widthOffset;
-      gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &topLeftX /*x*/, &topLeftY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+      gui.add(new ProgressBarH(value /*v*/, valueMin /*min*/,valueMax /*max*/, &topLeftX /*x*/, &topLeftY /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
     }
 
     //////////////// default rendering /////////////////////////////////
