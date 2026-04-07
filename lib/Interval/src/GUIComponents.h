@@ -297,7 +297,12 @@ class Widget : public GUI{
     }
 
     virtual bool refresh(bool force=false){
-      refreshed = force;      
+      refreshed = force;
+
+      if (x == nullptr || y == nullptr || fColor == nullptr || bColor == nullptr || brightness == nullptr) {
+        return refreshed;
+      }
+
       if (oldX != *x || oldY != *y || oldfColor != *fColor || oldbColor != *bColor || oldBrightness != *brightness || refreshed ){
         if (debug){
           /*DEBUG_PRINT("\n%s.refreshed()",id.c_str());
@@ -316,8 +321,8 @@ class Widget : public GUI{
     }
 
     void createSprite(){
-      //createSprite(*bColor);
-      createSprite(*bColor);
+      const uint16_t color = (bColor != nullptr) ? *bColor : GUI::defaultBcolor;
+      createSprite(color);
     }
     
     void createSprite(uint16_t color){
@@ -327,15 +332,20 @@ class Widget : public GUI{
         //sprite->setSwapBytes(true);
         sprite->createSprite(width,height);     
         if (color == TFT_TRANSPARENT) sprite->fillSprite(TFT_TRANSPARENT);
-        else sprite->fillSprite(GUI::luminance(color,*brightness * GUI::screenBrightness * 255));            
+        else {
+          const float localBrightness = (brightness != nullptr) ? *brightness : GUI::fullBrightness;
+          sprite->fillSprite(GUI::luminance(color, localBrightness * GUI::screenBrightness * 255));
+        }            
         //if (debug){DEBUG_PRINT("\tsprite(%i,%i)",width,height);}
       }     
     }
 
    
     uint16_t getClearColor(){
-      if (*bColor == TFT_TRANSPARENT) return  GUI::luminance(GUI::defaultBcolor,*brightness * GUI::screenBrightness * 255);
-      else return GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255);
+      const uint16_t localBColor = (bColor != nullptr) ? *bColor : GUI::defaultBcolor;
+      const float localBrightness = (brightness != nullptr) ? *brightness : GUI::fullBrightness;
+      if (localBColor == TFT_TRANSPARENT) return  GUI::luminance(GUI::defaultBcolor,localBrightness * GUI::screenBrightness * 255);
+      else return GUI::luminance(localBColor,localBrightness * GUI::screenBrightness * 255);
     }
 
     virtual int16_t getX(){return *x;}
@@ -418,7 +428,18 @@ class Font : public Widget{
     virtual bool refresh(bool force=false){ 
       refreshed = force;
 
-      if(Widget::refresh(force) || *value != oldValue){       
+      if (value == nullptr) {
+        oldValue = "";
+        oldValuePtr = nullptr;
+        return Widget::refresh(force);
+      }
+
+      bool valuePointerChanged = (value != oldValuePtr);
+      if (valuePointerChanged) {
+        oldValuePtr = value;
+      }
+
+      if(Widget::refresh(force || valuePointerChanged) || valuePointerChanged || *value != oldValue){       
         if (debug){
           //if (*value != oldValue) DEBUG_PRINT("\n%s changed value from '%s' to '%s'", this->id.c_str(), oldValue.c_str(), value->c_str());
         }
@@ -494,6 +515,7 @@ class Font : public Widget{
     }  
   private:    
     String oldValue = "?";
+    const String* oldValuePtr = nullptr;
     //OpenFontRender ofr;    
     Align align;
   protected:
@@ -552,7 +574,17 @@ class TextArea : public Widget{
     virtual bool refresh(bool force=false){
       refreshed = force;
       Widget::refresh(force);
-      if (*text != oldText || force){
+
+      if (text == nullptr) {
+        oldText = "";
+        oldTextPtr = nullptr;
+        return refreshed;
+      }
+
+      bool textPointerChanged = (text != oldTextPtr);
+      if (textPointerChanged) oldTextPtr = text;
+
+      if (*text != oldText || force || textPointerChanged){
 
         LineBreakInfo lbi = computeLineBreakInfo(*text, width);
         //if (debug) DEBUG_PRINT("\nlbi.lines:%i, lbi.maxWidth:%i, lbi.maxHeight:%i\n",lbi.lines,lbi.maxWidth,lbi.maxHeight);
@@ -621,6 +653,7 @@ class TextArea : public Widget{
     Align areaAlign, phraseAlign;
     const String* text;
     String oldText;
+    const String* oldTextPtr = nullptr;
     uint8_t size;
 
     std::vector<String> getWords(String text){
@@ -980,7 +1013,8 @@ class FromToWidget : public Widget {
       : Widget(posX, posY, fC, bC, _brightness, d)
     {
       value    = v; 
-      oldValue = *v - 1.0f; // force un premier refresh
+      oldValuePtr = v;
+      oldValue = (v != nullptr) ? (*v - 1.0f) : 0.0f; // force un premier refresh si possible
       minValue = mini;
       maxValue = maxi;
     }
@@ -1002,6 +1036,13 @@ class FromToWidget : public Widget {
       bool logicChanged = false;
       bool colorChanged = false;
 
+      const bool valuePointerChanged = (value != oldValuePtr);
+      if (valuePointerChanged) {
+        oldValuePtr = value;
+        forceFull = true;
+        if (value != nullptr) oldValue = *value - 1.0f;
+      }
+
       // Changement de position ou de couleur de fond => redraw frame
       if (forceFull || oldX != *x || oldY != *y || oldbColor != *bColor) {
         refreshFrame();
@@ -1014,7 +1055,9 @@ class FromToWidget : public Widget {
       // Logique spécifique au widget (angles, valeurs, etc.)
       // IMPORTANT : chaque dérivé doit appeler lui-même refreshContent()
       // quand la valeur change (partiel ou complet).
-      logicChanged = refreshLogic(forceFull);
+      if (value != nullptr) {
+        logicChanged = refreshLogic(forceFull);
+      }
 
       // Changement de couleur de premier plan => redraw complet du contenu
       if (forceFull || oldfColor != *fColor) {
@@ -1024,7 +1067,7 @@ class FromToWidget : public Widget {
       }
 
       // Le widget est considéré comme rafraîchi si au moins un de ces éléments a changé
-      refreshed = frameChanged || logicChanged || colorChanged || forceFull;
+      refreshed = frameChanged || logicChanged || colorChanged || forceFull || valuePointerChanged;
       return refreshed;
     }
 
@@ -1037,6 +1080,7 @@ class FromToWidget : public Widget {
     int16_t  from = 0, oldFrom = 254;
 
     const float* value;
+    const float* oldValuePtr = nullptr;
     float oldValue;
     float minValue, maxValue;
 };
@@ -1174,9 +1218,10 @@ class RingMeter : public Arc{
 
       if (Arc::refreshLogic(force)) refreshValueLabel();
       
-      if (*unit != oldUnit || force){
+      if ((unit != nullptr) && (*unit != oldUnit || force || unit != oldUnitPtr)){
         refreshUnitLabel();
         oldUnit = *unit;
+        oldUnitPtr = unit;
         refreshed = true;
         //if (debug){DEBUG_PRINT("\n%s.refreshed unit, new: %s",this->id.c_str(),unit->c_str());}
       } 
@@ -1189,6 +1234,7 @@ class RingMeter : public Arc{
     uint16_t valueLabelHeight;
     const String *unit;
     String oldUnit ;
+    const String* oldUnitPtr = nullptr;
     uint8_t decimal, clearArea=0;
 
     void refreshFrame(){
@@ -1204,6 +1250,7 @@ class RingMeter : public Arc{
       createSprite();
       //DEBUG_PRINT("\n%s.refreshUnitLabel()",this->id.c_str());
       // THE UNIT LABEL
+      if (unit == nullptr || unit->length() == 0) return;
       uint8_t unitFontSize = (2 * radius*0.7) / (unit->length());
       uint16_t color = widgetInnerColor;
       color = GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255);
@@ -1249,14 +1296,26 @@ class Toggle : public Widget{
       width = TFT_WIDTH;
       height = h;
       revert = p;
-      oldRevert = !*revert;
+      oldRevert = (revert != nullptr) ? !*revert : false;
       text = v;
       id = "Toggle";
     }
 
     virtual bool refresh(bool force=false){
       Widget::refresh(force);
-      if (refreshed || oldRevert != *revert || oldText != *text){
+
+      if (revert == nullptr || text == nullptr) {
+        oldRevertPtr = nullptr;
+        oldTextPtr = nullptr;
+        return refreshed;
+      }
+
+      bool revertPointerChanged = (revert != oldRevertPtr);
+      bool textPointerChanged = (text != oldTextPtr);
+      if (revertPointerChanged) oldRevertPtr = revert;
+      if (textPointerChanged) oldTextPtr = text;
+
+      if (refreshed || oldRevert != *revert || oldText != *text || revertPointerChanged || textPointerChanged){
 
         uint16_t fillColor, textColor;
 
@@ -1295,6 +1354,8 @@ class Toggle : public Widget{
   private:    
     bool oldRevert;    
     String oldText;
+    const bool* oldRevertPtr = nullptr;
+    const String* oldTextPtr = nullptr;
 
 };
 
