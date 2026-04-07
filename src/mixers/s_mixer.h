@@ -3,6 +3,7 @@
 
 #include "mixers/mixer.h"
 
+#include "mixers/values.h"
 
 class StripMixer{
   public:

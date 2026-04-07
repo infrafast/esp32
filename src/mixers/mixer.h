@@ -6,6 +6,7 @@
 #define GROUP_INTERFACE_MIXER "Mixer"   
 
 #include "Interfaces.h"
+#include "mixers/values.h"
 
 #define IF_STATE_LIVE               "live"
 #define IF_STATE_DATASYNCING        "Getting data"
