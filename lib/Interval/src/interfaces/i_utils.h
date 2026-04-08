@@ -232,7 +232,7 @@ class DirectoryInterface: public NetworkDevice{
         }          
 
         if (deviceInterface->state.enabled == false) setStateDisabled();
-        deviceInterface->state.details = concatStrings(*lang.getString("Device is not detectable on the network. Use")," ",hwm.network->IP.toString()," ",*lang.getString("to connect"));
+        deviceInterface->state.details = concatStrings(*lang.getString("Device is not detectable on the network.")," ",*lang.getString("Use")," ",hwm.network->getIP()," ",*lang.getString("to connect"));
 
         return true;
       }        

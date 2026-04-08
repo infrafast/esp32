@@ -99,6 +99,7 @@ public:
     static const String iconMixEthWiFi;
     static const String iconEth;
     static const String iconWiFi;
+    
 
     // default luminance
     static const float fullBrightness;
@@ -1333,8 +1334,7 @@ class Toggle : public Widget{
 
         sprite->fillSmoothRoundRect(0,0 , width, height, height/5, GUI::luminance(fillColor,*brightness * GUI::screenBrightness * 255));
         
-        uint16_t color = *bColor;
-        if (*revert) sprite->drawRoundRect(0,0, width, height, height/5, GUI::luminance(color,*brightness * GUI::screenBrightness * 255));
+        if (*revert) sprite->drawRoundRect(0,0, width, height, height/5, GUI::luminance(TFT_WHITE,*brightness * GUI::screenBrightness * 255));
 
         uint16_t transparent = TFT_TRANSPARENT;
         Label* label = new Label(text,Align::Center,&GUI::zero,&GUI::zero,height*1.4,TOGGLE_CHAR_MAX_LEN, &textColor,&transparent,  brightness, debug);
@@ -1775,31 +1775,45 @@ class SliderWidget{
 };
 
 
-class Led : public Widget{
+class Led : public Widget {
 
   public:
-    Led(const int16_t* posX, const int16_t* posY, uint16_t rad, const String* props, const float* _brightness = &GUI::fullBrightness, bool d=false):Widget(posX, posY, &ledBaseColor, &GUI::transparentColor, _brightness, d), properties(props), radius(rad){
+    Led(const int16_t* posX,
+        const int16_t* posY,
+        uint16_t rad,
+        const String* props,
+        const float* _brightness = &GUI::fullBrightness,
+        const bool* _enabled = &GUI::on,
+        bool d = false
+        )
+      : Widget(posX, posY, &ledBaseColor, &GUI::transparentColor, _brightness, d),
+        properties(props),
+        radius(rad),
+        enabled(_enabled) {
+
       id = concatStrings("Led", *posX, "x", *posY);
-      width = rad*2;
-      height = rad*2;
+      width = rad * 2;
+      height = rad * 2;
+
       parseProperties();
       oldProperties = *properties;
     }
 
-    virtual bool refresh(bool force=false){
+    virtual bool refresh(bool force = false) {
       refreshed = force;
+
       bool baseNeedsRefresh = Widget::refresh(force);
       bool propertyChanged = false;
 
-      if (*properties != oldProperties){
+      if (*properties != oldProperties) {
         parseProperties();
         oldProperties = *properties;
         propertyChanged = true;
       }
 
-      bool blinkChanged = updateBlink(force);
+      bool stateChanged = updateState(force);
 
-      if (baseNeedsRefresh || propertyChanged || blinkChanged || force){
+      if (baseNeedsRefresh || propertyChanged || stateChanged || force) {
         drawLed();
         refreshed = true;
       }
@@ -1809,19 +1823,26 @@ class Led : public Widget{
 
   private:
     static const uint16_t FLASH_MEDIUM_INTERVAL = 350;
-    static const uint16_t FLASH_FAST_INTERVAL = 100;
-    static const uint16_t FLASH_SLOW_INTERVAL = 1500;
+    static const uint16_t FLASH_FAST_INTERVAL   = 100;
+    static const uint16_t FLASH_SLOW_INTERVAL   = 1500;
 
     const String* properties;
     String oldProperties;
+
+    const bool* enabled = nullptr;   // pointeur externe on/off
+
     uint16_t ledBaseColor = TFT_RED;
     uint16_t radius;
+
     bool flashEnabled = false;
     uint16_t flashInterval = FLASH_MEDIUM_INTERVAL;
-    bool ledOn = true;
+
+    bool ledOn = true;               // état logique "normal" interne
+    bool effectiveLedOn = true;      // état réellement affiché après override externe
+
     unsigned long lastToggle = 0;
 
-    void parseProperties(){
+    void parseProperties() {
       String lower = *properties;
       lower.trim();
       lower.toLowerCase();
@@ -1830,12 +1851,15 @@ class Led : public Widget{
 
       ledBaseColor = TFT_RED;
       bool flashRequested = false;
+      flashInterval = FLASH_MEDIUM_INTERVAL;
 
-      while (lower.length() > 0){
+      while (lower.length() > 0) {
         int spaceIndex = lower.indexOf(' ');
         String token = (spaceIndex == -1) ? lower : lower.substring(0, spaceIndex);
-        if (spaceIndex == -1) lower = "";
-        else{
+
+        if (spaceIndex == -1) {
+          lower = "";
+        } else {
           lower = lower.substring(spaceIndex + 1);
           lower.trim();
         }
@@ -1849,53 +1873,68 @@ class Led : public Widget{
         else if (token == "green") ledBaseColor = TFT_GREEN;
         else if (token == "orange") ledBaseColor = TFT_ORANGE;
         else if (token == "grey" || token == "gray") ledBaseColor = TFT_SILVER;
-        else if (token == "fast"){
+        else if (token == "fast") {
           flashRequested = true;
           flashInterval = FLASH_FAST_INTERVAL;
-        }else if (token == "medium"){
+        }
+        else if (token == "medium") {
           flashRequested = true;
           flashInterval = FLASH_MEDIUM_INTERVAL;
         }
-        else if (token == "low" || token == "slow"){
+        else if (token == "low" || token == "slow") {
           flashRequested = true;
           flashInterval = FLASH_SLOW_INTERVAL;
         }
       }
 
       flashEnabled = flashRequested;
-      if (!flashEnabled){
+
+      if (!flashEnabled) {
         ledOn = true;
       }
+
       lastToggle = millis();
     }
 
-    bool updateBlink(bool force){
-      if (!flashEnabled){
-        if (!ledOn){
-          ledOn = true;
-          return true;
-        }
-        return false;
-      }
-
+    bool updateState(bool force) {
+      bool changed = false;
       unsigned long now = millis();
-      if (force){
+
+      // 1) Calcul de l'état interne normal (couleur fixe ou clignotement)
+      bool previousLedOn = ledOn;
+
+      if (!flashEnabled) {
         ledOn = true;
-        lastToggle = now;
-        return true;
+      } else {
+        if (force) {
+          lastToggle = now;
+        } else if (now - lastToggle >= flashInterval) {
+          ledOn = !ledOn;
+          lastToggle = now;
+        }
       }
 
-      if (now - lastToggle >= flashInterval){
-        ledOn = !ledOn;
-        lastToggle = now;
-        return true;
+      if (ledOn != previousLedOn) {
+        changed = true;
       }
 
-      return false;
+      // 2) Application de l'override externe
+      bool previousEffectiveLedOn = effectiveLedOn;
+
+      if (enabled != nullptr) {
+        effectiveLedOn = (*enabled) ? ledOn : false;
+      } else {
+        effectiveLedOn = ledOn;
+      }
+
+      if (effectiveLedOn != previousEffectiveLedOn) {
+        changed = true;
+      }
+
+      return changed;
     }
 
-    void drawLed(){
-      //createSprite(getClearColor());
+    void drawLed() {
       createSprite(*bColor);
 
       int16_t centerX = width / 2;
@@ -1903,21 +1942,21 @@ class Led : public Widget{
       int16_t mainRadius = (min(width, height) / 2) - 1;
       if (mainRadius < 2) mainRadius = 2;
 
-      uint16_t innerColor = ledOn ? ledBaseColor : TFT_DARKGREY;
-      uint16_t rimColor = GUI::luminance(GUI::defaultFcolor,*brightness * GUI::screenBrightness * 255);
+      uint16_t innerColor = effectiveLedOn ? ledBaseColor : TFT_DARKGREY;
+      uint16_t rimColor = GUI::luminance(GUI::defaultFcolor, *brightness * GUI::screenBrightness * 255);
 
-      sprite->drawCircle(centerX, centerY, mainRadius-1, TFT_BLACK);
-      sprite->drawSmoothCircle(centerX, centerY, mainRadius, rimColor,GUI::defaultBcolor );
+      sprite->drawCircle(centerX, centerY, mainRadius - 1, TFT_BLACK);
+      sprite->drawSmoothCircle(centerX, centerY, mainRadius, rimColor, *bColor);
 
       int16_t innerRadius = mainRadius - 2;
-      if (innerRadius > 1){
-        sprite->fillSmoothCircle(centerX, centerY, innerRadius, GUI::luminance(innerColor,*brightness * GUI::screenBrightness * 255));
+      if (innerRadius > 1) {
+        sprite->fillSmoothCircle(centerX, centerY, innerRadius,
+          GUI::luminance(innerColor, *brightness * GUI::screenBrightness * 255));
       }
-
     }
 
-    virtual int16_t getX(){return *x-width/2;}
-    virtual int16_t getY(){return *y-height/2;}      
+    virtual int16_t getX() { return *x - width / 2; }
+    virtual int16_t getY() { return *y - height / 2; }
 };
 
 

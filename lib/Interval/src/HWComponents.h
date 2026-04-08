@@ -775,7 +775,7 @@ class Network : public HWComponent2State{
     
     float networkConnectAttemptProgress = 0.0;
 
-    String iFconnectivityIcon = ICON_MIXETHWIFI;
+    String networkConnectivityIcon = ICON_MIXETHWIFI;
 
     SemaphoreHandle_t networkBusy;
 
@@ -824,6 +824,7 @@ class Network : public HWComponent2State{
     virtual void asyncPing(TargetEcho* echo, PingCallback callBack)=0;
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
     virtual String dumpW5500Sockets()=0;
+    virtual String getIP() = 0;
     
     virtual void init(){
       //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
@@ -986,7 +987,7 @@ class WiFiEth : public Network{
         }
       }else{
         //if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
-        iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
+        networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
       }
      
       if (!ethEnabled){
@@ -1534,9 +1535,6 @@ class WiFiEth : public Network{
                 // save power    
                 disconnectWifi();
                 // we just connected ETH so we do everything related to ETH specialized object instanciation
-                IP = Ethernet.localIP();      
-                subnet = Ethernet.subnetMask();   
-                DEBUG_INFO("Ethernet.begin() => got IP:%s",IP.toString().c_str());  
                 if (client == NULL) client = new EthernetClient();
                 if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
                 //if (udp == NULL) udp = new EthernetUDP;
@@ -1548,20 +1546,10 @@ class WiFiEth : public Network{
                   wsEthClient->onClose(WiFiEth::socketClientOnCloseStatic);                      
                 }
                 if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);
-
-/*                String midiName = concatStrings(appleMidiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
-                String httpName = concatStrings(appleMidiClient->getName(), "._http");
-                if (EthernetBonjour.begin(systemCfg.getString(S_AP_NAME)->c_str())){
-                  EthernetBonjour.addServiceRecord(midiName.c_str(), appleMidiClient->getPort(),MDNSServiceUDP);
-                  EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
-                }else{
-                  DEBUG_PRINT("\nEthernetBonjour registration <%s> failed", systemCfg.getString(S_AP_NAME)->c_str());
-                }   
-*/
                 state = CONNECTED;
                 media = CABLE_MEDIA;                
                 DEBUG_INFO("\t...all Eth object instantiated\n");                  
-                iFconnectivityIcon = ICON_ETH;
+                networkConnectivityIcon = ICON_ETH;
                 xSemaphoreGive(networkBusy);
               }else{
                 DEBUG_WARN("ETH CONNECT: networkBusy\n"); 
@@ -1604,8 +1592,6 @@ class WiFiEth : public Network{
           }else{
             // we just connected WIFI_MEDIA so we do everything related to WIFI_MEDIA specialized object instanciation
             if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
-              IP = WiFi.localIP();
-              subnet = WiFi.subnetMask();
               DEBUG_PRINT("\t => got IP:%s",IP.toString().c_str()); 
               //if (debug) DEBUG_PRINT("\nWifi.begin() => got IP: %s, %idb",IP.toString().c_str(),WiFi.RSSI());
               if (client == NULL) client = new WiFiClient();
@@ -1621,14 +1607,7 @@ class WiFiEth : public Network{
                 wsWiFiClient->onError(WiFiEth::socketClientOnErrorCallbackStatic);
                 wsWiFiClient->onClose(WiFiEth::socketClientOnCloseStatic);                  
               }
-              if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);                     
-              
-/*              if (MDNS.begin(systemCfg.getString(S_AP_NAME)->c_str())){
-                MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", appleMidiClient->getPort());
-                MDNS.addService("http", "tcp", 80);                                
-              }else{
-                DEBUG_PRINT("\nMDNS registration <%s> failed",appleMidiClient->getName());
-              }*/
+              if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);                                 
               state = CONNECTED;
               media = WIFI_MEDIA;
               DEBUG_PRINT("\t...all WiFi object instantiated\n");                                
@@ -1636,7 +1615,6 @@ class WiFiEth : public Network{
             }else{
               DEBUG_WARN("WIFI CONNECT: networkBusy"); 
             }
-
           }
         }
       }else if (state == CONNECTED) {
@@ -1660,7 +1638,6 @@ class WiFiEth : public Network{
             if (cable == LinkON){
               // do whatever is required when we are connected by cable
               if (wsEthClient != nullptr) wsEthClient->listen();
-              //EthernetBonjour.run();
             }else{
               state = DISCONNECTED; 
               media = NO_MEDIA;
@@ -1671,10 +1648,10 @@ class WiFiEth : public Network{
               // this code is executed in loop
               int8_t signalStrength = abs(WiFi.RSSI());
 
-              if (signalStrength >=90) iFconnectivityIcon = ICON_WIFI_STRENGTH_0;
-              else if (signalStrength >=75) iFconnectivityIcon = ICON_WIFI_STRENGTH_1;
-              else if (signalStrength >=45) iFconnectivityIcon = ICON_WIFI_STRENGTH_2;
-              else iFconnectivityIcon = ICON_WIFI_STRENGTH_3;                
+              if (signalStrength >=90) networkConnectivityIcon = ICON_WIFI_STRENGTH_0;
+              else if (signalStrength >=75) networkConnectivityIcon = ICON_WIFI_STRENGTH_1;
+              else if (signalStrength >=45) networkConnectivityIcon = ICON_WIFI_STRENGTH_2;
+              else networkConnectivityIcon = ICON_WIFI_STRENGTH_3;                
 
               //ArduinoOTA.handle();     
               if (wsWiFiClient != nullptr) wsWiFiClient->listen();
@@ -1703,17 +1680,19 @@ class WiFiEth : public Network{
           // reset the progress indicator
           networkConnectAttemptProgress = -1;
           // initialiser of common object to both Wifi and Ethernet goes here      
+          getIP();
+          DEBUG_INFO(" => got IP:%s",getIP().c_str());                                
 
           if (media == WIFI_MEDIA){
             SSID = WiFi.SSID();
-            gateway = WiFi.gatewayIP();
             lastConnectedSSID = SSID;
             //DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
             unpauseWiFi();       
           }else{
             // ETHERNET        
-            gateway = Ethernet.gatewayIP();                                      
+                                     
            }
+
           lastActiveMedia = media;
           checkInternet();
           DEBUG_INFO("+-------------------+");
@@ -1751,8 +1730,8 @@ class WiFiEth : public Network{
             }*/
 
             lastActiveMedia = NO_MEDIA;
-            if (!ethEnabled) iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
-            else iFconnectivityIcon = ICON_MIXETHWIFI; 
+            if (!ethEnabled) networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
+            else networkConnectivityIcon = ICON_MIXETHWIFI; 
             DEBUG_INFO("+----------------------------+");           
             DEBUG_INFO(" ALL NETWORK OBJECTED CLEANED");
             DEBUG_INFO("+----------------------------+");
@@ -1772,8 +1751,20 @@ class WiFiEth : public Network{
         fireEvent(evtNet);    
 
       }
-
       return refreshed;
+    }
+
+    String getIP() override{
+      if (media == CABLE_MEDIA){
+        IP = Ethernet.localIP();      
+        subnet = Ethernet.subnetMask();    
+        gateway = Ethernet.gatewayIP();
+      }else{
+        IP = WiFi.localIP();
+        subnet = WiFi.subnetMask();
+        gateway = WiFi.gatewayIP();      
+      }
+      return IP.toString();
     }
 
     void onInternetPing(TargetEcho* echo) {
@@ -2014,6 +2005,7 @@ class  NoNetwork: public Network{
     virtual UdpSlot* stopUDPslot(int i){return nullptr;}
     virtual void stopAllUDP(){}
     virtual void releaseUDPSlot(int* i){}
+    virtual String getIP() override{return "";}
 
 };
 
@@ -2089,9 +2081,14 @@ class AccessPoint : public Network{
       //setWifiPower();      
 
 
-     IP = WiFi.softAPIP();
+      getIP();
       WiFi.enableLongRange(true);
       DEBUG_INFO("AccessPoint.init (%s) %s",SSID.c_str(),IP.toString().c_str());        
+    }
+
+    String getIP(){
+      IP = WiFi.softAPIP();
+      return IP.toString();
     }
 
     bool refresh(bool force=false) {      

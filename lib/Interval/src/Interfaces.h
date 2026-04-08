@@ -416,7 +416,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }       
 
     virtual const String* getIcon(){
-      return &icon;
+      return &icon; //hwm.network->networkConnectivityIcon
     }
 
   protected:
@@ -735,6 +735,11 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       return begin();    // derived class call   
     };        
 
+    virtual const String* getIcon() override{
+      if (hwm.network->state == CONNECTED) return &icon; // maybe if (state == IF_READY) return &icon;
+      else return &hwm.network->networkConnectivityIcon;
+    }
+    
     virtual bool monitor() override{           
       return monitorNetwork();      
     }    

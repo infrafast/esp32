@@ -126,10 +126,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       mixerDef = new MSmixerDefinition();
       strcpy(((MSmixerDefinition*)mixerDef)->model, mixerID.model.c_str());
 
+      // sets the mixer definition and calculate its hash to be able to detect when it changes
       msMixer = (MSmixerDefinition*)mixerDef;
+      lastMixerDefHash = computeHash(*((MSmixerDefinition*)mixerDef));
 
     }
-
+    
     virtual bool ping() override{
       hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));  // forge a MS get json query with echoCommand as the path
       return true;
@@ -176,7 +178,21 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }    
  
   protected: 
+    // MIXER DEFINITION 
     MSmixerDefinition* msMixer;
+
+    // used to see if mixer has changed, so we only save it if that's the case
+    uint32_t lastMixerDefHash = 0;
+    uint32_t computeHash(const MSmixerDefinition& def) {
+        const uint8_t* data = (const uint8_t*)&def;
+        size_t size = sizeof(MSmixerDefinition);
+
+        uint32_t hash = 5381; // djb2 simple
+        for (size_t i = 0; i < size; i++) {
+            hash = ((hash << 5) + hash) + data[i];
+        }
+        return hash;
+    }
 
     ////////////////////////////////////////
     // JSON and ROUTE HANDLING DEFINITION
@@ -461,7 +477,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       }
 
       // now serialize this onfo into the MS_MIXER_PROFILE_FILENAME in binary form
-      saveMixerDefinition();
+      uint32_t newHash = computeHash(*((MSmixerDefinition*)mixerDef));
+      // only do it if the mixerDef has changed, we detect that by checking if its hash has changed
+      if (newHash != lastMixerDefHash) {
+        saveMixerDefinition();
+        lastMixerDefHash = newHash;
+      }      
 
       // now get the mixer identity
       hwm.network->clientSocketSend(get(MSPATH_MIXER_IDENTITY)); // retrieve name, etc...            

@@ -361,8 +361,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     std::vector<IntervalBank*> banks; // Vecteur de strips
 
     ///////////////////// OVERLAY ICONS ////////////////////////
+    bool dataProcessed = false;   // blink when interface is processing data
     String apIcon;
-    uint16_t iFconnectivityIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor, blinkColorBlue = TFT_BLUE;
+    const String defaultInterfaceIcon = ICON_FORBID;
+    const String* interfaceIcon = &defaultInterfaceIcon;
+    uint16_t interfaceIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor, blinkColorBlue = TFT_BLUE;
 
     String batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3};
     String batIcon = ICON_WAIT; // by default we display a timeelapser while battery level is undetermined
@@ -645,9 +648,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     void setiFconnectivityColor(){
       if (hwm->network->state == CONNECTED){
         iFconnectivityIconGlowingRedColor.value = &GUI::unUsedColor;
-        iFconnectivityIconColorIdle = GUI::green;
+        interfaceIconColorIdle = GUI::green;
       }else{
-        iFconnectivityIconGlowingRedColor.value = &iFconnectivityIconColorIdle;
+        iFconnectivityIconGlowingRedColor.value = &interfaceIconColorIdle;
       }
     }
 
@@ -1872,18 +1875,16 @@ void setup() {
       //
       // MANAGE INTERFACE
       //
-      //------------------
-      bool dataProcessed = false;
+      //------------------      
 
       for (const auto& interface : interfaceRepo.interfaces){
         
-        dataProcessed |= interface->update();      // return value drive the icon to indicate data being processed
-        
-        Strip* currentStrip = getSelectedStrip();
-        if (currentStrip != nullptr && currentStrip->interface == interface && dataProcessed){
-          //DEBUG_PRINT("❄");    // simulate the blinking of an icon indicating some data are being processed for the current focused strip
-        }
+        dataProcessed |= interface->update();      // return value drive the icon to indicate data being processed        
 
+        Strip* currentStrip = getSelectedStrip();
+        if (currentStrip != nullptr && currentStrip->interface == interface){               // the interface that has just been updated is the one used by the focused strip
+          interfaceIconColorIdle = dataProcessed?TFT_BLACK:interface->state.qualityColor;   // so we display the related QoS color or we blink it if data being Processed
+        }
         
         if (interface->state.broadcastState){
           broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
@@ -2701,6 +2702,8 @@ void setup() {
 
       //DEBUG_PRINT("\n==> %s %p" ,targetBank->name.c_str(),targetStrip);
       if (stripHeader != nullptr) stripHeader->strip = targetStrip;
+
+      interfaceIcon = targetStrip->interface->getIcon();
 
       // Force screen redraw if we changed the window or the bank OR if we are displaying full size strip
       if (

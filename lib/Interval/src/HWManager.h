@@ -91,7 +91,7 @@ public:
   
     MIDIusb* tinyMIDIusb = nullptr;           // <===== tinyUSB
 
-    String configURL;
+    String configURL="0.0.0.0";
 
     unsigned long bootTime = 0;     // how long it took to boot (means when powerRail is on)
 

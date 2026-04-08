@@ -2428,8 +2428,7 @@ void voidOverlay(uint8_t id){
 
 void baseOverLayBuilder(uint8_t id){  
   /*GUI::tft->fillRect(0,app.overlayIconY,TFT_WIDTH,OVERLAY_ICON_SIZE,GUI::overlayIconBackgroundColor);
-  GUI::tft->drawFastHLine(0,app.overlayIconY-1,TFT_WIDTH,TFT_SILVER);*/
-  gui.add(new Icon(&hwm.network->iFconnectivityIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.iFconnectivityIconColorIdle,&GUI::defaultBcolor));             
+  GUI::tft->drawFastHLine(0,app.overlayIconY-1,TFT_WIDTH,TFT_SILVER);*/  
   //gui.add(new AnimatedIcon(app.iconRolling,TWOFRAMEICON,Align::Center,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,ANIMATE_REPEAT,250,&GUI::blue,&GUI::defaultBcolor));              
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor));                  
   gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor));          
@@ -2442,6 +2441,8 @@ float testV = 76;
 void bankOverlayBuilder(uint8_t BankIndex){
   
   baseOverLayBuilder(BankIndex);
+
+  gui.add(new Icon(app.interfaceIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.interfaceIconColorIdle,&GUI::defaultBcolor));               
   
   //we do not display the bankNavigator if user deactivate the bank screen display
   if (app.disabledBankRendering == true) return;
@@ -2483,6 +2484,8 @@ void bankScreenBuilder(uint8_t subScreen){
     gui.add(app.stripHeader);         
 
     if (strip != nullptr){
+
+      app.interfaceIcon = strip->interface->getIcon();
     
       for (const auto& winstrip : bank->strips) {
         
