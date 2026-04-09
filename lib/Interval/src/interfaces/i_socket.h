@@ -8,17 +8,24 @@
 class NetworkSocket: public NetworkDevice{
   public:
   
-    bool dataAvailable = false;
+  bool dataAvailable = false;
 
-    #define MAX_SOCKET_MESSAGE_LEN kBufferMaxSize
-    // Structure interne avec copie réelle du message
-    struct SocketDataCopy {
-      uint16_t length;
-      char message[MAX_SOCKET_MESSAGE_LEN];
-      int code;
-    }socketCopy;    
+  #define MAX_SOCKET_MESSAGE_LEN kBufferMaxSize
+  #define SOCKET_QUEUE_SIZE 5
+  #define MESSAGE_PROCESSED_AT_ONCE 3
 
-    Event evtSock = Event(&socketCopy);  // we always fire the event using the copy
+  struct SocketDataCopy {
+    uint16_t length;
+    char message[MAX_SOCKET_MESSAGE_LEN];
+    int code;
+  };
+
+  SocketDataCopy socketQueue[SOCKET_QUEUE_SIZE];
+  volatile uint8_t queueHead = 0;   // prochain message à lire
+  volatile uint8_t queueTail = 0;   // prochain slot d’écriture
+  volatile uint8_t queueCount = 0;
+
+  Event evtSock = Event(nullptr);
 
     NetworkSocket(String name=INTERFACE_SOCKET, String group=GROUP_INTERFACE_UTILS,String echoCommand="",int localP=8887,int remoteP=8888, bool exposed=false):NetworkDevice(name,group,localP,remoteP,echoCommand, exposed){
       //destination.host = "192.168.99.99"; 
@@ -30,41 +37,36 @@ class NetworkSocket: public NetworkDevice{
 
       bool dataProcessed = false;
 
-      if (dataAvailable){
-        // recupere la donnée reçue et stockée  
-        route(socketCopy.message,socketCopy.length);      // informe qui de droit          
-        dataAvailable = false;
+      SocketDataCopy* msg = nullptr;
+      uint8_t processed = 0;
+
+      while (processed < MESSAGE_PROCESSED_AT_ONCE && (msg = dequeueSocketMessage()) != nullptr) {
+        route(msg->message, msg->length);
         dataProcessed = true;
+        processed++;
       }
 
-      #define PULSE_CHECK_DELAY kTimeoutInterval*1.1        // kTimeoutInterval is the timeout of opening a socket from 
-      // delay expired, we didn't receive any incoming socket message...
-      // time to ping the device to see if it's still alive or if we have to attempt reconnecting      
-      if (millis()-destination.lastPingTime > PULSE_CHECK_DELAY){                
-          destination.lastPingTime = millis(); // reset timer
-          if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
-            // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
-            ping();
-            dataProcessed = true;   // we indicate we have processed data (send->OUT) with the ping
-          }else{
-            // if we have no socket connection or we loose it, we try to esbalish one
-            if (handleConnectService()) setStatePending();
-            else  setStateError("Thread socket-open failed");
-          }        
+      #define PULSE_CHECK_DELAY kTimeoutInterval*1.1
+      if (millis() - destination.lastPingTime > PULSE_CHECK_DELAY) {                
+        destination.lastPingTime = millis();
+
+        if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN) {
+          ping();
+          dataProcessed = true;
+        } else {
+          if (handleConnectService()) setStatePending();
+          else setStateError("Thread socket-open failed");
+        }
       }    
       
       return dataProcessed;
-      
-    }
-  
+    }  
 
     void virtual onSocketConnected() = 0; //called when socket connection has been established
 
     void onEvent(const Event& evt) override {
       NetworkDevice::onEvent(evt);
      
-      if (dataAvailable) return; // previous data has not been ocnsummed yet so we ignore it (we could make a queue)
-
       switch(evt.type){
         case EVENT_SOCKET_OPEN:
           // connexion has just been made to NetworkSocket
@@ -96,23 +98,9 @@ class NetworkSocket: public NetworkDevice{
         case EVENT_SOCKET_MESSAGE:
           destination.lastPingTime = millis();   // no need to query device
 
-          SocketData* data = (SocketData*)evt.data;        
-
-          // Comme la data va etre consommée dans la prochaine boucle, les pointeurs seront perdus, il faut donc faire une copie profonde (unique... sinon on peut faire une queue) qu'on utilisera plus tard
-          uint16_t copyLen = data->length;
-
-          if (copyLen >= MAX_SOCKET_MESSAGE_LEN) {
-            copyLen = MAX_SOCKET_MESSAGE_LEN - 1; // garde une place pour '\0'
-          }
-
-          if (data->message != nullptr && copyLen > 0) {
-            memcpy(socketCopy.message, data->message, copyLen);
-          }
-          socketCopy.message[copyLen] = '\0';
-          socketCopy.length = copyLen;
-          
-          dataAvailable = true;
-        break;                
+          SocketData* data = (SocketData*)evt.data;
+          enqueueSocketMessage(data);
+        break;              
       }
     }    
 
@@ -133,6 +121,48 @@ class NetworkSocket: public NetworkDevice{
       if (state.enabled == false) setStateDisabled();
       return true;
     }    
+
+  protected:
+    bool enqueueSocketMessage(const SocketData* data) {
+    if (data == nullptr || data->message == nullptr) return false;
+
+    if (queueCount >= SOCKET_QUEUE_SIZE) {
+      DEBUG_WARN("%s::enqueueSocketMessage() queue full, dropping message", interfaceName.c_str());
+      return false;
+    }
+
+    SocketDataCopy& slot = socketQueue[queueTail];
+
+    uint16_t copyLen = data->length;
+    if (copyLen >= MAX_SOCKET_MESSAGE_LEN) {
+      copyLen = MAX_SOCKET_MESSAGE_LEN - 1;
+    }
+
+    memcpy(slot.message, data->message, copyLen);
+    slot.message[copyLen] = '\0';
+    slot.length = copyLen;
+    slot.code = data->code;
+
+    queueTail = (queueTail + 1) % SOCKET_QUEUE_SIZE;
+    queueCount++;
+    dataAvailable = (queueCount > 0);
+
+    return true;
+  }
+
+  SocketDataCopy* dequeueSocketMessage() {
+    if (queueCount == 0) {
+      dataAvailable = false;
+      return nullptr;
+    }
+
+    SocketDataCopy* out = &socketQueue[queueHead];
+    queueHead = (queueHead + 1) % SOCKET_QUEUE_SIZE;
+    queueCount--;
+    dataAvailable = (queueCount > 0);
+
+    return out;
+}
  
  
 };
