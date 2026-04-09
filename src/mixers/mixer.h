@@ -50,7 +50,7 @@ class Synchronizer{
     }    
 
     DataSetSynced* getCurrent(){
-      if (syncRequestLocker) return nullptr;
+      if (syncRequestLocker) return nullptr;    // we are locked so we do not provide the data set
       else return datasets[dsIndex];
     }
 
@@ -560,7 +560,6 @@ void Synchronizer::reset(){
 int8_t Synchronizer::update(uint16_t latency){  
   
   if (latency<20) latency = 20;   // minimum latency of 20ms to avoid too much request / flood
-  //should we unlock (after 3 loop)?
   if (syncRequestLocker && (millis() - lockStartTime >= latency)) {
     syncRequestLocker = false; // autorise relance d'une requête
   }
