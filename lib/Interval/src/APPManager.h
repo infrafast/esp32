@@ -1890,7 +1890,7 @@ void setup() {
         Strip* currentStrip = getSelectedStrip();
         if (currentStrip != nullptr && currentStrip->interface == interface){               // the interface that has just been updated is the one used by the focused strip
           interfaceIconColor = interface->state.QoScolor;                                   // set color to interface QoS color
-          interfaceIconBrightness = dataProcessed?0:GUI::systemBrightness;                  // and blink the icon upon data receive
+          interfaceIconBrightness = dataProcessed?GUI::systemBrightness*0.5f:GUI::systemBrightness;                  // and blink the icon upon data receive
         }
         
         if (interface->state.broadcastState){
