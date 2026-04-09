@@ -320,7 +320,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       //DEBUG_INFO("%s::processState: msg:%s,progress:%i,state:%s,topState:%s",interfaceName.c_str(),msg,progress,state,topState);
 
       if (strcmp(topState, MS_IDLE) == 0) {
-        if (deviceInterface->state.label = MS_IDLE){
+        if (deviceInterface->state.label == MS_IDLE){
           setStatePending();
           deviceInterface->state.label = MS_IDLE;               // do not invert details/label as label=IDLE forces state refresh for the GUI compared to label=PENDING which is also set by device scan
           deviceInterface->state.details = destinationDetails();  // connexion details of mixing station
