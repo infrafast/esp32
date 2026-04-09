@@ -1405,7 +1405,7 @@ class WiFiEth : public Network{
       WiFi.setSleep(false); // Désactiver le mode veille Wi-Fi
       WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); // Reconfigurer DHCP    */
 
-      DEBUG_INFO("startWifi(%s,%s), wifiEnabled=%d, status: %d, MAC:%s",SSID.c_str(),pwd.c_str(),WiFiEnabled,WiFi.status(),WiFi.macAddress().c_str());                
+      DEBUG_INFO("startWifi(%s,%s), wifiEnabled=%d, status: %s, MAC:%s",SSID.c_str(),pwd.c_str(),WiFiEnabled,wifiStatusToString(WiFi.status()),WiFi.macAddress().c_str());                
       // Hostname avant begin
       //WiFi.setHostname("esp32-client");
       // Pas d’économie d’énergie pendant les tests

@@ -40,11 +40,12 @@ class NetworkSocket: public NetworkDevice{
       #define PULSE_CHECK_DELAY kTimeoutInterval*1.1        // kTimeoutInterval is the timeout of opening a socket from 
       // delay expired, we didn't receive any incoming socket message...
       // time to ping the device to see if it's still alive or if we have to attempt reconnecting      
-      if (millis()-destination.lastQueryTime > PULSE_CHECK_DELAY){                
-          destination.lastQueryTime = millis(); // reset timer
+      if (millis()-destination.lastPingTime > PULSE_CHECK_DELAY){                
+          destination.lastPingTime = millis(); // reset timer
           if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
             // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
             ping();
+            dataProcessed = true;   // we indicate we have processed data (send->OUT) with the ping
           }else{
             // if we have no socket connection or we loose it, we try to esbalish one
             if (handleConnectService()) setStatePending();
@@ -70,7 +71,7 @@ class NetworkSocket: public NetworkDevice{
           //setStateConnected();
           setStatePending();      // the derived class will have to override state
           deviceInterface->state.details = "Querying application";
-          destination.lastQueryTime = 0;   // request an immediate /app/state to ping
+          destination.lastPingTime = 0;   // request an immediate /app/state to ping
           onSocketConnected();    
         break;
         case EVENT_SOCKET_CLOSE:{
@@ -93,7 +94,7 @@ class NetworkSocket: public NetworkDevice{
           setStateDisconnected();
         break;
         case EVENT_SOCKET_MESSAGE:
-          destination.lastQueryTime = millis();   // no need to query device
+          destination.lastPingTime = millis();   // no need to query device
 
           SocketData* data = (SocketData*)evt.data;        
 
@@ -127,7 +128,7 @@ class NetworkSocket: public NetworkDevice{
 
     virtual bool handleDisconnectService(){
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
-      destination.lastQueryTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
+      destination.lastPingTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
       hwm.network->clientSocketClose(); 
       if (state.enabled == false) setStateDisabled();
       return true;

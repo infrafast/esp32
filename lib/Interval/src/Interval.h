@@ -90,7 +90,7 @@ bool useUSBMidi = false;
 class TargetEcho{
   public:
     bool alive = false;
-    unsigned long lastQueryTime ;    
+    unsigned long lastPingTime ;    
     uint16_t latency = 0;      // normal latency on TCP/IP lan
     uint16_t jitter = 0;
     String host;
@@ -558,6 +558,21 @@ private:
 
 
 ////////////////////// UTILITIES ///////////////////////////
+const char* wifiStatusToString(wl_status_t status) {
+  switch (status) {
+    case WL_NO_SHIELD:        return "No shield";
+    case WL_IDLE_STATUS:      return "Idle";
+    case WL_NO_SSID_AVAIL:    return "No SSID available";
+    case WL_SCAN_COMPLETED:   return "Scan completed";
+    case WL_CONNECTED:        return "Connected";
+    case WL_CONNECT_FAILED:   return "Connect failed";
+    case WL_CONNECTION_LOST:  return "Connection lost";
+    case WL_DISCONNECTED:     return "Disconnected";
+    default:                  return "Unknown";
+  }
+}
+
+
 void populateFileList(String extension, String folder, std::vector<String> *list, String prefix="", bool withExtension=true) {
   //we first clean all items from the list
 
@@ -1430,12 +1445,11 @@ struct State{ // used by Strip and Interface
   bool previousSwitchable = switchable;
   float previousProgress = -1;
 
+  uint16_t QoScolor = TFT_WHITE;
+
   bool changed = false;               // this is used by the strip to determine if they have to refresh
   bool broadcastState = false;
   bool broadcastConfig = false;
-
-  uint16_t qualityColor = TFT_GREEN;
-
 };
 
 #include "GUIManager.h"
@@ -2310,8 +2324,8 @@ void shutdown_menu_item_selected(MenuComponent* p_menu_component) {
 }
 
 void brightness_menu_item_selected(MenuComponent* p_menu_component) {
-  /*if (GUI::screenBrightness == 1.0) GUI::screenBrightness = 0.5;
-  else GUI::screenBrightness = 1.0;
+  /*if (GUI::systemBrightness == 1.0) GUI::systemBrightness = 0.5;
+  else GUI::systemBrightness = 1.0;
   app.triggerRedraw(); // force redraw*/
   screen.id = SCREEN_UTILS;
   screen.state = STATE_UTILS_BRIGHTNESS;
@@ -2427,23 +2441,18 @@ void voidOverlay(uint8_t id){
 }
 
 void baseOverLayBuilder(uint8_t id){  
-  /*GUI::tft->fillRect(0,app.overlayIconY,TFT_WIDTH,OVERLAY_ICON_SIZE,GUI::overlayIconBackgroundColor);
-  GUI::tft->drawFastHLine(0,app.overlayIconY-1,TFT_WIDTH,TFT_SILVER);*/  
-  //gui.add(new AnimatedIcon(app.iconRolling,TWOFRAMEICON,Align::Center,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,ANIMATE_REPEAT,250,&GUI::blue,&GUI::defaultBcolor));              
+  gui.add(new Icon(&hwm.network->networkConnectivityIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.networkConnectivityIconColorIdle,&GUI::defaultBcolor));               
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor));                  
   gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor));          
-  //gui.add (new PendingBar(&app.pendingBarWidth /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &GUI::zero /*y*/, TFT_WIDTH /*w*/, 1 /*h*/, /*pingpong*/ false, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/, 30, 4));                    
-  //app.rollingIcon(false);
 }
 
-float testV = 76;
 
 void bankOverlayBuilder(uint8_t BankIndex){
   
   baseOverLayBuilder(BankIndex);
 
-  gui.add(new Icon(app.interfaceIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.interfaceIconColorIdle,&GUI::defaultBcolor));               
-  
+  gui.add(new Icon(&app.interfaceIcon,Align::Left,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.interfaceIconColor,&GUI::defaultBcolor,&app.interfaceIconBrightness));               
+
   //we do not display the bankNavigator if user deactivate the bank screen display
   if (app.disabledBankRendering == true) return;
 
@@ -2485,8 +2494,8 @@ void bankScreenBuilder(uint8_t subScreen){
 
     if (strip != nullptr){
 
-      app.interfaceIcon = strip->interface->getIcon();
-    
+      app.interfaceIcon = *strip->interface->getIcon();                                             // retrieve interface icon from the current strip
+          
       for (const auto& winstrip : bank->strips) {
         
         winstrip->visible = false;
@@ -2663,21 +2672,21 @@ void promptScreenBuiler(uint8_t id){
 void addLeftRightIcons(){
     //DEBUG_PRINT("addLeftRightIcons()");
     GUI::cls(GUI::defaultBcolor);  
-    gui.add(new Icon(&app.leftIcon, Align::Right,&GUI::hquarter2xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
-    gui.add(new Icon(&app.rightIcon, Align::Left,&GUI::hquarter3xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
+    gui.add(new Icon(&app.bigLeftIcon, Align::Right,&GUI::hquarter2xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&app.bigLeftIconColor,&GUI::defaultBcolor));
+    gui.add(new Icon(&app.bigRightIcon, Align::Left,&GUI::hquarter3xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
     addTopandBottomMenuLabel();    
 }
 
 void setAPIconAndText(){
   gui.add(new TextArea(lang.getString("Connect WiFi Access Point "), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-  app.leftIcon = ICON_AP;
+  app.bigLeftIcon = ICON_AP;
 }
 
 void buildNetworkScreen(){
   GUI::cls();
 
-  app.rightIcon = ICON_LAPTOP;
-  app.configIconGlowingRedColor.value = &app.leftIconColor;  
+  app.bigRightIcon = ICON_LAPTOP;
+  app.configIconGlowingRedColor.value = &app.bigLeftIconColor;  
   //gui.add(new AnimatedIcon(app.iconRolling,2,Align::Center,&midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));              
   #ifdef USE_NETWORK
     if (!hwm.network->ethEnabled){
@@ -2685,14 +2694,14 @@ void buildNetworkScreen(){
       setAPIconAndText();                    
     }else{
       gui.add(new TextArea(lang.getString("Connect"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      app.leftIcon = ICON_MIXETHWIFI;
+      app.bigLeftIcon = ICON_MIXETHWIFI;
     }
   #else
     setAPIconAndText();
   #endif
 
-  gui.add(new Icon(&app.leftIcon, Align::Right,&GUI::hquarter2xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
-  gui.add(new Icon(&app.rightIcon, Align::Left,&GUI::hquarter3xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
+  gui.add(new Icon(&app.bigLeftIcon, Align::Right,&GUI::hquarter2xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&app.bigLeftIconColor,&GUI::defaultBcolor));
+  gui.add(new Icon(&app.bigRightIcon, Align::Left,&GUI::hquarter3xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
 
   gui.add(new Label(&hwm.configMedia->SSID, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));
 }
@@ -2716,11 +2725,11 @@ void utilsScreenBuilder(uint8_t state){
   switch (state) {
     case STATE_UTILS_BRIGHTNESS:{
       //DEBUG_PRINT("\nSTATE_UTILS_BRIGHTNESS");
-      //gui.add(new ProgressBarH(&GUI::screenBrightness /*v*/, BRIGHTNESS_MIN /*min*/,BRIGHTNESS_MAX /*max*/, &GUI::zero /*x*/, &app.menuIconYpos /*y*/, TFT_WIDTH /*w*/, TFT_HEIGHT/6 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::gold /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
+      //gui.add(new ProgressBarH(&GUI::systemBrightness /*v*/, BRIGHTNESS_MIN /*min*/,BRIGHTNESS_MAX /*max*/, &GUI::zero /*x*/, &app.menuIconYpos /*y*/, TFT_WIDTH /*w*/, TFT_HEIGHT/6 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::gold /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
       gui.add(new Label(lang.getString("BRIGHTNESS"), Align::Center,&GUI::midScreenHoriz, &GUI::three,MENU_TITLE_SIZE*0.8,16,&GUI::defaultFcolor,&GUI::defaultBcolor));            
-      gui.add(new Arc(&GUI::screenBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
+      gui.add(new Arc(&GUI::systemBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
       gui.add(new Icon(&app.brightIcon, Align::Center,&GUI::midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
-      gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
+      gui.add(new NumericLabel(&GUI::systemBrightness, 0, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SHOW_PROGRESS_MULTIPLE :{      
@@ -2752,7 +2761,7 @@ void utilsScreenBuilder(uint8_t state){
     break;
     case STATE_UTILS_CONNECTWEBAPP:
       app.configIconGlowingRedColor.value = &GUI::unUsedColor;
-      app.leftIconColor = GUI::menuActiveIconColor;
+      app.bigLeftIconColor = GUI::menuActiveIconColor;
       app.menuBottomLabel = ""; // erase the title of the previous menu item
       addLeftRightIcons();  
       app.iconPending[0] = ICON_TIMER;
@@ -2760,8 +2769,8 @@ void utilsScreenBuilder(uint8_t state){
       //gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&GUI::midScreenHoriz, &GUI::midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
       gui.add(new TextArea(lang.getString("Open browser"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Label(&hwm.configURL, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,30,64,&GUI::defaultFcolor,&GUI::defaultBcolor));      
-      app.leftIcon = ICON_LAPTOP;
-      app.rightIcon = ICON_FOOTSWITCH;
+      app.bigLeftIcon = ICON_LAPTOP;
+      app.bigRightIcon = ICON_FOOTSWITCH;
     break;
     case STATE_UTILS_WEBAPPCONNECTED:         
       addLeftRightIcons();
@@ -2771,8 +2780,8 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new TextArea(lang.getString("Press any button"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Label(lang.getString("Connected"), Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
-      app.leftIcon = ICON_LAPTOP;
-      app.rightIcon = ICON_FOOTSWITCH;
+      app.bigLeftIcon = ICON_LAPTOP;
+      app.bigRightIcon = ICON_FOOTSWITCH;
       //DEBUG_PRINT("\nSTATE_UTILS_WEBAPPCONNECTED: %s",app.menuTopText.c_str());      
     break;
     case STATE_UTILS_BLINK_ICON_TEXT:

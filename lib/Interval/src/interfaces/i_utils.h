@@ -221,6 +221,10 @@ class DirectoryInterface: public NetworkDevice{
 
       virtual bool ping(){return true;}
       
+      virtual void setQoSColor() override{
+        this->state.QoScolor = TFT_GREEN;     // to be set based on webserver data flow speed
+      }
+
       virtual bool handleDisconnectService(){
         DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
         if (hwm.network->lastActiveMedia == CABLE_MEDIA){
@@ -412,6 +416,10 @@ class WebApplicationService: public NetworkDevice{
     virtual bool monitorService() override{
       monitorInactivityTimeout();
       return handleWeb(); // report if we processed any data
+    }
+
+    virtual void setQoSColor() override{
+      state.QoScolor = TFT_GREEN;     // to be set based on webserver data flow speed
     }
 
     virtual bool ping() override{return true;}

@@ -247,7 +247,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     virtual void route(const char *message,uint16_t length) override{
 
       //DEBUG_INFO("%s::process(%s,%i)",interfaceName.c_str(),message,length);
-      destination.lastQueryTime = millis(); 
+      destination.lastPingTime = millis(); 
     
       if (length + 1 > RX_MAX){
         DEBUG_ERROR("%s::process(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
@@ -491,7 +491,10 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
 
     void processMixerIdentity(const char* path, JsonVariant body) {
-      // got the connected mixer informartion
+      // got the connected mixer information = reply to ping
+      
+      calculateLatencyAndJitter();
+
       #define OFFLINE "offline"
       IPAddress ip;
       ip.fromString(body["ipAddress"] | "");
@@ -500,7 +503,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       String model  = body["currentModel"] | "";
 
       if (name != OFFLINE){        
-        determineQoS();        
         setMixer(name,model,ip);                
       }else{
         hwm.network->clientSocketSend(get(MSPATH_APP_STATE));   // force getting the state as a backup in case mixerQuery didn't pass thru
@@ -979,21 +981,17 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       return false;
     }
 
-    void determineQoS(){      
-      calculateLatencyAndJitter();
-
-      // Sécurité bornes
-      if (destination.latency > 500) destination.latency = 500;
-      
-      if (destination.latency <= 15 && destination.jitter <= 5)
-        state.qualityColor = GUI::green;    
-      else if (destination.latency <= 30 && destination.jitter <= 5)
-        state.qualityColor = GUI::blue;    
-      else if (destination.latency <= 50 && destination.jitter <= 20)
-        state.qualityColor = GUI::yellow;    
-      // Au-delà : problème réseau
+    virtual void setQoSColor() override{      
+      if (state.code != IF_READY) state.QoScolor = TFT_GREY;
       else
-        state.qualityColor = GUI::red;    
+      if (destination.latency <= 15 && destination.jitter <= 5)  state.QoScolor = TFT_GREEN;    
+      else
+      if (destination.latency <= 30 && destination.jitter <= 5) state.QoScolor = TFT_BLUE;    
+      else
+      if (destination.latency <= 50 && destination.jitter <= 20)  state.QoScolor = TFT_YELLOW;    
+      else
+      // Au-delà : problème réseau
+      state.QoScolor = TFT_RED;    
     }       
         
     

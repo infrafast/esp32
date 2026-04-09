@@ -131,6 +131,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }  
 
     bool init(/*EventListener* listener*/) {
+      setQoSColor();
       DEBUG_INFO("----------------------------------  %s->init(...)  ---------------------------------- ", interfaceName.c_str());
       //registerEventListener(listener);
       load();
@@ -258,6 +259,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
             //DEBUG_INFO("%s 🔌 ❌------- Offline, offlineStart=%i ---------- ",interfaceName.c_str(),offlineStart);           
           }
         }
+
+        this->setQoSColor();            // recalculate the color
+        
       }
 
       if (state.enabled){      
@@ -408,6 +412,11 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     } 
     
     virtual bool monitor() = 0; 
+
+    virtual void setQoSColor(){
+      if (state.enabled) state.QoScolor = TFT_WHITE;
+      else state.QoScolor = TFT_GREY;
+    };
 
     virtual void handlePropertyChange(){DEBUG_INFO("%s::handlePropertyChange() : void",name.c_str());} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
 
@@ -721,12 +730,10 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       registerDataSetAddress(&addressIP);           // global       
 
       remotePort = rport;
-      localPort = lport;
-
-      
+      localPort = lport;     
     }
 
-    virtual bool ping() = 0;
+    virtual bool ping() = 0;    
 
     // network devices listen to network event
     virtual bool _begin() override{     // called by init()
@@ -734,12 +741,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       hwm.network->registerEventListener(this);   
       return begin();    // derived class call   
     };        
-
-    virtual const String* getIcon() override{
-      if (hwm.network->state == CONNECTED) return &icon; // maybe if (state == IF_READY) return &icon;
-      else return &hwm.network->networkConnectivityIcon;
-    }
-    
+   
     virtual bool monitor() override{           
       return monitorNetwork();      
     }    
@@ -754,7 +756,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
       ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
       */
-      unsigned long rawLatency = millis() - destination.lastQueryTime;
+      unsigned long rawLatency = millis() - destination.lastPingTime;
 
       // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
       if (rawLatency < 500){
@@ -776,7 +778,11 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
             }                  
 
       }
-      //DEBUG_INFO("%s latency: %i, jitter:%i",interfaceName.c_str(),destination.latency,destination.jitter);    
+
+      // Sécurité bornes
+      if (destination.latency > 500) destination.latency = 500;      
+
+      DEBUG_INFO("%s latency: %i, jitter:%i",interfaceName.c_str(),destination.latency,destination.jitter);    
     }      
 
     void onEvent(const Event& evt) override {

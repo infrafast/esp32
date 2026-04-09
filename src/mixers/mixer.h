@@ -197,7 +197,6 @@ public:
     JsonDocument payload;                     // data from the mixer
 
     //// pure virtual utilities ////
-    //virtual void startMixerDataSync() = 0;
     virtual bool restoreMixerProfile() = 0;
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;    
 
@@ -442,6 +441,8 @@ public:
       //DEBUG_INFO("%s:setMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
 
       MixerIdentity newID { name, model, ip };
+
+      this->setQoSColor();       // mixer replied so we set the QoS based on latency and jitter 
 
       bool mixerChanged = !mixerID.equals(newID);
       

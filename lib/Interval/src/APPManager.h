@@ -360,47 +360,53 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     //LinkedList<IntervalBank*> banks = LinkedList<IntervalBank*>();
     std::vector<IntervalBank*> banks; // Vecteur de strips
 
-    ///////////////////// OVERLAY ICONS ////////////////////////
-    bool dataProcessed = false;   // blink when interface is processing data
-    String apIcon;
-    const String defaultInterfaceIcon = ICON_FORBID;
-    const String* interfaceIcon = &defaultInterfaceIcon;
-    uint16_t interfaceIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor, blinkColorBlue = TFT_BLUE;
+    StripHeaderWidget* stripHeader = nullptr;
 
-    String batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3};
-    String batIcon = ICON_WAIT; // by default we display a timeelapser while battery level is undetermined
+    ///////////////////// OVERLAY ICONS ////////////////////////
+
+    String apIcon,
+          interfaceIcon = ICON_FORBID,
+          batIcon = ICON_WAIT, 
+          iconReset = ICON_RESET,
+          iconForbid = ICON_FORBID,
+          powerIcon = ICON_POWER,
+          iconX = "X",
+          footSwitchIcon = ICON_FOOTSWITCH,
+          intervalIcon = ICON_INTERVAL,
+          batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3},          
+          brightIcon = ICON_BRIGHTNESS,
+          bigLeftIcon,
+          bigRightIcon;        
+
+    uint16_t networkConnectivityIconColorIdle = TFT_RED, 
+            apIconColor = TFT_RED, 
+            batIconColor = TFT_GREEN, 
+            bigLeftIconColor = GUI::menuActiveIconColor, 
+            blinkColorBlue = TFT_BLUE,
+            rainbowC,
+            interfaceIconColor = TFT_GREY;
+                
     String* byeIcon = &iconForbid; const uint16_t* byeIconColor = &GUI::defaultFcolor;
-    String iconReset = ICON_RESET;
-    String iconForbid = ICON_FORBID;
-    String powerIcon = ICON_POWER;
-    String iconX = "X";
-    String footSwitchIcon = ICON_FOOTSWITCH;
-    String intervalIcon = ICON_INTERVAL;
+
+    float interfaceIconBrightness = GUI::systemBrightness;      // used to blink icon when dataProcessed
 
     String utilsBlinkLabel = "", utilsBlinkIcon = "";
 
-    AlteredColor iFconnectivityIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
+    AlteredColor networkConnectivityIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &networkConnectivityIconColorIdle};
     AlteredColor apIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor configIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor blinkColor = AlteredColor{.baseColor = GUI::blue, .value =  &GUI::unUsedColor};
-
-    int16_t overlayIconY = TFT_HEIGHT-OVERLAY_ICON_SIZE, apIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE*2;
-    int16_t batIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE;
-    int16_t iconRow2 = OVERLAY_ICON_SIZE;
-
-    float pendingBarWidth = TFT_WIDTH;
-
-    uint16_t rainbowC;
     AlteredColor rainbowColor = AlteredColor{.baseColor = TFT_WHITE, .value = &rainbowC};
 
-    String leftIcon,rightIcon, brightIcon = ICON_BRIGHTNESS;
+    int16_t overlayIconY = TFT_HEIGHT-OVERLAY_ICON_SIZE, 
+            apIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE*2,
+            batIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE,
+            iconRow2 = OVERLAY_ICON_SIZE,
+            rightScreen = TFT_WIDTH;
 
-    bool disabledBankRendering = false;   // this is to stop rendering the bank
-
-    //Strip* getSelectedStrip() = nullptr;
-    StripHeaderWidget* stripHeader = nullptr;
-
-    int16_t rightScreen = TFT_WIDTH;
+    float pendingBarWidth = TFT_WIDTH;
+   
+    bool disabledBankRendering = false;   // this is to stop rendering the bank  
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
 
@@ -645,12 +651,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    void setiFconnectivityColor(){
+    void setNetworkConnectivityColor(){
       if (hwm->network->state == CONNECTED){
-        iFconnectivityIconGlowingRedColor.value = &GUI::unUsedColor;
-        interfaceIconColorIdle = GUI::green;
+        networkConnectivityIconGlowingRedColor.value = &GUI::unUsedColor;
+        networkConnectivityIconColorIdle = GUI::green;
       }else{
-        iFconnectivityIconGlowingRedColor.value = &interfaceIconColorIdle;
+        networkConnectivityIconGlowingRedColor.value = &networkConnectivityIconColorIdle;
       }
     }
 
@@ -723,7 +729,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       LittleFS.remove(SYSTEM_FILE_NAME);
       hwm->persistants.clear();
       hwm->persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);
-      hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    //default brightness
+      hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::systemBrightness);    //default brightness
     }
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
@@ -853,9 +859,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       #endif
 
 
-      GUI::screenBrightness = hwm->persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
-      if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
-      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;
+      GUI::systemBrightness = hwm->persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
+      if (GUI::systemBrightness < BRIGHTNESS_MIN) GUI::systemBrightness = BRIGHTNESS_MIN;
+      if (GUI::systemBrightness > BRIGHTNESS_MAX) GUI::systemBrightness = BRIGHTNESS_MAX;
 
       gui->init();
 
@@ -908,7 +914,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       blinkColor.value = &blinkColorBlue;
       gui->alphaColors.add(&blinkColor);
-      gui->alphaColors.add(&iFconnectivityIconGlowingRedColor);
+      gui->alphaColors.add(&networkConnectivityIconGlowingRedColor);
       gui->alphaColors.add(&apIconGlowingRedColor);
       gui->alphaColors.add(&configIconGlowingRedColor);
 
@@ -1027,7 +1033,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
         break;
         case EVENT_NETWORK_CONNECTION_CHANGED:
-          setiFconnectivityColor();
+          setNetworkConnectivityColor();
           setAPIcon();
         break;
         case EVENT_ANALOG_BUTTON:
@@ -1437,7 +1443,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
   void saveBrightness(){
     triggerRedraw();
-    hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);
+    hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::systemBrightness);
   }
 
   void handleClicBrightnessButton(uint8_t buttonID){
@@ -1453,11 +1459,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
   void changeBrightness(uint8_t buttonID, float increment){
     if (buttonID == hwm->buttons[LEFTB]->getID()){
-      if (GUI::screenBrightness > BRIGHTNESS_MIN) GUI::screenBrightness -= increment;
-      if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
+      if (GUI::systemBrightness > BRIGHTNESS_MIN) GUI::systemBrightness -= increment;
+      if (GUI::systemBrightness < BRIGHTNESS_MIN) GUI::systemBrightness = BRIGHTNESS_MIN;
     }else if (buttonID == hwm->buttons[RIGHTB]->getID()){
-      if (GUI::screenBrightness < BRIGHTNESS_MAX) GUI::screenBrightness += increment;
-      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;
+      if (GUI::systemBrightness < BRIGHTNESS_MAX) GUI::systemBrightness += increment;
+      if (GUI::systemBrightness > BRIGHTNESS_MAX) GUI::systemBrightness = BRIGHTNESS_MAX;
     }
   }
 
@@ -1879,11 +1885,12 @@ void setup() {
 
       for (const auto& interface : interfaceRepo.interfaces){
         
-        dataProcessed |= interface->update();      // return value drive the icon to indicate data being processed        
+        bool dataProcessed = interface->update();      // return value drive the icon to indicate data being processed        
 
         Strip* currentStrip = getSelectedStrip();
         if (currentStrip != nullptr && currentStrip->interface == interface){               // the interface that has just been updated is the one used by the focused strip
-          interfaceIconColorIdle = dataProcessed?TFT_BLACK:interface->state.qualityColor;   // so we display the related QoS color or we blink it if data being Processed
+          interfaceIconColor = interface->state.QoScolor;                                   // set color to interface QoS color
+          interfaceIconBrightness = dataProcessed?0:GUI::systemBrightness;                  // and blink the icon upon data receive
         }
         
         if (interface->state.broadcastState){
@@ -2703,7 +2710,7 @@ void setup() {
       //DEBUG_PRINT("\n==> %s %p" ,targetBank->name.c_str(),targetStrip);
       if (stripHeader != nullptr) stripHeader->strip = targetStrip;
 
-      interfaceIcon = targetStrip->interface->getIcon();
+      interfaceIcon = *targetStrip->interface->getIcon();      
 
       // Force screen redraw if we changed the window or the bank OR if we are displaying full size strip
       if (
