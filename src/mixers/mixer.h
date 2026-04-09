@@ -38,7 +38,7 @@ class Synchronizer{
     uint8_t  dsIndex = 0;       // which dataset we are currently synchronizing
 
     void reset();
-    int8_t update(uint16_t latency);
+    int8_t update(/*uint16_t latency*/);
 
     void add(DataSetSynced* ds){
        datasets.push_back(ds);
@@ -417,7 +417,7 @@ public:
       /////////// GESTION DE LA PROGRESSION DE SYNCHRO
       if (this->state.label == IF_STATE_DATASYNCING) {
         // call synchronizer update to return global progress and sets all sync index        
-        this->state.progress = synchronizer.update(this->destination.latency);    // wait latency between two request to avoid doub,ling them
+        this->state.progress = synchronizer.update(/*this->destination.latency*/);    // wait latency between two request to avoid doubling them
         if (synchronizer.synced){
           // post sync action (like subscription)
           postSync();
@@ -557,19 +557,21 @@ void Synchronizer::reset(){
 }
     
 
-int8_t Synchronizer::update(uint16_t latency){  
-  
-  if (latency<20) latency = 20;   // minimum latency of 20ms to avoid too much request / flood
-  if (syncRequestLocker && (millis() - lockStartTime >= latency)) {
+int8_t Synchronizer::update(/*uint16_t latency*/){  
+  #define SYNC_LOCK_TIMEOUT 1000      // une seconde laisse le temps au data de se flusher et se resynchro
+  //if (latency<20) latency = 20;   // minimum latency of 20ms to avoid too much request / flood
+  if (syncRequestLocker && (millis() - lockStartTime >= /*latency*/SYNC_LOCK_TIMEOUT)) {
     syncRequestLocker = false; // autorise relance d'une requête
   }
 
   DataSetSynced* dataset = datasets[dsIndex]; //sync in serial, next dataset  
   if (dataset->syncStep < dataset->getSize()){ // complete ?
     //DEBUG_INFO("Synchronizer::update() %i %s",dataset->syncStep, dataset->getValuePtr(dataset->syncStep));
-    while (dataset->getValuePtr(dataset->syncStep)->indexOf(UNSYNC_PATTERN) == -1 && dataset->syncStep < dataset->getSize()){
-      dataset->syncStep++;  // check the next item
-      syncedSoFar++;
+    while (dataset->syncStep < dataset->getSize() // on  a pas atteind la fin du dataset 
+      && dataset->getValuePtr(dataset->syncStep)->indexOf(UNSYNC_PATTERN) == -1){ // et le data courant a été synchronisé car on n'y trouve plus le tag de snychro dans sa valeur
+        dataset->syncStep++;  // donc on check the next item
+        syncRequestLocker = false; // et autorise relance d'une requête
+        syncedSoFar++; // et on incremente le progres 
     }
   }else dsIndex++;
 

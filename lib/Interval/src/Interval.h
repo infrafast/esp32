@@ -558,21 +558,6 @@ private:
 
 
 ////////////////////// UTILITIES ///////////////////////////
-const char* wifiStatusToString(wl_status_t status) {
-  switch (status) {
-    case WL_NO_SHIELD:        return "No shield";
-    case WL_IDLE_STATUS:      return "Idle";
-    case WL_NO_SSID_AVAIL:    return "No SSID available";
-    case WL_SCAN_COMPLETED:   return "Scan completed";
-    case WL_CONNECTED:        return "Connected";
-    case WL_CONNECT_FAILED:   return "Connect failed";
-    case WL_CONNECTION_LOST:  return "Connection lost";
-    case WL_DISCONNECTED:     return "Disconnected";
-    default:                  return "Unknown";
-  }
-}
-
-
 void populateFileList(String extension, String folder, std::vector<String> *list, String prefix="", bool withExtension=true) {
   //we first clean all items from the list
 

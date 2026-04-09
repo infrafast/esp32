@@ -7,7 +7,7 @@
 
 #include <Ethernet.h>       // apply following fix: https://github.com/arduino-libraries/Ethernet/pull/107/files
 #include <EthernetUdp.h>
-#include <WiFiGeneric.cpp>  // for tipipinit
+#include <WiFiGeneric.cpp>  // for tcpipinit
 #include <ArduinoOTA.h>     // for WIFI_MEDIA program upload 
 #include <ESP32Ping.h>      // for WiFi
 
@@ -30,6 +30,22 @@ struct SocketData{
   const char* message="";
   int code;
 };
+
+////////////////////////////////////////////////////////////
+const char* wifiStatusToString(wl_status_t status) {
+  switch (status) {
+    case WL_NO_SHIELD:        return "No shield";
+    case WL_IDLE_STATUS:      return "Idle";
+    case WL_NO_SSID_AVAIL:    return "No SSID available";
+    case WL_SCAN_COMPLETED:   return "Scan completed";
+    case WL_CONNECTED:        return "Connected";
+    case WL_CONNECT_FAILED:   return "Connect failed";
+    case WL_CONNECTION_LOST:  return "Connection lost";
+    case WL_DISCONNECTED:     return "Disconnected";
+    default:                  return "Unknown";
+  }
+}
+//////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 void onEthernetBonjourServiceFoundCallback(const char* serviceType,
