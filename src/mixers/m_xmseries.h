@@ -136,20 +136,24 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       // do nothing
     }
 
-    virtual bool monitorService() override{
-
+    virtual bool monitorService() override {
       unsigned long now = millis();
-      // periodic command to keep mixer sending updates
+
       if (now - lastXremote >= XREMOTE_INTERVAL) {
+        /*
         oscOut.empty();
-        oscOut.setAddress(XMSERIES_XREMOTE_CMD);   // si disponible dans ta version
-        send(oscOut);    
+        oscOut.setAddress(XMSERIES_XREMOTE_CMD);   // envoi differé
+        send(oscOut);           
+        */
+
+        OSCMessage keepPushing(XMSERIES_XREMOTE_CMD);
+        _sendOSCMessage(&keepPushing);   // envoi immediat Sinon un backlog sortant peut retarder le keepalive, Comme c’est un keepalive critique, je l'envoi directement au lieu de passer par send() :
         lastXremote = now;
-      }      
+      }
 
       return NetworkOSC::monitorService();
-
     }
+
 
     virtual void beginMixer() override{
       DEBUG_INFO("%s::beginMixer() => user setting up XMmixerModelDS/model and dataset pattern",interfaceName.c_str());                  
@@ -349,8 +353,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
                   ip[0] != destination.ip[0] || ip[1] != destination.ip[1] ||
                   ip[2] != destination.ip[2] || ip[3] != destination.ip[3]
               ){
-                  //DEBUG_WARN("Mixer IP differs from UDP packet %s->%s", pathBuffer, UDPIP.toString());
-                  // destination.ip = ip;
+                  DEBUG_WARN("Mixer IP differs from UDP packet %s->%s", pathBuffer, UDPIP.toString());
+                  destination.ip = UDPIP;     // could be destination.ip = ip but this will not work
               }
             } else {
               DEBUG_ERROR("String reçue mais IP invalide");

@@ -133,7 +133,10 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
     
     virtual bool ping() override{
-      hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));  // forge a MS get json query with echoCommand as the path
+      destination.lastPingSentAt = millis();
+      destination.pingPending = true;
+
+      hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));
       return true;
     }
 
@@ -247,7 +250,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     virtual void route(const char *message,uint16_t length) override{
 
       //DEBUG_INFO("%s::process(%s,%i)",interfaceName.c_str(),message,length);
-      destination.lastPingTime = millis(); 
+      destination.lastRxTime = millis(); 
     
       if (length + 1 > RX_MAX){
         DEBUG_ERROR("%s::process(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
@@ -489,26 +492,26 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
-
     void processMixerIdentity(const char* path, JsonVariant body) {
-      // got the connected mixer information = reply to ping
-      
-      calculateLatencyAndJitter();
+      if (destination.pingPending) { // ensure we didn't receive the frame "out of a ping"
+        unsigned long rawLatency = millis() - destination.lastPingSentAt;
+        calculateLatencyAndJitter(rawLatency);
+        destination.pingPending = false;
+      }
 
       #define OFFLINE "offline"
       IPAddress ip;
       ip.fromString(body["ipAddress"] | "");
-      //String name   = body["name"]    | OFFLINE;        // name is the same as model, better to use manufacturer + model which is more unique and more relevant for the user
-      String name   = body["manufacturer"]    | OFFLINE;
-      String model  = body["currentModel"] | "";
+      String name  = body["manufacturer"] | OFFLINE;
+      String model = body["currentModel"] | "";
 
-      if (name != OFFLINE){        
-        setMixer(name,model,ip);                
-      }else{
-        hwm.network->clientSocketSend(get(MSPATH_APP_STATE));   // force getting the state as a backup in case mixerQuery didn't pass thru
+      if (name != OFFLINE) {
+        setMixer(name, model, ip);
+      } else {
+        hwm.network->clientSocketSend(get(MSPATH_APP_STATE));
       }
-
     }
+
 
     void processMixersAvailable(char* rx, size_t len) {
       JsonDocument filter;
@@ -981,17 +984,17 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       return false;
     }
 
-    virtual void setQoSColor() override{      
-      if (state.code != IF_READY) state.QoScolor = TFT_GREY;
+    virtual void determineQoS() override{      
+      if (state.code != IF_READY) state.QoSlevel = QoS::UNDETERMINED;
       else
-      if (destination.latency <= 15 && destination.jitter <= 5)  state.QoScolor = TFT_GREEN;    
+      if (destination.latency <= 15 && destination.jitter <= 5)  state.QoSlevel = QoS::GOOD;    
       else
-      if (destination.latency <= 30 && destination.jitter <= 5) state.QoScolor = TFT_BLUE;    
+      if (destination.latency <= 30 && destination.jitter <= 5) state.QoSlevel = QoS::MEDIUM;    
       else
-      if (destination.latency <= 50 && destination.jitter <= 20)  state.QoScolor = TFT_YELLOW;    
+      if (destination.latency <= 50 && destination.jitter <= 20)  state.QoSlevel = QoS::POOR;    
       else
       // Au-delà : problème réseau
-      state.QoScolor = TFT_RED;    
+      state.QoSlevel = QoS::CRITICAL;    
     }       
         
     

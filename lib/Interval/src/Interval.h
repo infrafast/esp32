@@ -93,13 +93,17 @@ bool useUSBMidi = false;
 class TargetEcho{
   public:
     bool alive = false;
-    unsigned long lastPingTime ;    
-    uint16_t latency = 0;      // normal latency on TCP/IP lan
-    uint16_t jitter = 0;
+    unsigned long lastRxTime ;    
+    uint16_t latency = 30;      // normal latency on TCP/IP lan
+    uint16_t jitter = 5;
     String host;
     IPAddress ip;  
     TargetEcho(String h):host(h){} 
     String echoCommand = "";
+
+    unsigned long lastPingSentAt = 0;
+    bool pingPending = false;    
+
 };
 
 typedef std::function<void(TargetEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité
@@ -1417,6 +1421,27 @@ enum{
   IF_READY
 };
 
+enum class QoS : int8_t {
+  NOTAPPLICABLE = -1,
+  UNDETERMINED,  
+  CRITICAL,
+  POOR,
+  MEDIUM,
+  GOOD
+};
+
+uint16_t QoStoColor(QoS qos) {
+  switch (qos) {
+      case QoS::GOOD:           return TFT_GREEN;    
+      case QoS::MEDIUM:         return TFT_YELLOW;   
+      case QoS::POOR:           return TFT_ORANGE;   
+      case QoS::CRITICAL:       return TFT_RED;      
+      case QoS::NOTAPPLICABLE:  return TFT_WHITE;
+      case QoS::UNDETERMINED:   return 0x5AEB;        // = TFT_GREY
+      default:                  return TFT_WHITE;    // fallback
+  }
+}
+
 #include "interfaces/i_states.h"
 
 struct State{ // used by Strip and Interface
@@ -1436,7 +1461,7 @@ struct State{ // used by Strip and Interface
   bool previousSwitchable = switchable;
   float previousProgress = -1;
 
-  uint16_t QoScolor = TFT_WHITE;
+  QoS QoSlevel = QoS::NOTAPPLICABLE;
 
   bool changed = false;               // this is used by the strip to determine if they have to refresh
   bool broadcastState = false;

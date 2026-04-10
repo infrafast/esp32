@@ -757,9 +757,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //Event::enableEventDump(EVENT_SOCKET_ERROR);
       //Event::enableEventDump(EVENT_SOCKET_CLOSE);
       //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
-      //Event::enableEventDump(EVENT_INTERFACE_MESSAGE);
       //Event::enableEventDump(EVENT_WEBAPP_STARTED);
-      Event::enableEventDump(EVENT_BATTERY_REFRESHED);
+      //Event::enableEventDump(EVENT_BATTERY_REFRESHED);
+      //Event::enableEventDump(EVENT_INTERFACE_MESSAGE);      
 
       // *********************************
       // SKELETONS & DATA SETS
@@ -1891,7 +1891,7 @@ void setup() {
 
         Strip* currentStrip = getSelectedStrip();
         if (currentStrip != nullptr && currentStrip->interface == interface){               // the interface that has just been updated is the one used by the focused strip
-          interfaceIconColor = interface->state.QoScolor;                                   // set color to interface QoS color
+          interfaceIconColor = QoStoColor(interface->state.QoSlevel);                                   // set color to interface QoS color
           interfaceIconBrightness = dataProcessed?GUI::systemBrightness*0.3f:GUI::systemBrightness;                  // and blink the icon upon data receive
         }
         

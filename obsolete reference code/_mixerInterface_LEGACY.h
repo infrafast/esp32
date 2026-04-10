@@ -464,14 +464,14 @@ class OSCMixerInterface: public MixerInterface {
 
         } 
 
-        lastPingTime = millis();   // remove THIS ONE IF YOU STILL WANT TO CHECK REST API WHEN OSC IS RESPONDING (CONSUMME MORE TIME)                
+        lastRxTime = millis();   // remove THIS ONE IF YOU STILL WANT TO CHECK REST API WHEN OSC IS RESPONDING (CONSUMME MORE TIME)                
         OSCechoAttempt = 0;                        
         return true; 
       } 
 
       /////// MANAGE CONNECTION ////////////////////////////////////////////////////   
-      if (millis()-lastPingTime > queryDelay){        
-        lastPingTime = millis();
+      if (millis()-lastRxTime > queryDelay){        
+        lastRxTime = millis();
         queryState();
         OSCechoAttempt++;
         osc->SendCmd2OSC(echoCommand.c_str());                      
@@ -515,7 +515,7 @@ class OSCMixerInterface: public MixerInterface {
       strcpy(OSCCommand,"");   
 
       if (progress() >= 100){
-        lastPingTime = 0;        // do not wait and trigger immediate queryState if we are complete
+        lastRxTime = 0;        // do not wait and trigger immediate queryState if we are complete
         return;
       }
 
@@ -602,7 +602,7 @@ class OSCMixerInterface: public MixerInterface {
     #define OSC_MAX_LEN 64
     char OSCCommand[OSC_MAX_LEN];
 
-    unsigned long lastPingTime = 0, lastRestartMonitorTime = 0;   
+    unsigned long lastRxTime = 0, lastRestartMonitorTime = 0;   
 };
 
 String OSCMixerInterface::echoCommand = "";
@@ -730,7 +730,7 @@ class BehringerMixer : public OSCMixerInterface {
 
     void dropSequentialSyncQuery(){      
       if (dsNameIndex >= dsNames.size()){ // we've synced it all
-        lastPingTime = 0;        // do not wait and trigger immediate queryState
+        lastRxTime = 0;        // do not wait and trigger immediate queryState
         return;
       }
       DataSetSynced* dsName = dsNames[dsNameIndex]; //sync in serial, next dsName
@@ -1025,7 +1025,7 @@ class MixingStation : public OSCMixerInterface {
           });
 
 
-          lastPingTime = 0; // speed up the call to ping with no delay in between
+          lastRxTime = 0; // speed up the call to ping with no delay in between
 
           setSynced(origin);
         }else{
@@ -1042,7 +1042,7 @@ class MixingStation : public OSCMixerInterface {
           //DEBUG_PRINT("\n\t\t\t\t\t\t ---- REST API STATE %s %d% ----", API_Mixer_State.c_str(), (int)syncSoftwareProgress);
           //syncSoftwareProgress = syncSoftwareProgress * 1.1; // we fill the gap due to the latency of http checks
           if (syncSoftwareProgress > 100) syncSoftwareProgress = 100; 
-          if (interfaceState == SYNCING_SOFTWARE) lastPingTime = 0; // speed up the call to ping with no delay in between
+          if (interfaceState == SYNCING_SOFTWARE) lastRxTime = 0; // speed up the call to ping with no delay in between
         }else{
           API_Mixer_State = "offline";
           //DEBUG_PRINT("\n\t\t\t\t\t\t ----!!! REST API Offline !!!----");          
@@ -1053,7 +1053,7 @@ class MixingStation : public OSCMixerInterface {
         if (status == API_OK){
           API_Mixer_State = "connecting";
           syncSoftwareProgress = 0;
-          lastPingTime = 0; // speed up the call to ping with no delay in between          
+          lastRxTime = 0; // speed up the call to ping with no delay in between          
         }else{
           setConnectFailed();
         }
@@ -1088,7 +1088,7 @@ class MixingStation : public OSCMixerInterface {
             //DEBUG_PRINT("\nmixingstation serialized failed");
           }
           setSynced(origin);
-          lastPingTime = 0; // speed up the call to ping with no delay in between          
+          lastRxTime = 0; // speed up the call to ping with no delay in between          
         }else{
           setConnectFailed();
           setSynced(origin,false);
@@ -1214,7 +1214,7 @@ class MixingStation : public OSCMixerInterface {
           resetSyncData();
         }
         interfaceState = SYNCING_SOFTWARE;
-        //lastPingTime = 0; // try the next one straight with no delay
+        //lastRxTime = 0; // try the next one straight with no delay
       }
       else if (API_Mixer_State == "connecting" || API_Mixer_State == "reconnecting"){
         interfaceState = CONNECTING;
@@ -1320,7 +1320,7 @@ class MixingStation : public OSCMixerInterface {
           API_Mixer_State = "connecting";
           //DEBUG_PRINT("\nCONNECT MS TO %s\n", app.userConfig.getString(MIXER_AUTOIP_KEY)->c_str());      
           LogUDP::sendLog("AUTO CONNECT MS",hwm.network->udp);
-          lastPingTime = 0; // try the next one straight with no delay
+          lastRxTime = 0; // try the next one straight with no delay
         }
       }
     }

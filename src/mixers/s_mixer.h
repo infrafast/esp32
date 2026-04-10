@@ -46,21 +46,9 @@ class StripMixer{
     }    
 
   protected:
-    virtual void getConfig() = 0;
-    virtual void getValues() = 0;
-    bool handlePeriodicRefreshEvent(const Event& evt){
-      if (evt.type != EVENT_INTERFACE_MESSAGE || evt.data == nullptr) return false;
-      JsonDocument evtData = *((JsonDocument*)evt.data);
-      int action = evtData[0] | -1;
-      if (action != STRIP_REFRESH_VISIBLE) return false;
-
-      if (baseStrip == nullptr || !baseStrip->visible || boundInterface == nullptr) return true;
-      if (boundInterface->state.code != IF_READY) return true;
-
-      getConfig();
-      getValues();
-      return true;
-    }
+    
+    virtual void getConfig(){}
+    virtual void getValues(){}
 
 };
 
@@ -87,6 +75,24 @@ public:
     MixerBase* activeMixer = getMixer();   
     return true;
   }  
+
+  virtual void processAction(int action,JsonDocument& data) override{  
+
+    if (baseStrip == nullptr || !baseStrip->visible || boundInterface == nullptr) return;
+
+    // if strip is not visible, we can skip event processing as the state will be refreshed when getting the focus
+    if (!baseStrip->visible) return;
+
+    switch (action){
+      case STRIP_REFRESH_VISIBLE:         
+        
+      if (boundInterface->state.code != IF_READY) return;      
+
+        getValues(); // strip is visible so we get its values
+        if (baseStrip->focused) getConfig(); // plus get the toplabel name if it has focus 
+      break;
+    }
+  }
   
 };
 
@@ -146,43 +152,7 @@ class Input2MixbusStrip : public SendStrip{
       unitString = "dB";
     }
 
-    virtual void onEvent(const Event& evt) override{
-      if (handlePeriodicRefreshEvent(evt)) return;
-
-      // if strip is not visible, we can skip event processing as the state will be refreshed when getting the focus
-      if (!visible) return;
-
-      // handle events from the mixer (e.g. to update strip state on external changes not made through the interface)
-      JsonDocument evtData = evt.data != nullptr ? *((JsonDocument*)evt.data) : JsonDocument();
-      int action = evtData[0];
-    
-      switch (action){
-        case STRIP_CH_BUS_MUTE:
-          // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
-          if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
-            *toggle1 = evtData[3];  // mute state
-            DEBUG_INFO("%s onEvent() STRIP_CH(%i)_BUS(%i)_MUTE %d",type.c_str(), select1ID, select2ID, toggle1);
-          }
-          break;
-        case STRIP_CH_MAIN_MUTE:
-          // chek if the event is for us based on select1ID which is representing the chID
-          if (evtData[1] == select1ID){  // evtData[1] = chID
-            *toggle1 = evtData[2];  // mute state
-            DEBUG_INFO("%s onEvent() STRIP_CH(%i)_MAIN_MUTE %d",type.c_str(), select1ID, toggle1);
-          }
-          break;        
-        case STRIP_CH_BUS_MIX_LEVEL:
-          // chek if the event is for us based on select1ID and select2ID which are representing the chID and busID respectively
-          if (evtData[1] == select1ID && evtData[2] == select2ID){  // evtData[1] = chID, evtData[2] = busID
-            *value = evtData[3];  // level value
-            DEBUG_INFO("%s onEvent() STRIP_CH(%i)_BUS(%i)_MIX_LEVEL %.2f",type.c_str(), select1ID, select2ID, value);
-          }
-          break;
-      }
-
-    }
-
-    void getConfig(){
+    virtual void getConfig() override{
       DEBUG_INFO("getConfig %s",type.c_str());      
 
       // 1 . request name refresh
@@ -195,7 +165,7 @@ class Input2MixbusStrip : public SendStrip{
       
     }
 
-    void getValues(){
+    virtual void getValues() override{
       mixer->requestCHBUSlevel(select1ID, select2ID);  // select1ID = chID, select2ID = busID
     }
 
@@ -265,19 +235,6 @@ class inputGainStrip : public StripMixerMixin<OneSelectStrip> {
         push4x1hBar();
       }     
 
-    }
-
-    virtual void onEvent(const Event& evt) override{
-      handlePeriodicRefreshEvent(evt);
-    } 
-
-    virtual void getConfig() override{
-      DEBUG_INFO("%s:getConfig %s",type.c_str());
-    }
-
-    virtual void getValues() override{
-      DEBUG_INFO("%s:getValues %s",type.c_str());
-      // request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
     }
 
     virtual float increaseCallback(unsigned long time,uint8_t trigger) override{

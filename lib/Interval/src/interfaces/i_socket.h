@@ -12,7 +12,7 @@ class NetworkSocket: public NetworkDevice{
 
   #define MAX_SOCKET_MESSAGE_LEN kBufferMaxSize
   #define SOCKET_QUEUE_SIZE 5
-  #define MESSAGE_PROCESSED_AT_ONCE 3
+  #define SOCKET_MESSAGE_PROCESSED_AT_ONCE 3
 
   struct SocketDataCopy {
     uint16_t length;
@@ -40,16 +40,14 @@ class NetworkSocket: public NetworkDevice{
       SocketDataCopy* msg = nullptr;
       uint8_t processed = 0;
 
-      while (processed < MESSAGE_PROCESSED_AT_ONCE && (msg = dequeueSocketMessage()) != nullptr) {
+      while (processed < SOCKET_MESSAGE_PROCESSED_AT_ONCE && (msg = dequeueSocketMessage()) != nullptr) {
         route(msg->message, msg->length);
         dataProcessed = true;
         processed++;
       }
 
       #define PULSE_CHECK_DELAY kTimeoutInterval*1.1
-      if (millis() - destination.lastPingTime > PULSE_CHECK_DELAY) {                
-        destination.lastPingTime = millis();
-
+      if (millis() - destination.lastRxTime > PULSE_CHECK_DELAY) {
         if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN) {
           ping();
           dataProcessed = true;
@@ -57,7 +55,7 @@ class NetworkSocket: public NetworkDevice{
           if (handleConnectService()) setStatePending();
           else setStateError("Thread socket-open failed");
         }
-      }    
+      }  
       
       return dataProcessed;
     }  
@@ -73,7 +71,7 @@ class NetworkSocket: public NetworkDevice{
           //setStateConnected();
           setStatePending();      // the derived class will have to override state
           deviceInterface->state.details = "Querying application";
-          destination.lastPingTime = 0;   // request an immediate /app/state to ping
+          destination.lastRxTime = 0;   // request an immediate /app/state to ping
           onSocketConnected();    
         break;
         case EVENT_SOCKET_CLOSE:{
@@ -96,7 +94,7 @@ class NetworkSocket: public NetworkDevice{
           setStateDisconnected();
         break;
         case EVENT_SOCKET_MESSAGE:
-          destination.lastPingTime = millis();   // no need to query device
+          destination.lastRxTime = millis();   // no need to query device        
 
           SocketData* data = (SocketData*)evt.data;
           enqueueSocketMessage(data);
@@ -116,8 +114,9 @@ class NetworkSocket: public NetworkDevice{
 
     virtual bool handleDisconnectService(){
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
-      destination.lastPingTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
+      destination.lastRxTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
       hwm.network->clientSocketClose(); 
+      destination.pingPending = false;          // clear any pending ping
       if (state.enabled == false) setStateDisabled();
       return true;
     }    

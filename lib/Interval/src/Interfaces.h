@@ -131,7 +131,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }  
 
     bool init(/*EventListener* listener*/) {
-      setQoSColor();
+      determineQoS();
       DEBUG_INFO("----------------------------------  %s->init(...)  ---------------------------------- ", interfaceName.c_str());
       //registerEventListener(listener);
       load();
@@ -260,7 +260,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
           }
         }
 
-        this->setQoSColor();            // recalculate the color
+        this->determineQoS();            // recalculate the color
         
       }
 
@@ -413,9 +413,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     
     virtual bool monitor() = 0; 
 
-    virtual void setQoSColor(){
-      if (state.enabled) state.QoScolor = TFT_WHITE;
-      else state.QoScolor = TFT_GREY;
+    virtual void determineQoS(){
+      if (state.enabled) state.QoSlevel = QoS::GOOD;
+      else state.QoSlevel = QoS::UNDETERMINED;
     };
 
     virtual void handlePropertyChange(){DEBUG_INFO("%s::handlePropertyChange() : void",name.c_str());} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
@@ -750,40 +750,54 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       switchNetworkService(_enabled); // we use our own
     }   
 
-    void calculateLatencyAndJitter(){
+    void calculateLatencyAndJitter(unsigned long rawLatency){
       /* we got a echoCommand echo, so we calculate the latency
       we determine latency and jitter based on the ping response time, we use an EWMA to smooth the values and avoid spikes, we also set a max latency of 500ms to avoid crazy values in case of network issues
       Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
       ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
       */
-      unsigned long rawLatency = millis() - destination.lastPingTime;
+      const unsigned long MAX_VALID_LATENCY = 500;
+      const float LAT_ALPHA = 0.20f;
+      const float JIT_ALPHA = 0.25f;
 
-      // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
-      if (rawLatency < 500){
-        // α entre 0.1 (très lisse) et 0.3 (réactif)
-        #define LAT_ALPHA 0.2f                                 
-
-        if (rawLatency < 500) {
-            destination.latency =
-                destination.latency * (1.0f - LAT_ALPHA) +
-                rawLatency * LAT_ALPHA;
-
-            destination.latency = (uint16_t)destination.latency;
-
-            float delta = abs((int)rawLatency - (int)destination.latency);
-
-            destination.jitter =
-                destination.jitter * 0.75f +
-                delta * 0.25f;                      
-            }                  
-
+      if (rawLatency == 0 || rawLatency > MAX_VALID_LATENCY) {
+        return;
       }
 
-      // Sécurité bornes
-      if (destination.latency > 500) destination.latency = 500;      
+      const float previousLatency = destination.latency;
 
-      DEBUG_INFO("%s latency: %i, jitter:%i",interfaceName.c_str(),destination.latency,destination.jitter);    
-    }      
+      if (destination.latency == 0) {
+        destination.latency = (uint16_t)rawLatency;
+        destination.jitter  = 0;
+      } else {
+        float filteredLatency =
+            previousLatency * (1.0f - LAT_ALPHA) +
+            rawLatency * LAT_ALPHA;
+
+        float delta = fabsf((float)rawLatency - previousLatency);
+
+        float filteredJitter =
+            destination.jitter * (1.0f - JIT_ALPHA) +
+            delta * JIT_ALPHA;
+
+        destination.latency = (uint16_t)filteredLatency;
+        destination.jitter  = (uint16_t)filteredJitter;
+      }
+
+      if (destination.latency > MAX_VALID_LATENCY) {
+        destination.latency = MAX_VALID_LATENCY;
+      }
+
+      if (destination.jitter > MAX_VALID_LATENCY) {
+        destination.jitter = MAX_VALID_LATENCY;
+      }
+
+      DEBUG_INFO("📉 %s latency:%u jitter:%u raw:%lu",
+                interfaceName.c_str(),
+                destination.latency,
+                destination.jitter,
+                rawLatency);
+    } 
 
     void onEvent(const Event& evt) override {
       // recive the event propagated from Appmanager

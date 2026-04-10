@@ -168,10 +168,9 @@ DropDownAddress addressMAINname = DropDownAddress(ADDRESS_MAIN_NAME);
 #define ADDRESS_DCA_NAME "/dcaname/%d"
 DropDownAddress addressDCAname = DropDownAddress(ADDRESS_DCA_NAME);  
 
+
+// strip action / event
 enum{
-  STRIP_CH_BUS_MUTE,
-  STRIP_CH_MAIN_MUTE,
-  STRIP_CH_BUS_MIX_LEVEL,
   STRIP_REFRESH_VISIBLE
 };
 
@@ -274,8 +273,8 @@ public:
     #define PATH_MAX_SIZE 64
     char pathBuffer[PATH_MAX_SIZE];        
     unsigned long lastVisibleStripRefreshAt = 0;
-    uint16_t visibleStripRefreshIntervalMs = 800;
-
+      
+    
     template<typename... Args>
     MixerDevice(Args&&... args)      
         : NetworkBase(std::forward<Args>(args)...){
@@ -409,11 +408,6 @@ public:
       this->fireEvent(this->message);
     }
 
-    /*void onEvent(const Event& event) override {
-      NetworkBase::onEvent(event);   // call parent to handle network events
-      if (event.type == EVENT_TYPE) {
-      }
-    }*/
       
     /////////////////////////////////
 
@@ -439,12 +433,16 @@ public:
         }
       }
 
-      if (this->state.code == IF_READY) {
+      if (this->state.code == IF_READY) {  // we have a bad QoS, so we force a data sync at VISIBLE_STRIP_REFRESH_RATE to catch up possible data loss and stay sync
         unsigned long now = millis();
-        if ((now - lastVisibleStripRefreshAt) >= visibleStripRefreshIntervalMs) {
+        uint16_t visibleStripRefreshRate = 60000; // by default we refresh every minute
+
+        if (this->state.QoSlevel < QoS::GOOD) visibleStripRefreshRate = 10000; // if QoS is bad, we reduce to every 10s
+
+        if ((now - lastVisibleStripRefreshAt) >= visibleStripRefreshRate) {
           lastVisibleStripRefreshAt = now;
           fireVisibleStripRefreshEvent();
-        }
+        }       
       }
 
       return NetworkBase::monitorNetwork();
@@ -457,7 +455,7 @@ public:
 
       MixerIdentity newID { name, model, ip };
 
-      this->setQoSColor();       // mixer replied so we set the QoS based on latency and jitter 
+      this->determineQoS();       // mixer replied so we set the QoS based on latency and jitter 
 
       bool mixerChanged = !mixerID.equals(newID);
       

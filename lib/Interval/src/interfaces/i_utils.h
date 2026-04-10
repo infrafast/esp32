@@ -221,8 +221,8 @@ class DirectoryInterface: public NetworkDevice{
 
       virtual bool ping(){return true;}
       
-      virtual void setQoSColor() override{
-        this->state.QoScolor = TFT_GREEN;     // to be set based on webserver data flow speed
+      virtual void determineQoS() override{
+        this->state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
       }
 
       virtual bool handleDisconnectService(){
@@ -418,8 +418,8 @@ class WebApplicationService: public NetworkDevice{
       return handleWeb(); // report if we processed any data
     }
 
-    virtual void setQoSColor() override{
-      state.QoScolor = TFT_GREEN;     // to be set based on webserver data flow speed
+    virtual void determineQoS() override{
+      state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
     }
 
     virtual bool ping() override{return true;}

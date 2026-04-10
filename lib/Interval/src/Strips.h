@@ -205,6 +205,7 @@ class Strip: public EventListener{
     DeviceInterface* interface = nullptr;
 
     bool visible = false;
+    bool focused = false;
 
     // logical position
     uint8_t x, y, win, index;
@@ -254,6 +255,26 @@ class Strip: public EventListener{
         interface->unregisterEventListener(this);
       }
     }    
+
+    // --------------------------------------------------------------------------
+    // EVENT HANDLING
+    // -------------------------------------------------------------------------- 
+
+
+    virtual void onEvent(const Event& evt) override{
+
+      if (evt.type != EVENT_INTERFACE_MESSAGE || evt.data == nullptr) return;
+
+      // handle events from the mixer (e.g. to update strip state on external changes not made through the interface)
+      JsonDocument evtData = evt.data != nullptr ? *((JsonDocument*)evt.data) : JsonDocument();
+      int action = evtData[0] | -1;
+      
+      processAction(action,evtData);
+
+    } 
+
+    virtual void processAction(int action,JsonDocument& data){} // do nothing by default
+
 
     // --------------------------------------------------------------------------
     // BUTTON MANAGEMENT
@@ -446,12 +467,14 @@ class Strip: public EventListener{
         brightness = BRIGHTNESS_MAX;
         //DEBUG_PRINT(" has focus");
         visible = true;
+        focused = true;
 
         // drop command to query strip state
         hasFocus();        
        
       }else{
         brightness = BRIGHTNESS_NOFOCUS;
+        focused = false;
         //DEBUG_PRINT(" lost focus");
       }
     }
