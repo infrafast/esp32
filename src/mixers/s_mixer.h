@@ -48,6 +48,19 @@ class StripMixer{
   protected:
     virtual void getConfig() = 0;
     virtual void getValues() = 0;
+    bool handlePeriodicRefreshEvent(const Event& evt){
+      if (evt.type != EVENT_INTERFACE_MESSAGE || evt.data == nullptr) return false;
+      JsonDocument evtData = *((JsonDocument*)evt.data);
+      int action = evtData[0] | -1;
+      if (action != STRIP_REFRESH_VISIBLE) return false;
+
+      if (baseStrip == nullptr || !baseStrip->visible || boundInterface == nullptr) return true;
+      if (boundInterface->state.code != IF_READY) return true;
+
+      getConfig();
+      getValues();
+      return true;
+    }
 
 };
 
@@ -134,6 +147,7 @@ class Input2MixbusStrip : public SendStrip{
     }
 
     virtual void onEvent(const Event& evt) override{
+      if (handlePeriodicRefreshEvent(evt)) return;
 
       // if strip is not visible, we can skip event processing as the state will be refreshed when getting the focus
       if (!visible) return;
@@ -253,7 +267,9 @@ class inputGainStrip : public StripMixerMixin<OneSelectStrip> {
 
     }
 
-    virtual void onEvent(const Event& evt) override{} 
+    virtual void onEvent(const Event& evt) override{
+      handlePeriodicRefreshEvent(evt);
+    } 
 
     virtual void getConfig() override{
       DEBUG_INFO("%s:getConfig %s",type.c_str());

@@ -171,7 +171,8 @@ DropDownAddress addressDCAname = DropDownAddress(ADDRESS_DCA_NAME);
 enum{
   STRIP_CH_BUS_MUTE,
   STRIP_CH_MAIN_MUTE,
-  STRIP_CH_BUS_MIX_LEVEL
+  STRIP_CH_BUS_MIX_LEVEL,
+  STRIP_REFRESH_VISIBLE
 };
 
 
@@ -272,6 +273,8 @@ public:
     // used to handle path templates and values
     #define PATH_MAX_SIZE 64
     char pathBuffer[PATH_MAX_SIZE];        
+    unsigned long lastVisibleStripRefreshAt = 0;
+    uint16_t visibleStripRefreshIntervalMs = 800;
 
     template<typename... Args>
     MixerDevice(Args&&... args)      
@@ -401,6 +404,10 @@ public:
 
 
     //////////////////////////////////
+    void fireVisibleStripRefreshEvent() {
+      payload[0] = STRIP_REFRESH_VISIBLE;
+      this->fireEvent(this->message);
+    }
 
     /*void onEvent(const Event& event) override {
       NetworkBase::onEvent(event);   // call parent to handle network events
@@ -429,6 +436,14 @@ public:
             requestDSname(dataset, dataset->syncStep);
             synchronizer.lockSyncRequest();
           }            
+        }
+      }
+
+      if (this->state.code == IF_READY) {
+        unsigned long now = millis();
+        if ((now - lastVisibleStripRefreshAt) >= visibleStripRefreshIntervalMs) {
+          lastVisibleStripRefreshAt = now;
+          fireVisibleStripRefreshEvent();
         }
       }
 
