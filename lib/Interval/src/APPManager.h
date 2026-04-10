@@ -759,7 +759,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
       //Event::enableEventDump(EVENT_INTERFACE_MESSAGE);
       //Event::enableEventDump(EVENT_WEBAPP_STARTED);
-
+      Event::enableEventDump(EVENT_BATTERY_REFRESHED);
 
       // *********************************
       // SKELETONS & DATA SETS
@@ -875,6 +875,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
       hwm->onOff.registerEventListener(this);           // ApplicationManager listen to onOff button event
       hwm->network->registerEventListener(this);        // ApplicationManager listen to network event
+
+      hwm->battery.registerEventListener(this);         // ApplicationManager listen to battery state
 
       ////////////////////////////////////////////////////////////////////////
       // DESIGN MENU
@@ -1890,7 +1892,7 @@ void setup() {
         Strip* currentStrip = getSelectedStrip();
         if (currentStrip != nullptr && currentStrip->interface == interface){               // the interface that has just been updated is the one used by the focused strip
           interfaceIconColor = interface->state.QoScolor;                                   // set color to interface QoS color
-          interfaceIconBrightness = dataProcessed?GUI::systemBrightness*0.5f:GUI::systemBrightness;                  // and blink the icon upon data receive
+          interfaceIconBrightness = dataProcessed?GUI::systemBrightness*0.3f:GUI::systemBrightness;                  // and blink the icon upon data receive
         }
         
         if (interface->state.broadcastState){

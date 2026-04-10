@@ -73,6 +73,9 @@ bool useUSBMidi = false;
 
 #else
   #define DEBUG_PRINT(...) 
+  #define DEBUG_INFO(...) 
+  #define DEBUG_WARN(...) 
+  #define DEBUG_ERROR(...)
   #define debugMon 0
 #endif
 
@@ -362,6 +365,7 @@ public:
     data=_data;
   }
 
+  #ifdef DEBUG
   virtual const char* name() const {
     return getEventName(type);
   }
@@ -376,6 +380,8 @@ public:
     }
     return "UNKNOWN_EVENT";
   }
+  #endif
+
 
   static bool isEventDumpEnabled(EventType id) {
     if (id >= EVENT_COUNT) return false;

@@ -181,7 +181,7 @@ class AnalogIn : public HWComponent{
 
 };
 
-#define VBAT_CHANGE_THRESHOLD 0.06
+#define VBAT_CHANGE_THRESHOLD 0.1
 
 #define VBAT_CRIT 3.2     // selon chat gpt => tension minimal. En dessous de 3.0v , dommages irreversibles
 #define VBAT_MIN 3.3      // selon chat gpt => tension a surveiller, seuil de pré-alarme
@@ -191,7 +191,7 @@ class AnalogIn : public HWComponent{
 
 #define VBAT_OFFSET 0.0 // compensate voltage drop (positive or negative) from the diode or other component
 
-#define BAT_REFRESH_RATE 500 // refresh every 500ms
+#define BAT_REFRESH_RATE 1000 // refresh every second
 #define BAT_NUM_READINGS 5
 
 
@@ -206,106 +206,185 @@ enum{
 enum BatteryState {
     BAT_CHECKING,  
     BAT_USB_PLUGGED,
+    BAT_CHARGING,
     BAT_DISCHARGING,
 };
 
-class BatteryMonitor : public HWComponent{
-  // read https://forum.seeedstudio.com/t/xiao-ble-sense-mbed-2-7-2-battery-charge-and-voltage-monitor-analogread-p0-31-does-not-work/266438
+class BatteryMonitor : public HWComponent {
+  // See:
+  // https://forum.seeedstudio.com/t/xiao-ble-sense-mbed-2-7-2-battery-charge-and-voltage-monitor-analogread-p0-31-does-not-work/266438
 
-  public:
-    Event evt;
+public:
+  Event evt;
 
-    uint8_t indicator = BAT_FULL_LEVEL;
-    float vBat = VBAT_MAX;
-    // Global variables for tracking battery state
-    float previousVBat = 0.0;
-    BatteryState batteryState = BAT_CHECKING;
+  uint8_t indicator = BAT_FULL_LEVEL;
+  float vBat = VBAT_MAX;
+  float previousVBat = VBAT_MAX;
+  BatteryState batteryState = BAT_CHECKING;
 
-    BatteryMonitor(uint8_t p, boolean d=true): HWComponent(p,d){
-      pinMode(CSPin, INPUT);
-      id = concatStrings("BatteryMonitor~", p);
-      evt.type = EVENT_BATTERY_REFRESHED;
-    };
+  BatteryMonitor(uint8_t p, bool d = true) : HWComponent(p, d) {
+    pinMode(CSPin, INPUT);
+    id = concatStrings("BatteryMonitor~", p);
+    evt.type = EVENT_BATTERY_REFRESHED;
+  }
 
-    virtual void init(){
-      HWComponent::init();
-      for (readIndex = 0; readIndex < BAT_NUM_READINGS-1; readIndex++) read();
-      refresh(true);  // force first reading
+  virtual void init() override {
+    HWComponent::init();
+
+    readIndex = 0;
+    readSum = 0;
+    initialized = false;
+    lastReadMillis = 0;
+
+    // Remplit le buffer une première fois pour stabiliser la moyenne
+    uint32_t firstReading = analogReadMilliVolts(CSPin);
+    for (int i = 0; i < BAT_NUM_READINGS; i++) {
+      readings[i] = firstReading;
+      readSum += firstReading;
     }
 
-    void read(){
-      readings[readIndex] = analogReadMilliVolts(CSPin);     
-      readSum = readSum + readings[readIndex];      
-      //if (debug) DEBUG_PRINT("\nreadings[%i]:%i",readIndex,readings[readIndex]);
+    float initialVBat = convertMilliVoltsToVBat(firstReading);
+    vBat = initialVBat;
+    previousVBat = initialVBat;
+    indicator = computeIndicator(vBat);
+    batteryState = determineBatteryState(vBat, previousVBat, VBAT_CHANGE_THRESHOLD / 2.0f);
+
+    initialized = true;
+
+    refreshed = true;
+    fireEvent(evt);
+  }
+
+  virtual bool refresh(bool force = false) override {
+    refreshed = false;
+
+    if (!initialized) return false;
+
+    unsigned long now = millis();
+    if (!force && (now - lastReadMillis < BAT_REFRESH_RATE)) {
+      return false;
+    }
+    lastReadMillis = now;
+
+    // Retire l’ancienne valeur du buffer circulaire
+    readSum -= readings[readIndex];
+
+    // Lit la nouvelle valeur
+    uint32_t rawReading = analogReadMilliVolts(CSPin);
+    readings[readIndex] = rawReading;
+    readSum += rawReading;
+
+    // Passe à la case suivante
+    readIndex = (readIndex + 1) % BAT_NUM_READINGS;
+
+    // Moyenne glissante
+    uint32_t averageReading = readSum / BAT_NUM_READINGS;
+    float newVBat = convertMilliVoltsToVBat(averageReading);
+
+    bool voltageChanged = false;
+    bool indicatorChanged = false;
+    bool stateChanged = false;
+
+    // Sauvegarde l’ancienne tension avant mise à jour
+    float oldVBat = vBat;
+    uint8_t oldIndicator = indicator;
+    BatteryState oldBatteryState = batteryState;
+
+    float delta = fabs(newVBat - oldVBat);
+
+    // Mise à jour tension seulement si variation suffisante ou force
+    if (force || delta >= VBAT_CHANGE_THRESHOLD) {
+      previousVBat = oldVBat;
+      vBat = newVBat;
+      voltageChanged = true;
     }
 
-    bool refresh(bool force=false){
-      refreshed = force;      
+    // Même si la variation est faible, on peut utiliser la valeur récente
+    // pour l'état si on veut une vision plus actuelle.
+    float stateReferenceVBat = voltageChanged ? vBat : newVBat;
+    float statePreviousVBat  = voltageChanged ? previousVBat : oldVBat;
 
-      if (millis()-lastReadMillis<BAT_REFRESH_RATE && !force) return refreshed;
-      lastReadMillis = millis();
-
-      readSum = readSum - readings[readIndex];
-      read();
-      readIndex = (readIndex + 1) % BAT_NUM_READINGS;
-
-      uint32_t averageReading = readSum / BAT_NUM_READINGS;  
-
-      float val = 2 * averageReading / 1000.0; 
-      val += VBAT_OFFSET;
-
-      // rounding to 2 digit after decimal place
-      float delta = abs(val-vBat);          
-      /*int c = (int)(delta * 1000 + .5);
-      float roundedDelta = c/1000.0;             */
-
-      if (delta>=VBAT_CHANGE_THRESHOLD || force){    // 0.06 we only consider change of 0.6mv
-        vBat = val;
-        
-        previousVBat = vBat;
-        if (debug){
-          //DEBUG_PRINT("\n%s changed to: %.3f readSum:%i averageReading:%i delta:%.3f",id.c_str(),vBat,readSum, averageReading,/*roundedDelta*/delta);          
-        }        
-        
-        indicator = mapFloatToInt(vBat,VBAT_MIN,VBAT_MAX,0,BAT_MAX_LEVEL-1);
-        if (indicator > BAT_MAX_LEVEL-1) indicator = 0;          
-       
-        refreshed = true;
-      }     
-
-      if (readIndex == BAT_NUM_READINGS-1/* && batteryState == BAT_CHECKING*/){ 
-        // we have enough readings to get a good average 
-        batteryState = determineBatteryState(vBat, previousVBat,VBAT_CHANGE_THRESHOLD/2);
-
-        if (debug){
-          //DEBUG_PRINT("\n %ldms battery.status:%d %.2fv",millis(),batteryState,vBat);
-        }
-        refreshed = true;
-      }
-
-      if (refreshed){
-        fireEvent(evt);
-      }
-
-      return refreshed;
+    indicator = computeIndicator(stateReferenceVBat);
+    if (indicator != oldIndicator) {
+      indicatorChanged = true;
     }
 
-  private:
-    uint32_t readings[BAT_NUM_READINGS];      // the readings from the analog input
-    int readIndex = 0;              // the index of the current reading
-    uint32_t readSum = 0;                   // the running readSum
-    unsigned long lastReadMillis = 0;
+    batteryState = determineBatteryState(stateReferenceVBat, statePreviousVBat, VBAT_CHANGE_THRESHOLD / 2.0f);
+    if (batteryState != oldBatteryState) {
+      stateChanged = true;
+    }
 
-    BatteryState determineBatteryState(float currentVBat, float previousVBat, float threshold) {
-      if (vBat>VBAT_USB) return BAT_USB_PLUGGED;
-      /*float delta = currentVBat - previousVBat;
-      if (delta > threshold) {
-          return BAT_USB_PLUGGED;
-      } else {
-          return BAT_DISCHARGING;
-      }*/
+    refreshed = force || voltageChanged || indicatorChanged || stateChanged;
+
+    if (debug && refreshed) {
+      //DEBUG_PRINT(
+      //  "\n%s refreshed raw:%lu avg:%lu vBat:%.3f prev:%.3f delta:%.3f ind:%u state:%d",
+      //  id.c_str(),
+      //  rawReading,
+      //  averageReading,
+      //  vBat,
+      //  previousVBat,
+      //  delta,
+      //  indicator,
+      //  batteryState
+      //);
+    }
+
+    if (refreshed) {
+      fireEvent(evt);
+    }
+
+    return refreshed;
+  }
+
+private:
+  uint32_t readings[BAT_NUM_READINGS] = {0};
+  int readIndex = 0;
+  uint32_t readSum = 0;
+  unsigned long lastReadMillis = 0;
+  bool initialized = false;
+
+  float convertMilliVoltsToVBat(uint32_t milliVolts) {
+    float val = 2.0f * milliVolts / 1000.0f;
+    val += VBAT_OFFSET;
+    return val;
+  }
+
+  uint8_t computeIndicator(float voltage) {
+    int level = mapFloatToInt(voltage, VBAT_MIN, VBAT_MAX, 0, BAT_MAX_LEVEL - 1);
+
+    if (level < 0) level = 0;
+    if (level > BAT_MAX_LEVEL - 1) level = BAT_MAX_LEVEL - 1;
+
+    return (uint8_t)level;
+  }
+
+  BatteryState determineBatteryState(float currentVBat, float previousVBat, float threshold) {
+    if (currentVBat >= VBAT_USB) {
+      return BAT_USB_PLUGGED;
+    }
+
+    float delta = currentVBat - previousVBat;
+
+    if (delta > threshold) {
+      return BAT_CHARGING;
+    }
+
+    if (delta < -threshold) {
       return BAT_DISCHARGING;
-    }    
+    }
+
+    // zone neutre : on conserve un état cohérent
+    if (batteryState == BAT_USB_PLUGGED && currentVBat < VBAT_USB) {
+      return BAT_DISCHARGING;
+    }
+
+    if (batteryState == BAT_CHECKING) {
+      return BAT_DISCHARGING;
+    }
+
+    return batteryState;
+  }
 };
 
 
@@ -343,6 +422,7 @@ public:
 class ButtonEvent : public Event {
 public:
 
+  #ifdef DEBUG
   const char* serialize() const override {
     snprintf(_buffer, sizeof(_buffer),
              "buttonType=%s(%u), buttonId=%u, time=%lu",
@@ -352,6 +432,7 @@ public:
              ((ButtonData*)data)->time);
     return _buffer;
   }
+  #endif
 
 private:
 
@@ -771,10 +852,13 @@ class SocketEvent : public Event {
 public:
 
   SocketEvent(void* data):Event(data){}
+
+  #ifdef DEBUG
   const char* serialize() const override {
     if (((SocketData*)data)->length > 0) return ((SocketData*)data)->message;
     else return "";
   }
+  #endif
 };
 
 class Network : public HWComponent2State{
