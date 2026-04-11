@@ -393,6 +393,8 @@ class WebApplicationService: public NetworkDevice{
     }
 
     virtual bool handleDisconnectService() override{
+      internalShutdownRequested = true;
+      pendingDisable = false;
       stopWebApp();
       setStateDisconnected();
       return true;
@@ -407,7 +409,7 @@ class WebApplicationService: public NetworkDevice{
     }
 
     void requestDisable(){
-      if (disableInProgress || !state.enabled) return;
+      if (internalShutdownRequested || disableInProgress || !state.enabled) return;
       pendingDisable = true;
     }
 
@@ -443,6 +445,8 @@ class WebApplicationService: public NetworkDevice{
       if (hwm.configMedia == nullptr) return false;
       if (hwm.configMedia->state != CONNECTED) return false;
 
+      internalShutdownRequested = false;
+
       if (webServer == nullptr){
         DEBUG_INFO("[WEBAPP]\t\tstart");
 
@@ -473,7 +477,9 @@ class WebApplicationService: public NetworkDevice{
     void setWSServer(){
       if (webServer == nullptr) return;
 
+      internalShutdownRequested = true;
       shutdownWSS();
+      internalShutdownRequested = false;
 
       if (hwm.configMedia->media == CABLE_MEDIA){
         wss = new WebSocketServer<EthernetServer, EthernetClient, 1>{};
@@ -493,6 +499,7 @@ class WebApplicationService: public NetworkDevice{
     WebSocketHandler webSocketHandler = nullptr;
     bool pendingDisable = false;
     bool disableInProgress = false;
+    bool internalShutdownRequested = false;
 
     char hdrContentType[120];
     char hdrContentLength[20];
