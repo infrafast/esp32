@@ -2723,7 +2723,7 @@ void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *re
   DEBUG_INFO("\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
   //DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
   app.webAppConnected = false;
-  if (app.webAppService != nullptr) app.webAppService->requestDisable();
+  if (app.webAppService != nullptr) app.webAppService->requestDeferredDisable();
 }
 
 
