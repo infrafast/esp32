@@ -51,7 +51,8 @@ class Synchronizer{
 
     DataSetSynced* getCurrent(){
       if (syncRequestLocker) return nullptr;    // we are locked so we do not provide the data set
-      else return datasets[dsIndex];
+      if (dsIndex >= datasets.size()) return nullptr;
+      return datasets[dsIndex];
     }
 
   protected:
@@ -573,8 +574,18 @@ void Synchronizer::reset(){
 int8_t Synchronizer::update(/*uint16_t latency*/){  
   #define SYNC_LOCK_TIMEOUT 1000      // une seconde laisse le temps au data de se flusher et se resynchro
   //if (latency<20) latency = 20;   // minimum latency of 20ms to avoid too much request / flood
+  if (datasets.empty()) {
+    synced = true;
+    return 100;
+  }
+
   if (syncRequestLocker && (millis() - lockStartTime >= /*latency*/SYNC_LOCK_TIMEOUT)) {
     syncRequestLocker = false; // autorise relance d'une requête
+  }
+
+  if (dsIndex >= datasets.size()) {
+    synced = true;
+    return 100;
   }
 
   DataSetSynced* dataset = datasets[dsIndex]; //sync in serial, next dataset  
@@ -589,7 +600,7 @@ int8_t Synchronizer::update(/*uint16_t latency*/){
   }else dsIndex++;
 
   // computing the overall progress
-  int8_t progress = map(syncedSoFar, 0, totalToSync, 0, 100);      
+  int8_t progress = (totalToSync == 0) ? 100 : map(syncedSoFar, 0, totalToSync, 0, 100);      
   if (progress >=100){
     synced = true;
     progress = 100;
