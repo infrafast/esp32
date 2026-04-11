@@ -1,0 +1,10 @@
+/main/st/config/name
+/dca/%d/config/name
+/ch/%02d/config/name
+/bus/%02d/config/name
+/auxin/%02d/config/name
+/fxrtn/%02d/config/name
+/ch/%02d/mix/%02d/level
+/ch/%02d/mix/%02d/on
+/ch/%02d/mix/on
+/bus/%02d/mix/on

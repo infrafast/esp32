@@ -1,0 +1,12 @@
+{
+  "protocol":"xair",
+  "channelCount":16, 
+  "busCount":4,
+  "auxCount":1,
+  "fxCount":4,
+  "mainCount":1,
+  "mtxCount":1,
+  "DCAcount":4,
+  "fxSndCount":1,
+  "groupCount":1
+}

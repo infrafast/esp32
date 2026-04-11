@@ -32,7 +32,7 @@
           "win": 0
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/11",
           "/value2/33",
           "/note/Off"
@@ -51,7 +51,7 @@
           "win": 0
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/12",
           "/value2/43",
           "/note/Off"
@@ -150,7 +150,7 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/11",
           "/value2/23",
           "/note/Off"
@@ -169,7 +169,7 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/52",
           "/value2/57",
           "/note/Off"
@@ -188,7 +188,7 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/52",
           "/value2/57",
           "/note/Off"
@@ -207,7 +207,7 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/11",
           "/value2/23",
           "/note/Off"
@@ -248,7 +248,7 @@
           "win": 0
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/12",
           "/value2/43",
           "/note/Off"
@@ -267,7 +267,7 @@
           "win": 0
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/11",
           "/value2/33",
           "/note/Off"
@@ -366,7 +366,7 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/11",
           "/value2/23",
           "/note/Off"
@@ -385,7 +385,7 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/52",
           "/value2/57",
           "/note/Off"
@@ -404,7 +404,7 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/52",
           "/value2/57",
           "/note/Off"
@@ -423,7 +423,7 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
+          "/channel/1",
           "/value1/11",
           "/value2/23",
           "/note/Off"
@@ -431,32 +431,16 @@
       }
     ]
   },
-  "midi3": {
+  "xmseries": {
     "layout": 2,
     "icon": 3,
     "strips": [
       {
-        "type": "Sysex",
+        "type": "input2mixbus",
         "color": 0,
         "icon": 5,
         "size": "1x4",
-        "interface": "USBMIDI",
-        "position": {
-          "x": 0,
-          "y": 0,
-          "id": 1,
-          "win": 0
-        },
-        "properties": [
-          "/sysex/firstkey"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "1x4",
-        "interface": "BLEMIDI",
+        "interface": "XMSeries",
         "position": {
           "x": 1,
           "y": 0,
@@ -464,174 +448,33 @@
           "win": 0
         },
         "properties": [
-          "/channel/0",
-          "/value1/12",
-          "/value2/43",
-          "/note/Off"
+          "/chname/2",
+          "/busname/3"
         ]
       },
       {
-        "type": "Note",
+        "type": "input2mixbus",
         "color": 0,
         "icon": 5,
         "size": "1x4",
-        "interface": "DINMIDI",
+        "interface": "XMSeries",
         "position": {
-          "x": 2,
+          "x": 0,
           "y": 0,
-          "id": 3,
+          "id": 1,
           "win": 0
         },
         "properties": [
-          "/channel/0",
-          "/value1/11",
-          "/value2/33",
-          "/note/Off"
+          "/chname/1",
+          "/busname/3"
         ]
       },
       {
-        "type": "Sysex",
+        "type": "input2mixbus",
         "color": 0,
         "icon": 5,
         "size": "1x4",
-        "interface": "AppleMIDI",
-        "position": {
-          "x": 3,
-          "y": 0,
-          "id": 4,
-          "win": 0
-        },
-        "properties": [
-          "/sysex/toto"
-        ]
-      },
-      {
-        "type": "Sysex",
-        "color": 0,
-        "icon": 5,
-        "size": "4x1",
-        "interface": "USBMIDI",
-        "position": {
-          "x": 0,
-          "y": 0,
-          "id": 5,
-          "win": 1
-        },
-        "properties": [
-          "/sysex/firstkey"
-        ]
-      },
-      {
-        "type": "text",
-        "color": 0,
-        "icon": 5,
-        "size": "2x2",
-        "interface": "system",
-        "position": {
-          "x": 0,
-          "y": 1,
-          "id": 6,
-          "win": 1
-        },
-        "properties": [
-          "/text/mediumsizetext"
-        ]
-      },
-      {
-        "type": "text",
-        "color": 0,
-        "icon": 5,
-        "size": "4x1",
-        "interface": "system",
-        "position": {
-          "x": 0,
-          "y": 3,
-          "id": 7,
-          "win": 1
-        },
-        "properties": [
-          "/text/verylongstringsizetext"
-        ]
-      },
-      {
-        "type": "Sysex",
-        "color": 0,
-        "icon": 5,
-        "size": "2x2",
-        "interface": "BLEMIDI",
-        "position": {
-          "x": 2,
-          "y": 1,
-          "id": 8,
-          "win": 1
-        },
-        "properties": [
-          "/sysex/firstkey"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "1x4",
-        "interface": "AppleMIDI",
-        "position": {
-          "x": 0,
-          "y": 0,
-          "id": 9,
-          "win": 2
-        },
-        "properties": [
-          "/channel/0",
-          "/value1/11",
-          "/value2/23",
-          "/note/Off"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "2x2",
-        "interface": "USBMIDI",
-        "position": {
-          "x": 1,
-          "y": 0,
-          "id": 10,
-          "win": 2
-        },
-        "properties": [
-          "/channel/0",
-          "/value1/52",
-          "/value2/57",
-          "/note/Off"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "2x2",
-        "interface": "USBMIDI",
-        "position": {
-          "x": 1,
-          "y": 2,
-          "id": 11,
-          "win": 2
-        },
-        "properties": [
-          "/channel/0",
-          "/value1/52",
-          "/value2/57",
-          "/note/Off"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "1x4",
-        "interface": "AppleMIDI",
+        "interface": "XMSeries",
         "position": {
           "x": 3,
           "y": 0,
@@ -639,215 +482,175 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
-          "/value1/11",
-          "/value2/23",
-          "/note/Off"
+          "/chname/12",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "XMSeries",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 11,
+          "win": 2
+        },
+        "properties": [
+          "/chname/11",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "XMSeries",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 10,
+          "win": 2
+        },
+        "properties": [
+          "/chname/10",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "XMSeries",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 9,
+          "win": 2
+        },
+        "properties": [
+          "/chname/9",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "XMSeries",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 7,
+          "win": 1
+        },
+        "properties": [
+          "/chname/7",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "XMSeries",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 8,
+          "win": 1
+        },
+        "properties": [
+          "/chname/8",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "XMSeries",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 5,
+          "win": 1
+        },
+        "properties": [
+          "/chname/5",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "XMSeries",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 6,
+          "win": 1
+        },
+        "properties": [
+          "/chname/6",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "XMSeries",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 4,
+          "win": 0
+        },
+        "properties": [
+          "/chname/4",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "XMSeries",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 3,
+          "win": 0
+        },
+        "properties": [
+          "/chname/3",
+          "/busname/3"
         ]
       }
     ]
   },
-  "midi4": {
+  "mstation": {
     "layout": 2,
     "icon": 3,
     "strips": [
       {
-        "type": "Sysex",
+        "type": "input2mixbus",
         "color": 0,
         "icon": 5,
         "size": "1x4",
-        "interface": "USBMIDI",
-        "position": {
-          "x": 0,
-          "y": 0,
-          "id": 1,
-          "win": 0
-        },
-        "properties": [
-          "/sysex/firstkey"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "1x4",
-        "interface": "BLEMIDI",
-        "position": {
-          "x": 1,
-          "y": 0,
-          "id": 2,
-          "win": 0
-        },
-        "properties": [
-          "/channel/0",
-          "/value1/12",
-          "/value2/43",
-          "/note/Off"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "1x4",
-        "interface": "DINMIDI",
-        "position": {
-          "x": 2,
-          "y": 0,
-          "id": 3,
-          "win": 0
-        },
-        "properties": [
-          "/channel/0",
-          "/value1/11",
-          "/value2/33",
-          "/note/Off"
-        ]
-      },
-      {
-        "type": "Sysex",
-        "color": 0,
-        "icon": 5,
-        "size": "1x4",
-        "interface": "AppleMIDI",
-        "position": {
-          "x": 3,
-          "y": 0,
-          "id": 4,
-          "win": 0
-        },
-        "properties": [
-          "/sysex/toto"
-        ]
-      },
-      {
-        "type": "Sysex",
-        "color": 0,
-        "icon": 5,
-        "size": "4x1",
-        "interface": "USBMIDI",
-        "position": {
-          "x": 0,
-          "y": 0,
-          "id": 5,
-          "win": 1
-        },
-        "properties": [
-          "/sysex/firstkey"
-        ]
-      },
-      {
-        "type": "text",
-        "color": 0,
-        "icon": 5,
-        "size": "2x2",
-        "interface": "system",
-        "position": {
-          "x": 0,
-          "y": 1,
-          "id": 6,
-          "win": 1
-        },
-        "properties": [
-          "/text/mediumsizetext"
-        ]
-      },
-      {
-        "type": "text",
-        "color": 0,
-        "icon": 5,
-        "size": "4x1",
-        "interface": "system",
-        "position": {
-          "x": 0,
-          "y": 3,
-          "id": 7,
-          "win": 1
-        },
-        "properties": [
-          "/text/verylongstringsizetext"
-        ]
-      },
-      {
-        "type": "Sysex",
-        "color": 0,
-        "icon": 5,
-        "size": "2x2",
-        "interface": "BLEMIDI",
-        "position": {
-          "x": 2,
-          "y": 1,
-          "id": 8,
-          "win": 1
-        },
-        "properties": [
-          "/sysex/firstkey"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "1x4",
-        "interface": "AppleMIDI",
-        "position": {
-          "x": 0,
-          "y": 0,
-          "id": 9,
-          "win": 2
-        },
-        "properties": [
-          "/channel/0",
-          "/value1/11",
-          "/value2/23",
-          "/note/Off"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "2x2",
-        "interface": "USBMIDI",
-        "position": {
-          "x": 1,
-          "y": 0,
-          "id": 10,
-          "win": 2
-        },
-        "properties": [
-          "/channel/0",
-          "/value1/52",
-          "/value2/57",
-          "/note/Off"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "2x2",
-        "interface": "USBMIDI",
-        "position": {
-          "x": 1,
-          "y": 2,
-          "id": 11,
-          "win": 2
-        },
-        "properties": [
-          "/channel/0",
-          "/value1/52",
-          "/value2/57",
-          "/note/Off"
-        ]
-      },
-      {
-        "type": "Note",
-        "color": 0,
-        "icon": 5,
-        "size": "1x4",
-        "interface": "AppleMIDI",
+        "interface": "MixingStation",
         "position": {
           "x": 3,
           "y": 0,
@@ -855,10 +658,195 @@
           "win": 2
         },
         "properties": [
-          "/channel/0",
-          "/value1/11",
-          "/value2/23",
-          "/note/Off"
+          "/chname/12",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 11,
+          "win": 2
+        },
+        "properties": [
+          "/chname/11",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 10,
+          "win": 2
+        },
+        "properties": [
+          "/chname/10",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 9,
+          "win": 2
+        },
+        "properties": [
+          "/chname/9",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 8,
+          "win": 1
+        },
+        "properties": [
+          "/chname/8",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 7,
+          "win": 1
+        },
+        "properties": [
+          "/chname/7",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 6,
+          "win": 1
+        },
+        "properties": [
+          "/chname/6",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 5,
+          "win": 1
+        },
+        "properties": [
+          "/chname/5",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 3,
+          "y": 0,
+          "id": 4,
+          "win": 0
+        },
+        "properties": [
+          "/chname/4",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 2,
+          "y": 0,
+          "id": 3,
+          "win": 0
+        },
+        "properties": [
+          "/chname/3",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 1,
+          "y": 0,
+          "id": 2,
+          "win": 0
+        },
+        "properties": [
+          "/chname/2",
+          "/busname/3"
+        ]
+      },
+      {
+        "type": "input2mixbus",
+        "color": 0,
+        "icon": 5,
+        "size": "1x4",
+        "interface": "MixingStation",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "id": 1,
+          "win": 0
+        },
+        "properties": [
+          "/chname/1",
+          "/busname/3"
         ]
       }
     ]

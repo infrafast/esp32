@@ -1,0 +1,12 @@
+{
+  "protocol":"x32",  
+  "channelCount":32, 
+  "busCount":16,
+  "auxCount":8,
+  "fxCount":8,
+  "mainCount":1,
+  "mtxCount":8,
+  "DCAcount":8,
+  "fxSndCount":1,
+  "groupCount":1
+}

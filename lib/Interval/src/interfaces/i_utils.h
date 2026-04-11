@@ -18,16 +18,26 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     #define SYSTEM_INTERFACE "system"
     public:    
 
-    SerializableParameters systemDS = SerializableParameters(SYSTEM_INTERFACE, GROUP_INTERFACE_UTILS, &dataRepo);   // one instance
-        
-    DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_STRING),this);  // create as many parameters as required
+      SerializableParameters systemDS = SerializableParameters(SYSTEM_INTERFACE, GROUP_INTERFACE_UTILS, &dataRepo);   // one instance
+          
+      DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_STRING),this);  // create as many parameters as required
 
-    SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_UTILS,_configurable),DataProvider(getProviderNameForData()){
-      state.code = IF_READY;     
-    }
+      SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_UTILS,_configurable),DataProvider(getProviderNameForData()){
+        state.code = IF_READY;     
+      }
+
+      virtual bool begin(){
+        DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+        return true;
+      }
+
+      virtual bool end(){
+        DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+        return true;
+      }    
   
       virtual void load() override{
-        DEBUG_INFO("%s::load() default ignored => DISABLED", interfaceName.c_str()); 
+        DEBUG_INFO("%s::load() default ignored => 🚫DISABLED", interfaceName.c_str()); 
         // ignore the given parameter. Just enable the interface
         state.enabled = false;       
         hasStrip = true;             // textStrip...
@@ -38,15 +48,15 @@ class SystemInterface: public DeviceInterface, public DataProvider{
         return true;
       } 
 
-    virtual void monitor(){}
+    virtual bool monitor() override{
+      return false;
+    }
     
     virtual void* read(){return nullptr;}
     
-    virtual bool begin(){
-      DEBUG_INFO("%s::begin() => registered systemDS",interfaceName.c_str());          
+    virtual bool _begin() override{
+      DEBUG_INFO("%s::_begin() => registered systemDS",interfaceName.c_str());          
       systemDS.registerDataSetAddress(dsText.address);      // register all ds             
-
-      //dataProviderName = getProviderNameForData();      
 
       return true;
     }
@@ -117,17 +127,30 @@ class DirectoryInterface: public NetworkDevice{
 
       DirectoryInterface(bool _configurable = false):NetworkDevice(DIRECTORY_INTERFACE,GROUP_INTERFACE_UTILS,APPLE_MIDI_PORT,0,"",_configurable){
         attachDeviceInterface(this);
+        unregisterDataSetAddress(&addressIP);              // we un-expose the ping parameter as user should not modify it 
+        unregisterDataSetAddress(&addressPort);              // we un-expose the ping parameter as user should not modify it 
       }
+
+      virtual bool begin(){
+        DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+        return true;
+      }
+
+      virtual bool end(){
+        DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+        return true;
+      }      
+
 
       virtual void load() override{
         DEBUG_INFO("%s::load() default ignored => ENABLE", interfaceName.c_str()); 
         // ignore the given parameter. 
-        state.enabled = false;          // the interface is forced disabled at startup as we do not need to browse network until a request is sent (by startWebApp to publish DNS name or by appleMidi to advert)
+        switchDevice(DEVICE_OFF);          // the interface is forced disabled at startup as we do not need to browse network until a request is sent (by startWebApp to publish DNS name or by appleMidi to advert)
         hasStrip = false;             
       }
 
-      virtual bool begin(){     // called by init()
-        DEBUG_INFO("%s::begin() registering serviceFoundWrapper and _instance",interfaceName.c_str());
+      virtual bool _begin() override{     // called by init()
+        DEBUG_INFO("%s::_begin() registering serviceFoundWrapper and _instance",interfaceName.c_str());
         instance_ = this;  // enregistrer l’instance active       // we don't do that in the constructor as the instance has multiple heritage, hence we want to be sure the object is fully created
         EthernetBonjour.setServiceFoundCallback(&DirectoryInterface::serviceFoundWrapper);  
         return true;        
@@ -136,24 +159,15 @@ class DirectoryInterface: public NetworkDevice{
       virtual bool save() override{
         DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str()); 
         return true;
-      }      
+      }           
 
-      virtual void monitor(){
-          monitorNetwork();
-      }
-
-      virtual void switchDevice(bool _enabled) override{
-        switchNetworkService(_enabled);
-      }         
-
-      virtual void* read(){return nullptr;}
-
-      virtual void monitorService(){
+      virtual bool monitorService() override{
         if (hwm.network->media == CABLE_MEDIA){
           EthernetBonjour.run();
         }else if (hwm.network->media == WIFI_MEDIA){
           //Sur ESP32, mDNS n’a PAS besoin d’être appelé dans loop() une fois qu’il est démarré.
-        }               
+        }          
+        return false;     
       }
      
       virtual bool handleConnectService(){
@@ -180,7 +194,7 @@ class DirectoryInterface: public NetworkDevice{
 
         //discoveryRequest();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
 
-        DeviceInterface::setStateReady("green",*lang.getString("online"),"",*systemCfg.getString(S_AP_NAME));
+        DeviceInterface::setStateReady("green",lang.getString("online")->c_str(),"",systemCfg.getString(S_AP_NAME)->c_str());
 
         return true;
       }
@@ -207,6 +221,10 @@ class DirectoryInterface: public NetworkDevice{
 
       virtual bool ping(){return true;}
       
+      virtual void determineQoS() override{
+        this->state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
+      }
+
       virtual bool handleDisconnectService(){
         DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
         if (hwm.network->lastActiveMedia == CABLE_MEDIA){
@@ -217,7 +235,8 @@ class DirectoryInterface: public NetworkDevice{
           MDNS.end();
         }          
 
-        setStateOffline(concatStrings(*lang.getString("Device is not detectable on the network. Use")," ",hwm.network->IP.toString()," ",*lang.getString("to connect")));                
+        if (deviceInterface->state.enabled == false) setStateDisabled();
+        deviceInterface->state.details = concatStrings(*lang.getString("Device is not detectable on the network.")," ",*lang.getString("Use")," ",hwm.network->getIP()," ",*lang.getString("to connect"));
 
         return true;
       }        
@@ -323,7 +342,7 @@ class DirectoryInterface: public NetworkDevice{
           );          
         }      
       }
-
+    
       void wiFiRTPDiscoveryTask(){
         DEBUG_INFO("[RTP-WiFi]\t\tScan RTP-MIDI lancé...\n");     
         int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
@@ -354,25 +373,39 @@ DirectoryInterface* DirectoryInterface::instance_ = nullptr;
 
 class WebApplicationService: public NetworkDevice{
   #define WEBAPP_INTERFACE "WebApplication"
+  #define WEBAPP_INACTIVITY_TIMEOUT_MS 20000
 
   public:
     using WebServerHandler = void (*)(Request&, Response&);
     using WebSocketHandler = void (*)(IWebSocket&);
+
+    Event evtWebApp = Event();  //no payload/data
 
     Application* webServer = nullptr;
     IWebSocketServer* wss = nullptr;
 
     WebApplicationService(bool _configurable = false):NetworkDevice(WEBAPP_INTERFACE,GROUP_INTERFACE_UTILS,80,80,"",_configurable){}
 
+    virtual uint8_t getServiceWeight(){
+      return 0;                               // in reality it consume 3 but we book 8-3 = 5 as SERVICES_WEIGHT_LIMIT so it can always start (priority)
+    }
+
+
     virtual void load() override{
-      DEBUG_INFO("%s::load() default ignored => DISABLED", interfaceName.c_str());
+      DEBUG_INFO("%s::load() default ignored => 🚫DISABLED", interfaceName.c_str());
       state.enabled = false;
+      state.switchable = false;
       hasStrip = false;
     }
 
-    virtual bool begin() override{
-      DEBUG_INFO("%s::begin()", interfaceName.c_str());
-      return NetworkDevice::begin();
+    virtual bool begin(){
+      DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+      return true;
+    }
+
+    virtual bool end(){
+      DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+      return true;
     }
 
     virtual bool save() override{
@@ -380,22 +413,45 @@ class WebApplicationService: public NetworkDevice{
       return true;
     }
 
-    virtual void monitorService() override{
-      handleWeb();
+    virtual bool monitorService() override{
+      monitorInactivityTimeout();
+      return handleWeb(); // report if we processed any data
+    }
+
+    virtual void determineQoS() override{
+      state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
     }
 
     virtual bool ping() override{return true;}
 
     virtual bool handleConnectService() override{
       bool started = startWebApp();
-      if (started) setStateReady();
+      if (started){
+        setStateReady();
+        evtWebApp.type = EVENT_WEBAPP_STARTED; // notifies listeners that the webapp is started, so they can for example publish their API documentation on it
+        fireEvent(evtWebApp);           
+      }
       return started;
     }
 
     virtual bool handleDisconnectService() override{
       stopWebApp();
+
+      evtWebApp.type =  EVENT_WEBAPP_STOPPED;  
+      fireEvent(evtWebApp);           
+
+
       setStateDisconnected();
       return true;
+    }
+
+    virtual void switchDevice(bool _enabled) override{
+      if (!_enabled){
+        socketConnected = false;
+      }else{
+        reportActivity();
+      }
+      NetworkDevice::switchDevice(_enabled);
     }
 
     void setWebServerHandler(WebServerHandler callback){
@@ -415,6 +471,8 @@ class WebApplicationService: public NetworkDevice{
     void handleWeb(){
       Network* configMedia = hwm.configMedia;
 
+      bool processedData = false;
+
       if (configMedia != nullptr && configMedia->state == CONNECTED){
         if(webServer != nullptr){
           if (configMedia->media == CABLE_MEDIA){
@@ -422,12 +480,14 @@ class WebApplicationService: public NetworkDevice{
             if (newEthClient) {
               webServer->process(&newEthClient);
               newEthClient.stop();
+              processedData = true;
             }
           }else if (configMedia->media == WIFI_MEDIA){
             WiFiClient newWiFiClient = ((WiFiServer*)configMedia->server)->available();
             if (newWiFiClient.connected()) {
               webServer->process(&newWiFiClient);
               newWiFiClient.stop();
+              processedData = true;
             }
           }
         }
@@ -459,6 +519,7 @@ class WebApplicationService: public NetworkDevice{
 
       hwm.configURL = concatStrings("http://", hwm.configMedia->IP.toString());
       DEBUG_INFO("[WEBAPP]\t\tserving on %s", hwm.configURL.c_str());
+      reportActivity();
       return true;
     }
 
@@ -468,6 +529,7 @@ class WebApplicationService: public NetworkDevice{
         delete webServer;
         webServer = nullptr;
       }
+      socketConnected = false;
       DEBUG_INFO("WebAppservices down");
     }
 
@@ -504,9 +566,17 @@ class WebApplicationService: public NetworkDevice{
         wss = nullptr;
       }
     }
+
+    void monitorInactivityTimeout(){
+      if (lastActivityMs == 0) return;
+      if (socketConnected) return;
+
+      const uint32_t now = millis();
+      if ((uint32_t)(now - lastActivityMs) > WEBAPP_INACTIVITY_TIMEOUT_MS){
+        DEBUG_INFO("[WEBAPP]\t\tInactivity timeout reached (%ums), stopping service", WEBAPP_INACTIVITY_TIMEOUT_MS);
+        switchDevice(false);
+      }
+    }
 };
-
-WebApplicationService gWebApplicationService(false);    // internal web app lifecycle service
-
 
 #endif

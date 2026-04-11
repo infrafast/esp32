@@ -97,16 +97,16 @@ class MidiNotes : public DataSet{
     ///////////////////////////////////////////////////////////////
 
 
-class OneValueMidiStrip : public TwoSelectStrip{
+class OneValueMidiStrip : public OneSelectStrip{
   public:
-    OneValueMidiStrip(StripSkeleton* s,bool debug=false):TwoSelectStrip(s,debug){
-      select2PropertyAddress = ADDRESS_MIDICHANNEL;    
+    OneValueMidiStrip(StripSkeleton* s,bool debug=false):OneSelectStrip(s,debug){
+      select1PropertyAddress = ADDRESS_MIDICHANNEL;    
     }
 
     ~OneValueMidiStrip(){};
     
     void serializeProperties(){
-      TwoSelectStrip::serializeProperties();
+      OneSelectStrip::serializeProperties();
 
       // ""/midi/channel/%d"    => DSmidiValue.address.pattern
       char* buf = (char*)malloc( strlen(ADDRESS_MIDIVALUE1)*sizeof(char)+5);    // 5 digit max
@@ -118,8 +118,8 @@ class OneValueMidiStrip : public TwoSelectStrip{
 
 
     virtual void deserializeProperty(String property)  {  
-      // channel = "/midi/channel/%d"  => select2PropertyAddress => select2id
-      TwoSelectStrip::deserializeProperty(property);
+      // channel = "/midi/channel/%d"  => select1PropertyAddress => select1id
+      OneSelectStrip::deserializeProperty(property);
 
       // sValue = "/midi/value1/%s"     => DSmidiValue.address.pattern
       char sValue[5];                  
@@ -204,13 +204,8 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
 
 
     virtual void composeWidgets(uint8_t layout) override{      
-
-      uint16_t h = 0, w = 0;
-
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
-        h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
-        w = WIDGET4X4W-GUI::three*2;
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &GUI::three /*x*/, &GUI::midScreenHoriz /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+        push4x4hBar();
       }else if (size == SHAPE1X4){
         pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," Note")));
       }else if (size ==SHAPE2X2 ){
@@ -219,16 +214,8 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
          pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," Note")));
       }else{
 
-      } 
-
-      //DEBUG_PRINT("\nchGainStrip topX: %d, topY: %d, w: %d, h: %d",topX,topY,w,h);
-
-      //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
-    }
-
-    /*virtual void update(){ // this code is called by process()
-     
-    }  */
+      }     
+    } 
 
     void onEvent(const Event& evt) override {
       switch (evt.type) {
@@ -237,19 +224,24 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       }
     }
 
-    virtual void queryInterface(){ // this code is called by pushToGUI() to send a command that will be executed, 
+    virtual void hasFocus() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
+
+    virtual void hasVisibility() override{
+      // request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
+    }
+
 
     virtual bool actionCallback(uint8_t trigger){
       bool success = false;
 
       if (midiValue1 <= 127 &&
         midiValue2 >= 1 && midiValue2 <= 127 &&
-        select2ID  >= 1 && select2ID  <= 16) {
+        select1ID  >= 1 && select1ID  <= 16) {
 
-        if (note == midiMessages[MIDI_NOTEON]) success = ((MIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select2ID);
-        else if (note == midiMessages[MIDI_NOTEOFF]) success = ((MIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select2ID);
+        if (note == midiMessages[MIDI_NOTEON]) success = ((MIDIInterface*)interface)->sendNoteOn(midiValue1,midiValue2,select1ID);
+        else if (note == midiMessages[MIDI_NOTEOFF]) success = ((MIDIInterface*)interface)->sendNoteOff(midiValue1,midiValue2,select1ID);
       }
 
       return success;
@@ -282,10 +274,10 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
         w = WIDGET4X4W-GUI::three*2;
-        gui.add(new ProgressBarH(&value /*v*/, valueMin /*min*/,valueMax /*max*/, &GUI::three /*x*/, &GUI::midScreenHoriz /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
+        gui.add(new ProgressBarH(value /*v*/, valueMin /*min*/,valueMax /*max*/, &GUI::three /*x*/, &GUI::midScreenHoriz /*y*/, w /*w*/, h /*h*/, 2 /*offset*/, 5 /*radius*/, &frontColor /*fc*/ , &backColor/*bc*/, &brightness));
       }else if (size == SHAPE1X4){
         pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," SYSEX")));
-        gui.add(new RingMeter(&value, valueMin, valueMax, 1, &centerX,&centerY, w, &unitString,&GUI::blue,&GUI::transparentColor,&brightness,true));
+        gui.add(new RingMeter(value, valueMin, valueMax, 1, &centerX,&centerY, w, &unitString,&GUI::blue,&GUI::transparentColor,&brightness,true));
       }else if (size ==SHAPE2X2 ){
          pushSimpleText(layout, lang.getString(concatStrings(interface->interfaceName," SYSEX")));
       }else if (size == SHAPE4X1){
@@ -304,32 +296,14 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       }
     }    
 
-    /*virtual void update() override {
-      // --------------------------------------------------------------------
-      // Ancien mécanisme conservé temporairement pour compatibilité
-      // --------------------------------------------------------------------
-      if (!interface || !interface->data) return;
-
-      // On caste encore l'ancien buffer partagé tant que toute la migration
-      // n'est pas terminée.
-      MidiData* midiData = static_cast<MidiData*>(interface->data);
-
-      // On ne traite que les événements SysEx
-      if (midiData->type != MIDI_SYSEX) return;
-
-      // IMPORTANT :
-      // Dans l'ancien mécanisme, la longueur utile est encore portée par
-      // interface->available(), qui retourne dataAvailable.
-      const int availableBytes = interface->available();
-      if (availableBytes <= 0) {
-        value = 0;
-        return;
-      }
-    }*/
-
-    virtual void queryInterface(){ // this code is called by focus() to send a command that will be executed, 
+    virtual void hasFocus() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
+
+    virtual void hasVisibility() override{
+      // request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
+    }
+
 
     virtual bool actionCallback(uint8_t trigger) {
       bool success = false;

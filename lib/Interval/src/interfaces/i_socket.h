@@ -8,67 +8,97 @@
 class NetworkSocket: public NetworkDevice{
   public:
   
-    bool dataAvailable = false;
-    SocketData* socketData;
+  bool dataAvailable = false;
 
-    NetworkSocket(String name=INTERFACE_SOCKET, String group=GROUP_INTERFACE_UTILS,String echoCommand="ping",int localP=8887,int remoteP=8888, bool exposed=false):NetworkDevice(name,group,localP,remoteP,echoCommand, exposed){
+  #define MAX_SOCKET_MESSAGE_LEN kBufferMaxSize
+  #define SOCKET_QUEUE_SIZE 5
+  #define SOCKET_MESSAGE_PROCESSED_AT_ONCE 3
+
+  struct SocketDataCopy {
+    uint16_t length;
+    char message[MAX_SOCKET_MESSAGE_LEN];
+    int code;
+  };
+
+  SocketDataCopy socketQueue[SOCKET_QUEUE_SIZE];
+  volatile uint8_t queueHead = 0;   // prochain message à lire
+  volatile uint8_t queueTail = 0;   // prochain slot d’écriture
+  volatile uint8_t queueCount = 0;
+
+  Event evtSock = Event(nullptr);
+
+    NetworkSocket(String name=INTERFACE_SOCKET, String group=GROUP_INTERFACE_UTILS,String echoCommand="",int localP=8887,int remoteP=8888, bool exposed=false):NetworkDevice(name,group,localP,remoteP,echoCommand, exposed){
       //destination.host = "192.168.99.99"; 
     }
 
-    virtual void monitorService(){
-      
-        // check if we have a data socket in the queue
-        // ...
-        //
-        //if (socket.available()) process();
+    virtual void route(const char *message,uint16_t length) = 0;
 
-      if (dataAvailable){
-        process(socketData->message,socketData->length);
-        dataAvailable = false;
+    virtual bool monitorService() override{   
+
+      bool dataProcessed = false;
+
+      SocketDataCopy* msg = nullptr;
+      uint8_t processed = 0;
+
+      while (processed < SOCKET_MESSAGE_PROCESSED_AT_ONCE && (msg = dequeueSocketMessage()) != nullptr) {
+        route(msg->message, msg->length);
+        dataProcessed = true;
+        processed++;
       }
 
-        #define PULSE_CHECK_DELAY 5000
-        // delay expired, we didn't receive any incoming socket message...
-        // time to ping the device to see if it's still alive or if we have to attempt reconnecting      
-        if (millis()-destination.lastQueryTime > PULSE_CHECK_DELAY){                
-            destination.lastQueryTime = millis(); // reset timer
-            if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
-                // if we have a socket opened with MS, we inquiry the app state to wake up the socket          
-                ping();
-            }else{
-                // if we have no socket connection or we loose it, we try to esbalish one
-                handleConnectService();
-            }        
-        }                                                                   
-    }
-  
+      #define PULSE_CHECK_DELAY kTimeoutInterval*1.1
+      if (millis() - destination.lastRxTime > PULSE_CHECK_DELAY) {
+        if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN) {
+          ping();
+          dataProcessed = true;
+        } else {
+          if (handleConnectService()) setStatePending();
+          else setStateError("Thread socket-open failed");
+        }
+      }  
+      
+      return dataProcessed;
+    }  
 
-    virtual void process(const char *message, uint16_t length) = 0;
-
-    void virtual setStateConnected() = 0;
+    void virtual onSocketConnected() = 0; //called when socket connection has been established
 
     void onEvent(const Event& evt) override {
       NetworkDevice::onEvent(evt);
      
-      if (dataAvailable) return; // previous data has not been ocnsummed yet so we ignore it (we could make a queue)
-
       switch(evt.type){
         case EVENT_SOCKET_OPEN:
           // connexion has just been made to NetworkSocket
-          setStateConnected();
-          destination.lastQueryTime = 0;   // request an immediate /app/state to get state        
+          //setStateConnected();
+          setStatePending();      // the derived class will have to override state
+          deviceInterface->state.details = "Querying application";
+          destination.lastRxTime = 0;   // request an immediate /app/state to ping
+          onSocketConnected();    
         break;
-        case EVENT_SOCKET_CLOSE:
+        case EVENT_SOCKET_CLOSE:{
+          SocketEvent* evtSock = (SocketEvent*)&evt;
+          SocketData* socketData = (SocketData*)evtSock->data;        
           // this is called when closing socket => so could be by handleDisconnectService or because we lost the connection
-          deviceInterface->setStatePending();
+          switch(socketData->code){
+            case WebSocketCloseCode::MESSAGE_TOO_BIG:
+              setStateError("Unsupported mixer: too big!");
+            break;
+            case WebSocketCloseCode::NORMAL_CLOSURE:
+              setStatePending();  // continue normally
+            break;
+            default:
+              setStateError(concatStrings("Unsupported mixer: closure code:",socketData->code).c_str());
+          }
+        }
         break;
         case EVENT_SOCKET_ERROR:
-          deviceInterface->setStateDisconnected(*lang.getString("NetworkSocket unreachable"));
+          setStateDisconnected();
         break;
         case EVENT_SOCKET_MESSAGE:
-          socketData = (SocketData*)evt.data;        
-          dataAvailable = true;
-        break;                
+          destination.lastRxTime = millis();   // no need to query device        
+
+          SocketData* data = (SocketData*)evt.data;
+          enqueueSocketMessage(data);
+        break;              
       }
     }    
 
@@ -84,10 +114,54 @@ class NetworkSocket: public NetworkDevice{
 
     virtual bool handleDisconnectService(){
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
-      destination.lastQueryTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
+      destination.lastRxTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
       hwm.network->clientSocketClose(); 
-      return false;
+      destination.pingPending = false;          // clear any pending ping
+      if (state.enabled == false) setStateDisabled();
+      return true;
     }    
+
+  protected:
+    bool enqueueSocketMessage(const SocketData* data) {
+    if (data == nullptr || data->message == nullptr) return false;
+
+    if (queueCount >= SOCKET_QUEUE_SIZE) {
+      DEBUG_WARN("%s::enqueueSocketMessage() queue full, dropping message", interfaceName.c_str());
+      return false;
+    }
+
+    SocketDataCopy& slot = socketQueue[queueTail];
+
+    uint16_t copyLen = data->length;
+    if (copyLen >= MAX_SOCKET_MESSAGE_LEN) {
+      copyLen = MAX_SOCKET_MESSAGE_LEN - 1;
+    }
+
+    memcpy(slot.message, data->message, copyLen);
+    slot.message[copyLen] = '\0';
+    slot.length = copyLen;
+    slot.code = data->code;
+
+    queueTail = (queueTail + 1) % SOCKET_QUEUE_SIZE;
+    queueCount++;
+    dataAvailable = (queueCount > 0);
+
+    return true;
+  }
+
+  SocketDataCopy* dequeueSocketMessage() {
+    if (queueCount == 0) {
+      dataAvailable = false;
+      return nullptr;
+    }
+
+    SocketDataCopy* out = &socketQueue[queueHead];
+    queueHead = (queueHead + 1) % SOCKET_QUEUE_SIZE;
+    queueCount--;
+    dataAvailable = (queueCount > 0);
+
+    return out;
+}
  
  
 };

@@ -9,7 +9,9 @@
 0.20 - compatibility with code server
 0.21 - udp connectivity hardening
 0.22 - interfaces refactor + better state management
-0.xx - event and data handing
+0.23 - event and data handing, implementation of interfaces
+0.24 - starting sync data implementation
+0.xx - mixer value based on dedicated shared struct
 */
 
 
@@ -66,11 +68,14 @@ bool useUSBMidi = false;
   // Macros publiques
   #define DEBUG_INFO(...)  DEBUG_PRINT("\nℹ\t" __VA_ARGS__)    //✅
   #define DEBUG_WARN(...)  DEBUG_PRINT("\n⚠️\t" __VA_ARGS__)
-  #define DEBUG_ERROR(...) DEBUG_PRINT("\n⛔\t" __VA_ARGS__)
+  #define DEBUG_ERROR(...) DEBUG_PRINT("\n❌\t" __VA_ARGS__)
   
 
 #else
   #define DEBUG_PRINT(...) 
+  #define DEBUG_INFO(...) 
+  #define DEBUG_WARN(...) 
+  #define DEBUG_ERROR(...)
   #define debugMon 0
 #endif
 
@@ -88,13 +93,17 @@ bool useUSBMidi = false;
 class TargetEcho{
   public:
     bool alive = false;
-    unsigned long lastQueryTime ;    
-    uint16_t latency = 0;      // normal latency on TCP/IP lan
-    uint16_t jitter = 0;
+    unsigned long lastRxTime ;    
+    uint16_t latency = 30;      // normal latency on TCP/IP lan
+    uint16_t jitter = 5;
     String host;
     IPAddress ip;  
     TargetEcho(String h):host(h){} 
     String echoCommand = "";
+
+    unsigned long lastPingSentAt = 0;
+    bool pingPending = false;    
+
 };
 
 typedef std::function<void(TargetEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité
@@ -291,6 +300,8 @@ class GenericComponent{
 };
 
 enum EventType : uint8_t {
+  EVENT_WEBAPP_STARTED,
+  EVENT_WEBAPP_STOPPED,
   EVENT_SOCKET_OPEN,
   EVENT_SOCKET_CLOSE,
   EVENT_SOCKET_MESSAGE,
@@ -311,12 +322,15 @@ enum EventType : uint8_t {
   EVENT_OSC_MESSAGE,
   EVENT_WEBSOCKET_CLOSED,
   EVENT_TEXT_MESSAGE,
+  EVENT_INTERFACE_MESSAGE,
   EVENT_COUNT
 };
 
 /* Table de noms des événements */
 #ifdef DEBUG
 static const char* const EVENT_NAMES[EVENT_COUNT] = {
+  "EVENT_WEBAPP_STARTED",
+  "EVENT_WEBAPP_STOPPED",
   "EVENT_SOCKET_OPEN",
   "EVENT_SOCKET_CLOSE",
   "EVENT_SOCKET_MESSAGE",
@@ -336,7 +350,8 @@ static const char* const EVENT_NAMES[EVENT_COUNT] = {
   "EVENT_INTERFACE_DATA_READY",
   "EVENT_OSC_MESSAGE",
   "EVENT_WEBSOCKET_CLOSED",
-  "EVENT_TEXT_MESSAGE"
+  "EVENT_TEXT_MESSAGE",
+  "EVENT_INTERFACE_MESSAGE"
 };
 #endif
 
@@ -350,6 +365,11 @@ public:
 
   void* data;
 
+  void attachData(void* _data){
+    data=_data;
+  }
+
+  #ifdef DEBUG
   virtual const char* name() const {
     return getEventName(type);
   }
@@ -364,6 +384,8 @@ public:
     }
     return "UNKNOWN_EVENT";
   }
+  #endif
+
 
   static bool isEventDumpEnabled(EventType id) {
     if (id >= EVENT_COUNT) return false;
@@ -520,9 +542,9 @@ public:
   }  
 
   void fireEvent(const Event& evt) {
-#ifdef DEBUG
-    evt.dump("fire", getDispatcherName());
-#endif
+    #ifdef DEBUG
+      evt.dump("🔥fire", getDispatcherName());
+    #endif
 
     for (uint8_t i = 0; i < maxHandlers; ++i) {
       if (eventHandlers[i].fn) {
@@ -543,6 +565,81 @@ private:
   #define API_OK 1
   #define API_ERROR 0
 #define API_BODY   "body"
+
+
+////////////////////// UTILITIES ///////////////////////////
+void populateFileList(String extension, String folder, std::vector<String> *list, String prefix="", bool withExtension=true) {
+  //we first clean all items from the list
+
+  list->clear();
+
+  File root = LittleFS.open(folder);
+  DEBUG_INFO("Listing: 📝.%s in %S",extension.c_str(),folder.c_str());
+  File file = root.openNextFile();
+  while (file){
+    if (!file.isDirectory()){
+      String fullFileName = file.name();
+      if (fullFileName.endsWith(extension) || extension == "*") {
+        String filename = prefix;
+        // if we don't want the extension, we remmove it
+        if (!withExtension) filename = concatStrings(filename,fullFileName.substring(0, fullFileName.lastIndexOf('.')));
+        else filename = concatStrings(filename,fullFileName); // k is the icon ID
+        list->push_back(filename);
+        DEBUG_PRINT("\n\t %s",filename.c_str());
+      }
+    }
+    file = root.openNextFile();
+    yield();
+  }
+}
+
+template<typename T>
+bool saveStruct(const char* filename, const T& data){
+
+    File f = LittleFS.open(filename, FILE_WRITE);
+    if (!f) {
+        Serial.println("Erreur ouverture fichier en écriture");
+        return false;
+    }
+
+    size_t written = f.write(reinterpret_cast<const uint8_t*>(&data), sizeof(T));
+    f.close();
+
+    if (written != sizeof(T)) {
+        Serial.println("Erreur ecriture structure");
+        return false;
+    }
+
+    return true;
+}
+/*
+technique utilisée dans beaucoup de firmware ESP32 qui permet de sauvegarder et charger 
+automatiquement n'importe quelle struct dans SPIFFS/NVS avec une seule fonction template :
+*/
+template<typename T>
+bool loadStruct(const char* filename, T& data){
+    File f = LittleFS.open(filename, FILE_READ);
+    if (!f) {
+        DEBUG_ERROR("can't open file %s",filename);
+        return false;
+    }
+
+    if (f.size() != sizeof(T)) {
+        DEBUG_ERROR("invalid file size %s : %i/%i",filename,f.size(),sizeof(T));
+        f.close();
+        return false;
+    }
+
+    size_t read = f.read(reinterpret_cast<uint8_t*>(&data), sizeof(T));
+    f.close();
+
+    if (read != sizeof(T)) {
+        DEBUG_ERROR("error reading %s : %i/%i",filename);
+        return false;
+    }
+
+    return true;
+}
 
 bool checkAndDeleteFile(const char* filename) {
     if (LittleFS.exists(filename)) {
@@ -1324,6 +1421,27 @@ enum{
   IF_READY
 };
 
+enum class QoS : int8_t {
+  NOTAPPLICABLE = -1,
+  UNDETERMINED,  
+  CRITICAL,
+  POOR,
+  MEDIUM,
+  GOOD
+};
+
+uint16_t QoStoColor(QoS qos) {
+  switch (qos) {
+      case QoS::GOOD:           return TFT_GREEN;    
+      case QoS::MEDIUM:         return TFT_YELLOW;   
+      case QoS::POOR:           return TFT_ORANGE;   
+      case QoS::CRITICAL:       return TFT_RED;      
+      case QoS::NOTAPPLICABLE:  return TFT_WHITE;
+      case QoS::UNDETERMINED:   return 0x5AEB;        // = TFT_GREY
+      default:                  return TFT_WHITE;    // fallback
+  }
+}
+
 #include "interfaces/i_states.h"
 
 struct State{ // used by Strip and Interface
@@ -1343,12 +1461,11 @@ struct State{ // used by Strip and Interface
   bool previousSwitchable = switchable;
   float previousProgress = -1;
 
+  QoS QoSlevel = QoS::NOTAPPLICABLE;
+
   bool changed = false;               // this is used by the strip to determine if they have to refresh
   bool broadcastState = false;
   bool broadcastConfig = false;
-
-  uint16_t qualityColor = TFT_GREEN;
-
 };
 
 #include "GUIManager.h"
@@ -1572,14 +1689,6 @@ void stopGUIThread() {
   }
   //DEBUG_PRINT("\nstopGUIThread()");  
 }
-
-void handleWebTaskWrapper(void * parameter){
-  while(1){
-    app.handleWeb();
-    vTaskDelay(1);
-  }
-}
-
 
 
 void scanNetworksTaskWrapper(void * parameter){
@@ -2231,8 +2340,8 @@ void shutdown_menu_item_selected(MenuComponent* p_menu_component) {
 }
 
 void brightness_menu_item_selected(MenuComponent* p_menu_component) {
-  /*if (GUI::screenBrightness == 1.0) GUI::screenBrightness = 0.5;
-  else GUI::screenBrightness = 1.0;
+  /*if (GUI::systemBrightness == 1.0) GUI::systemBrightness = 0.5;
+  else GUI::systemBrightness = 1.0;
   app.triggerRedraw(); // force redraw*/
   screen.id = SCREEN_UTILS;
   screen.state = STATE_UTILS_BRIGHTNESS;
@@ -2348,22 +2457,18 @@ void voidOverlay(uint8_t id){
 }
 
 void baseOverLayBuilder(uint8_t id){  
-  /*GUI::tft->fillRect(0,app.overlayIconY,TFT_WIDTH,OVERLAY_ICON_SIZE,GUI::overlayIconBackgroundColor);
-  GUI::tft->drawFastHLine(0,app.overlayIconY-1,TFT_WIDTH,TFT_SILVER);*/
-  gui.add(new Icon(&hwm.network->iFconnectivityIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.iFconnectivityIconColorIdle,&GUI::defaultBcolor));             
-  //gui.add(new AnimatedIcon(app.iconRolling,TWOFRAMEICON,Align::Center,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,ANIMATE_REPEAT,250,&GUI::blue,&GUI::defaultBcolor));              
+  gui.add(new Icon(&hwm.network->networkConnectivityIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.networkConnectivityIconColorIdle,&GUI::defaultBcolor));               
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor));                  
   gui.add(new Icon(&app.batIcon,Align::Left,&app.batIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.batIconColor,&GUI::defaultBcolor));          
-  //gui.add (new PendingBar(&app.pendingBarWidth /*v*/, 0.0 /*min*/,100.0 /*max*/, &GUI::zero /*x*/, &GUI::zero /*y*/, TFT_WIDTH /*w*/, 1 /*h*/, /*pingpong*/ false, 0 /*offset*/, 0 /*radius*/, &GUI::green /*fc*/ , &GUI::defaultBcolor/*bc*/, 30, 4));                    
-  app.rollingIcon(false);
 }
 
-float testV = 76;
 
 void bankOverlayBuilder(uint8_t BankIndex){
   
   baseOverLayBuilder(BankIndex);
-  
+
+  gui.add(new Icon(&app.interfaceIcon,Align::Left,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.interfaceIconColor,&GUI::defaultBcolor,&app.interfaceIconBrightness));               
+
   //we do not display the bankNavigator if user deactivate the bank screen display
   if (app.disabledBankRendering == true) return;
 
@@ -2404,7 +2509,9 @@ void bankScreenBuilder(uint8_t subScreen){
     gui.add(app.stripHeader);         
 
     if (strip != nullptr){
-    
+
+      app.interfaceIcon = *strip->interface->getIcon();                                             // retrieve interface icon from the current strip
+          
       for (const auto& winstrip : bank->strips) {
         
         winstrip->visible = false;
@@ -2581,21 +2688,21 @@ void promptScreenBuiler(uint8_t id){
 void addLeftRightIcons(){
     //DEBUG_PRINT("addLeftRightIcons()");
     GUI::cls(GUI::defaultBcolor);  
-    gui.add(new Icon(&app.leftIcon, Align::Right,&GUI::hquarter2xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
-    gui.add(new Icon(&app.rightIcon, Align::Left,&GUI::hquarter3xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
+    gui.add(new Icon(&app.bigLeftIcon, Align::Right,&GUI::hquarter2xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&app.bigLeftIconColor,&GUI::defaultBcolor));
+    gui.add(new Icon(&app.bigRightIcon, Align::Left,&GUI::hquarter3xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
     addTopandBottomMenuLabel();    
 }
 
 void setAPIconAndText(){
   gui.add(new TextArea(lang.getString("Connect WiFi Access Point "), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-  app.leftIcon = ICON_AP;
+  app.bigLeftIcon = ICON_AP;
 }
 
 void buildNetworkScreen(){
   GUI::cls();
 
-  app.rightIcon = ICON_LAPTOP;
-  app.configIconGlowingRedColor.value = &app.leftIconColor;  
+  app.bigRightIcon = ICON_LAPTOP;
+  app.configIconGlowingRedColor.value = &app.bigLeftIconColor;  
   //gui.add(new AnimatedIcon(app.iconRolling,2,Align::Center,&midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));              
   #ifdef USE_NETWORK
     if (!hwm.network->ethEnabled){
@@ -2603,14 +2710,14 @@ void buildNetworkScreen(){
       setAPIconAndText();                    
     }else{
       gui.add(new TextArea(lang.getString("Connect"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      app.leftIcon = ICON_MIXETHWIFI;
+      app.bigLeftIcon = ICON_MIXETHWIFI;
     }
   #else
     setAPIconAndText();
   #endif
 
-  gui.add(new Icon(&app.leftIcon, Align::Right,&GUI::hquarter2xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&app.leftIconColor,&GUI::defaultBcolor));
-  gui.add(new Icon(&app.rightIcon, Align::Left,&GUI::hquarter3xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
+  gui.add(new Icon(&app.bigLeftIcon, Align::Right,&GUI::hquarter2xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&app.bigLeftIconColor,&GUI::defaultBcolor));
+  gui.add(new Icon(&app.bigRightIcon, Align::Left,&GUI::hquarter3xPos,&GUI::menuIconYpos,MENU_ICON_SIZE,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
 
   gui.add(new Label(&hwm.configMedia->SSID, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));
 }
@@ -2634,11 +2741,11 @@ void utilsScreenBuilder(uint8_t state){
   switch (state) {
     case STATE_UTILS_BRIGHTNESS:{
       //DEBUG_PRINT("\nSTATE_UTILS_BRIGHTNESS");
-      //gui.add(new ProgressBarH(&GUI::screenBrightness /*v*/, BRIGHTNESS_MIN /*min*/,BRIGHTNESS_MAX /*max*/, &GUI::zero /*x*/, &app.menuIconYpos /*y*/, TFT_WIDTH /*w*/, TFT_HEIGHT/6 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::gold /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
+      //gui.add(new ProgressBarH(&GUI::systemBrightness /*v*/, BRIGHTNESS_MIN /*min*/,BRIGHTNESS_MAX /*max*/, &GUI::zero /*x*/, &app.menuIconYpos /*y*/, TFT_WIDTH /*w*/, TFT_HEIGHT/6 /*h*/, 0 /*offset*/, 0 /*radius*/, &GUI::gold /*fc*/ , &GUI::blue/*bc*/, &GUI::fullBrightness));
       gui.add(new Label(lang.getString("BRIGHTNESS"), Align::Center,&GUI::midScreenHoriz, &GUI::three,MENU_TITLE_SIZE*0.8,16,&GUI::defaultFcolor,&GUI::defaultBcolor));            
-      gui.add(new Arc(&GUI::screenBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
+      gui.add(new Arc(&GUI::systemBrightness, BRIGHTNESS_MIN,BRIGHTNESS_MAX , &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::gold, &GUI::transparentColor,30));              
       gui.add(new Icon(&app.brightIcon, Align::Center,&GUI::midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
-      gui.add(new NumericLabel(&GUI::screenBrightness, 0, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
+      gui.add(new NumericLabel(&GUI::systemBrightness, 0, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
     }break;
     ////////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SHOW_PROGRESS_MULTIPLE :{      
@@ -2670,7 +2777,7 @@ void utilsScreenBuilder(uint8_t state){
     break;
     case STATE_UTILS_CONNECTWEBAPP:
       app.configIconGlowingRedColor.value = &GUI::unUsedColor;
-      app.leftIconColor = GUI::menuActiveIconColor;
+      app.bigLeftIconColor = GUI::menuActiveIconColor;
       app.menuBottomLabel = ""; // erase the title of the previous menu item
       addLeftRightIcons();  
       app.iconPending[0] = ICON_TIMER;
@@ -2678,8 +2785,8 @@ void utilsScreenBuilder(uint8_t state){
       //gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&GUI::midScreenHoriz, &GUI::midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
       gui.add(new TextArea(lang.getString("Open browser"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Label(&hwm.configURL, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,30,64,&GUI::defaultFcolor,&GUI::defaultBcolor));      
-      app.leftIcon = ICON_LAPTOP;
-      app.rightIcon = ICON_FOOTSWITCH;
+      app.bigLeftIcon = ICON_LAPTOP;
+      app.bigRightIcon = ICON_FOOTSWITCH;
     break;
     case STATE_UTILS_WEBAPPCONNECTED:         
       addLeftRightIcons();
@@ -2689,8 +2796,8 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new TextArea(lang.getString("Press any button"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Label(lang.getString("Connected"), Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
-      app.leftIcon = ICON_LAPTOP;
-      app.rightIcon = ICON_FOOTSWITCH;
+      app.bigLeftIcon = ICON_LAPTOP;
+      app.bigRightIcon = ICON_FOOTSWITCH;
       //DEBUG_PRINT("\nSTATE_UTILS_WEBAPPCONNECTED: %s",app.menuTopText.c_str());      
     break;
     case STATE_UTILS_BLINK_ICON_TEXT:
@@ -2707,6 +2814,7 @@ void utilsScreenBuilder(uint8_t state){
 
 void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, const char *message, uint16_t length){
   String response;
+  if (app.webAppService != nullptr) app.webAppService->reportActivity();
   switch (dataType) {
     case net::WebSocketDataType::TEXT:
       response = app.parseJsonInput(message);
@@ -2730,6 +2838,7 @@ void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *re
 void socketConnectionCallback(IWebSocket &ws) {
   DEBUG_INFO("[WSS]\t\tconnected!\n\n");
   app.webAppConnected = true;
+  if (app.webAppService != nullptr) app.webAppService->reportSocketConnected();
 
   const auto protocol = ws.getProtocol();
   if (protocol) {

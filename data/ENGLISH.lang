@@ -4,15 +4,6 @@
 "Press button":"You alreay have a browser connected to the footswitch. Press a button to exit."
 "setNetworkDownState":"Network connection pending",
 "setNetworkUpState":"Device is disconnected from network",
-"disconnected":"déconnecté",
-"connected":"connecté",
-"idle":"attente connexion",
-"connecting":"connexion",
-"searching":"recherche",
-"connect failed":"échec connexion",
-"trying":"tentative",
-"enabled":"appui court on/off = hors connexion",
-"Please wait":"Please wait a few seconds...",
 "PluginUSB":"Plugin your device USB MIDI cable",
 "restartUSB":"Restart to activate USB MIDI"
 }

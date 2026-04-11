@@ -146,7 +146,7 @@ class StripMixer{
       if (mixerServer->refreshed){
         changedState = true;
         JsonDocument json;
-        //{{mixerState:{"interfaceState":{"mixerName":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"mixerModel":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}},"mixerDemo":{"ip":"82.85.52.72","port":10023}}
+        //{{mixerState:{"interfaceState":{"currentMixer.name":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"currentMixer.model":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}},"mixerDemo":{"ip":"82.85.52.72","port":10023}}
         json[MIXER_STATE_KEY] = mixerServer->getMixerState();        
         String jsonString;
         serializeJson(json, jsonString);
@@ -274,10 +274,10 @@ class OSCTestStrip : public TextStrip, public StripMixer{
     String message="message";
 };
 
-class SendStrip : public ThreeSelectStrip, public StripMixer{
+class SendStrip : public TwoSelectStrip, public StripMixer{
   public:
 
-    SendStrip(StripSkeleton* s,GUIManager* g,MixerServer* _mi,bool debug=false):ThreeSelectStrip(s,g, debug),StripMixer(_mi){}
+    SendStrip(StripSkeleton* s,GUIManager* g,MixerServer* _mi,bool debug=false):TwoSelectStrip(s,g, debug),StripMixer(_mi){}
 
     ~SendStrip(){};
   
@@ -327,12 +327,12 @@ class SendStrip : public ThreeSelectStrip, public StripMixer{
 
 };
 
-class Ch2BusStrip : public SendStrip{
-  #define STRIP_CH2BUS "ch2bus"
+class Input2MixbusStrip : public SendStrip{
+  #define STRIP_INPUT2MIXBUS "input2mixbus"
 
   public:
 
-    Ch2BusStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):SendStrip(s,g,mi,debug){      
+    Input2MixbusStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):SendStrip(s,g,mi,debug){      
       unitString = "dB";
       //valueMin = 0; valueMax = 1;
     }
@@ -365,8 +365,8 @@ class Ch2BusStrip : public SendStrip{
 
       char formattedCommandString[50];
       String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHBUSMUTE];
-      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
-      uint8_t busID = dropDownIDtoInterfaceID(select3ID);  
+      uint8_t chID = dropDownIDtoInterfaceID(select1ID);
+      uint8_t busID = dropDownIDtoInterfaceID(select2ID);  
       sprintf(formattedCommandString,addressTemplate.c_str(),chID,busID);
 
       JsonDocument command;
@@ -383,8 +383,8 @@ class Ch2BusStrip : public SendStrip{
       DEBUG_PRINT("\nupdate %s",type.c_str());      
 
       char formattedCommandString[50];
-      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
-      uint8_t busID = dropDownIDtoInterfaceID(select3ID);  
+      uint8_t chID = dropDownIDtoInterfaceID(select1ID);
+      uint8_t busID = dropDownIDtoInterfaceID(select2ID);  
       // we query levels and mute state to update the strip
 
       JsonDocument command;      
@@ -426,20 +426,20 @@ class Ch2BusStrip : public SendStrip{
       
       if (OSCInterface::matchPattern(interface->addresses[ADDR_BUSMUTE],data[EXEC_ADDRESS])){
         if(match1AddressIDtoDropDownID(data[EXEC_ADDRESS],interface->addresses[ADDR_BUSMUTE].c_str())){ 
-          if (id1 == select3ID){  // retrieved ID match the select3ID which is the bus
+          if (id1 == select2ID){  // retrieved ID match the select2ID which is the bus
             toggle2 = data[EXEC_VALUE][0];
           }
         }
       }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSMUTE],data[EXEC_ADDRESS])){
         if(match2AddressIDtoDropDownID(data[EXEC_ADDRESS],interface->addresses[ADDR_CHBUSMUTE].c_str())){ 
-          if (id1 == select2ID && id2 == select3ID){  
+          if (id1 == select1ID && id2 == select2ID){  
             toggle1 = data[EXEC_VALUE][0];
           }
         }
       }else if (OSCInterface::matchPattern(interface->addresses[ADDR_CHBUSVALUE],data[EXEC_ADDRESS])){        
         if(match2AddressIDtoDropDownID(data[EXEC_ADDRESS],interface->addresses[ADDR_CHBUSVALUE].c_str())){         
-          //DEBUG_PRINT("\n id1:%d(%d) id2:%d(%d)",id1,select2ID,id2,select3ID);
-          if (id1 == select2ID && id2 == select3ID){  
+          //DEBUG_PRINT("\n id1:%d(%d) id2:%d(%d)",id1,select1ID,id2,select2ID);
+          if (id1 == select1ID && id2 == select2ID){  
             value = data[EXEC_VALUE][0];
             //DEBUG_PRINT("\t value: %.2f",value);
           }
@@ -468,8 +468,8 @@ class Ch2BusStrip : public SendStrip{
 
       char formattedCommandString[50];
       String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHBUSVALUE];
-      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
-      uint8_t busID = dropDownIDtoInterfaceID(select3ID);  
+      uint8_t chID = dropDownIDtoInterfaceID(select1ID);
+      uint8_t busID = dropDownIDtoInterfaceID(select2ID);  
       sprintf(formattedCommandString,addressTemplate.c_str(),chID,busID);
 
       JsonDocument command;
@@ -482,21 +482,21 @@ class Ch2BusStrip : public SendStrip{
     }    
 };
 
-#define CHGAINDB_MIN  -12
-#define CHGAINDB_MAX  60
-class ChGainStrip : public TwoSelectStrip, public StripMixer{
-  #define STRIP_CHGAIN "chGain"
+#define INPUGAINDB_MIN  -12
+#define INPUGAINDB_MAX  60
+class inputGainStrip : public OneSelectStrip, public StripMixer{
+  #define STRIP_INPUTGAIN "chGain"
 
   public:
-    ChGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):TwoSelectStrip(s,g,debug),StripMixer(mi){
-      valueMin = CHGAINDB_MIN;
-      valueMax = CHGAINDB_MAX;
+    inputGainStrip(StripSkeleton* s,GUIManager* g,MixerServer* mi,bool debug=false):OneSelectStrip(s,g,debug),StripMixer(mi){
+      valueMin = INPUGAINDB_MIN;
+      valueMax = INPUGAINDB_MAX;
       value = (valueMin + valueMax)/2;
       label = "gain";
       //icon = ICON_CHGAIN_STRIP;
     }
 
-    ~ChGainStrip(){};
+    ~inputGainStrip(){};
 
     virtual bool update(JsonObject& data) {     
       // IMPLEMENTS CODE TO PROCESS DATA HERE
@@ -544,20 +544,20 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
 
     virtual float increaseCallback(unsigned long time,uint8_t trigger){
       float delta = Strip::increaseCallback(time,trigger);
-      if (delta != 0.0) setChGain();
+      if (delta != 0.0) setInputGain();
       return delta;
     }
 
     virtual float decreaseCallback(unsigned long time,uint8_t trigger){
       float delta = Strip::decreaseCallback(time,trigger);
-      if (delta != 0.0) setChGain();
+      if (delta != 0.0) setInputGain();
       return delta;
     }
 
-    void setChGain(){
+    void setInputGain(){
       char formattedCommandString[50];
       String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHGAIN];
-      uint8_t chID = dropDownIDtoInterfaceID(select2ID);
+      uint8_t chID = dropDownIDtoInterfaceID(select1ID);
       sprintf(formattedCommandString,addressTemplate.c_str(),chID);
 
       JsonDocument command;
@@ -573,7 +573,7 @@ class ChGainStrip : public TwoSelectStrip, public StripMixer{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       /*char addr[100];
 
-      //select2ID = chID
+      //select1ID = chID
 
       //sprintf(addr,mixerServer->chNames.address.c_str(),chID);
       String val = concatStrings("name", random(1000));
@@ -659,13 +659,13 @@ Strip* testOSCStripConstructorCallback(){
 
 Strip* sendStripConstructorCallback(){
   //DEBUG_PRINT("\n\tch2busStripConstructorCallback()");
-  return new Ch2BusStrip(stripSendSkel,&gui,&mixerServer);
+  return new Input2MixbusStrip(stripSendSkel,&gui,&mixerServer);
 }
 
-StripSkeleton* stripChGainSkel;
+StripSkeleton* stripInputGainSkel;
 Strip* gain2chStripConstructorCallback(){
   //DEBUG_PRINT("\n\tgain2chStripConstructorCallback()");
-  return new ChGainStrip(stripChGainSkel,&gui,&mixerServer);
+  return new inputGainStrip(stripInputGainSkel,&gui,&mixerServer);
 }
 
 //////////////////////////////////////////////////////////////////
@@ -717,7 +717,7 @@ void QueryingDemoMixer(bool internet){
 String getMixersState(){
   String jsonString;
   JsonDocument json;
-  //{{mixerState:{"interfaceState":{"mixerName":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"mixerModel":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}},"mixerDemo":{"ip":"82.85.52.72","port":10023}}
+  //{{mixerState:{"interfaceState":{"currentMixer.name":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"currentMixer.model":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}},"mixerDemo":{"ip":"82.85.52.72","port":10023}}
   json[MIXER_STATE_KEY] = mixerServer.getMixerState();
   json[MIXER_DEMO_KEY] = mixerDemoJsonString();
   serializeJson(json,jsonString);
@@ -998,12 +998,12 @@ Serial.println(velocity);
 /////////////////////                         /////////////////////
 //////////////////////////////////////////////////////////////////
 { 
-  stripSendSkel = new StripSkeleton(STRIP_CH2BUS,STRIP_XAIR_GROUP,sendStripConstructorCallback,'!');  
+  stripSendSkel = new StripSkeleton(STRIP_INPUT2MIXBUS,STRIP_XAIR_GROUP,sendStripConstructorCallback,'!');  
   stripSendSkel->registerDataSetAddress(ADDRESS_CHNAME);
   stripSendSkel->registerDataSetAddress(ADDRESS_BUSNAME);
   
-  stripChGainSkel = new StripSkeleton(STRIP_CHGAIN,STRIP_XAIR_GROUP,gain2chStripConstructorCallback,'y'); 
-  stripChGainSkel->registerDataSetAddress(ADDRESS_CHNAME);
+  stripInputGainSkel = new StripSkeleton(STRIP_INPUTGAIN,STRIP_XAIR_GROUP,gain2chStripConstructorCallback,'y'); 
+  stripInputGainSkel->registerDataSetAddress(ADDRESS_CHNAME);
 
   stripOSCSkel = new StripSkeleton(STRIP_OSCTEST,STRIP_UTILS_GROUP,testOSCStripConstructorCallback,'a');
   stripOSCSkel->registerDataSetAddress(ADDRESS_IP);
@@ -1012,7 +1012,7 @@ Serial.println(velocity);
 
   /*stripFactory.add(stripTextSkel);
   stripFactory.add(stripSendSkel);
-  stripFactory.add(stripChGainSkel);
+  stripFactory.add(stripInputGainSkel);
   stripFactory.add(stripOSCSkel);*/
 
   /*app.stripDataRepository.addDataSet(&macroNames);   

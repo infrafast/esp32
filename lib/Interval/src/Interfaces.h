@@ -33,17 +33,18 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     State state;
 
     //int8_t stripCount = 0;      // indicate if an interface is not refered by any strip
-
+    unsigned long offlineStart = 0;
 
     String interfaceName; 
   
-    bool dataAvailable;
     //void* data;                 // will be replaced by EVENT QUEUE : MUST BE AFFECTED IN CONSTRUCTOR OF DERIVED CLASS AND THEN CASTED IN THE UPDATE() MEDTHOD OF STRIP (WHICH IS CALLED WHEN AVAILABLE RETURN > 0 in STRIP PROCESS())    
 
     bool exposed = true;          // 
     bool hasStrip = true;      // if the interface is used by a strip (ex. Midi) or not (ex. Directory Service), by default yes, but some interface are more technical and not relevant for the user to create a strip with them, so we can hide them in the strip creation menu by setting this parameter to false
 
     String group = "undef"; // used by the strip to define which deviceinterface they can connect
+
+    Event message;
 
 
     DeviceInterface(const String&, const String&, bool);
@@ -58,22 +59,22 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
 
-    void onEvent(const Event& evt) override {}
+    void onEvent(const Event& evt) override {
 
-    virtual bool begin(){     // called by init()
-      DEBUG_INFO("%s::begin() void",interfaceName.c_str());
+    }
+
+    virtual bool _begin(){     // called by init()
+      DEBUG_INFO("%s::_begin() void",interfaceName.c_str());
       return true;
     };        
 
-    virtual bool end(){         // called to shutdown completely
-      DEBUG_INFO("%s::end() void",interfaceName.c_str());
-      return true;
-    };          
-    virtual bool stop(){          // called to stop (ex. disconnect the network for network interface) require a begin() to start again
+    virtual bool begin() = 0;       // called to start the interface, require a end() to stop it
+    virtual bool end() = 0;       // called to stop the interface, require a begin() to start again
+
+    virtual bool stop(){      // called to stop (ex. disconnect the network for network interface) require a begin() to start again
       DEBUG_INFO("%s::stop() void",interfaceName.c_str());
       return true;
     };           
-
 
     virtual const String& getProviderNameForData(){ return group;}
 
@@ -130,10 +131,11 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }  
 
     bool init(/*EventListener* listener*/) {
+      determineQoS();
       DEBUG_INFO("----------------------------------  %s->init(...)  ---------------------------------- ", interfaceName.c_str());
       //registerEventListener(listener);
       load();
-      bool success = begin();
+      bool success = _begin();
       DEBUG_INFO("-----------------------------------------------------------------------------------------------------\n");
       return success;
     }
@@ -164,7 +166,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       if (config.containsKey(INTERFACE_ENABLED)){
         bool enabled = config[INTERFACE_ENABLED];
         state.enabled = enabled;  //switchDevice(enabled); // BE CAREFULL!
-        DEBUG_INFO("%s : %s",interfaceName.c_str(),enabled?"ENABLED":"DISABLED");
+        DEBUG_INFO("%s : %s",interfaceName.c_str(),enabled?"✅ENABLED":"🚫DISABLED");
       }
       
       // and then we call the restoreProperty of the interface which will check if the properties is for her
@@ -214,17 +216,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     }
 
-    /*int available(){ // called by strip 
-      return dataAvailable; 
-    }*/
-
-
-    virtual void update(){      // return a boolean indicatin if the interface has changed its state
-      // reset change state
+    virtual bool update(){      // return a boolean indicatin if the interface has processed some data
       state.changed = false;
-
-      // reset the flag so strips will not be updated and re-processed already consummed data
-      //dataAvailable = 0;
 
       // report if state has changed
       if (state.label != state.previousStateLabel){
@@ -254,11 +247,28 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
         state.previousSwitchable = state.switchable;
       }      
 
-      if (state.changed) state.broadcastState = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
+      if (state.changed){
+        state.broadcastState = true; // inform application manager that the state has changed. See why we managed both separately => state.progress
+
+        if (state.code == IF_READY){      // we just went online 
+          offlineStart = 0;               // so we reset timer
+          //DEBUG_INFO("%s 🔌 ✔️ ------- Online, offlineStart = 0 ---------- ",interfaceName.c_str());           
+        }else{
+          if (offlineStart == 0){          
+            offlineStart = millis();     // we went offline, so we start counting
+            //DEBUG_INFO("%s 🔌 ❌------- Offline, offlineStart=%i ---------- ",interfaceName.c_str(),offlineStart);           
+          }
+        }
+
+        this->determineQoS();            // recalculate the color
+        
+      }
 
       if (state.enabled){      
-        monitor();
-      }      
+        return monitor();
+      } 
+     
+      return false;
     }
 
     bool isSwitchable(){
@@ -274,7 +284,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     void setStateDeactivated(){
-      DEBUG_INFO("%s::setStateDeactivated()",interfaceName.c_str());
+      DEBUG_INFO("%s::setStateDeactivated()◎",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_DEACTIVATED;
       state.subState =  "";
@@ -282,8 +292,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;
     }
 
-    void setStateDisabled(){
-      DEBUG_INFO("%s::setStateDisabled()",interfaceName.c_str());
+    virtual void setStateDisabled(){
+      DEBUG_INFO("%s::setStateDisabled()⚫",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_DISABLED;
       state.subState =  IF_STATE_DISABLED;
@@ -293,7 +303,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     void setStateNotImplemented(){
-      DEBUG_INFO("%s:setStateNotImplemented",interfaceName.c_str());
+      DEBUG_INFO("%s:setStateNotImplemented()◎",interfaceName.c_str());
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_NOTIMPLEMENTED;
       state.subState =  IF_STATE_DISABLED;
@@ -302,8 +312,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;          
     }
 
-    virtual void setStateReady(String led = "green", String label = *lang.getString(IF_STATE_READY), String subState = "", String details = ""){            
-      DEBUG_INFO("%s::setStateReady()",interfaceName.c_str());
+    virtual void setStateReady(const char* led = "green", const char* label = lang.getString(IF_STATE_READY)->c_str(), const char* subState = "", const char* details = ""){            
+      DEBUG_INFO("%s:setStateReady(%s,%s)🟢",interfaceName.c_str(),label,details);
       state.code = IF_READY;      
       state.label = label;
       state.subState = subState;
@@ -312,8 +322,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;      
     }
 
-    virtual void setStatePending(String led = "green medium", String details = *lang.getString("Scanning devices")){
-      DEBUG_INFO("%s::setStatePending()",interfaceName.c_str());      
+    virtual void setStatePending(const char* led = "green medium", const char* details = lang.getString("Scanning network")->c_str()){
+      DEBUG_INFO("%s:setStatePending()◐",interfaceName.c_str());      
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
       state.details = details;
@@ -322,8 +332,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.progress = -1;
     }
 
-    virtual void setStateDisconnected(String details=""){
-      DEBUG_INFO("%s::setStateDisconnected()",interfaceName.c_str());      
+    virtual void setStateDisconnected(const char* details=""){
+      DEBUG_INFO("%s:setStateDisconnected()🔴",interfaceName.c_str());      
       state.code = IF_NOT_READY;
       state.label = IF_STATE_DISCONNECTED;
       state.subState = "";
@@ -331,6 +341,11 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.led = "red fast";
       state.progress = -1;
     }        
+
+    virtual void setStateError(const char* details=""){
+      setStateDisconnected(details);
+      state.label = IF_STATE_ERROR;
+    }
 
     #define IF_CFG_FILE_PATH "/"
 
@@ -396,9 +411,12 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       return false;
     } 
     
-    // monitor manage internal state and set the dataAvailable flag using internal functions to indicate data are available with available() method that expose the value in "data"
-    // do not need to care about offline state as it is managed by update method
-    virtual void monitor() = 0; 
+    virtual bool monitor() = 0; 
+
+    virtual void determineQoS(){
+      if (state.enabled) state.QoSlevel = QoS::GOOD;
+      else state.QoSlevel = QoS::UNDETERMINED;
+    };
 
     virtual void handlePropertyChange(){DEBUG_INFO("%s::handlePropertyChange() : void",name.c_str());} // this s called when the interface parameter/config/property is changed, the interface has to decide what to do like restarting
 
@@ -407,7 +425,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }       
 
     virtual const String* getIcon(){
-      return &icon;
+      return &icon; //hwm.network->networkConnectivityIcon
     }
 
   protected:
@@ -422,11 +440,10 @@ class NetWorkService{
     // ---- Global inventory of services (NetWorkService*) ----
     static std::vector<NetWorkService*> inventory;
     static int8_t enabledServicesWeightSum;
-   
-    virtual void monitorService()=0;
+  
+    virtual bool monitorService()=0;
     virtual bool handleConnectService()=0;
     virtual bool handleDisconnectService()=0;
-
 
     static void addToInventory(NetWorkService* iface) {
       if (iface == nullptr) return;
@@ -434,7 +451,7 @@ class NetWorkService{
 
     }
 
-    #define SERVICES_WEIGHT_LIMIT  4
+    #define SERVICES_WEIGHT_LIMIT  5
     
     bool serviceLocked = true; // by default locked to avoid monitoring straight after startup
 
@@ -449,9 +466,7 @@ class NetWorkService{
         - actualisation (sans modification des parametres) et avec differents etats
         - actualisation (avec modification des parametres) et avec differents etats
         - demarrer une interface alors qu'elle doit etre lock
-        - demarrer une interface en disable
-
-    
+        - demarrer une interface en disable  
     */
 
     void releaseCapacity(){
@@ -504,10 +519,10 @@ class NetWorkService{
 
     virtual void setStateDisconnected(){ // to be overrided by derived class
       if (!deviceInterface) return;
-      DEBUG_INFO("%s::setStateDisconnected()", deviceInterface->interfaceName.c_str());
+      DEBUG_INFO("%s::setStateDisconnected()🔴", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_DISCONNECTED;
-      deviceInterface->state.details = concatStrings(*lang.getString("disconnected"));
+      deviceInterface->state.details = "";
       deviceInterface->state.led = "red";
       deviceInterface->state.progress = -1;
     }
@@ -579,7 +594,7 @@ class NetWorkService{
           setStateDisconnected();
         }
       }
-      DEBUG_INFO("After %s enable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
+      //DEBUG_INFO("After %s enable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
     void disable(){
@@ -587,19 +602,21 @@ class NetWorkService{
       releaseCapacity();
       deviceInterface->setStateDisabled();
       handleDisconnectService();
-      DEBUG_INFO("After %s disable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
+      //DEBUG_INFO("After %s disable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
     }
 
-    void monitorNetwork(){
+    bool monitorNetwork(){
 
-      if (!deviceInterface) return;
+      if (!deviceInterface) return false;  
 
       if (hwm.network->state == DISCONNECTED){
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
         deviceInterface->state.subState = hwm.network->SSID;
       }else if (!serviceLocked){
-        monitorService();
+        return monitorService();
       }
+
+      return false;   // no data processed
     }
     
     void setNetworkStateDown(){
@@ -613,17 +630,8 @@ class NetWorkService{
       // progress is altered by the network
     }
 
-    virtual void setStateOffline(String details=""){
-      DEBUG_INFO("%s::setStateOffline()",deviceInterface->interfaceName.c_str());      
-      deviceInterface->state.code = IF_NOT_READY;
-      deviceInterface->state.label = IF_STATE_OFFLINE;
-      deviceInterface->state.subState = "";
-      deviceInterface->state.details = details;
-      deviceInterface->state.led = "red";
-      deviceInterface->state.progress = -1;
-    }     
 
-    virtual void setStateLocked(String led = "orange",String details = *lang.getString("Reached maximum network device capacity. Disable other device(s) to enable this one.")){
+    virtual void setStateLocked(const char* led = "orange",const char* details = lang.getString("Reached maximum device capacity. Disable other network device(s) to enable this one.")->c_str()){
       DEBUG_INFO("%s::setStateLocked()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_LOCKED;
@@ -639,7 +647,7 @@ class NetWorkService{
       deviceInterface->state.details = *lang.getString("Enable Directory to browse devices");
     }
 
-    void setStateConnecting(String subState, String details){
+    void setStateConnecting(const char* subState, const char* details){
       DEBUG_INFO("%s: setStateConnecting()",deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;      
       deviceInterface->state.label = IF_STATE_CONNECTING;   
@@ -649,9 +657,10 @@ class NetWorkService{
       deviceInterface->state.progress = 0; //show progress bar
     }     
 
-    void setStateSyncing(String details){
+    void setStateSyncing(const char* details){
       setStateConnecting(IF_STATE_SYNCING,details);
       DEBUG_INFO("%s: setStateSyncing()",deviceInterface->interfaceName.c_str());
+      deviceInterface->state.label = IF_STATE_SYNCING;
       deviceInterface->state.led = "green fast";
       deviceInterface->state.progress = 0; //show progress bar
     }     
@@ -688,6 +697,7 @@ DeviceInterface::DeviceInterface(const String& name, const String& _group,bool _
   interfaceRepo.interfaces.push_back(this);
   interfaceName = name;
   group = _group;
+  message.type = EVENT_INTERFACE_MESSAGE;   // an interface sends message to strip and not to the application manager, so we set a specific type for that
 }
 
 DeviceInterface::~DeviceInterface(){
@@ -708,7 +718,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
   public:
 
     int remotePort = 0;
-    int localPort = 0;  
+    int localPort = 0;
 
     NetworkDevice(String name, String group, int lport, int rport, String echoCommand, bool _configurable=false):DeviceInterface(name, group,_configurable){
       
@@ -716,33 +726,78 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       
       destination.echoCommand = echoCommand;
 
-      registerDataSetAddress(addressPort);          // global
+      registerDataSetAddress(&addressPort);          // global
       registerDataSetAddress(&addressIP);           // global       
 
       remotePort = rport;
-      localPort = lport;
-
-      
+      localPort = lport;     
     }
 
-    virtual bool ping() = 0;
+    virtual bool ping() = 0;    
 
     // network devices listen to network event
-    virtual bool begin(){     // called by init()
-      DEBUG_INFO("%s::begin() => self registering to network event",interfaceName.c_str());
-      hwm.network->registerEventListener(this);
-      return true;
+    virtual bool _begin() override{     // called by init()
+      DEBUG_INFO("NetworkDevice(%s)::_begin() => self registering to network event",interfaceName.c_str());
+      hwm.network->registerEventListener(this);   
+      return begin();    // derived class call   
     };        
-
-
-
-    virtual void monitor(){           
-      monitorNetwork();      
+   
+    virtual bool monitor() override{           
+      return monitorNetwork();      
     }    
 
     virtual void switchDevice(bool _enabled) override{
       switchNetworkService(_enabled); // we use our own
     }   
+
+    void calculateLatencyAndJitter(unsigned long rawLatency){
+      /* we got a echoCommand echo, so we calculate the latency
+      we determine latency and jitter based on the ping response time, we use an EWMA to smooth the values and avoid spikes, we also set a max latency of 500ms to avoid crazy values in case of network issues
+      Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
+      ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
+      */
+      const unsigned long MAX_VALID_LATENCY = 500;
+      const float LAT_ALPHA = 0.20f;
+      const float JIT_ALPHA = 0.25f;
+
+      if (rawLatency == 0 || rawLatency > MAX_VALID_LATENCY) {
+        return;
+      }
+
+      const float previousLatency = destination.latency;
+
+      if (destination.latency == 0) {
+        destination.latency = (uint16_t)rawLatency;
+        destination.jitter  = 0;
+      } else {
+        float filteredLatency =
+            previousLatency * (1.0f - LAT_ALPHA) +
+            rawLatency * LAT_ALPHA;
+
+        float delta = fabsf((float)rawLatency - previousLatency);
+
+        float filteredJitter =
+            destination.jitter * (1.0f - JIT_ALPHA) +
+            delta * JIT_ALPHA;
+
+        destination.latency = (uint16_t)filteredLatency;
+        destination.jitter  = (uint16_t)filteredJitter;
+      }
+
+      if (destination.latency > MAX_VALID_LATENCY) {
+        destination.latency = MAX_VALID_LATENCY;
+      }
+
+      if (destination.jitter > MAX_VALID_LATENCY) {
+        destination.jitter = MAX_VALID_LATENCY;
+      }
+
+      DEBUG_INFO("📉 %s latency:%u jitter:%u raw:%lu",
+                interfaceName.c_str(),
+                destination.latency,
+                destination.jitter,
+                rawLatency);
+    } 
 
     void onEvent(const Event& evt) override {
       // recive the event propagated from Appmanager
@@ -774,7 +829,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       free(buf);
 
       buf = (char*)malloc((strlen(ADDRESS_IP)+destination.ip.toString().length())*sizeof(char*)+1);
-      sprintf(buf,ADDRESS_IP,destination.ip.toString());
+      sprintf(buf,ADDRESS_IP,destination.ip.toString().c_str());
       properties.add(String(buf)); 
       free(buf);                
     }
@@ -800,18 +855,21 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       }
       return changed;
     }       
+    
+    virtual void setStateConnected(){
+      DEBUG_INFO("%s:setSetateConnected()🟢",deviceInterface->interfaceName.c_str());
+      DeviceInterface::setStateReady("green", lang.getString(IF_STATE_CONNECTED)->c_str(),destination.ip.toString().c_str(), destinationDetails().c_str());
+    }
 
-    virtual void setStateReady(){            
-      DeviceInterface::setStateReady("green", *lang.getString(IF_STATE_CONNECTED), destination.ip.toString(),destination.ip.toString());
+    String destinationDetails(){
+      return concatStrings(destination.ip.toString(),":",String(remotePort)).c_str();       
     }
 
     virtual void setStateDisconnected() override{
-      DeviceInterface::setStateDisconnected();
-      deviceInterface->state.details = concatStrings(*lang.getString("no connection"));      
-    }       
+      DEBUG_INFO("%s:setStateDisconnected()🔴",deviceInterface->interfaceName.c_str());
+      DeviceInterface::setStateDisconnected(concatStrings(*lang.getString("no connection")).c_str());
+    }     
 
 };
 
-
-//DeviceInterface(name, GROUP_INTERFACE_OSC,_configurable)
 #endif

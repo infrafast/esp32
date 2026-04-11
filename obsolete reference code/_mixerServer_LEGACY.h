@@ -106,7 +106,7 @@ class MixerServer: public HWComponent2State{
     }
 
     String getMixerState(){   
-        //{"interfaceState":{"mixerName":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"mixerModel":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}}
+        //{"interfaceState":{"mixerID.name":"XR16-Interval","mixerPort":3000,"mixerConnected":1,"mixerID.model":"XR16"},"serverState":{"interface":"MixingStation","serverIP":"82.65.4.93","serverPort":8080}}
 
         JsonDocument json;
         json[SERVER_STATE_KEY][SERVER_INTERFACE_KEY] = mixerInterface->name;

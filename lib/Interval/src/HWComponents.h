@@ -7,7 +7,7 @@
 
 #include <Ethernet.h>       // apply following fix: https://github.com/arduino-libraries/Ethernet/pull/107/files
 #include <EthernetUdp.h>
-#include <WiFiGeneric.cpp>  // for tipipinit
+#include <WiFiGeneric.cpp>  // for tcpipinit
 #include <ArduinoOTA.h>     // for WIFI_MEDIA program upload 
 #include <ESP32Ping.h>      // for WiFi
 
@@ -30,6 +30,22 @@ struct SocketData{
   const char* message="";
   int code;
 };
+
+////////////////////////////////////////////////////////////
+const char* wifiStatusToString(wl_status_t status) {
+  switch (status) {
+    case WL_NO_SHIELD:        return "No shield";
+    case WL_IDLE_STATUS:      return "Idle";
+    case WL_NO_SSID_AVAIL:    return "No SSID available";
+    case WL_SCAN_COMPLETED:   return "Scan completed";
+    case WL_CONNECTED:        return "Connected";
+    case WL_CONNECT_FAILED:   return "Connect failed";
+    case WL_CONNECTION_LOST:  return "Connection lost";
+    case WL_DISCONNECTED:     return "Disconnected";
+    default:                  return "Unknown";
+  }
+}
+//////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 void onEthernetBonjourServiceFoundCallback(const char* serviceType,
@@ -165,7 +181,7 @@ class AnalogIn : public HWComponent{
 
 };
 
-#define VBAT_CHANGE_THRESHOLD 0.06
+#define VBAT_CHANGE_THRESHOLD 0.1
 
 #define VBAT_CRIT 3.2     // selon chat gpt => tension minimal. En dessous de 3.0v , dommages irreversibles
 #define VBAT_MIN 3.3      // selon chat gpt => tension a surveiller, seuil de pré-alarme
@@ -175,7 +191,7 @@ class AnalogIn : public HWComponent{
 
 #define VBAT_OFFSET 0.0 // compensate voltage drop (positive or negative) from the diode or other component
 
-#define BAT_REFRESH_RATE 500 // refresh every 500ms
+#define BAT_REFRESH_RATE 1000 // refresh every second
 #define BAT_NUM_READINGS 5
 
 
@@ -190,106 +206,185 @@ enum{
 enum BatteryState {
     BAT_CHECKING,  
     BAT_USB_PLUGGED,
+    BAT_CHARGING,
     BAT_DISCHARGING,
 };
 
-class BatteryMonitor : public HWComponent{
-  // read https://forum.seeedstudio.com/t/xiao-ble-sense-mbed-2-7-2-battery-charge-and-voltage-monitor-analogread-p0-31-does-not-work/266438
+class BatteryMonitor : public HWComponent {
+  // See:
+  // https://forum.seeedstudio.com/t/xiao-ble-sense-mbed-2-7-2-battery-charge-and-voltage-monitor-analogread-p0-31-does-not-work/266438
 
-  public:
-    Event evt;
+public:
+  Event evt;
 
-    uint8_t indicator = BAT_FULL_LEVEL;
-    float vBat = VBAT_MAX;
-    // Global variables for tracking battery state
-    float previousVBat = 0.0;
-    BatteryState batteryState = BAT_CHECKING;
+  uint8_t indicator = BAT_FULL_LEVEL;
+  float vBat = VBAT_MAX;
+  float previousVBat = VBAT_MAX;
+  BatteryState batteryState = BAT_CHECKING;
 
-    BatteryMonitor(uint8_t p, boolean d=true): HWComponent(p,d){
-      pinMode(CSPin, INPUT);
-      id = concatStrings("BatteryMonitor~", p);
-      evt.type = EVENT_BATTERY_REFRESHED;
-    };
+  BatteryMonitor(uint8_t p, bool d = true) : HWComponent(p, d) {
+    pinMode(CSPin, INPUT);
+    id = concatStrings("BatteryMonitor~", p);
+    evt.type = EVENT_BATTERY_REFRESHED;
+  }
 
-    virtual void init(){
-      HWComponent::init();
-      for (readIndex = 0; readIndex < BAT_NUM_READINGS-1; readIndex++) read();
-      refresh(true);  // force first reading
+  virtual void init() override {
+    HWComponent::init();
+
+    readIndex = 0;
+    readSum = 0;
+    initialized = false;
+    lastReadMillis = 0;
+
+    // Remplit le buffer une première fois pour stabiliser la moyenne
+    uint32_t firstReading = analogReadMilliVolts(CSPin);
+    for (int i = 0; i < BAT_NUM_READINGS; i++) {
+      readings[i] = firstReading;
+      readSum += firstReading;
     }
 
-    void read(){
-      readings[readIndex] = analogReadMilliVolts(CSPin);     
-      readSum = readSum + readings[readIndex];      
-      //if (debug) DEBUG_PRINT("\nreadings[%i]:%i",readIndex,readings[readIndex]);
+    float initialVBat = convertMilliVoltsToVBat(firstReading);
+    vBat = initialVBat;
+    previousVBat = initialVBat;
+    indicator = computeIndicator(vBat);
+    batteryState = determineBatteryState(vBat, previousVBat, VBAT_CHANGE_THRESHOLD / 2.0f);
+
+    initialized = true;
+
+    refreshed = true;
+    fireEvent(evt);
+  }
+
+  virtual bool refresh(bool force = false) override {
+    refreshed = false;
+
+    if (!initialized) return false;
+
+    unsigned long now = millis();
+    if (!force && (now - lastReadMillis < BAT_REFRESH_RATE)) {
+      return false;
+    }
+    lastReadMillis = now;
+
+    // Retire l’ancienne valeur du buffer circulaire
+    readSum -= readings[readIndex];
+
+    // Lit la nouvelle valeur
+    uint32_t rawReading = analogReadMilliVolts(CSPin);
+    readings[readIndex] = rawReading;
+    readSum += rawReading;
+
+    // Passe à la case suivante
+    readIndex = (readIndex + 1) % BAT_NUM_READINGS;
+
+    // Moyenne glissante
+    uint32_t averageReading = readSum / BAT_NUM_READINGS;
+    float newVBat = convertMilliVoltsToVBat(averageReading);
+
+    bool voltageChanged = false;
+    bool indicatorChanged = false;
+    bool stateChanged = false;
+
+    // Sauvegarde l’ancienne tension avant mise à jour
+    float oldVBat = vBat;
+    uint8_t oldIndicator = indicator;
+    BatteryState oldBatteryState = batteryState;
+
+    float delta = fabs(newVBat - oldVBat);
+
+    // Mise à jour tension seulement si variation suffisante ou force
+    if (force || delta >= VBAT_CHANGE_THRESHOLD) {
+      previousVBat = oldVBat;
+      vBat = newVBat;
+      voltageChanged = true;
     }
 
-    bool refresh(bool force=false){
-      refreshed = force;      
+    // Même si la variation est faible, on peut utiliser la valeur récente
+    // pour l'état si on veut une vision plus actuelle.
+    float stateReferenceVBat = voltageChanged ? vBat : newVBat;
+    float statePreviousVBat  = voltageChanged ? previousVBat : oldVBat;
 
-      if (millis()-lastReadMillis<BAT_REFRESH_RATE && !force) return refreshed;
-      lastReadMillis = millis();
-
-      readSum = readSum - readings[readIndex];
-      read();
-      readIndex = (readIndex + 1) % BAT_NUM_READINGS;
-
-      uint32_t averageReading = readSum / BAT_NUM_READINGS;  
-
-      float val = 2 * averageReading / 1000.0; 
-      val += VBAT_OFFSET;
-
-      // rounding to 2 digit after decimal place
-      float delta = abs(val-vBat);          
-      /*int c = (int)(delta * 1000 + .5);
-      float roundedDelta = c/1000.0;             */
-
-      if (delta>=VBAT_CHANGE_THRESHOLD || force){    // 0.06 we only consider change of 0.6mv
-        vBat = val;
-        
-        previousVBat = vBat;
-        if (debug){
-          //DEBUG_PRINT("\n%s changed to: %.3f readSum:%i averageReading:%i delta:%.3f",id.c_str(),vBat,readSum, averageReading,/*roundedDelta*/delta);          
-        }        
-        
-        indicator = mapFloatToInt(vBat,VBAT_MIN,VBAT_MAX,0,BAT_MAX_LEVEL-1);
-        if (indicator > BAT_MAX_LEVEL-1) indicator = 0;          
-       
-        refreshed = true;
-      }     
-
-      if (readIndex == BAT_NUM_READINGS-1/* && batteryState == BAT_CHECKING*/){ 
-        // we have enough readings to get a good average 
-        batteryState = determineBatteryState(vBat, previousVBat,VBAT_CHANGE_THRESHOLD/2);
-
-        if (debug){
-          //DEBUG_PRINT("\n %ldms battery.status:%d %.2fv",millis(),batteryState,vBat);
-        }
-        refreshed = true;
-      }
-
-      if (refreshed){
-        fireEvent(evt);
-      }
-
-      return refreshed;
+    indicator = computeIndicator(stateReferenceVBat);
+    if (indicator != oldIndicator) {
+      indicatorChanged = true;
     }
 
-  private:
-    uint32_t readings[BAT_NUM_READINGS];      // the readings from the analog input
-    int readIndex = 0;              // the index of the current reading
-    uint32_t readSum = 0;                   // the running readSum
-    unsigned long lastReadMillis = 0;
+    batteryState = determineBatteryState(stateReferenceVBat, statePreviousVBat, VBAT_CHANGE_THRESHOLD / 2.0f);
+    if (batteryState != oldBatteryState) {
+      stateChanged = true;
+    }
 
-    BatteryState determineBatteryState(float currentVBat, float previousVBat, float threshold) {
-      if (vBat>VBAT_USB) return BAT_USB_PLUGGED;
-      /*float delta = currentVBat - previousVBat;
-      if (delta > threshold) {
-          return BAT_USB_PLUGGED;
-      } else {
-          return BAT_DISCHARGING;
-      }*/
+    refreshed = force || voltageChanged || indicatorChanged || stateChanged;
+
+    if (debug && refreshed) {
+      //DEBUG_PRINT(
+      //  "\n%s refreshed raw:%lu avg:%lu vBat:%.3f prev:%.3f delta:%.3f ind:%u state:%d",
+      //  id.c_str(),
+      //  rawReading,
+      //  averageReading,
+      //  vBat,
+      //  previousVBat,
+      //  delta,
+      //  indicator,
+      //  batteryState
+      //);
+    }
+
+    if (refreshed) {
+      fireEvent(evt);
+    }
+
+    return refreshed;
+  }
+
+private:
+  uint32_t readings[BAT_NUM_READINGS] = {0};
+  int readIndex = 0;
+  uint32_t readSum = 0;
+  unsigned long lastReadMillis = 0;
+  bool initialized = false;
+
+  float convertMilliVoltsToVBat(uint32_t milliVolts) {
+    float val = 2.0f * milliVolts / 1000.0f;
+    val += VBAT_OFFSET;
+    return val;
+  }
+
+  uint8_t computeIndicator(float voltage) {
+    int level = mapFloatToInt(voltage, VBAT_MIN, VBAT_MAX, 0, BAT_MAX_LEVEL - 1);
+
+    if (level < 0) level = 0;
+    if (level > BAT_MAX_LEVEL - 1) level = BAT_MAX_LEVEL - 1;
+
+    return (uint8_t)level;
+  }
+
+  BatteryState determineBatteryState(float currentVBat, float previousVBat, float threshold) {
+    if (currentVBat >= VBAT_USB) {
+      return BAT_USB_PLUGGED;
+    }
+
+    float delta = currentVBat - previousVBat;
+
+    if (delta > threshold) {
+      return BAT_CHARGING;
+    }
+
+    if (delta < -threshold) {
       return BAT_DISCHARGING;
-    }    
+    }
+
+    // zone neutre : on conserve un état cohérent
+    if (batteryState == BAT_USB_PLUGGED && currentVBat < VBAT_USB) {
+      return BAT_DISCHARGING;
+    }
+
+    if (batteryState == BAT_CHECKING) {
+      return BAT_DISCHARGING;
+    }
+
+    return batteryState;
+  }
 };
 
 
@@ -327,6 +422,7 @@ public:
 class ButtonEvent : public Event {
 public:
 
+  #ifdef DEBUG
   const char* serialize() const override {
     snprintf(_buffer, sizeof(_buffer),
              "buttonType=%s(%u), buttonId=%u, time=%lu",
@@ -336,6 +432,7 @@ public:
              ((ButtonData*)data)->time);
     return _buffer;
   }
+  #endif
 
 private:
 
@@ -346,6 +443,7 @@ enum EventID {
   BUTTON_SIMPLE_CLIC = 1,
   BUTTON_DOUBLE_CLIC,
   BUTTON_LONG_CLIC,
+  BUTTON_ENTER_HOLD,  
   BUTTON_HOLD,
   BUTTON_RELEASE_HOLD,
 };
@@ -401,9 +499,9 @@ public:
           pendingDoubleClicDetection = false;
 
           if (!doubleClic) {
-            if (pushedTime > push_reactivity) {
+            if (holdEntered) {
               emitButtonEvent(BUTTON_RELEASE_HOLD, pushedTime - push_reactivity);
-            } else if (pushedTime > push_reactivity / 3) {
+            }else if (pushedTime > push_reactivity / 3) {
               emitButtonEvent(BUTTON_LONG_CLIC, pushedTime);
             } else {
               emitButtonEvent(BUTTON_SIMPLE_CLIC, pushedTime);
@@ -417,16 +515,12 @@ public:
 
       } else { // pressed
         doubleClic = false;
+        holdEntered = false;
         startPushTime = millis();
 
         if (pendingDoubleClicDetection) {
           doubleClic = true;
           emitButtonEvent(BUTTON_DOUBLE_CLIC, millis() - startTimeBetween2Clics);
-          /*
-          if (usesLed) {
-            ledcWrite(0, 0);
-          }
-          */
         }
       }
 
@@ -435,6 +529,11 @@ public:
         pushedTime = millis() - startPushTime;
 
         if (pushedTime > push_reactivity) {
+          if (!holdEntered) {
+            holdEntered = true;
+            emitButtonEvent(BUTTON_ENTER_HOLD, pushedTime - push_reactivity);
+          }
+
           emitButtonEvent(BUTTON_HOLD, pushedTime - push_reactivity);
 
           if (usesLed) {
@@ -445,7 +544,6 @@ public:
           uint8_t dutyCycle = map(pushedTime, 0, push_reactivity, 0, 255);
           ledcWrite(0, dutyCycle);
         }
-
       } else {
         pushedTime = 0;
 
@@ -476,6 +574,7 @@ protected:
 
 private:
   int edge;
+  bool holdEntered = false;
   bool pendingDoubleClicDetection = false;
   unsigned long startTimeBetween2Clics = 0;
   unsigned long startPushTime = 0;
@@ -749,6 +848,19 @@ struct UdpSlot {
   }  
 };
 
+class SocketEvent : public Event {
+public:
+
+  SocketEvent(void* data):Event(data){}
+
+  #ifdef DEBUG
+  const char* serialize() const override {
+    if (((SocketData*)data)->length > 0) return ((SocketData*)data)->message;
+    else return "";
+  }
+  #endif
+};
+
 class Network : public HWComponent2State{
 
   public:
@@ -756,14 +868,14 @@ class Network : public HWComponent2State{
     WebSocketClient<EthernetClient> *wsEthClient{ nullptr };
 
     SocketData socketData;
-    Event evtSock = Event(&socketData);    
+    SocketEvent evtSock = SocketEvent(&socketData);    
     
     Event evtNet;
 
     
     float networkConnectAttemptProgress = 0.0;
 
-    String iFconnectivityIcon = ICON_MIXETHWIFI;
+    String networkConnectivityIcon = ICON_MIXETHWIFI;
 
     SemaphoreHandle_t networkBusy;
 
@@ -812,6 +924,7 @@ class Network : public HWComponent2State{
     virtual void asyncPing(TargetEcho* echo, PingCallback callBack)=0;
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
     virtual String dumpW5500Sockets()=0;
+    virtual String getIP() = 0;
     
     virtual void init(){
       //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
@@ -974,7 +1087,7 @@ class WiFiEth : public Network{
         }
       }else{
         //if (debug) DEBUG_PRINT("\n%s Using WiFi only",id.c_str());
-        iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
+        networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
       }
      
       if (!ethEnabled){
@@ -1244,30 +1357,76 @@ class WiFiEth : public Network{
       }
     }
 
-    virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){
-      DEBUG_INFO("%s::clientSocketOpen(%s,%d,%s)",id.c_str(),host,port,path);
-      return false;
-     
-      if (state != CONNECTED){
-        DEBUG_WARN("\t failed, network not connected!");
+    /*
+
+    SOCKETS MANAGEMENT
+    
+    */
+
+    enum SocketOpenJobState : uint8_t {
+      SOCKET_JOB_IDLE,
+      SOCKET_JOB_RUNNING,
+      SOCKET_JOB_FAILED
+    };
+
+    volatile SocketOpenJobState socketOpenJobState = SOCKET_JOB_IDLE;
+
+    TaskHandle_t socketOpenTaskHandle = nullptr;
+
+    // Paramètres copiés pour la task
+    String pendingHost;
+    String pendingPath;
+    uint16_t pendingPort = 0;    
+
+
+    virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path) {
+      DEBUG_INFO("%s::clientSocketOpen(%s,%d,%s)", id.c_str(), host, port, path);
+
+      if (state != CONNECTED) {
+        DEBUG_PRINT("\t❗failed, network not connected!");
         return false;
-      } 
-      if (media == CABLE_MEDIA){
-        if (wsEthClient!= nullptr){
-          if (!wsEthClient->open(host, port, path)){
-            DEBUG_WARN("\t open wsEthClient failed!");
-            return false;
-          }
-        }
-      }else{
-        if (wsWiFiClient!= nullptr){
-          if (!wsWiFiClient->open(host, port, path)){
-            DEBUG_WARN("\t open wsWiFiClient failed!");
-            return false;
-          }
-        }
       }
-      //DEBUG_PRINT("\t success");
+
+      if (socketOpenJobState == SOCKET_JOB_RUNNING) {
+        DEBUG_PRINT("\t❗already opening");
+        return true;
+      }
+
+      WebSocketReadyState wsState = clientSocketState();
+      if (wsState == WebSocketReadyState::OPEN) {
+        DEBUG_PRINT("\t❗already opened");
+        return true;
+      }
+
+      if (wsState == WebSocketReadyState::CONNECTING) {
+        DEBUG_PRINT("\t❗already connecting");
+        return true;
+      }
+
+      pendingHost = host ? host : "";
+      pendingPath = path ? path : "";
+      pendingPort = port;
+
+      socketOpenJobState = SOCKET_JOB_RUNNING;
+
+      BaseType_t ok = xTaskCreatePinnedToCore(
+        &WiFiEth::socketOpenTaskEntry,
+        "wsOpenTask",
+        6144,
+        this,
+        1,
+        &socketOpenTaskHandle,
+        1
+      );
+
+      if (ok != pdPASS) {
+        DEBUG_ERROR("\t task creation failed!");
+        socketOpenJobState = SOCKET_JOB_FAILED;
+        socketOpenTaskHandle = nullptr;
+        return false;
+      }
+
+      DEBUG_PRINT("\t opening started asynchronously");
       return true;
     }
 
@@ -1276,41 +1435,47 @@ class WiFiEth : public Network{
         if (wsEthClient!= nullptr){      
           if (wsEthClient->getReadyState() == WebSocketReadyState::OPEN){
             wsEthClient->send(WebSocketDataType::TEXT, message, strlen(message));
-            DEBUG_INFO("[ETHSocketSend] <%s>",message);
+            DEBUG_INFO("🌐→→→ %s",message);
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){      
           wsWiFiClient->send(WebSocketDataType::TEXT, message, strlen(message));
-          DEBUG_INFO("[WIFISocketSend] <%s>",message);
+          DEBUG_INFO("🌐→→→ %s",message);
         }
       }      
     }
 
-    virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){
-      DEBUG_INFO("%s::clientSocketClose()",id.c_str());      
-      const char reason[]={"application close"};
-      if (media == CABLE_MEDIA){
-        if (wsEthClient != nullptr){
-          wsEthClient->close(code,true,reason,strlen(reason));
+    virtual void clientSocketClose(WebSocketCloseCode code = WebSocketCloseCode::NORMAL_CLOSURE) {
+      DEBUG_INFO("%s::clientSocketClose()", id.c_str());
+      const char reason[] = {"application close"};
+
+      if (media == CABLE_MEDIA) {
+        if (wsEthClient != nullptr) {
+          wsEthClient->close(code, true, reason, strlen(reason));
         }
-      }else{
-        if (wsWiFiClient != nullptr){
-          wsWiFiClient->close(code,true,reason,strlen(reason));
-        }        
+      } else {
+        if (wsWiFiClient != nullptr) {
+          wsWiFiClient->close(code, true, reason, strlen(reason));
+        }
       }
+
+      socketOpenJobState = SOCKET_JOB_IDLE;
     }
     
     
-    virtual WebSocketReadyState clientSocketState(){
-      //DEBUG_PRINT("\nWebSocketReadyState()");
-      if (media == CABLE_MEDIA){
-        if (wsEthClient!= nullptr) return wsEthClient->getReadyState();
-      }else{
-        if (wsWiFiClient!= nullptr) return wsWiFiClient->getReadyState();
+    virtual WebSocketReadyState clientSocketState() {
+      if (socketOpenJobState == SOCKET_JOB_RUNNING) {
+        return WebSocketReadyState::CONNECTING;
       }
-      //DEBUG_PRINT(": CLOSED");
-      return WebSocketReadyState::CLOSED;      
+
+      if (media == CABLE_MEDIA) {
+        if (wsEthClient != nullptr) return wsEthClient->getReadyState();
+      } else {
+        if (wsWiFiClient != nullptr) return wsWiFiClient->getReadyState();
+      }
+
+      return WebSocketReadyState::CLOSED;
     }
 
 
@@ -1340,7 +1505,7 @@ class WiFiEth : public Network{
       WiFi.setSleep(false); // Désactiver le mode veille Wi-Fi
       WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); // Reconfigurer DHCP    */
 
-      DEBUG_INFO("startWifi(%s,%s), wifiEnabled=%d, status: %d, MAC:%s",SSID.c_str(),pwd.c_str(),WiFiEnabled,WiFi.status(),WiFi.macAddress().c_str());                
+      DEBUG_INFO("startWifi(%s,%s), wifiEnabled=%d, status: %s, MAC:%s",SSID.c_str(),pwd.c_str(),WiFiEnabled,wifiStatusToString(WiFi.status()),WiFi.macAddress().c_str());                
       // Hostname avant begin
       //WiFi.setHostname("esp32-client");
       // Pas d’économie d’énergie pendant les tests
@@ -1424,6 +1589,13 @@ class WiFiEth : public Network{
     }
     
     /////////////////////////////////////////////////////////
+    void resetWSstate(){
+      socketOpenJobState = SOCKET_JOB_IDLE;
+      socketOpenTaskHandle = nullptr;
+      pendingHost = "";
+      pendingPath = "";
+      pendingPort = 0;      
+    }
 
 
     bool refresh(bool force=false) {
@@ -1463,9 +1635,6 @@ class WiFiEth : public Network{
                 // save power    
                 disconnectWifi();
                 // we just connected ETH so we do everything related to ETH specialized object instanciation
-                IP = Ethernet.localIP();      
-                subnet = Ethernet.subnetMask();   
-                DEBUG_INFO("Ethernet.begin() => got IP:%s",IP.toString().c_str());  
                 if (client == NULL) client = new EthernetClient();
                 if (server == NULL) server = new EthernetServer(80); // apply patch https://github.com/arduino-libraries/Ethernet/pull/107/files
                 //if (udp == NULL) udp = new EthernetUDP;
@@ -1477,20 +1646,10 @@ class WiFiEth : public Network{
                   wsEthClient->onClose(WiFiEth::socketClientOnCloseStatic);                      
                 }
                 if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<EthernetUDP>(/*APPLE_MIDIETHCLIENT_NAME*/systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);
-
-/*                String midiName = concatStrings(appleMidiClient->getName(), "._", MDNS_ANNOUNCED_APPLEMIDI_SERVICE);
-                String httpName = concatStrings(appleMidiClient->getName(), "._http");
-                if (EthernetBonjour.begin(systemCfg.getString(S_AP_NAME)->c_str())){
-                  EthernetBonjour.addServiceRecord(midiName.c_str(), appleMidiClient->getPort(),MDNSServiceUDP);
-                  EthernetBonjour.addServiceRecord(httpName.c_str(), 80, MDNSServiceTCP);
-                }else{
-                  DEBUG_PRINT("\nEthernetBonjour registration <%s> failed", systemCfg.getString(S_AP_NAME)->c_str());
-                }   
-*/
                 state = CONNECTED;
                 media = CABLE_MEDIA;                
                 DEBUG_INFO("\t...all Eth object instantiated\n");                  
-                iFconnectivityIcon = ICON_ETH;
+                networkConnectivityIcon = ICON_ETH;
                 xSemaphoreGive(networkBusy);
               }else{
                 DEBUG_WARN("ETH CONNECT: networkBusy\n"); 
@@ -1533,8 +1692,6 @@ class WiFiEth : public Network{
           }else{
             // we just connected WIFI_MEDIA so we do everything related to WIFI_MEDIA specialized object instanciation
             if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){
-              IP = WiFi.localIP();
-              subnet = WiFi.subnetMask();
               DEBUG_PRINT("\t => got IP:%s",IP.toString().c_str()); 
               //if (debug) DEBUG_PRINT("\nWifi.begin() => got IP: %s, %idb",IP.toString().c_str(),WiFi.RSSI());
               if (client == NULL) client = new WiFiClient();
@@ -1550,14 +1707,7 @@ class WiFiEth : public Network{
                 wsWiFiClient->onError(WiFiEth::socketClientOnErrorCallbackStatic);
                 wsWiFiClient->onClose(WiFiEth::socketClientOnCloseStatic);                  
               }
-              if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);                     
-              
-/*              if (MDNS.begin(systemCfg.getString(S_AP_NAME)->c_str())){
-                MDNS.addService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp", appleMidiClient->getPort());
-                MDNS.addService("http", "tcp", 80);                                
-              }else{
-                DEBUG_PRINT("\nMDNS registration <%s> failed",appleMidiClient->getName());
-              }*/
+              if (appleMidiClient == nullptr) appleMidiClient = new AppleMidiWithInterfaceWrapper<WiFiUDP>(systemCfg.getString(S_AP_NAME)->c_str(),APPLE_MIDI_PORT);                                 
               state = CONNECTED;
               media = WIFI_MEDIA;
               DEBUG_PRINT("\t...all WiFi object instantiated\n");                                
@@ -1565,7 +1715,6 @@ class WiFiEth : public Network{
             }else{
               DEBUG_WARN("WIFI CONNECT: networkBusy"); 
             }
-
           }
         }
       }else if (state == CONNECTED) {
@@ -1589,7 +1738,6 @@ class WiFiEth : public Network{
             if (cable == LinkON){
               // do whatever is required when we are connected by cable
               if (wsEthClient != nullptr) wsEthClient->listen();
-              //EthernetBonjour.run();
             }else{
               state = DISCONNECTED; 
               media = NO_MEDIA;
@@ -1600,10 +1748,10 @@ class WiFiEth : public Network{
               // this code is executed in loop
               int8_t signalStrength = abs(WiFi.RSSI());
 
-              if (signalStrength >=90) iFconnectivityIcon = ICON_WIFI_STRENGTH_0;
-              else if (signalStrength >=75) iFconnectivityIcon = ICON_WIFI_STRENGTH_1;
-              else if (signalStrength >=45) iFconnectivityIcon = ICON_WIFI_STRENGTH_2;
-              else iFconnectivityIcon = ICON_WIFI_STRENGTH_3;                
+              if (signalStrength >=90) networkConnectivityIcon = ICON_WIFI_STRENGTH_0;
+              else if (signalStrength >=75) networkConnectivityIcon = ICON_WIFI_STRENGTH_1;
+              else if (signalStrength >=45) networkConnectivityIcon = ICON_WIFI_STRENGTH_2;
+              else networkConnectivityIcon = ICON_WIFI_STRENGTH_3;                
 
               //ArduinoOTA.handle();     
               if (wsWiFiClient != nullptr) wsWiFiClient->listen();
@@ -1632,17 +1780,19 @@ class WiFiEth : public Network{
           // reset the progress indicator
           networkConnectAttemptProgress = -1;
           // initialiser of common object to both Wifi and Ethernet goes here      
+          getIP();
+          DEBUG_INFO(" => got IP:%s",getIP().c_str());                                
 
           if (media == WIFI_MEDIA){
             SSID = WiFi.SSID();
-            gateway = WiFi.gatewayIP();
             lastConnectedSSID = SSID;
             //DEBUG_PRINT("\n         + - + - saving lastConnectedSSID=SSID=%s",lastConnectedSSID.c_str());                          
             unpauseWiFi();       
           }else{
             // ETHERNET        
-            gateway = Ethernet.gatewayIP();                                      
+                                     
            }
+
           lastActiveMedia = media;
           checkInternet();
           DEBUG_INFO("+-------------------+");
@@ -1666,8 +1816,8 @@ class WiFiEth : public Network{
             //if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
             if (client != NULL){client->stop(); delete client; client = NULL;} 
             if (server != NULL){delete server; server  = NULL;} 
-            if (wsWiFiClient != nullptr){delete wsWiFiClient; wsWiFiClient = nullptr;}
-            if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr;}
+            if (wsWiFiClient != nullptr){delete wsWiFiClient; wsWiFiClient = nullptr; resetWSstate();}
+            if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr; resetWSstate();}
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
             
             // specific destruction to WIFI or ETH
@@ -1680,8 +1830,8 @@ class WiFiEth : public Network{
             }*/
 
             lastActiveMedia = NO_MEDIA;
-            if (!ethEnabled) iFconnectivityIcon = ICON_WIFI_STRENGTH_3;
-            else iFconnectivityIcon = ICON_MIXETHWIFI; 
+            if (!ethEnabled) networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
+            else networkConnectivityIcon = ICON_MIXETHWIFI; 
             DEBUG_INFO("+----------------------------+");           
             DEBUG_INFO(" ALL NETWORK OBJECTED CLEANED");
             DEBUG_INFO("+----------------------------+");
@@ -1701,8 +1851,20 @@ class WiFiEth : public Network{
         fireEvent(evtNet);    
 
       }
-
       return refreshed;
+    }
+
+    String getIP() override{
+      if (media == CABLE_MEDIA){
+        IP = Ethernet.localIP();      
+        subnet = Ethernet.subnetMask();    
+        gateway = Ethernet.gatewayIP();
+      }else{
+        IP = WiFi.localIP();
+        subnet = WiFi.subnetMask();
+        gateway = WiFi.gatewayIP();      
+      }
+      return IP.toString();
     }
 
     void onInternetPing(TargetEcho* echo) {
@@ -1864,12 +2026,53 @@ class WiFiEth : public Network{
   private:
     byte ethMac[6] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
     //bool _newWifiAttempt = false;    // set to false to allow ether connection first to start
-    int mixerPort = 10023;
-    IPAddress mixerIP={192,168,0,255};
     bool  webAppOn = false;
     unsigned long lastWiFiAttempt = 0, lastEthAttempt = 0;
     uint8_t rstPin;
     static WiFiEth* instance ;
+
+    /* 
+      THREAD MANAGING SOCKET CONNECTION
+    */
+    static void socketOpenTaskEntry(void *param) {
+      WiFiEth *self = static_cast<WiFiEth*>(param);
+      if (self) {
+        self->socketOpenTask();
+      }
+      vTaskDelete(nullptr);
+    }
+
+    void socketOpenTask() {
+      DEBUG_INFO("%s::socketOpenTask()", id.c_str());
+
+      bool success = false;
+
+      if (media == CABLE_MEDIA) {
+        if (wsEthClient != nullptr) {
+          success = wsEthClient->open(
+            pendingHost.c_str(),
+            pendingPort,
+            pendingPath.c_str()
+          );
+        }
+      } else {
+        if (wsWiFiClient != nullptr) {
+          success = wsWiFiClient->open(
+            pendingHost.c_str(),
+            pendingPort,
+            pendingPath.c_str()
+          );
+        }
+      }
+
+      if (!success) {
+        socketOpenJobState = SOCKET_JOB_FAILED;
+      } else {
+        socketOpenJobState = SOCKET_JOB_IDLE;
+      }
+
+      socketOpenTaskHandle = nullptr;
+    }
 };
 
 WiFiEth* WiFiEth::instance = nullptr;
@@ -1902,6 +2105,7 @@ class  NoNetwork: public Network{
     virtual UdpSlot* stopUDPslot(int i){return nullptr;}
     virtual void stopAllUDP(){}
     virtual void releaseUDPSlot(int* i){}
+    virtual String getIP() override{return "";}
 
 };
 
@@ -1977,9 +2181,14 @@ class AccessPoint : public Network{
       //setWifiPower();      
 
 
-     IP = WiFi.softAPIP();
+      getIP();
       WiFi.enableLongRange(true);
       DEBUG_INFO("AccessPoint.init (%s) %s",SSID.c_str(),IP.toString().c_str());        
+    }
+
+    String getIP(){
+      IP = WiFi.softAPIP();
+      return IP.toString();
     }
 
     bool refresh(bool force=false) {      

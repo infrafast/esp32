@@ -227,8 +227,8 @@ class StripHeaderWidget: public Top2Toggles{
       setPointers(
         strip->getTopLabel(),
         strip->getBottomLabel(),
-        &strip->toggle1,
-        &strip->toggle2,
+        strip->toggle1,
+        strip->toggle2,
         &strip->frontColor,
         &strip->backColor
       );
@@ -338,7 +338,7 @@ class Shortcuts: public DataProvider{
 
 ///////////////////// MAIN APPLICATION CLASS ////////////////////////
 
-class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, EventListener{
+class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, public EventListener{
   //
   public:
   #define maxConcurrentClients 3
@@ -360,43 +360,53 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     //LinkedList<IntervalBank*> banks = LinkedList<IntervalBank*>();
     std::vector<IntervalBank*> banks; // Vecteur de strips
 
-    ///////////////////// OVERLAY ICONS ////////////////////////
-    String apIcon;
-    uint16_t iFconnectivityIconColorIdle = TFT_RED, apIconColor = TFT_RED, batIconColor = TFT_GREEN, leftIconColor = GUI::menuActiveIconColor, blinkColorBlue = TFT_BLUE;
+    StripHeaderWidget* stripHeader = nullptr;
 
-    String batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3};
-    String batIcon = ICON_WAIT; // by default we display a timeelapser while battery level is undetermined
+    ///////////////////// OVERLAY ICONS ////////////////////////
+
+    String apIcon,
+          interfaceIcon = ICON_FORBID,
+          batIcon = ICON_WAIT, 
+          iconReset = ICON_RESET,
+          iconForbid = ICON_FORBID,
+          powerIcon = ICON_POWER,
+          iconX = "X",
+          footSwitchIcon = ICON_FOOTSWITCH,
+          intervalIcon = ICON_INTERVAL,
+          batteryIcons[BAT_MAX_LEVEL]={ICON_BAT_LEVEL_0,ICON_BAT_LEVEL_1,ICON_BAT_LEVEL_2,ICON_BAT_LEVEL_3},          
+          brightIcon = ICON_BRIGHTNESS,
+          bigLeftIcon,
+          bigRightIcon;        
+
+    uint16_t networkConnectivityIconColorIdle = TFT_RED, 
+            apIconColor = TFT_RED, 
+            batIconColor = TFT_GREEN, 
+            bigLeftIconColor = GUI::menuActiveIconColor, 
+            blinkColorBlue = TFT_BLUE,
+            rainbowC,
+            interfaceIconColor = TFT_GREY;
+                
     String* byeIcon = &iconForbid; const uint16_t* byeIconColor = &GUI::defaultFcolor;
-    String iconReset = ICON_RESET;
-    String iconForbid = ICON_FORBID;
-    String powerIcon = ICON_POWER;
-    String iconX = "X";
-    String footSwitchIcon = ICON_FOOTSWITCH;
-    String intervalIcon = ICON_INTERVAL;
+
+    float interfaceIconBrightness = GUI::systemBrightness;      // used to blink icon when dataProcessed
 
     String utilsBlinkLabel = "", utilsBlinkIcon = "";
 
-    AlteredColor iFconnectivityIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
+    AlteredColor networkConnectivityIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &networkConnectivityIconColorIdle};
     AlteredColor apIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor configIconGlowingRedColor = AlteredColor{.baseColor = GUI::red, .value =  &GUI::unUsedColor};
     AlteredColor blinkColor = AlteredColor{.baseColor = GUI::blue, .value =  &GUI::unUsedColor};
-
-    int16_t overlayIconY = TFT_HEIGHT-OVERLAY_ICON_SIZE, apIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE*2;
-    int16_t batIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE;
-
-    float pendingBarWidth = TFT_WIDTH;
-
-    uint16_t rainbowC;
     AlteredColor rainbowColor = AlteredColor{.baseColor = TFT_WHITE, .value = &rainbowC};
 
-    String leftIcon,rightIcon, brightIcon = ICON_BRIGHTNESS;
+    int16_t overlayIconY = TFT_HEIGHT-OVERLAY_ICON_SIZE, 
+            apIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE*2,
+            batIconPosX = TFT_WIDTH-OVERLAY_ICON_SIZE,
+            iconRow2 = OVERLAY_ICON_SIZE,
+            rightScreen = TFT_WIDTH;
 
-    bool disabledBankRendering = false;   // this is to stop rendering the bank
-
-    //Strip* getSelectedStrip() = nullptr;
-    StripHeaderWidget* stripHeader = nullptr;
-
-    int16_t rightScreen = TFT_WIDTH;
+    float pendingBarWidth = TFT_WIDTH;
+   
+    bool disabledBankRendering = false;   // this is to stop rendering the bank  
 
     ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
 
@@ -418,7 +428,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     uint16_t menuActiveIconColor;
 
     #define TWOFRAMEICON 2
-    String iconRolling[TWOFRAMEICON] = {ICON_ROLLING1,ICON_ROLLING2};
     String iconPending[TWOFRAMEICON];
 
     const char* quitMenuString ={ICON_QUIT":QUIT"};
@@ -642,22 +651,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    void rollingIcon(bool on){
-      if (on){
-        iconRolling[0]=ICON_ROLLING1;
-        iconRolling[1]=ICON_ROLLING2;
-      }else{
-        iconRolling[0]=" ";
-        iconRolling[1]=" ";
-      }
-    }
-
-    void setiFconnectivityColor(){
+    void setNetworkConnectivityColor(){
       if (hwm->network->state == CONNECTED){
-        iFconnectivityIconGlowingRedColor.value = &GUI::unUsedColor;
-        iFconnectivityIconColorIdle = GUI::green;
+        networkConnectivityIconGlowingRedColor.value = &GUI::unUsedColor;
+        networkConnectivityIconColorIdle = GUI::green;
       }else{
-        iFconnectivityIconGlowingRedColor.value = &iFconnectivityIconColorIdle;
+        networkConnectivityIconGlowingRedColor.value = &networkConnectivityIconColorIdle;
       }
     }
 
@@ -730,7 +729,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       LittleFS.remove(SYSTEM_FILE_NAME);
       hwm->persistants.clear();
       hwm->persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);
-      hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);    //default brightness
+      hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::systemBrightness);    //default brightness
     }
 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
@@ -748,9 +747,19 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         ftp.begin();
       #endif
 
-      Event::disableEventDump(EVENT_ANALOG_BUTTON);
+      Event::disableAllEventDumps();
+      /*Event::disableEventDump(EVENT_ANALOG_BUTTON);
       Event::disableEventDump(EVENT_DIGITAL_BUTTON);
       Event::disableEventDump(EVENT_BATTERY_REFRESHED);
+      Event::disableEventDump(EVENT_NETWORK_CONNECTED);
+      Event::disableEventDump(EVENT_NETWORK_CONNECTION_CHANGED);
+      Event::disableEventDump(EVENT_NETWORK_DISCONNECTED);*/      
+      //Event::enableEventDump(EVENT_SOCKET_ERROR);
+      //Event::enableEventDump(EVENT_SOCKET_CLOSE);
+      //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
+      //Event::enableEventDump(EVENT_WEBAPP_STARTED);
+      //Event::enableEventDump(EVENT_BATTERY_REFRESHED);
+      //Event::enableEventDump(EVENT_INTERFACE_MESSAGE);      
 
       // *********************************
       // SKELETONS & DATA SETS
@@ -793,7 +802,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       threePinDMXInterface = new ThreePinDMXInterface(true);
       // RTPMIDI
       appleMIDIInterface = new AppleMIDIInterface(true);
-      webAppService = &gWebApplicationService;
+      // WEB APP
+      webAppService = new WebApplicationService(false);    // internal web app lifecycle service
       webAppService->setWebServerHandler(commonFileServerWrapper);
       webAppService->setWebSocketHandler(socketConnectionCallback);
 
@@ -849,9 +859,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       #endif
 
 
-      GUI::screenBrightness = hwm->persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
-      if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
-      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;
+      GUI::systemBrightness = hwm->persistants.getFloat(PERSISTANT_BRIGHTNESS,DEFAULT_BRIGHTNESS);
+      if (GUI::systemBrightness < BRIGHTNESS_MIN) GUI::systemBrightness = BRIGHTNESS_MIN;
+      if (GUI::systemBrightness > BRIGHTNESS_MAX) GUI::systemBrightness = BRIGHTNESS_MAX;
 
       gui->init();
 
@@ -865,6 +875,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
       hwm->onOff.registerEventListener(this);           // ApplicationManager listen to onOff button event
       hwm->network->registerEventListener(this);        // ApplicationManager listen to network event
+
+      hwm->battery.registerEventListener(this);         // ApplicationManager listen to battery state
 
       ////////////////////////////////////////////////////////////////////////
       // DESIGN MENU
@@ -904,7 +916,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       blinkColor.value = &blinkColorBlue;
       gui->alphaColors.add(&blinkColor);
-      gui->alphaColors.add(&iFconnectivityIconGlowingRedColor);
+      gui->alphaColors.add(&networkConnectivityIconGlowingRedColor);
       gui->alphaColors.add(&apIconGlowingRedColor);
       gui->alphaColors.add(&configIconGlowingRedColor);
 
@@ -976,11 +988,17 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       // unsused interfaces are the one which are not referred by any instanciated strips
       for (const auto& interface : interfaceRepo.interfaces){
         if (interface->countRegisteredListeners()==0 && interface->hasStrip){ // only for interfaces that are exposed => means they can be configured by user
-          DEBUG_INFO("%s has no strip : DISABLED",interface->interfaceName.c_str());
+          DEBUG_INFO("%s has no strip : 🚫DISABLED",interface->interfaceName.c_str());
           //interface->switchDevice(false);  // BE CAREFULL
           interface->state.enabled = false;
         }
       }
+    }
+
+    void webAppToRefreshBanks(){
+      // the banks have to be send by POST http and not socket, hence we just tells the application:
+      // now you need to request the banks to be send you back by placing a postQuery
+      broadCast("{\"reloadBanks\":\"\"}");
     }
 
     // *********************************
@@ -994,11 +1012,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           stopInterfaces();
         break;
         case EVENT_NETWORK_CONNECTED:
-          // discover RTP services available on the network
-          //startDirectoryServiceDiscovery();
           // inform all that network has changed (it could be the network cable pluged/unplug while in AP)
           if (webAppConnected) broadCast(parseJsonInput("{\"command\":\"retrieve\",\"param\":\"connectivity\"}"));  // inform webclient               could be done via ws.send as well
-          // network has refreshed so we shift to appropriate configMedia
+          
           if (hwm->network->media == WIFI_MEDIA){
             //we set last used Wifi SSID (id) and save config, hence keep WIFI_MEDIA credential
             //DEBUG_PRINT("\n------> SAVING SSID");
@@ -1010,14 +1026,16 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             "ssid3": "pass3"
             */
           }
+
           if (!webAppConnected){
             // there is no connection to any application, therefore, we prefer to use the network as the one to configure the application
             //if (debug) DEBUG_PRINT("\n\tsetting the configMedia to WiFiEth");
             hwm->configMedia = hwm->network;    // since the normal network gets reconnected,
           }
+
         break;
         case EVENT_NETWORK_CONNECTION_CHANGED:
-          setiFconnectivityColor();
+          setNetworkConnectivityColor();
           setAPIcon();
         break;
         case EVENT_ANALOG_BUTTON:
@@ -1056,6 +1074,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         break;
         case BUTTON_SIMPLE_CLIC:
           simpleClicCallBack(btData->buttonId,btData->time);
+        break;
+        case BUTTON_ENTER_HOLD:
+          enterHoldCallback(btData->buttonId,btData->time);
         break;
       }
     }
@@ -1383,6 +1404,30 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
+    void enterHoldCallback(uint8_t buttonID, unsigned long time){
+      switch(screen.id){
+        case SCREEN_STARTUP:
+
+        break;
+        case SCREEN_WIZARD:
+
+        break;
+        case SCREEN_MENU:
+
+        break;
+        case SCREEN_PROMPT:
+
+        break;
+        case SCREEN_UTILS:
+
+        break;
+        case SCREEN_BANK:
+          moduleEnterholdClic(buttonID, time);
+        break;
+      }
+    }
+
+
   //////////////////////////////////////////////////////////////
   ////                BUTTONS CALLBACKS UTILITIES        ///////
   //////////////////////////////////////////////////////////////
@@ -1400,7 +1445,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
   void saveBrightness(){
     triggerRedraw();
-    hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::screenBrightness);
+    hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::systemBrightness);
   }
 
   void handleClicBrightnessButton(uint8_t buttonID){
@@ -1416,11 +1461,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
   void changeBrightness(uint8_t buttonID, float increment){
     if (buttonID == hwm->buttons[LEFTB]->getID()){
-      if (GUI::screenBrightness > BRIGHTNESS_MIN) GUI::screenBrightness -= increment;
-      if (GUI::screenBrightness < BRIGHTNESS_MIN) GUI::screenBrightness = BRIGHTNESS_MIN;
+      if (GUI::systemBrightness > BRIGHTNESS_MIN) GUI::systemBrightness -= increment;
+      if (GUI::systemBrightness < BRIGHTNESS_MIN) GUI::systemBrightness = BRIGHTNESS_MIN;
     }else if (buttonID == hwm->buttons[RIGHTB]->getID()){
-      if (GUI::screenBrightness < BRIGHTNESS_MAX) GUI::screenBrightness += increment;
-      if (GUI::screenBrightness > BRIGHTNESS_MAX) GUI::screenBrightness = BRIGHTNESS_MAX;
+      if (GUI::systemBrightness < BRIGHTNESS_MAX) GUI::systemBrightness += increment;
+      if (GUI::systemBrightness > BRIGHTNESS_MAX) GUI::systemBrightness = BRIGHTNESS_MAX;
     }
   }
 
@@ -1466,6 +1511,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // at the moment, this is hard coded
     stripChangeValue(buttonID, time, BUTTON_HOLD);
   }
+
+  void moduleEnterholdClic(uint8_t buttonID, unsigned long time){
+    // perform the behaviour defined in the config file
+    // at the moment, this is hard coded
+    stripEnterHold(buttonID, time, BUTTON_HOLD);
+  }
+
 
   void moduleReleaseClic(uint8_t buttonID, unsigned long time){
     stripReleaseHold(buttonID, time, BUTTON_HOLD);
@@ -1669,6 +1721,7 @@ void setup() {
       return String(item).substring(2);
     }
 
+    std::vector<String> countryList;
     void buildLangMenu(){
       if (langMenu != nullptr) delete langMenu;
       langMenu = new Menu(langMenuString,menu_selected);
@@ -1677,7 +1730,7 @@ void setup() {
 
       // populate the menu with all language found
       for(int i = 0; i < countryList.size(); i++){
-        const char* countryIconAndName = countryList.get(i)->c_str();
+        const char* countryIconAndName = countryList[i].c_str();
         langMenu->add_item(new MenuItem(countryIconAndName, loadLangFromMenu_item_selected));
         if (debug){
           //DEBUG_PRINT("\nadded menu entry: %s",countryList.get(i)->c_str());
@@ -1728,9 +1781,9 @@ void setup() {
     // MANAGE WEB APPLICATION
     //
     //------------------
-    void handleWeb(){
+    /*void handleWeb(){
       if (webAppService != nullptr) webAppService->handleWeb();
-    }
+    }*/
 
     void jumpToMenu(const char* menuTitle){
       // we branch to the lang menu
@@ -1830,32 +1883,29 @@ void setup() {
       //
       // MANAGE INTERFACE
       //
-      //------------------
-      bool interfaceChangedState = false;
+      //------------------      
 
       for (const auto& interface : interfaceRepo.interfaces){
+        
+        bool dataProcessed = interface->update();      // return value drive the icon to indicate data being processed        
 
-        #ifdef PROD
-        if (interface->stripCount == 0){
-          //continue;
-          // // optimization  WARNING: to activate that you need to implement the feature of greying out the interface panel as they will not
-          // be updated unless a strip is dropped in a bank
+        Strip* currentStrip = getSelectedStrip();
+        if (currentStrip != nullptr && currentStrip->interface == interface){               // the interface that has just been updated is the one used by the focused strip
+          interfaceIconColor = QoStoColor(interface->state.QoSlevel);                                   // set color to interface QoS color
+          interfaceIconBrightness = dataProcessed?GUI::systemBrightness*0.3f:GUI::systemBrightness;                  // and blink the icon upon data receive
         }
-        #endif
-
-        //DEBUG_PRINT("\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t%s...",interface->interfaceName.c_str());
-
-        interface->update();
+        
         if (interface->state.broadcastState){
           broadCast(concatStrings("{\"deviceState\":", interface->serializeState(), "}")); // inform web interface
           interface->state.broadcastState = false; // acknowledged
         }
+        
         if (interface->state.broadcastConfig){
           broadcastIFconfig(interface);
           interface->state.broadcastConfig = false; // acknowledged
         }
-      }
 
+      }
 
       processBroadcastQueue();
 
@@ -1931,10 +1981,10 @@ void setup() {
               }
             break;
             case STATE_UTILS_CONNECTWEBAPP:
-              if (hwm->configMedia->refreshed){
+              if (hwm->configMedia->refreshed ){
                 handleConfigConnection();
               }
-              if (webAppConnected == true){ // when web app connect we go back to normal screen
+              if (webAppConnected == true || !webAppService->state.enabled){ // when web app connect we go back to normal screen
                 restoreScreen();    // go back to caller. can be from bank/menu or wizard
               }
             break;
@@ -2221,6 +2271,7 @@ void setup() {
 
     void commonFileServer(Request &req, Response &res) {
       if (hwm->network->media == CABLE_MEDIA) hwm->network->stopAllUDP();   // because of limited IP sockets in ethernet
+      if (webAppService != nullptr) webAppService->reportActivity();
       String path = req.path();
 
       // --- POST: endpoints spéciaux ---
@@ -2656,10 +2707,12 @@ void setup() {
       targetStrip->focus(true);
 
       // drop command to query strip state
-      targetStrip->queryInterface();
+      //targetStrip->queryConfig();    inside focus()
 
       //DEBUG_PRINT("\n==> %s %p" ,targetBank->name.c_str(),targetStrip);
       if (stripHeader != nullptr) stripHeader->strip = targetStrip;
+
+      interfaceIcon = *targetStrip->interface->getIcon();      
 
       // Force screen redraw if we changed the window or the bank OR if we are displaying full size strip
       if (
@@ -2742,12 +2795,17 @@ void setup() {
 
     }
 
+    void stripEnterHold(uint8_t direction, unsigned long time, uint8_t trigger){
+      DEBUG_WARN("\n\n\n                 ENTER HOLD STRIP              \n\n\n");
+    }
+
     void stripReleaseHold(uint8_t direction, unsigned long time, uint8_t trigger){
+      DEBUG_WARN("\n\n\n                 RELEASE HOLD STRIP              \n\n\n");   
       IntervalBank* bank = banks[screen.state];
       if (bank != nullptr){
         Strip* strip = bank->getStrip(bank->selector);
         if (strip != nullptr) return strip->onButtonReleased();
-      }
+      }         
     }
 
 
@@ -2840,6 +2898,8 @@ void setup() {
         }else if(param == "fullConfig"){
           jsonAnswer.callback = bulkconfig;
           serialize(&jsonAnswer.value);
+        }else if(param == "banks"){
+          refreshBanksResponse();
         }
       }else if (command == "set"){
         //{"command":"set","param":{"section":"system","id":"pushDelay","value":"3"}}
@@ -3149,36 +3209,20 @@ void setup() {
 
         //write the data with compression
         if (writeBufferToGzFile(concatStrings(WEBAPP_PATH, "/", fileName, ".gz"), entries.c_str()) != 0){
-
+          bool success;
           // reload the datasets
           if (fileName == SYSEXLIB_FILENAME){
-            if (!dsSysexMessages->reload()){
-              jsonAnswer.callback=RET_POPUP;
-              jsonAnswer.value = "Data reload error";
-            }else{
-              // then resend the banks with updated datasets
-
-              JsonDocument doc;
-
-              /*JsonArray ds = doc[stripdatasets].to<JsonArray>();
-              dataRepo.serialize(&ds); */
-              JsonObject ds = doc.createNestedObject(stripdatasets);
-              dataRepo.serialize(ds);
-
-
-              String banksString = serializeBanks();
-              doc["banks"]=banksString;
-
-              //{bulkConfig:{$datasets,$banks}}';
-              jsonAnswer.callback = bulkconfig;
-
-              serializeJson(doc, jsonAnswer.value);
-              removeJsonQuote(&jsonAnswer.value);
-
-            }
+            success = dsSysexMessages->reload();
+          }else if (fileName == OSCLIB_FILENAME){
+            success = dsOSCMessages->reload();
           }
-          //do the same for osc messages here
-
+          if (!success){
+            jsonAnswer.callback=RET_POPUP;
+            jsonAnswer.value = "Data reload error";
+          }else{
+            // then resend the banks with updated datasets
+            refreshBanksResponse();
+          }
         }else{
           jsonAnswer.callback=RET_COMMANDERROR;
           jsonAnswer.value = "File Error";
@@ -3215,6 +3259,26 @@ void setup() {
       return jsonString;
 
     }
+    
+    void refreshBanksResponse(){
+      JsonDocument doc;
+
+      /*JsonArray ds = doc[stripdatasets].to<JsonArray>();
+      dataRepo.serialize(&ds); */
+      JsonObject ds = doc.createNestedObject(stripdatasets);
+      dataRepo.serialize(ds);
+
+
+      String banksString = serializeBanks();
+      doc["banks"]=banksString;
+
+      //{bulkConfig:{$datasets,$banks}}';
+      jsonAnswer.callback = bulkconfig;
+
+      serializeJson(doc, jsonAnswer.value);
+      removeJsonQuote(&jsonAnswer.value);      
+    }
+
 
     bool writeStringtoFile(const String &filename, String& entries) {
       File file = LittleFS.open(filename, "w");
@@ -3416,7 +3480,8 @@ void setup() {
 
     ScreenUnion oldScreen;
 
-    LinkedList<String*> countryList = LinkedList<String*>();
+    //LinkedList<String*> countryList = LinkedList<String*>();
+
     //LinkedList<String*> webGZFiles = LinkedList<String*>();
     //LinkedList<String*> webFiles = LinkedList<String*>();
 
@@ -3454,34 +3519,6 @@ void setup() {
 
       jsonOutput.shrinkToFit();
       broadCast(jsonString);
-    }
-
-    void populateFileList(String extension, String folder, LinkedList<String*> *list, String prefix="", bool withExtension=true) {
-      //we first clean all items from the list
-
-      while (list->size()>0){
-        String* s = list->shift();
-        delete(s);
-      }
-
-      File root = LittleFS.open(folder);
-      //DEBUG_PRINT("\n\nListing: .%s in %S",extension.c_str(),folder.c_str());
-      File file = root.openNextFile();
-      while (file){
-        if (!file.isDirectory()){
-          String fullFileName = file.name();
-          if (fullFileName.endsWith(extension) || extension == "*") {
-            String* filename = new String(prefix);
-            // if we don't want the extension, we remmove it
-            if (!withExtension) *filename += fullFileName.substring(0, fullFileName.lastIndexOf('.'));
-            else *filename += fullFileName; // k is the icon ID
-            list->add(filename);
-            //DEBUG_PRINT("\n\t %s",filename->c_str());
-          }
-        }
-        file = root.openNextFile();
-        yield();
-      }
     }
 
     MenuItem* back_menu_item;
