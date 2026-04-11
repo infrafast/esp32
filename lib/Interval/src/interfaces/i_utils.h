@@ -406,6 +406,10 @@ class WebApplicationService: public NetworkDevice{
       webSocketHandler = callback;
     }
 
+    void requestDisable(){
+      pendingDisable = true;
+    }
+
     void handleWeb(){
       Network* configMedia = hwm.configMedia;
 
@@ -426,6 +430,11 @@ class WebApplicationService: public NetworkDevice{
           }
         }
         if (wss != nullptr) wss->listen();
+      }
+
+      if (pendingDisable){
+        pendingDisable = false;
+        switchDevice(false);
       }
     }
 
@@ -481,6 +490,7 @@ class WebApplicationService: public NetworkDevice{
   protected:
     WebServerHandler webServerHandler = nullptr;
     WebSocketHandler webSocketHandler = nullptr;
+    bool pendingDisable = false;
 
     char hdrContentType[120];
     char hdrContentLength[20];
