@@ -300,6 +300,7 @@ class Widget : public GUI{
       refreshed = force;
 
       if (x == nullptr || y == nullptr || fColor == nullptr || bColor == nullptr || brightness == nullptr) {
+        refreshed = false;
         return refreshed;
       }
 
