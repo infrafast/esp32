@@ -407,6 +407,7 @@ class WebApplicationService: public NetworkDevice{
     }
 
     void requestDisable(){
+      if (disableInProgress || !state.enabled) return;
       pendingDisable = true;
     }
 
@@ -491,15 +492,18 @@ class WebApplicationService: public NetworkDevice{
     WebServerHandler webServerHandler = nullptr;
     WebSocketHandler webSocketHandler = nullptr;
     bool pendingDisable = false;
+    bool disableInProgress = false;
 
     char hdrContentType[120];
     char hdrContentLength[20];
 
     void shutdownWSS(){
       if (wss != nullptr){
+        disableInProgress = true;
         wss->shutdown();
         delete wss;
         wss = nullptr;
+        disableInProgress = false;
       }
     }
 };
