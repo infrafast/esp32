@@ -406,7 +406,9 @@ class WebApplicationService: public NetworkDevice{
       webSocketHandler = callback;
     }
 
-    void requestDisable(){
+    // Queue a disable request so shutdown happens after the websocket
+    // event loop returns to ApplicationManager::handleWeb().
+    void requestDeferredDisable(){
       pendingDisable = true;
     }
 
