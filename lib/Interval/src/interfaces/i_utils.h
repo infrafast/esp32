@@ -408,6 +408,10 @@ class WebApplicationService: public NetworkDevice{
       return true;
     }
 
+    virtual void setStatePending(const char* led = "green medium", const char* details = lang.getString("Scanning network")->c_str()){
+      setStateConnected();  // web interface when pending is in fact connected...
+    }
+
     virtual bool save() override{
       DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str());
       return true;

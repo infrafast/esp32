@@ -574,7 +574,7 @@ class NetWorkService{
         // - will set locked state or attempt handleConnectService()
         iface->enable();
 
-        if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) break;
+        if (enabledServicesWeightSum > SERVICES_WEIGHT_LIMIT) break;
       }
     }
 
@@ -603,6 +603,8 @@ class NetWorkService{
         if (hwm.network->state == CONNECTED){
           if (!handleConnectService()){
             setStateDisconnected();
+          }else{
+            deviceInterface->setStatePending();
           }
         }else{
           DEBUG_INFO("%s::Network down, skipped handleConnectService()",
@@ -648,7 +650,7 @@ class NetWorkService{
     }
 
 
-    virtual void setStateLocked(const char* led = "orange",const char* details = lang.getString("Reached maximum device capacity. Disable other network device(s) to enable this one.")->c_str()){
+    virtual void setStateLocked(const char* led = "orange",const char* details = lang.getString("Reached maximum capacity. Disable other network device(s) to enable this one.")->c_str()){
       DEBUG_INFO("%s::setStateLocked()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_LOCKED;
