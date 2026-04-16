@@ -288,7 +288,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
               connectAttemptCount++;
               dataProcessed = true;
             } else {
-              handleConnectService();
+              if (handleConnectService()){
+                setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
+                destination.lastRxTime = 0;                               // with the valid UDP we just got so we force ping to be triggered immediately                
+              }else{
+                setStateError("Can't connect (UDP failed)");
+              }
             }
           }
         }
@@ -405,8 +410,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       if (udpID == -1) return false;                            // can't get any UDP connectivity => try again until next queryTime expired
       
       DEBUG_INFO("udp(%i) got UDP slot #%i",localPort,udpID);      
-      setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
-      destination.lastRxTime = 0;                             // with the valid UDP we just got so we force ping to be triggered immediately
       return true;
     }
 

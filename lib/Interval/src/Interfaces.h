@@ -323,7 +323,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     virtual void setStatePending(const char* led = "green medium", const char* details = lang.getString("Scanning network")->c_str()){
-      DEBUG_INFO("%s:setStatePending()◐",interfaceName.c_str());      
+      DEBUG_INFO("%s:setStatePending(%s)◐",interfaceName.c_str(),details);      
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
       state.details = details;
@@ -333,7 +333,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     virtual void setStateDisconnected(const char* details=""){
-      DEBUG_INFO("%s:setStateDisconnected()🔴",interfaceName.c_str());      
+      DEBUG_INFO("%s:setStateDisconnected(%s)🔴",interfaceName.c_str(),details);      
       state.code = IF_NOT_READY;
       state.label = IF_STATE_DISCONNECTED;
       state.subState = "";
@@ -479,9 +479,9 @@ class NetWorkService{
       enabledServicesWeightSum -= getServiceWeight();
       if (enabledServicesWeightSum < 0) enabledServicesWeightSum = 0;
 
-      DEBUG_INFO("\t%s::releaseCapacity() : %i",
+      DEBUG_INFO("\t💪%s::releaseCapacity() : %i, consummed:%i/%i",
                   deviceInterface ? deviceInterface->interfaceName.c_str() : "<?>",
-                  getServiceWeight());
+                  getServiceWeight(),enabledServicesWeightSum,SERVICES_WEIGHT_LIMIT);
 
       // then we check if any enabled interface currently in LOCKED state can be unlocked
       unlockWaitingEnabledServices();
@@ -506,7 +506,7 @@ class NetWorkService{
       // Refuser si l'ajout dépasserait ou atteindrait la limite
       // (choisis > ou >= selon ta règle exacte)
       if (enabledServicesWeightSum + w >= SERVICES_WEIGHT_LIMIT) {
-        DEBUG_INFO("\tcapacity %i+%i >= %i => LOCKED",
+        DEBUG_INFO("\t💪capacity %i+%i >= %i => LOCKED",
                     enabledServicesWeightSum, w, SERVICES_WEIGHT_LIMIT);
         return true; // limit = true
       }
@@ -514,7 +514,7 @@ class NetWorkService{
       // OK: on réserve
       enabledServicesWeightSum += w;
 
-      DEBUG_INFO("\tRESERVED => %i/%i",
+      DEBUG_INFO("\t💪RESERVED => %i/%i",
                   enabledServicesWeightSum, SERVICES_WEIGHT_LIMIT);
 
       return false; // limit = false
@@ -569,21 +569,22 @@ class NetWorkService{
     DeviceInterface* deviceInterface = nullptr;
 
     void switchNetworkService(bool _enable){      
-      deviceInterface->state.enabled = _enable;
       //DEBUG_PRINT("\nDump before switchNetworkService: %s",hwm.network->dumpW5500Sockets().c_str());
       DEBUG_INFO("(%s)::switchNetworkService(%s)",
                   deviceInterface->interfaceName.c_str(),
                   _enable ? "true" : "false");              
       if(_enable) enable();
       else disable();
+      destination.lastRxTime = 0; // immediate state query
     }
 
     void enable(){
       DEBUG_INFO("%s->enable()", deviceInterface->interfaceName.c_str());
-
+      deviceInterface->state.enabled = true;
       if (reserveCapacity()){
         setStateLocked();
       }else{
+        deviceInterface->state.enabled = true;
         // attempts to enable devices may happen while network is not yet connected
         if (hwm.network->state == CONNECTED){
           if (!handleConnectService()){
@@ -599,8 +600,9 @@ class NetWorkService{
     }
 
     void disable(){
-      DEBUG_INFO("%s->disable()", deviceInterface->interfaceName.c_str());
-      releaseCapacity();
+      DEBUG_INFO("%s->disable()", deviceInterface->interfaceName.c_str());      
+      releaseCapacity();   // we only release if the device was enabled otherwise we may fool the count
+      deviceInterface->state.enabled = false;
       deviceInterface->setStateDisabled();
       handleDisconnectService();
       //DEBUG_INFO("After %s disable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());

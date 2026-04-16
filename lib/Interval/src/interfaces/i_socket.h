@@ -52,7 +52,10 @@ class NetworkSocket: public NetworkDevice{
           ping();
           dataProcessed = true;
         } else {
-          if (handleConnectService()) setStatePending();
+          if (handleConnectService()){
+            destination.lastRxTime = millis();  // wait next round
+            setStatePending("green medium","Searching MixingStation");
+          }
           else setStateError("Thread socket-open failed");
         }
       }  
@@ -64,14 +67,14 @@ class NetworkSocket: public NetworkDevice{
 
     void onEvent(const Event& evt) override {
       NetworkDevice::onEvent(evt);
-     
+      destination.lastRxTime = millis();   // do not query device imemdiately, let time for the state to stabilize
+
       switch(evt.type){
         case EVENT_SOCKET_OPEN:
           // connexion has just been made to NetworkSocket
           //setStateConnected();
           setStatePending();      // the derived class will have to override state
           deviceInterface->state.details = "Querying application";
-          destination.lastRxTime = 0;   // request an immediate /app/state to ping
           onSocketConnected();    
         break;
         case EVENT_SOCKET_CLOSE:{
@@ -91,11 +94,9 @@ class NetworkSocket: public NetworkDevice{
         }
         break;
         case EVENT_SOCKET_ERROR:
-          setStateDisconnected();
+          setStateDisconnected();    
         break;
         case EVENT_SOCKET_MESSAGE:
-          destination.lastRxTime = millis();   // no need to query device        
-
           SocketData* data = (SocketData*)evt.data;
           enqueueSocketMessage(data);
         break;              
