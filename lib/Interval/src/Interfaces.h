@@ -609,6 +609,13 @@ class NetWorkService{
 
       if (!deviceInterface) return false;  
 
+      // Guard against any lock-state drift: a LOCKED interface must never
+      // execute its connected monitor path on its own.
+      if (deviceInterface->state.label == IF_STATE_LOCKED) {
+        serviceLocked = true;
+        return false;
+      }
+
       if (hwm.network->state == DISCONNECTED){
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
         deviceInterface->state.subState = hwm.network->SSID;
