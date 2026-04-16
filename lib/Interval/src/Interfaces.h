@@ -473,11 +473,16 @@ class NetWorkService{
     */
 
     void releaseCapacity(){
-      if (hwm.network->media != CABLE_MEDIA) return;    // only applicable for ethernet
+      if (!capacityReserved){
+        DEBUG_INFO("\t💪%s::releaseCapacity() skipped (not reserved)",
+                    deviceInterface ? deviceInterface->interfaceName.c_str() : "<?>");
+        return;
+      }
 
       // first we release what we consume
       enabledServicesWeightSum -= getServiceWeight();
       if (enabledServicesWeightSum < 0) enabledServicesWeightSum = 0;
+      capacityReserved = false;
 
       DEBUG_INFO("\t💪%s::releaseCapacity() : %i, consummed:%i/%i",
                   deviceInterface ? deviceInterface->interfaceName.c_str() : "<?>",
@@ -495,6 +500,12 @@ class NetWorkService{
     }
 
     bool reserveCapacity() {
+      if (capacityReserved){
+        DEBUG_INFO("\t💪%s::reserveCapacity() skipped (already reserved)",
+                    deviceInterface ? deviceInterface->interfaceName.c_str() : "<?>");
+        return false; // limit = false
+      }
+
       // Sur WiFi: pas de limitation
       if (hwm.network->media != CABLE_MEDIA) {
         DEBUG_INFO("\tNOT LIMIT (WiFi)");
@@ -513,6 +524,7 @@ class NetWorkService{
 
       // OK: on réserve
       enabledServicesWeightSum += w;
+      capacityReserved = true;
 
       DEBUG_INFO("\t💪RESERVED => %i/%i",
                   enabledServicesWeightSum, SERVICES_WEIGHT_LIMIT);
@@ -567,6 +579,7 @@ class NetWorkService{
 
   protected:
     DeviceInterface* deviceInterface = nullptr;
+    bool capacityReserved = false;
 
     void switchNetworkService(bool _enable){      
       //DEBUG_PRINT("\nDump before switchNetworkService: %s",hwm.network->dumpW5500Sockets().c_str());
@@ -601,8 +614,8 @@ class NetWorkService{
 
     void disable(){
       DEBUG_INFO("%s->disable()", deviceInterface->interfaceName.c_str());      
-      releaseCapacity();   // we only release if the device was enabled otherwise we may fool the count
       deviceInterface->state.enabled = false;
+      releaseCapacity();   // we only release if the device was enabled otherwise we may fool the count
       deviceInterface->setStateDisabled();
       handleDisconnectService();
       //DEBUG_INFO("After %s disable: %s",deviceInterface->interfaceName.c_str(), hwm.network->dumpW5500Sockets().c_str());
