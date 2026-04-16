@@ -99,11 +99,12 @@ public:
     static const String iconMixEthWiFi;
     static const String iconEth;
     static const String iconWiFi;
+    
 
     // default luminance
     static const float fullBrightness;
     static const float greydOutBrightness;
-    static float screenBrightness;
+    static float systemBrightness;
 
     // const positions and size
     #ifdef TFT_WIDTH
@@ -167,7 +168,7 @@ public:
     
     static inline void cls(uint16_t color = GUI::defaultBcolor){
       if (color == TFT_TRANSPARENT) color = GUI::defaultBcolor;
-      tft->fillScreen(GUI::luminance(color,GUI::screenBrightness * 255));  
+      tft->fillScreen(GUI::luminance(color,GUI::systemBrightness * 255));  
       //DEBUG_PRINT("\nGUI::cls()");
     }
 
@@ -271,82 +272,140 @@ public:
 // #########################################################################
 // Base class
 // #########################################################################
-class Widget : public GUI{
-  
+class Widget : public GUI {
+
   public:
-    uint16_t width=1;
-    uint16_t height=1; 
-    TFT_eSprite* sprite = nullptr;    
+    uint16_t width = 1;
+    uint16_t height = 1;
+    TFT_eSprite* sprite = nullptr;
     const float* brightness = &GUI::fullBrightness;
     const uint16_t *fColor = nullptr, *bColor = nullptr;
-    float oldBrightness = 0;
+    float oldBrightness = -1.0f;
     int16_t angle = 0;
 
-
-    Widget(const int16_t* xPos, const int16_t* yPos, const uint16_t* fC, const uint16_t* bC, const float* _brightness = &GUI::fullBrightness, bool d=false):brightness(_brightness),GUI(d){
-      x = xPos; y = yPos; fColor = fC; bColor = bC;
-      //if (debug) DEBUG_PRINT("\n new Widget(%i,%i,%i,%i,%.2f,%i)",*xPos, *yPos, *fC, *bC, *brightness, debug);
+    Widget(const int16_t* xPos,
+           const int16_t* yPos,
+           const uint16_t* fC,
+           const uint16_t* bC,
+           const float* _brightness = &GUI::fullBrightness,
+           bool d = false)
+      : GUI(d), brightness(_brightness) {
+      x = xPos;
+      y = yPos;
+      fColor = fC;
+      bColor = bC;
     }
 
-    void setFcolor(const uint16_t* fC){
+    Widget(const Widget&) = delete;
+    Widget& operator=(const Widget&) = delete;
+
+    virtual ~Widget() {
+      destroySprite();
+    }
+
+    void setFcolor(const uint16_t* fC) {
       fColor = fC;
     }
 
-    virtual ~Widget(){
-      if (sprite != nullptr) delete sprite;         
-    }
+    virtual bool refresh(bool force = false) {
+      bool changed = force;
 
-    virtual bool refresh(bool force=false){
-      refreshed = force;      
-      if (oldX != *x || oldY != *y || oldfColor != *fColor || oldbColor != *bColor || oldBrightness != *brightness || refreshed ){
-        if (debug){
-          /*DEBUG_PRINT("\n%s.refreshed()",id.c_str());
-          if (oldBrightness != *brightness) DEBUG_PRINT("\tbrightness %.2f=>%.2f",oldBrightness,*brightness);
-          if (oldfColor != *fColor) DEBUG_PRINT("\tfColor %i=>%i",this->id.c_str(),oldfColor,*fColor);
-          if (oldbColor != *bColor) DEBUG_PRINT("\tbColor %i=>%i",this->id.c_str(),oldbColor,*bColor);
-          if (oldX != *x) DEBUG_PRINT("\tx %i=>%i",this->id.c_str(),oldX,*x);
-          if (oldY != *y) DEBUG_PRINT("\ty %i=>%i",this->id.c_str(),oldY,*y);*/
-        }
+      if (x == nullptr || y == nullptr || fColor == nullptr || bColor == nullptr || brightness == nullptr) {
+        refreshed = false;
+        return refreshed;
+      }
+
+      if (oldX != *x ||
+          oldY != *y ||
+          oldfColor != *fColor ||
+          oldbColor != *bColor ||
+          oldBrightness != *brightness ||
+          oldWidth != width ||
+          oldHeight != height) {
+
         oldBrightness = *brightness;
-        oldX=*x; oldY=*y;
-        oldfColor = *fColor; oldbColor = *bColor;
-        refreshed = true;
-      }      
-      return refreshed; // nothing to redraw
+        oldX = *x;
+        oldY = *y;
+        oldfColor = *fColor;
+        oldbColor = *bColor;
+        oldWidth = width;
+        oldHeight = height;
+        changed = true;
+      }
+
+      refreshed = changed;
+      return refreshed;
     }
 
-    void createSprite(){
-      //createSprite(*bColor);
-      createSprite(*bColor);
+    void createSprite() {
+      const uint16_t color = (bColor != nullptr) ? *bColor : GUI::defaultBcolor;
+      createSprite(color);
     }
-    
-    void createSprite(uint16_t color){
-      if (sprite == nullptr){
+
+    void createSprite(uint16_t color) {
+      const uint16_t w = (width == 0) ? 1 : width;
+      const uint16_t h = (height == 0) ? 1 : height;
+
+      if (sprite == nullptr) {
         sprite = new TFT_eSprite(tft);
-        //sprite->setColorDepth(BIT_DEPTH);   // we keep a high definition for smooth and antialias rendering
-        //sprite->setSwapBytes(true);
-        sprite->createSprite(width,height);     
-        if (color == TFT_TRANSPARENT) sprite->fillSprite(TFT_TRANSPARENT);
-        else sprite->fillSprite(GUI::luminance(color,*brightness * GUI::screenBrightness * 255));            
-        //if (debug){DEBUG_PRINT("\tsprite(%i,%i)",width,height);}
-      }     
+        sprite->createSprite(w, h);
+        spriteWidth = w;
+        spriteHeight = h;
+        fillSpriteBackground(color);
+        return;
+      }
+
+      if (spriteWidth != w || spriteHeight != h) {
+        sprite->deleteSprite();
+        sprite->createSprite(w, h);
+        spriteWidth = w;
+        spriteHeight = h;
+        fillSpriteBackground(color);
+      }
     }
 
-   
-    uint16_t getClearColor(){
-      if (*bColor == TFT_TRANSPARENT) return  GUI::luminance(GUI::defaultBcolor,*brightness * GUI::screenBrightness * 255);
-      else return GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255);
+    void destroySprite() {
+      if (sprite != nullptr) {
+        sprite->deleteSprite();
+        delete sprite;
+        sprite = nullptr;
+      }
+      spriteWidth = 0;
+      spriteHeight = 0;
     }
 
-    virtual int16_t getX(){return *x;}
-    virtual int16_t getY(){return *y;}  
+    uint16_t getClearColor() {
+      const uint16_t localBColor = (bColor != nullptr) ? *bColor : GUI::defaultBcolor;
+      const float localBrightness = (brightness != nullptr) ? *brightness : GUI::fullBrightness;
 
-  private:    
+      if (localBColor == TFT_TRANSPARENT) {
+        return GUI::luminance(GUI::defaultBcolor, localBrightness * GUI::systemBrightness * 255);
+      }
+      return GUI::luminance(localBColor, localBrightness * GUI::systemBrightness * 255);
+    }
 
-  protected:        
-    const int16_t *x = nullptr ,*y = nullptr;
-    int16_t oldX=-1,oldY=-1;
-    uint16_t oldfColor, oldbColor;
+    virtual int16_t getX() { return (x != nullptr) ? *x : 0; }
+    virtual int16_t getY() { return (y != nullptr) ? *y : 0; }
+
+  protected:
+    const int16_t *x = nullptr, *y = nullptr;
+    int16_t oldX = -1, oldY = -1;
+
+    uint16_t oldfColor = 0xFFFF, oldbColor = 0xFFFF;
+
+    uint16_t oldWidth = 0, oldHeight = 0;
+    uint16_t spriteWidth = 0, spriteHeight = 0;
+
+    void fillSpriteBackground(uint16_t color) {
+      if (sprite == nullptr) return;
+
+      if (color == TFT_TRANSPARENT) {
+        sprite->fillSprite(TFT_TRANSPARENT);
+      } else {
+        const float localBrightness = (brightness != nullptr) ? *brightness : GUI::fullBrightness;
+        sprite->fillSprite(GUI::luminance(color, localBrightness * GUI::systemBrightness * 255));
+      }
+    }
 };
 
 class Canva : public Widget{
@@ -361,9 +420,9 @@ class Canva : public Widget{
     virtual bool refresh(bool force=false){ 
       refreshed = force;
       if(Widget::refresh(force)){     
-        createSprite(GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255));
+        createSprite(GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));
         uint16_t color = *fColor;
-        sprite->drawRoundRect(0,0,width,height,round,GUI::luminance(color,*brightness * GUI::screenBrightness * 255));
+        sprite->drawRoundRect(0,0,width,height,round,GUI::luminance(color,*brightness * GUI::systemBrightness * 255));
         // background is done by filling the sprite with bColor when creating it
       }
       return refreshed;
@@ -388,129 +447,127 @@ class Canva : public Widget{
 
 #define LIMIT_TEXT_RENDERING_LENGTH 99    // on affiche pas plus de 15 caracteres sinon le texte est illisible;
 
-class Font : public Widget{  
+class Font : public Widget {  
   public:    
- 
     uint8_t maxLen = LIMIT_TEXT_RENDERING_LENGTH;
 
-    Font(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint16_t s, uint8_t _len = LIMIT_TEXT_RENDERING_LENGTH, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=true):Widget(posX, posY, fC, bC, _brightness, d), maxLen(_len){
-      value = v; 
-      init(a,posX,posY,s);
-      //if (d) DEBUG_PRINT("\nnew %s(<%s>)",id.c_str(),value->c_str());    => cause problem as value may not be initialized when call from AnimatedIcon
+    Font(const String* v, Align a, const int16_t* posX, const int16_t* posY,
+         uint16_t s, uint8_t _len = LIMIT_TEXT_RENDERING_LENGTH,
+         const uint16_t *fC = &GUI::defaultFcolor,
+         const uint16_t *bC = &GUI::defaultBcolor,
+         const float* _brightness = &GUI::fullBrightness,
+         bool d = true)
+      : Widget(posX, posY, fC, bC, _brightness, d), value(v), maxLen(_len) {
+      init(a, posX, posY, s);
     }
 
-    Font(Align a, const int16_t* posX, const int16_t* posY, uint16_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* brightness = &GUI::fullBrightness,bool d=true):Widget(posX, posY, fC, bC, brightness, d){
-      init(a,posX,posY,s);
+    Font(Align a, const int16_t* posX, const int16_t* posY,
+         uint16_t s,
+         const uint16_t *fC = &GUI::defaultFcolor,
+         const uint16_t *bC = &GUI::defaultBcolor,
+         const float* brightness = &GUI::fullBrightness,
+         bool d = true)
+      : Widget(posX, posY, fC, bC, brightness, d), value(nullptr) {
+      init(a, posX, posY, s);
     }
 
-    void init(Align a,const int16_t* posX, const int16_t* posY,uint16_t s){
-      size = s; align = a;
+    Font(const Font&) = delete;
+    Font& operator=(const Font&) = delete;
+
+    void init(Align a, const int16_t* posX, const int16_t* posY, uint16_t s) {
+      size = s;
+      align = a;
       id = concatStrings("Font", *posX, "x", *posY);
     }
 
-    virtual int16_t getX(){
-      int16_t xAligned = *x;  // align left by default
-      if (align == Align::Center) xAligned = *x - width/2;
-      if (align == Align::Right) xAligned = *x - width;
+    virtual int16_t getX() override {
+      if (x == nullptr) return 0;
+      int16_t xAligned = *x;
+      if (align == Align::Center) xAligned = *x - width / 2;
+      if (align == Align::Right)  xAligned = *x - width;
       return xAligned;
     }
 
-    virtual bool refresh(bool force=false){ 
+    virtual bool refresh(bool force = false) override { 
       refreshed = force;
 
-      if(Widget::refresh(force) || *value != oldValue){       
-        if (debug){
-          //if (*value != oldValue) DEBUG_PRINT("\n%s changed value from '%s' to '%s'", this->id.c_str(), oldValue.c_str(), value->c_str());
-        }
+      if (value == nullptr) {
+        oldValue = "";
+        oldValuePtr = nullptr;
+        return Widget::refresh(force);
+      }
 
+      bool valuePointerChanged = (value != oldValuePtr);
+      if (valuePointerChanged) {
+        oldValuePtr = value;
+      }
+
+      if (Widget::refresh(force || valuePointerChanged) || *value != oldValue) {       
         String truncatedValue = value->substring(0, maxLen);
-        if (value->length() > maxLen) {
-            truncatedValue = truncatedValue.substring(0, maxLen - 3) + "...";
+        if (value->length() > maxLen && maxLen >= 3) {
+          truncatedValue = truncatedValue.substring(0, maxLen - 3) + "...";
         }
 
-        FT_BBox boundaries1 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,oldValue.substring(0,maxLen).c_str());
-        FT_BBox boundaries2 = getOfr()->calculateBoundingBox(0,0,size,Align::Left ,Layout::Horizontal,truncatedValue.c_str());
-        // add 2 pixels for surrounding animation move to right/left
-        width = max(boundaries1.xMax,boundaries2.xMax)+1; 
-        height = max(boundaries1.yMax,boundaries2.yMax)+1;
-        //height = height*1.6;  // why 1.6 ? no idea... if we remove this the font is truncated : last version: 2.0 truncate font for some reason., see platformIO.ini
+        FT_BBox boundaries1 = getOfr()->calculateBoundingBox(0, 0, size, Align::Left, Layout::Horizontal, oldValue.substring(0, maxLen).c_str());
+        FT_BBox boundaries2 = getOfr()->calculateBoundingBox(0, 0, size, Align::Left, Layout::Horizontal, truncatedValue.c_str());
 
-        getOfr()->setFontSize(size);
+        width  = max(boundaries1.xMax, boundaries2.xMax) + 1;
+        height = max(boundaries1.yMax, boundaries2.yMax) + 1;
 
-        /*width = max(getOfr()->getTextWidth(value->c_str()),getOfr()->getTextWidth(oldValue.c_str()))+2;
-        height = max(getOfr()->getTextHeight(value->c_str()),getOfr()->getTextHeight(oldValue.c_str()));*/
-
-        if (width>tft->width()) width=tft->width();
-        if (height>tft->height()) height=tft->height();
+        if (width > tft->width())   width = tft->width();
+        if (height > tft->height()) height = tft->height();
+        if (width == 0)  width = 1;
+        if (height == 0) height = 1;
 
         createSprite();
+        fillSpriteBackground((bColor != nullptr) ? *bColor : GUI::defaultBcolor);
 
-        /*if (debug){
-          DEBUG_PRINT("\t =>(%i,%i)",width,height);
-          DEBUG_PRINT("\t sprite is : %ix%i",sprite->getViewportWidth(),sprite->getViewportHeight());  
-
-        if (debug){
-          DEBUG_PRINT("\t %ld,%ld  %ld,%ld =>(%i,%i)",boundaries1.xMax,boundaries1.yMax,boundaries2.xMax,boundaries2.yMax,width,height);
-          DEBUG_PRINT("\t sprite is : %ix%i",sprite->getViewportWidth(),sprite->getViewportHeight());          
-        }                  
-        }*/
-
-        //sprite->fillSprite(TFT_PURPLE);      
-
-        //getOfr()->setDrawer(*sprite);
+        getOfr()->setFontSize(size);
         getOfr()->setDrawer(*sprite);
+        getOfr()->setCursor(width / 2, 0);
 
-        getOfr()->setCursor(width/2, 0);
-        /*if (getOfr()->getTextHeight(value->c_str())>=getOfr()->getTextHeight(oldValue.c_str()))
-        getOfr()->setCursor(width/2, -height*0.3);    // as we reduced the sprite windows (see above) we have to move the text a bit up (30% seems to be correct to cover all cases)
-        else getOfr()->setCursor(width/2, -height/2);*/
-        
-        // center + 1 pixel to let the surrounding pixel for animation scroll to right
-        uint16_t fCol1 = GUI::luminance(*fColor,*brightness * GUI::screenBrightness * 255);
-        uint16_t bCol1 = GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255);
-        getOfr()->setFontColor(fCol1,bCol1);
-        
-        /*
-        if (align == Align::Center)
-          getOfr()->cprintf(value->c_str());           
-        else if (align == Align::Left)
-          getOfr()->printf(value->c_str());           
-        else if (align == Align::Right)
-          getOfr()->rprintf(value->c_str());           
-          */
-        getOfr()->cprintf(truncatedValue.c_str());        
+        uint16_t fCol1 = GUI::luminance(*fColor, *brightness * GUI::systemBrightness * 255);
+        uint16_t bCol1 = GUI::luminance(*bColor, *brightness * GUI::systemBrightness * 255);
+        getOfr()->setFontColor(fCol1, bCol1);
 
-        //getOfr()->unloadFont();
+        getOfr()->cprintf(truncatedValue.c_str());
 
-        /*sprite->pushSprite(getX(),y,TFT_TRANSPARENT);
-
-        delete sprite;*/
-        
         oldValue = *value;            
-
-        refreshed = true;          // and return the info that we did a refresh
+        refreshed = true;
       }
       return refreshed;
-    }  
+    }
+
   private:    
     String oldValue = "?";
-    //OpenFontRender ofr;    
-    Align align;
+    const String* oldValuePtr = nullptr;
+    Align align = Align::Left;
+
   protected:
-      const String *value;
-      uint16_t size = 0;
-      virtual OpenFontRender* getOfr()=0;
+    const String *value = nullptr;
+    uint16_t size = 0;
+    virtual OpenFontRender* getOfr() = 0;
 };
 
-class Label : public Font{
+class Label : public Font {
   public:
-      static OpenFontRender* ofr; 
-      Label(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint16_t s, uint8_t _len = LIMIT_TEXT_RENDERING_LENGTH, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Font(v, a, posX, posY, s, _len, fC , bC ,_brightness, d){
-        id = "Label";
-      };
+    static OpenFontRender* ofr;
+
+    Label(const String* v, Align a, const int16_t* posX, const int16_t* posY,
+          uint16_t s, uint8_t _len = LIMIT_TEXT_RENDERING_LENGTH,
+          const uint16_t *fC = &GUI::defaultFcolor,
+          const uint16_t *bC = &GUI::defaultBcolor,
+          const float* _brightness = &GUI::fullBrightness,
+          bool d = false)
+      : Font(v, a, posX, posY, s, _len, fC, bC, _brightness, d) {
+      id = "Label";
+    }
+
+    Label(const Label&) = delete;
+    Label& operator=(const Label&) = delete;
 
   protected:
-      virtual OpenFontRender* getOfr(){return ofr;}      
+    virtual OpenFontRender* getOfr() override { return ofr; }
 };
 
 struct LineBreakInfo
@@ -552,7 +609,17 @@ class TextArea : public Widget{
     virtual bool refresh(bool force=false){
       refreshed = force;
       Widget::refresh(force);
-      if (*text != oldText || force){
+
+      if (text == nullptr) {
+        oldText = "";
+        oldTextPtr = nullptr;
+        return refreshed;
+      }
+
+      bool textPointerChanged = (text != oldTextPtr);
+      if (textPointerChanged) oldTextPtr = text;
+
+      if (*text != oldText || force || textPointerChanged){
 
         LineBreakInfo lbi = computeLineBreakInfo(*text, width);
         //if (debug) DEBUG_PRINT("\nlbi.lines:%i, lbi.maxWidth:%i, lbi.maxHeight:%i\n",lbi.lines,lbi.maxWidth,lbi.maxHeight);
@@ -580,7 +647,8 @@ class TextArea : public Widget{
         int16_t offsetY = 0;
         //height = size * lbi.lines;
         //height = Label::ofr->getTextHeight(text->c_str())*lbi.lines;
-        Label l = Label(text,phraseAlign,&GUI::zero,&GUI::zero,size,LIMIT_TEXT_RENDERING_LENGTH, fColor,bColor,brightness, debug);
+        Label l(text, phraseAlign, &GUI::zero, &GUI::zero, size,
+                LIMIT_TEXT_RENDERING_LENGTH, fColor, bColor, brightness, debug);
         l.refresh(true);    // the only way to know the maximum height of a line is to draw it (without rendering)
         height = l.height * lbi.lines;
         createSprite();
@@ -621,6 +689,7 @@ class TextArea : public Widget{
     Align areaAlign, phraseAlign;
     const String* text;
     String oldText;
+    const String* oldTextPtr = nullptr;
     uint8_t size;
 
     std::vector<String> getWords(String text){
@@ -794,78 +863,180 @@ enum{
   ANIMATE_PING_PONG,
 };
 
-class AnimatedIcon : public Icon{
+class AnimatedIcon : public Icon {
+public:
+  AnimatedIcon(const String* frames,
+               uint8_t nbFrames,
+               Align a,
+               const int16_t* posX,
+               const int16_t* posY,
+               uint8_t size,
+               uint8_t animType = ANIMATE_REPEAT,
+               uint16_t animDelay = 500,
+               const uint16_t* fC = &GUI::defaultFcolor,
+               const uint16_t* bC = &GUI::defaultBcolor,
+               const float* _brightness = &GUI::fullBrightness,
+               bool d = false)
+  : Icon(&currentIcon, a, posX, posY, size, fC, bC, _brightness, d)
+  {
+    id = concatStrings("AnimatedIcon", *posX, "x", *posY);
 
-  public:
-    AnimatedIcon(const String* stringArray, uint8_t nb, Align a, const int16_t* posX, const int16_t* posY, uint8_t size, uint8_t at=ANIMATE_REPEAT, uint16_t ad=500, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,const float* _brightness = &GUI::fullBrightness, bool d=false):Icon(&currentIcon, a, posX, posY, size, fC , bC , _brightness, d){
-      id = concatStrings("AnimatedIcon", *posX, "x", *posY);
-      numberOfFrames = nb;
-      //DEBUG_PRINT("\n%s contains %i frames",id.c_str(),numberOfFrames);
-      iconArray = stringArray;      
-      animateType = at; 
-      animateDelay = ad;
-      currentIcon = stringArray[0];
-    };
+    iconArray      = frames;
+    numberOfFrames = nbFrames;
+    animateType    = animType;
+    animateDelay   = animDelay;
 
-    virtual bool refresh(bool force=false){
-      refreshed = force;
+    oldIconArray = nullptr;
+    lastTick     = 0;
+    frame        = 0;
+    inc          = 1;
+    running      = true;
 
-      if (oldIconArray != iconArray){
-        //if (debug){DEBUG_PRINT("\n%s changed value to <%s>", id.c_str(), iconArray[0].c_str());}
-        refreshed = true;
-        oldIconArray = iconArray;
-      }      
+    // Sécurisation
+    if (iconArray == nullptr || numberOfFrames == 0) {
+      numberOfFrames = 0;
+      currentIcon = "";
+    } else {
+      currentIcon = iconArray[0];
+    }
+  }
 
-      if (wait() && !refreshed) return false;
+  virtual bool refresh(bool force = false) override {
+    refreshed = force;
 
-      //Icon::setText(&iconArray[frame]);
-      currentIcon = iconArray[frame];
-      Icon::refresh(refreshed);    
-      if (refreshed){
-        //if (debug) DEBUG_PRINT("%s frame:%i",id.c_str(),frame);
-      }
-          
-
-      switch (animateType){
-        case ANIMATE_ONCE:
-          if (frame == numberOfFrames-1) break;
-          else frame++;
-        break;
-        case ANIMATE_REPEAT:
-          frame = (frame + 1) % numberOfFrames;
-        break;
-        case ANIMATE_PING_PONG:
-          frame += inc;
-          if (frame == -1){
-            frame = 0;
-            inc = 1;
-          }else if (frame == numberOfFrames){
-            frame = numberOfFrames-1;
-            inc = -1;
-          }                
-        break;      
-      }
-
-      return refreshed;
-    }    
-
-    bool wait(){
-      if(millis()-lastTick<animateDelay) return true;
-      else{
-        lastTick = millis();
-        return false;
-      }
+    // Rien à afficher
+    if (iconArray == nullptr || numberOfFrames == 0) {
+      currentIcon = "";
+      return Icon::refresh(true);
     }
 
-  private:
-    int8_t frame = 0;
-    uint8_t inc = -1;
-    uint8_t numberOfFrames,animateType;
-    uint16_t animateDelay;
-    const String* iconArray;
-    const String* oldIconArray;
-    unsigned long lastTick=0;
-    String currentIcon = "";
+    // Si le tableau a changé, on repart proprement
+    if (oldIconArray != iconArray) {
+      oldIconArray = iconArray;
+      reset();
+      refreshed = true;
+    }
+
+    // Mettre à jour l’icône courante avant affichage
+    currentIcon = iconArray[frame];
+
+    // On affiche si forcé ou si le timer est arrivé
+    bool timeToAdvance = shouldAdvance();
+    bool didDraw = Icon::refresh(refreshed || timeToAdvance);
+
+    if (timeToAdvance && running) {
+      advanceFrame();
+      return true;
+    }
+
+    return didDraw;
+  }
+
+  void reset() {
+    frame = 0;
+    inc = 1;
+    lastTick = millis();
+    if (iconArray != nullptr && numberOfFrames > 0) {
+      currentIcon = iconArray[0];
+    } else {
+      currentIcon = "";
+    }
+  }
+
+  void start() {
+    running = true;
+    lastTick = millis();
+  }
+
+  void stop() {
+    running = false;
+  }
+
+  void setDelay(uint16_t newDelay) {
+    animateDelay = newDelay;
+  }
+
+  void setFrames(const String* newFrames, uint8_t nbFrames) {
+    iconArray = newFrames;
+    numberOfFrames = nbFrames;
+
+    if (iconArray == nullptr || numberOfFrames == 0) {
+      numberOfFrames = 0;
+      currentIcon = "";
+      frame = 0;
+    } else {
+      if (frame >= numberOfFrames) frame = 0;
+      currentIcon = iconArray[frame];
+    }
+
+    oldIconArray = nullptr; // force reset logique au prochain refresh
+  }
+
+private:
+  int8_t frame = 0;
+  int8_t inc = 1;
+
+  uint8_t numberOfFrames = 0;
+  uint8_t animateType = ANIMATE_REPEAT;
+  uint16_t animateDelay = 500;
+
+  const String* iconArray = nullptr;
+  const String* oldIconArray = nullptr;
+
+  unsigned long lastTick = 0;
+  bool running = true;
+
+  String currentIcon = "";
+
+  bool shouldAdvance() {
+    if (!running) return false;
+    if (animateDelay == 0) return true;
+
+    unsigned long now = millis();
+    if ((unsigned long)(now - lastTick) >= animateDelay) {
+      lastTick = now;
+      return true;
+    }
+    return false;
+  }
+
+  void advanceFrame() {
+    if (numberOfFrames <= 1) {
+      frame = 0;
+      return;
+    }
+
+    switch (animateType) {
+      case ANIMATE_ONCE:
+        if (frame < (int8_t)(numberOfFrames - 1)) {
+          frame++;
+        }
+        break;
+
+      case ANIMATE_REPEAT:
+        frame++;
+        if (frame >= (int8_t)numberOfFrames) {
+          frame = 0;
+        }
+        break;
+
+      case ANIMATE_PING_PONG:
+        frame += inc;
+
+        if (frame >= (int8_t)numberOfFrames) {
+          frame = numberOfFrames - 2;
+          inc = -1;
+        } else if (frame < 0) {
+          frame = 1;
+          inc = 1;
+        }
+        break;
+
+      default:
+        frame = 0;
+        break;
+    }
+  }
 };
 
 class FromToWidget : public Widget {
@@ -878,7 +1049,8 @@ class FromToWidget : public Widget {
       : Widget(posX, posY, fC, bC, _brightness, d)
     {
       value    = v; 
-      oldValue = *v - 1.0f; // force un premier refresh
+      oldValuePtr = v;
+      oldValue = (v != nullptr) ? (*v - 1.0f) : 0.0f; // force un premier refresh si possible
       minValue = mini;
       maxValue = maxi;
     }
@@ -900,6 +1072,13 @@ class FromToWidget : public Widget {
       bool logicChanged = false;
       bool colorChanged = false;
 
+      const bool valuePointerChanged = (value != oldValuePtr);
+      if (valuePointerChanged) {
+        oldValuePtr = value;
+        forceFull = true;
+        if (value != nullptr) oldValue = *value - 1.0f;
+      }
+
       // Changement de position ou de couleur de fond => redraw frame
       if (forceFull || oldX != *x || oldY != *y || oldbColor != *bColor) {
         refreshFrame();
@@ -912,7 +1091,9 @@ class FromToWidget : public Widget {
       // Logique spécifique au widget (angles, valeurs, etc.)
       // IMPORTANT : chaque dérivé doit appeler lui-même refreshContent()
       // quand la valeur change (partiel ou complet).
-      logicChanged = refreshLogic(forceFull);
+      if (value != nullptr) {
+        logicChanged = refreshLogic(forceFull);
+      }
 
       // Changement de couleur de premier plan => redraw complet du contenu
       if (forceFull || oldfColor != *fColor) {
@@ -922,7 +1103,7 @@ class FromToWidget : public Widget {
       }
 
       // Le widget est considéré comme rafraîchi si au moins un de ces éléments a changé
-      refreshed = frameChanged || logicChanged || colorChanged || forceFull;
+      refreshed = frameChanged || logicChanged || colorChanged || forceFull || valuePointerChanged;
       return refreshed;
     }
 
@@ -935,6 +1116,7 @@ class FromToWidget : public Widget {
     int16_t  from = 0, oldFrom = 254;
 
     const float* value;
+    const float* oldValuePtr = nullptr;
     float oldValue;
     float minValue, maxValue;
 };
@@ -1024,7 +1206,7 @@ class Arc : public FromToWidget {
 
       uint16_t color = *fColor;
       uint16_t fg    = GUI::luminance(color,
-                          *brightness * GUI::screenBrightness * 255);
+                          *brightness * GUI::systemBrightness * 255);
       uint16_t bg    = getClearColor();
 
       if (full) {
@@ -1044,7 +1226,7 @@ class Arc : public FromToWidget {
         } else if (to < from) {
           // la valeur diminue : on "efface" le surplus
           uint16_t eraseColor = GUI::luminance(widgetInnerColor,
-                                   *brightness * GUI::screenBrightness * 255);
+                                   *brightness * GUI::systemBrightness * 255);
 
           sprite->drawArc(width/2, height/2,
                           radius-2, radius - thickness -1,
@@ -1072,9 +1254,10 @@ class RingMeter : public Arc{
 
       if (Arc::refreshLogic(force)) refreshValueLabel();
       
-      if (*unit != oldUnit || force){
+      if ((unit != nullptr) && (*unit != oldUnit || force || unit != oldUnitPtr)){
         refreshUnitLabel();
         oldUnit = *unit;
+        oldUnitPtr = unit;
         refreshed = true;
         //if (debug){DEBUG_PRINT("\n%s.refreshed unit, new: %s",this->id.c_str(),unit->c_str());}
       } 
@@ -1087,24 +1270,26 @@ class RingMeter : public Arc{
     uint16_t valueLabelHeight;
     const String *unit;
     String oldUnit ;
+    const String* oldUnitPtr = nullptr;
     uint8_t decimal, clearArea=0;
 
     void refreshFrame(){
       //DEBUG_PRINT("\n%s.refreshFrame()",this->id.c_str());
       createSprite();
-      sprite->fillSmoothCircle(width/2, height/2, radius,GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255) );
-      sprite->drawSmoothCircle(width/2, height/2, radius, GUI::luminance(TFT_SILVER,*brightness * GUI::screenBrightness * 255), GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255));
+      sprite->fillSmoothCircle(width/2, height/2, radius,GUI::luminance(widgetInnerColor,*brightness * GUI::systemBrightness * 255) );
+      sprite->drawSmoothCircle(width/2, height/2, radius, GUI::luminance(TFT_SILVER,*brightness * GUI::systemBrightness * 255), GUI::luminance(widgetInnerColor,*brightness * GUI::systemBrightness * 255));
       uint16_t tmp = radius - 3;
-      sprite->drawArc(width/2, height/2, tmp, tmp - tmp / 5, startAngle-1, 360-startAngle+1, TFT_NEARLYBLACK, GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255));           
+      sprite->drawArc(width/2, height/2, tmp, tmp - tmp / 5, startAngle-1, 360-startAngle+1, TFT_NEARLYBLACK, GUI::luminance(widgetInnerColor,*brightness * GUI::systemBrightness * 255));           
     }
 
     void refreshUnitLabel(){
       createSprite();
       //DEBUG_PRINT("\n%s.refreshUnitLabel()",this->id.c_str());
       // THE UNIT LABEL
+      if (unit == nullptr || unit->length() == 0) return;
       uint8_t unitFontSize = (2 * radius*0.7) / (unit->length());
       uint16_t color = widgetInnerColor;
-      color = GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255);
+      color = GUI::luminance(widgetInnerColor,*brightness * GUI::systemBrightness * 255);
       label = new Label(unit,Align::Center,&GUI::zero,&GUI::zero,unitFontSize,12, &widgetSubLabelColor,&color,brightness,debug);
       label->refresh(true);
       label->sprite->pushToSprite(sprite,width/2-label->width/2,height/2+(radius-unitFontSize/1.1));     //height/2+valueLabelHeight/3
@@ -1125,7 +1310,7 @@ class RingMeter : public Arc{
         digitFontSize = (4.8 * radius) / (fToS.length());
       }
       
-      sprite->fillSmoothCircle(width/2, height/2.2, radius*0.65,GUI::luminance(widgetInnerColor,*brightness * GUI::screenBrightness * 255)); //
+      sprite->fillSmoothCircle(width/2, height/2.2, radius*0.65,GUI::luminance(widgetInnerColor,*brightness * GUI::systemBrightness * 255)); //
       // we create the numeric label but with an empty unit as this one is handled separately as it is below the value for the RingerMeter 
       NumericLabel* digits = new NumericLabel(value,decimal,Align::Center,&GUI::zero,&GUI::zero,digitFontSize,&GUI::defaultFcolor,&GUI::transparentColor,brightness, "", 1, debug); 
       digits->refresh(true);
@@ -1147,18 +1332,30 @@ class Toggle : public Widget{
       width = TFT_WIDTH;
       height = h;
       revert = p;
-      oldRevert = !*revert;
+      oldRevert = (revert != nullptr) ? !*revert : false;
       text = v;
       id = "Toggle";
     }
 
     virtual bool refresh(bool force=false){
       Widget::refresh(force);
-      if (refreshed || oldRevert != *revert || oldText != *text){
+
+      if (revert == nullptr || text == nullptr) {
+        oldRevertPtr = nullptr;
+        oldTextPtr = nullptr;
+        return refreshed;
+      }
+
+      bool revertPointerChanged = (revert != oldRevertPtr);
+      bool textPointerChanged = (text != oldTextPtr);
+      if (revertPointerChanged) oldRevertPtr = revert;
+      if (textPointerChanged) oldTextPtr = text;
+
+      if (refreshed || oldRevert != *revert || oldText != *text || revertPointerChanged || textPointerChanged){
 
         uint16_t fillColor, textColor;
 
-        if(*revert) {
+        if(!*revert) {
           //DEBUG_PRINT("\nFlip");
           fillColor    = TFT_RED;
           textColor    = TFT_WHITE;
@@ -1170,10 +1367,10 @@ class Toggle : public Widget{
 
         createSprite(GUI::defaultBcolor);        
 
-        sprite->fillSmoothRoundRect(0,0 , width, height, height/5, GUI::luminance(fillColor,*brightness * GUI::screenBrightness * 255));
+        sprite->fillSmoothRoundRect(0,0 , width, height, height/5, GUI::luminance(fillColor,*brightness * GUI::systemBrightness * 255));
         
-        uint16_t color = *bColor;
-        if (!*revert) sprite->drawRoundRect(0,0, width, height, height/5, GUI::luminance(color,*brightness * GUI::screenBrightness * 255));
+        uint16_t borderColor = *revert?*bColor:TFT_WHITE;        
+        sprite->drawRoundRect(0,0, width, height, height/5, GUI::luminance(borderColor,*brightness * GUI::systemBrightness * 255));
 
         uint16_t transparent = TFT_TRANSPARENT;
         Label* label = new Label(text,Align::Center,&GUI::zero,&GUI::zero,height*1.4,TOGGLE_CHAR_MAX_LEN, &textColor,&transparent,  brightness, debug);
@@ -1193,6 +1390,8 @@ class Toggle : public Widget{
   private:    
     bool oldRevert;    
     String oldText;
+    const bool* oldRevertPtr = nullptr;
+    const String* oldTextPtr = nullptr;
 
 };
 
@@ -1221,8 +1420,8 @@ class Bar : public FromToWidget{
     virtual void refreshFrame(){
       createSprite(GUI::transparentColor);
       if (frameOffset != 0){
-        sprite->fillRoundRect(0,0,width,height,radius,GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255));
-        sprite->drawRoundRect(0,0,width,height,radius,GUI::luminance(*fColor,*brightness * GUI::screenBrightness * 255));
+        sprite->fillRoundRect(0,0,width,height,radius,GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));
+        sprite->drawRoundRect(0,0,width,height,radius,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));
       }      
     }  
 
@@ -1254,7 +1453,7 @@ class VerticalBar : public Bar{
 
       if (full){
         // full content refresh, means FROM -> TO                
-        sprite->fillRoundRect(0+frameOffset,to+frameOffset,width-frameOffset*2,from-to-frameOffset*2,radius,GUI::luminance(*fColor,*brightness * GUI::screenBrightness * 255));        
+        sprite->fillRoundRect(0+frameOffset,to+frameOffset,width-frameOffset*2,from-to-frameOffset*2,radius,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
         //DEBUG_PRINT("\nFull refreshcontent");
       }else{
         // only refresh tail/and or head
@@ -1264,24 +1463,24 @@ class VerticalBar : public Bar{
 
         if (oldFrom > from){
           // remove tail
-          sprite->fillRect(0+frameOffset,from+frameOffset,width-frameOffset*2,oldFrom-from,GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255));   
+          sprite->fillRect(0+frameOffset,from+frameOffset,width-frameOffset*2,oldFrom-from,GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));   
           //DEBUG_PRINT("\nRemove tail");
         }else if (from > oldFrom){
           // add tail
           //DEBUG_PRINT("\nAdd tail");
-          sprite->fillRect(0+frameOffset,oldFrom+frameOffset,width-frameOffset*2,from-oldFrom,GUI::luminance(*fColor,*brightness * GUI::screenBrightness * 255));        
+          sprite->fillRect(0+frameOffset,oldFrom+frameOffset,width-frameOffset*2,from-oldFrom,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
         }          
 
         if (oldTo > to){
           // add head
           blockHeight = oldTo-to;
           //DEBUG_PRINT("\nAdd head: %i",blockHeight);
-          sprite->fillRect(0+frameOffset,to+frameOffset,width-frameOffset*2,blockHeight,GUI::luminance(*fColor,*brightness * GUI::screenBrightness * 255));        
+          sprite->fillRect(0+frameOffset,to+frameOffset,width-frameOffset*2,blockHeight,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
         }else if (to > oldTo){
           // remove head
           blockHeight = to-oldTo;
           //DEBUG_PRINT("\nRemove head: %i",blockHeight);
-          sprite->fillRect(0+frameOffset,oldTo,width-frameOffset*2,blockHeight,GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255));                    
+          sprite->fillRect(0+frameOffset,oldTo,width-frameOffset*2,blockHeight,GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));                    
         }       
       }
     }
@@ -1303,8 +1502,8 @@ class HorizontalBar : public Bar{
       createSprite(GUI::transparentColor); 
       if (full){
         // full content refresh, means FROM -> TO
-        //sprite->fillRoundRect(from+frameOffset,frameOffset,to-frameOffset,height-frameOffset*2,radius,GUI::luminance(*fColor,*brightness * GUI::screenBrightness * 255));        
-        sprite->fillRect(from+frameOffset,frameOffset,to-frameOffset,height-frameOffset*2,GUI::luminance(*fColor,*brightness * GUI::screenBrightness * 255));        
+        //sprite->fillRoundRect(from+frameOffset,frameOffset,to-frameOffset,height-frameOffset*2,radius,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
+        sprite->fillRect(from+frameOffset,frameOffset,to-frameOffset,height-frameOffset*2,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
         //DEBUG_PRINT("\nFull refreshcontent");
       }else{
         // only refresh tail/and or head
@@ -1316,25 +1515,25 @@ class HorizontalBar : public Bar{
           // remove tail
           if (oldFrom<0) oldFrom = 0;
           blockWidth = from-oldFrom-frameOffset;
-          sprite->fillRect(oldFrom+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255));   
+          sprite->fillRect(oldFrom+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));   
           //DEBUG_PRINT("\tRemove tail: %d",blockWidth);
         }else if (from < oldFrom){
           // add tail
           blockWidth = oldFrom-from-frameOffset;
           //DEBUG_PRINT("\tAdd tail :%d",blockWidth);
-          sprite->fillRect(from+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*fColor,*brightness * GUI::screenBrightness * 255));        
+          sprite->fillRect(from+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
         }          
 
         if (to > oldTo){
           // add head
           blockWidth = to-oldTo;
           //DEBUG_PRINT("\tAdd head: %i",blockWidth);
-          sprite->fillRect(oldTo+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*fColor,*brightness * GUI::screenBrightness * 255));        
+          sprite->fillRect(oldTo+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
         }else if (to < oldTo){
           // remove head
           blockWidth = oldTo-to;
           //DEBUG_PRINT("\tRemove head: %i",blockWidth);
-          sprite->fillRect(to+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*bColor,*brightness * GUI::screenBrightness * 255));                    
+          sprite->fillRect(to+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));                    
         }       
       }
     }
@@ -1612,31 +1811,45 @@ class SliderWidget{
 };
 
 
-class Led : public Widget{
+class Led : public Widget {
 
   public:
-    Led(const int16_t* posX, const int16_t* posY, uint16_t rad, const String* props, const float* _brightness = &GUI::fullBrightness, bool d=false):Widget(posX, posY, &ledBaseColor, &GUI::transparentColor, _brightness, d), properties(props), radius(rad){
+    Led(const int16_t* posX,
+        const int16_t* posY,
+        uint16_t rad,
+        const String* props,
+        const float* _brightness = &GUI::fullBrightness,
+        const bool* _enabled = &GUI::on,
+        bool d = false
+        )
+      : Widget(posX, posY, &ledBaseColor, &GUI::transparentColor, _brightness, d),
+        properties(props),
+        radius(rad),
+        enabled(_enabled) {
+
       id = concatStrings("Led", *posX, "x", *posY);
-      width = rad*2;
-      height = rad*2;
+      width = rad * 2;
+      height = rad * 2;
+
       parseProperties();
       oldProperties = *properties;
     }
 
-    virtual bool refresh(bool force=false){
+    virtual bool refresh(bool force = false) {
       refreshed = force;
+
       bool baseNeedsRefresh = Widget::refresh(force);
       bool propertyChanged = false;
 
-      if (*properties != oldProperties){
+      if (*properties != oldProperties) {
         parseProperties();
         oldProperties = *properties;
         propertyChanged = true;
       }
 
-      bool blinkChanged = updateBlink(force);
+      bool stateChanged = updateState(force);
 
-      if (baseNeedsRefresh || propertyChanged || blinkChanged || force){
+      if (baseNeedsRefresh || propertyChanged || stateChanged || force) {
         drawLed();
         refreshed = true;
       }
@@ -1646,19 +1859,26 @@ class Led : public Widget{
 
   private:
     static const uint16_t FLASH_MEDIUM_INTERVAL = 350;
-    static const uint16_t FLASH_FAST_INTERVAL = 100;
-    static const uint16_t FLASH_SLOW_INTERVAL = 1500;
+    static const uint16_t FLASH_FAST_INTERVAL   = 100;
+    static const uint16_t FLASH_SLOW_INTERVAL   = 1500;
 
     const String* properties;
     String oldProperties;
+
+    const bool* enabled = nullptr;   // pointeur externe on/off
+
     uint16_t ledBaseColor = TFT_RED;
     uint16_t radius;
+
     bool flashEnabled = false;
     uint16_t flashInterval = FLASH_MEDIUM_INTERVAL;
-    bool ledOn = true;
+
+    bool ledOn = true;               // état logique "normal" interne
+    bool effectiveLedOn = true;      // état réellement affiché après override externe
+
     unsigned long lastToggle = 0;
 
-    void parseProperties(){
+    void parseProperties() {
       String lower = *properties;
       lower.trim();
       lower.toLowerCase();
@@ -1667,12 +1887,15 @@ class Led : public Widget{
 
       ledBaseColor = TFT_RED;
       bool flashRequested = false;
+      flashInterval = FLASH_MEDIUM_INTERVAL;
 
-      while (lower.length() > 0){
+      while (lower.length() > 0) {
         int spaceIndex = lower.indexOf(' ');
         String token = (spaceIndex == -1) ? lower : lower.substring(0, spaceIndex);
-        if (spaceIndex == -1) lower = "";
-        else{
+
+        if (spaceIndex == -1) {
+          lower = "";
+        } else {
           lower = lower.substring(spaceIndex + 1);
           lower.trim();
         }
@@ -1686,53 +1909,68 @@ class Led : public Widget{
         else if (token == "green") ledBaseColor = TFT_GREEN;
         else if (token == "orange") ledBaseColor = TFT_ORANGE;
         else if (token == "grey" || token == "gray") ledBaseColor = TFT_SILVER;
-        else if (token == "fast"){
+        else if (token == "fast") {
           flashRequested = true;
           flashInterval = FLASH_FAST_INTERVAL;
-        }else if (token == "medium"){
+        }
+        else if (token == "medium") {
           flashRequested = true;
           flashInterval = FLASH_MEDIUM_INTERVAL;
         }
-        else if (token == "low" || token == "slow"){
+        else if (token == "low" || token == "slow") {
           flashRequested = true;
           flashInterval = FLASH_SLOW_INTERVAL;
         }
       }
 
       flashEnabled = flashRequested;
-      if (!flashEnabled){
+
+      if (!flashEnabled) {
         ledOn = true;
       }
+
       lastToggle = millis();
     }
 
-    bool updateBlink(bool force){
-      if (!flashEnabled){
-        if (!ledOn){
-          ledOn = true;
-          return true;
-        }
-        return false;
-      }
-
+    bool updateState(bool force) {
+      bool changed = false;
       unsigned long now = millis();
-      if (force){
+
+      // 1) Calcul de l'état interne normal (couleur fixe ou clignotement)
+      bool previousLedOn = ledOn;
+
+      if (!flashEnabled) {
         ledOn = true;
-        lastToggle = now;
-        return true;
+      } else {
+        if (force) {
+          lastToggle = now;
+        } else if (now - lastToggle >= flashInterval) {
+          ledOn = !ledOn;
+          lastToggle = now;
+        }
       }
 
-      if (now - lastToggle >= flashInterval){
-        ledOn = !ledOn;
-        lastToggle = now;
-        return true;
+      if (ledOn != previousLedOn) {
+        changed = true;
       }
 
-      return false;
+      // 2) Application de l'override externe
+      bool previousEffectiveLedOn = effectiveLedOn;
+
+      if (enabled != nullptr) {
+        effectiveLedOn = (*enabled) ? ledOn : false;
+      } else {
+        effectiveLedOn = ledOn;
+      }
+
+      if (effectiveLedOn != previousEffectiveLedOn) {
+        changed = true;
+      }
+
+      return changed;
     }
 
-    void drawLed(){
-      //createSprite(getClearColor());
+    void drawLed() {
       createSprite(*bColor);
 
       int16_t centerX = width / 2;
@@ -1740,21 +1978,21 @@ class Led : public Widget{
       int16_t mainRadius = (min(width, height) / 2) - 1;
       if (mainRadius < 2) mainRadius = 2;
 
-      uint16_t innerColor = ledOn ? ledBaseColor : TFT_DARKGREY;
-      uint16_t rimColor = GUI::luminance(GUI::defaultFcolor,*brightness * GUI::screenBrightness * 255);
+      uint16_t innerColor = effectiveLedOn ? ledBaseColor : TFT_DARKGREY;
+      uint16_t rimColor = GUI::luminance(GUI::defaultFcolor, *brightness * GUI::systemBrightness * 255);
 
-      sprite->drawCircle(centerX, centerY, mainRadius-1, TFT_BLACK);
-      sprite->drawSmoothCircle(centerX, centerY, mainRadius, rimColor,GUI::defaultBcolor );
+      sprite->drawCircle(centerX, centerY, mainRadius - 1, TFT_BLACK);
+      sprite->drawSmoothCircle(centerX, centerY, mainRadius, rimColor, *bColor);
 
       int16_t innerRadius = mainRadius - 2;
-      if (innerRadius > 1){
-        sprite->fillSmoothCircle(centerX, centerY, innerRadius, GUI::luminance(innerColor,*brightness * GUI::screenBrightness * 255));
+      if (innerRadius > 1) {
+        sprite->fillSmoothCircle(centerX, centerY, innerRadius,
+          GUI::luminance(innerColor, *brightness * GUI::systemBrightness * 255));
       }
-
     }
 
-    virtual int16_t getX(){return *x-width/2;}
-    virtual int16_t getY(){return *y-height/2;}      
+    virtual int16_t getX() { return *x - width / 2; }
+    virtual int16_t getY() { return *y - height / 2; }
 };
 
 
@@ -1785,7 +2023,7 @@ const float GUI::greydOutBrightness = 0.5;
 #define BRIGHTNESS_MAX 1.0
 #define BRIGHTNESS_MIN 0.2
 #define BRIGHTNESS_NOFOCUS 0.5
-float GUI::screenBrightness = DEFAULT_BRIGHTNESS;
+float GUI::systemBrightness = DEFAULT_BRIGHTNESS;
 
 // WIDGETS AND MENU COLORS DEFINITIONS
 uint16_t GUI::widgetInnerColor = GUI::luminance(DARKER_GREY,120);

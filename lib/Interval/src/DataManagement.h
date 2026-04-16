@@ -88,6 +88,7 @@ class FreeTextAddress: public Address{
   public:
     String friendlyName = "";
     String regex = "";
+    bool hide = false;
 
     FreeTextAddress(String p, String _fName, String _regex):friendlyName(_fName), regex(_regex), Address(p,INPUTTEXT){}
 
@@ -99,7 +100,7 @@ class FreeTextAddress: public Address{
 
 FreeTextAddress addressIP = FreeTextAddress(ADDRESS_IP, "ip", REGEX_IPADDRESS);    
 FreeTextAddress addressPing = FreeTextAddress(ADDRESS_PING, "ping", REGEX_STRING);  
-FreeTextAddress* addressPort = new FreeTextAddress(ADDRESS_PORT,"port", REGEX_0to65535);  
+FreeTextAddress addressPort = FreeTextAddress(ADDRESS_PORT,"port", REGEX_0to65535);  
 
 String errorDatasetOOR = "outOfRange";
 
@@ -118,8 +119,6 @@ class DataSet{
     virtual const String* getValuePtr(uint16_t i) = 0;
     virtual JsonObject serialize(JsonObject o);
     virtual void serializeContent(JsonObject o);
-
-
 };
 
 class ConfigDataSet : public DataSet{
@@ -182,7 +181,7 @@ class DataRepository{
   private:
     std::vector<DataSet*> dataSets;
 
-}dataRepo,    // used by skeletons, Shortcuts, SystemInterface
+}dataRepo,    // used by skeletons, Shortcuts
 IFdataRepo; // used by Interfaces
 
 DataSet::DataSet(Address* addr, const String& _name, DataRepository* targetRepo): address(addr), name(_name) {
@@ -308,6 +307,41 @@ class SerializableParameters {
       return true;
     }
 
+    bool unregisterDataSetAddress(Address* address) {
+
+      if (!address) {
+        return false;
+      }
+
+      // 1️⃣ suppression dans parameterAddresses
+      for (auto it = parameterAddresses.begin(); it != parameterAddresses.end(); ++it) {
+        if (*it == address) {
+          parameterAddresses.erase(it);
+          break;
+        }
+      }
+
+      // 2️⃣ suppression du ConfigDataSet associé
+      if (registerConfigDataSets) {
+        for (auto it = ownedDataSets.begin(); it != ownedDataSets.end(); ++it) {
+
+          DataSet* ds = *it;
+
+          // on suppose que ConfigDataSet possède getAddress()
+          if (ds && ds->address == address) {
+
+            delete ds;
+            ownedDataSets.erase(it);
+            break;
+          }
+        }
+      }
+
+      return true;
+    }
+    
+
+
     Address* getDataSetAddress(size_t index) const {
       if (index >= parameterAddresses.size()){
         return nullptr;
@@ -340,14 +374,14 @@ class SerializableParameters {
     const String* getValuePtr(String provider, String address, uint8_t index){
       const String *retVal = &emptyString;
 
-      //DEBUG_PRINT("\nSerializableDataset<%s>.getValuePtr(%s,%s,%i): ",stripID.c_str(),provider.c_str(),address.c_str(),index);
+      //DEBUG_PRINT("\nSerializableDataset::getValuePtr(%s,%s,%i): ",provider.c_str(),address.c_str(),index);
       DataSet* ds = repo->getDataSet(provider, address);
 
       if (ds != nullptr){
         retVal = ds->getValuePtr(index);
       }
 
-      //DEBUG_PRINT("\nSerializableParameters::getValuePtr<%s>",retVal->c_str());
+      //DEBUG_PRINT("\t ====> <%s>",retVal->c_str());
 
       return retVal;
     }    
@@ -359,7 +393,6 @@ class SerializableParameters {
 
     protected:
       char* buf;    //used for serialization
-
 
 };
 
@@ -389,10 +422,9 @@ class WebLibrary : public DataSet, public JsonListFile{
       return success;
     }
 
-    virtual const String* getValuePtr(uint16_t index){      
-      if (index>size()-1) return &errorDatasetOOR;      
-      //return getString(getName(index));       // return the valuenof the jkey   
-      return getName(index);                
+    virtual const String* getValuePtr(uint16_t index){           
+      if (index>getSize()-1) return &errorDatasetOOR;
+      return getName(index);    
     }  
 
     virtual uint16_t getSize(){

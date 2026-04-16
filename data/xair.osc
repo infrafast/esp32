@@ -1,0 +1,10 @@
+/lr/config/name
+/dca/%d/config/name
+/ch/%02d/config/name
+/bus/%d/config/name
+/rtn/aux/config/name
+/rtn/%d/config/name
+/ch/%02d/mix/%02d/level
+/ch/%02d/mix/on
+/ch/%02d/mix/on
+/bus/%i/mix/on

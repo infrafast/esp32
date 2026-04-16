@@ -11,8 +11,8 @@ class DMXInterface : public DeviceInterface{
       state.switchable = false;
     }
     
-    virtual bool begin(){     // called by init()
-      DEBUG_INFO("%s::begin() setStateNotImplemented",interfaceName.c_str());
+    virtual bool _begin() override{     // called by init()
+      DEBUG_INFO("%s::_begin() setStateNotImplemented",interfaceName.c_str());
       setStateNotImplemented();
       return true;
     };        
@@ -31,11 +31,21 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkService {
       state.switchable = false;
     }
 
-    virtual void monitor(){     
-      monitorNetwork();
+    virtual bool begin(){
+      DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+      return true;
+    }
+
+    virtual bool end(){
+      DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+      return true;
+    }
+
+    virtual bool monitor() override{     
+      return monitorNetwork();
     }
     
-    virtual void monitorService(){}
+    virtual bool monitorService() override{return false;}
     virtual bool handleConnectService(){return false;}
     virtual bool handleDisconnectService(){return false;}
         
@@ -52,7 +62,18 @@ class ThreePinDMXInterface: public DMXInterface{
       state.switchable = false;
     }
 
-    virtual void monitor(){
+    virtual bool begin(){
+      DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+      return true;
+    }
+
+    virtual bool end(){
+      DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
+      return true;
+    }
+
+    virtual bool monitor() override{
+      return false;
     } 
     
 };

@@ -18,6 +18,6 @@
 //#define _DUMP_FRAME_DATA
 
 /** Maximum size of data buffer - frame payload (in bytes). */
-constexpr uint16_t kBufferMaxSize{8192}; //https://github.com/skaarj1989/mWebSockets/issues/72
+constexpr uint16_t kBufferMaxSize{1024*11}; //https://github.com/skaarj1989/mWebSockets/issues/72 10K buffer
 /** Maximum time to wait for endpoint response (in milliseconds). */
 constexpr uint16_t kTimeoutInterval{5000};

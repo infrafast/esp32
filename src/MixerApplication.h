@@ -1,23 +1,29 @@
 #define USE_NETWORK
-//#define DEBUG_OSC
-//#define USE_FTP
-
-//#define TFT_BGCOLOR   TFT_DARKGREY
-
 #include "Interval.h"
 
 #include "mixers/m_mstation.h"
-#include "mixers/m_XMbehringer.h"
+#include "mixers/m_xmseries.h"
+#include "mixers/s_mixer.h"
 
 MixingStation* msMixer;
-BehringerXM* xmMixer;
+XMSeries* xmMixer;
+
+
 
 void setup(){
     
-    msMixer = new MixingStation();    
-    xmMixer = new BehringerXM();
+    msMixer = new MixingStation();    // a mixer has to be notified when webapp is started so it starts synchronisationo of data
+    xmMixer = new XMSeries();
+
+    stripInput2mixbusSkel = new StripSkeleton(STRIP_INPUT2MIXBUS,GROUP_INTERFACE_MIXER,sendStripConstructorCallback,'*');
+        stripInput2mixbusSkel->registerDataSetAddress(&addressCHname);
+        stripInput2mixbusSkel->registerDataSetAddress(&addressBUSname);
+    
+    stripInputGainSkel = new StripSkeleton(STRIP_INPUTGAIN,GROUP_INTERFACE_MIXER,gain2chStripConstructorCallback,'*');
+        stripInputGainSkel->registerDataSetAddress(&addressCHname);
 
     app.init();
+
 }
 
 void loop(){

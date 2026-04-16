@@ -63,14 +63,21 @@ class MIDIInterface: public DeviceInterface{
   #define GROUP_INTERFACE_MIDI "MIDI"
   public:
 
-    MidiData midiData;
-    Event evtMidi = Event(&midiData);
+    #define MAX_SYSEX_SIZE 256
+    struct MidiDataCopy{
+      uint8_t type = MIDI_CC;
+      byte channel = 0;
+      byte number = 0;
+      byte value = 0;
+      byte sysexdata[MAX_SYSEX_SIZE];
+      unsigned length;  
+    }midiDataCopy;
+
+    bool dataAvailable = false;
 
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
-      //data = &midiData;       // this inertaface handle  MidiData
-    }
-   
-    
+      message.attachData(&midiDataCopy); // this interface is sending midi data directly to the strip so we attach the midiDataCopy to the message event, this way we can reuse the same event for all kind of midi messages and just check the content of the midiDataCopy to know what to do with it in the strip (for example if it is a note on or a sysex)  
+    }     
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
@@ -88,11 +95,13 @@ class MIDIInterface: public DeviceInterface{
         }      
     }
 
-    virtual void monitor(){  
+    virtual bool monitor() override{  
       if (dataAvailable){
-        fireEvent(evtMidi);
+        fireEvent(message);     // will be processed by strip that are registered to this interface event
         dataAvailable = false;
+        return true;  // we have processed data
       }
+      return false; // no data processed
     }
 
     virtual void handleChangeControl(byte channel, byte number, byte value){
@@ -100,10 +109,10 @@ class MIDIInterface: public DeviceInterface{
 
       if (dataAvailable) return; // previous data has not been ocnsummed yet so we ignore it (we could make a queue)
       
-      midiData.type = MIDI_CC;
-      midiData.channel = channel;
-      midiData.number = number;
-      midiData.value = value;
+      midiDataCopy.type = MIDI_CC;
+      midiDataCopy.channel = channel;
+      midiDataCopy.number = number;
+      midiDataCopy.value = value;
       dataAvailable = 1;
 
     }
@@ -118,19 +127,19 @@ class MIDIInterface: public DeviceInterface{
       // ------------------------------------------------------------------------
       // Ancien mécanisme conservé pour compatibilité
       // ------------------------------------------------------------------------
-      midiData.type = MIDI_SYSEX;
+      midiDataCopy.type = MIDI_SYSEX;
 
-      if (midiData.sysexdata != nullptr) {
-        delete[] midiData.sysexdata;
-        midiData.sysexdata = nullptr;
+      // Comme la data va etre consommée dans la prochaine boucle, les pointeurs seront perdus, il faut donc faire une copie profonde (unique... sinon on peut faire une queue) qu'on utilisera plus tard
+      uint16_t copyLen = length;
+
+      if (copyLen >= MAX_SYSEX_SIZE) {
+        copyLen = MAX_SYSEX_SIZE - 1; // garde une place pour '\0'
       }
 
-      if (length > 0) {
-        midiData.sysexdata = new byte[length];
-        if (midiData.sysexdata != nullptr) {
-          memcpy(midiData.sysexdata, sysexdata, length);
-        }
+      if (sysexdata != nullptr && copyLen > 0) {
+        memcpy(midiDataCopy.sysexdata,sysexdata, copyLen);
       }
+      midiDataCopy.length = copyLen;
 
       dataAvailable = 1;
     } 
@@ -174,10 +183,10 @@ class BLEMIDIInterface: public MIDIInterface{
       return &emptyString;
     }
 
-    virtual void monitor(){     
-      MIDIInterface::monitor();
+    virtual bool monitor() override{           
       if (state.label == IF_STATE_CONNECTED) 
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
+      return MIDIInterface::monitor();
     }
 
     virtual bool begin(){
@@ -208,6 +217,12 @@ class BLEMIDIInterface: public MIDIInterface{
         DEBUG_INFO("\tbleMIDI.begin() ignored (hasBegun)");          
       }             
 
+      return true;
+    }
+
+    virtual bool end() override{
+      DEBUG_INFO("%s::end()",interfaceName.c_str());          
+      //setStateRestart();  // as we cant really stop the BLE MIDI, we just set the state to not ready and ask the user to connect the BLE MIDI to make it work again, this is not ideal but at least it avoid having a wrong state until the next connection attempt
       return true;
     }
 
@@ -243,11 +258,11 @@ class BLEMIDIInterface: public MIDIInterface{
 
 
     void setStateReady(){            
-      DeviceInterface::setStateReady("blue",*lang.getString("paired"));
+      DeviceInterface::setStateReady("blue",lang.getString("paired")->c_str());
     }
 
     void setStatePending(){
-      DeviceInterface::setStatePending("blue medium",concatStrings(*lang.getString("Connect Blutooth"), " ", BLE_CONNECTION_NAME));
+      DeviceInterface::setStatePending("blue medium",concatStrings(*lang.getString("Connect Blutooth"), " ", BLE_CONNECTION_NAME).c_str());
     } 
 
     static void handleConnectedStatic() {
@@ -298,8 +313,8 @@ class USBMIDIInterface: public MIDIInterface{
       icon = ICON_USBMIDI;  
     }
 
-    virtual void monitor() override{
-      MIDIInterface::monitor();
+    virtual bool monitor() override{
+      
       if (useUSBMidi){  // only if USB is active
         #define USB_POLL_DELAY  1000
         if (millis()-lastPoll > USB_POLL_DELAY){  
@@ -316,6 +331,9 @@ class USBMIDIInterface: public MIDIInterface{
         }
         usbMIDI.read();
       }
+
+      return MIDIInterface::monitor();
+
     }
 
     void setStateRestart(){
@@ -339,6 +357,12 @@ class USBMIDIInterface: public MIDIInterface{
         usbMIDI.setHandleSystemExclusive(handleSysexStatic);        
         state.switchable = true; 
       }
+      return true;
+    }
+
+    virtual bool end() override{
+      DEBUG_INFO("%s::end()",interfaceName.c_str());
+      //setStateRestart();  // as we cant really stop the USB MIDI, we just set the state to not ready and ask the user to plugin the USB MIDI to make it work again, this is not ideal but at least it avoid having a wrong state until the next connection attempt
       return true;
     }
 
@@ -378,8 +402,14 @@ class DINMIDIInterface: public MIDIInterface{
       return true;
     };        
 
-    virtual void monitor() override{
-      MIDIInterface::monitor();      
+    virtual bool end() override{
+      DEBUG_INFO("%s::end()",interfaceName.c_str());          
+      //setStateRestart();  // as we cant really stop the DIN MIDI, we just set the state to not ready and ask the user to connect the DIN MIDI to make it work again, this is not ideal but at least it avoid having a wrong state until the next connection attempt
+      return true;
+    };
+
+    virtual bool monitor() override{
+      return MIDIInterface::monitor();      
     }
 
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override {return false;}
@@ -509,6 +539,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }    
 
     void requestDirectoryRefresh(){
+      if (state.enabled == false) return;
       // trigger application manager to call discovery.discoveryRequest()
       DEBUG_INFO("%s::requestDirectoryRefresh()",interfaceName.c_str());
       // state will be recalled when directory service has finished
@@ -746,13 +777,14 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       return changed;
     }      
 
-    virtual void monitor() override{     
-      MIDIInterface::monitor();      
-      monitorNetwork();      
+    virtual bool monitor() override{
+      bool dataProcessed = MIDIInterface::monitor();      
+      dataProcessed |= monitorNetwork();      
+      return dataProcessed;
     }
 
     #define MIDI_MONITORING_DELAY 15000   // should be bigger than the timeout of invite()
-    virtual void monitorService(){
+    virtual bool monitorService() override{
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;  
       
       if (appleMidiClient != nullptr){
@@ -766,7 +798,10 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
             startSession();
           }
         }              
-      }            
+      } 
+      
+      return dataAvailable;
+      
     }
     
     // Méthode de l'instance réellement appelée
@@ -947,8 +982,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
         state.details = *lang.getString("session disconnected");        
       }else{
         // oherwise, this is considered as an error
-        state.label = IF_STATE_ERROR;        
-        state.details = *lang.getString(exception);
+        setStateError(lang.getString(exception)->c_str());
         exception = UNDEF_EXCEPTION; //acknowledged
       }
     }    

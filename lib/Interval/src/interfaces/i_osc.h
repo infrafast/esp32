@@ -5,33 +5,224 @@
 #include "DataManagement.h"
 #include "OSCMessage.h"
 
-#define GROUP_INTERFACE_OSC "OSC"
-/*class OSCInterface{
-  public:
-};*/
 
+// ============================================================
+// Helpers de parsing
+// ============================================================
+
+static bool parse2Digits(const char* p, uint8_t& value) {
+  if (p[0] < '0' || p[0] > '9') return false;
+  if (p[1] < '0' || p[1] > '9') return false;
+  value = (p[0] - '0') * 10 + (p[1] - '0');
+  return true;
+}
+
+static bool strEquals(const char* a, const char* b) {
+  return strcmp(a, b) == 0;
+}
+
+static bool strStartsWith(const char* s, const char* prefix) {
+  return strncmp(s, prefix, strlen(prefix)) == 0;
+}
+
+// serialization de message OSC
+class MemoryPrint : public Print {
+public:
+  MemoryPrint(uint8_t* buf, size_t maxLen)
+    : _buf(buf), _maxLen(maxLen), _len(0) {}
+
+  size_t write(uint8_t b) override {
+    if (_len >= _maxLen) return 0;
+    _buf[_len++] = b;
+    return 1;
+  }
+
+  size_t length() const { return _len; }
+
+private:
+  uint8_t* _buf;
+  size_t _maxLen;
+  size_t _len;
+};
+
+struct OscQueueNode {
+  String address;
+  uint8_t* data = nullptr;
+  size_t len = 0;
+  OscQueueNode* next = nullptr;
+};
+
+class OscMessageQueue {
+public:
+  OscMessageQueue()
+    : head(nullptr), tail(nullptr), count(0), lastSendTime(0) {}
+
+  ~OscMessageQueue() {
+    clear();
+  }
+
+  bool enqueue(OSCMessage& msg) {
+    // enqueue une copie d'un message OSC
+    size_t msgLen = msg.size();
+
+    // Sécurité minimale : allouer au moins 64 octet, meme si pas de parametres au message
+    size_t allocLen = (msgLen > 0) ? msgLen : 64;
+
+    uint8_t* temp = new uint8_t[allocLen];
+    if (!temp) return false;
+
+    MemoryPrint mp(temp, allocLen);
+    msg.send(mp);
+
+    size_t actualLen = mp.length();
+
+    // Si rien n'a été écrit → invalide
+    if (actualLen == 0) {
+      delete[] temp;
+      return false;
+    }
+
+    // Vérifie doublon
+    for (OscQueueNode* cur = head; cur != nullptr; cur = cur->next) {
+      if (cur->len == actualLen && memcmp(cur->data, temp, actualLen) == 0) {
+        delete[] temp;
+        return false;
+      }
+    }
+
+    // Ajuste la taille si nécessaire
+    uint8_t* finalBuf = temp;
+    if (actualLen != allocLen) {
+      finalBuf = new uint8_t[actualLen];
+      if (!finalBuf) {
+        delete[] temp;
+        return false;
+      }
+      memcpy(finalBuf, temp, actualLen);
+      delete[] temp;
+    }
+
+    // Création node
+    OscQueueNode* node = new OscQueueNode();
+    if (!node) {
+      delete[] finalBuf;
+      return false;
+    }
+
+    node->data = finalBuf;
+    node->len = actualLen;
+    node->next = nullptr;
+
+    // FIFO
+    if (!tail) {
+      head = tail = node;
+    } else {
+      tail->next = node;
+      tail = node;
+    }
+
+    count++;
+    return true;
+  }
+
+
+  // Déqueue uniquement si delayBetweenTwoSend ms écoulées depuis le dernier envoi = latency
+  bool dequeue(OSCMessage& outMsg, int delayBetweenTwoSend) {
+    if (!head){
+      return false;
+    }
+
+    unsigned long now = millis();
+    if ((now - lastSendTime) < delayBetweenTwoSend) {
+      return false;
+    }
+
+    OscQueueNode* node = head;
+
+    for (size_t i = 0; i < node->len; i++) {
+      outMsg.fill(node->data[i]);
+    }
+
+    head = head->next;
+    if (!head) tail = nullptr;
+
+    delete[] node->data;
+    delete node;
+    count--;
+
+    lastSendTime = now;
+    return true;
+  }
+
+  bool isEmpty() const {
+    return head == nullptr;
+  }
+
+  size_t size() const {
+    return count;
+  }
+
+  void clear() {
+    while (head) {
+      OscQueueNode* node = head;
+      head = head->next;
+      delete[] node->data;
+      delete node;
+    }
+    tail = nullptr;
+    count = 0;
+  }
+
+private:
+  OscQueueNode* head;
+  OscQueueNode* tail;
+  size_t count;
+  unsigned long lastSendTime;
+};
+
+
+
+
+#define GROUP_INTERFACE_OSC "OSC"
 
 class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
-    OSCMessage osc;
-    Event evtOSC = Event(&osc);
+    OSCMessage oscIn;   // reception
+    OSCMessage oscOut;  // envoi
 
-    virtual const String& getProviderNameForData(){ return interfaceName;}   // we are our own provider do not forget it!
+    OscMessageQueue queue; // envoi compatible avec la latence
+
+    Event evtOSC = Event(&oscIn);
+    // from remote UDP
+    IPAddress UDPIP;
+    int UDPPort;
+    UDP* udp = nullptr;
 
     NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String echoCommand, bool _configurable=false, String group = GROUP_INTERFACE_OSC):NetworkDevice(name, group ,_OSC_localPort,_OSC_remotePort,echoCommand, _configurable){
       icon = "g";        
 
       if (!destination.ip.fromString(_OSC_IPaddress)) destination.ip = IPAddress(0,0,0,0);
-  
-      registerDataSetAddress(&addressPing);         // global      
-    
-      //data = &osc;                                  // this interface manage OSCMessage as data 
 
+      registerDataSetAddress(&addressPing);         //       
+    
+      evtOSC.type = EVENT_OSC_MESSAGE;              // thta's the only event type this interface is raising
+
+    
     }
 
     ~NetworkOSC(){
+    }
+
+    virtual bool begin(){
+      DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
+      return true;
+    }
+
+    virtual bool end(){
+      DEBUG_INFO("%s::end() calling stop()",interfaceName.c_str());            
+      return stop();
     }
 
     virtual void serializeProperties(JsonArray& properties) override{
@@ -57,85 +248,219 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       return changed | NetworkDevice::restoreProperty(property);
     }        
 
-     virtual void monitorService(){
-      // Check if packet was received
-      dataAvailable = readOSC();
+    #define OSC_PING_DELAY 3000
+    #define OSC_MESSAGE_PROCESSED_AT_ONCE 3 // process
 
-      if (dataAvailable > 0){                                     // data has come
-        if (state.code != IF_READY) setStateReady();          // set the device to connected
-        destination.lastQueryTime =  millis();                   // so no need to trigger the ping as we know the device is alive
-        connectAttemptCount = 0;                                  // reset attempt counter                
-        return;                                                   
+    uint32_t lastPingTime = 0;
+
+    virtual bool monitorService() override {
+      bool dataProcessed = false;
+
+      OSCMessage msgOut;
+      if (queue.dequeue(msgOut, destination.latency)) {
+        _sendOSCMessage(&msgOut);
+        dataProcessed = true;
       }
 
-      if (dataAvailable == -1){                                     // UDP not replying
-        if (deviceInterface->state.label != IF_STATE_DISCONNECTED) setStateDisconnected();
+      for (uint8_t i = 0; i < OSC_MESSAGE_PROCESSED_AT_ONCE; ++i) {
+        int8_t dataAvailable = readOSC();
+        if (dataAvailable <= 0) break;
+
+        if (state.code != IF_READY) setStateConnected();
+        connectAttemptCount = 0;
+
+        process();
+        dataProcessed = true;
       }
 
-      // time to ping the device to see if it's still alive after certain time or if we have no valid UDP, we reconnect
-      #define OSC_PING_DELAY 3000
-      // delay expired
-      if (millis()-destination.lastQueryTime > OSC_PING_DELAY){        
-        destination.lastQueryTime = millis();
-        if (connectAttemptCount++ == 1){            //put 2 if you give it a new chance or set state (2x try)
-          setStateQueryingDevice();
-          connectAttemptCount = 0;          
-        }else{
-          if (!ping()) handleConnectService();
-        }                                                                 
-      }                                                                   
+      if (!dataProcessed) {
+        uint32_t now = millis();
+
+        if (now - destination.lastRxTime > OSC_PING_DELAY &&
+            now - lastPingTime > OSC_PING_DELAY) {
+
+          if (connectAttemptCount >= 2) {
+            if (state.label != IF_STATE_PENDING) setStateQueryingDevice();
+            connectAttemptCount = 0;
+          } else {
+            if (ping()) {
+              lastPingTime = now;
+              connectAttemptCount++;
+              dataProcessed = true;
+            } else {
+              handleConnectService();
+            }
+          }
+        }
+      }
+
+      return dataProcessed;
     }
+
+    
+    bool send(OSCMessage& msg){
+      return queue.enqueue(msg);            // queued send
+      //return _sendOSCMessage(&msg);       // direct send
+    }
+
+    virtual void process(){
+      fireEvent(evtOSC);  //simply propagate the data
+    }    
+    
+    #ifdef DEBUG
+      char oscDump[256];
+    #endif
 
     int readOSC(){
         UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);   // request UDP slot
+        udp = nullptr;
+        
         if (udpSlot == NULL) return -1;                
 
-        UDP* udp = udpSlot->udp;
+        udp = udpSlot->udp;
         if (udp == nullptr) return -1;
 
         int size = udp->parsePacket();
 
         if (size > 0){
-            osc.empty();
+            oscIn.empty();
 
             while (size--){
-                osc.fill(udp->read());                                
+                oscIn.fill(udp->read());                                
                 delay(0);               
             }
 
             //xSemaphoreGive(udpSlot->mutex);
 
-            if (osc.hasError()) {
-                DEBUG_INFO("readOSC: %i\n", osc.getError());
+            if (oscIn.hasError()) {
+                DEBUG_INFO("readOSC: %i\n", oscIn.getError());
                 return 0;   // message invalide
             }else{
               char addr[64];
-              osc.getAddress(addr, 0);
-              DEBUG_INFO("<<%s(%s,%i) ",addr,destination.ip.toString().c_str(),remotePort);
+              oscIn.getAddress(addr, 0);
+
+              destination.lastRxTime = millis();
 
               // see if it's a ping, we measure
-              if ( destination.echoCommand == addr ) determineQoS();
+              if (destination.echoCommand == addr) {
+                if (destination.pingPending) {
+                  unsigned long rawLatency = millis() - destination.lastPingSentAt;
+                  calculateLatencyAndJitter(rawLatency);
+                  destination.pingPending = false;
+                }
 
-              // we now forward the event
-              // before that we may filter here some message (ex. the ping...)
-              fireEvent(evtOSC);
+                UDPIP = udp->remoteIP();
+                UDPPort = udp->remotePort();
+              }
 
+
+              #ifdef DEBUG
+                dump(oscIn, oscDump, sizeof(oscDump));              
+                DEBUG_INFO("<<%s(%s,%i) %s",addr,destination.ip.toString().c_str(),remotePort, oscDump);              
+              #endif
+              
             }              
             // ✔ message valide
             // retour : au moins 1, même si aucun argument
-            int argCount = osc.size();
+            int argCount = oscIn.size();
             return (argCount == 0 ? 1 : argCount);
         }
     
         return 0;
     }
 
+    char* dump(OSCMessage &msg, char* buffer, size_t bufferSize) {
+      size_t offset = 0;
+      for (int i = 0; i < msg.size(); i++) {
+        if (offset >= bufferSize) break;
+        if (msg.isInt(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%d ", msg.getInt(i));
+        else if (msg.isFloat(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%f ", msg.getFloat(i));
+        else if (msg.isString(i)) {
+          char txt[128];
+          if (msg.getString(i, txt, sizeof(txt)) > 0) offset += snprintf(buffer + offset, bufferSize - offset,"%s ", txt);
+        }
+        else if (msg.isBoolean(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%s ", msg.getBoolean(i) ? "true" : "false");
+        else if (msg.isDouble(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%lf ", msg.getDouble(i));
+        else if (msg.isBlob(i)) offset += snprintf(buffer + offset, bufferSize - offset,"[blob:%d] ", msg.getBlobLength(i));
+        else offset += snprintf(buffer + offset, bufferSize - offset,"[type:%c] ", msg.getType(i));
+      }
+      return buffer;
+    }
 
-    bool sendOSCMessage(OSCMessage *msg){           
+    virtual bool stop() override{          // disconnect the network for network interface
+      DEBUG_INFO("%s::stop()",interfaceName.c_str());
+      return handleDisconnectService();
+    };  
+
+    virtual bool isSwitchable(){
+      return true;
+    }    
+
+    virtual bool handleConnectService() override{
+      DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
+      // network connection is established so we now try to connect the device to its protocol
+      if (udpID == -1) {
+        udpID = hwm.network->requestUDPslotID(localPort);   // the network will create or reuse a udp slot and give its ID to us
+      }
+      if (udpID == -1) return false;                            // can't get any UDP connectivity => try again until next queryTime expired
+      
+      DEBUG_INFO("udp(%i) got UDP slot #%i",localPort,udpID);      
+      setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
+      destination.lastRxTime = 0;                             // with the valid UDP we just got so we force ping to be triggered immediately
+      return true;
+    }
+
+    virtual bool handleDisconnectService() override{
+      DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
+      destination.lastRxTime = 0;                                // force immediate ping attempt
+      destination.pingPending = false;          // clear any pending ping
+      if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
+      queue.clear();      
+      return true;
+    }    
+  
+    void setStateQueryingDevice(){
+      //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
+      // network is connected but not the OSC device is not answering
+      DeviceInterface::setStatePending();
+      state.subState = destination.ip.toString();      
+      state.progress = -1;      
+    }
+
+    /*virtual bool ping() override{
+      destination.lastRxTime = millis();       
+      OSCMessage msg(destination.echoCommand.c_str()); 
+      return send(msg);
+    }*/
+
+    virtual bool ping() override {
+      OSCMessage msg(destination.echoCommand.c_str());
+
+      destination.lastPingSentAt = millis();
+      destination.pingPending = true;
+
+      return _sendOSCMessage(&msg);
+    }    
+
+
+    virtual void determineQoS() override{    
+      if (state.code != IF_READY) state.QoSlevel = QoS::UNDETERMINED;
+      else
+      if (destination.latency <= 50 && destination.jitter <= 10) state.QoSlevel = QoS::GOOD;    
+      else
+      if (destination.latency <= 100 && destination.jitter <= 20) state.QoSlevel = QoS::MEDIUM;    
+      else
+      if (destination.latency <= 200 && destination.jitter <= 40)  state.QoSlevel = QoS::POOR;    // yellow
+      else
+      // Au-delà : problème réseau
+      state.QoSlevel = QoS::CRITICAL;    
+    }      
+
+    bool _sendOSCMessage(OSCMessage *msg){           
       
       bool success = false;
 
-      DEBUG_INFO(">>%s(%s,%i->%i) ",msg->getAddress(),destination.ip.toString().c_str(),localPort, remotePort);
+      dumpOSCMessage(*msg);
 
       UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
 
@@ -158,101 +483,73 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       return success;          
     }
 
-    virtual bool stop() override{          // disconnect the network for network interface
-      DEBUG_INFO("%s::stop()",interfaceName.c_str());
-      return handleDisconnectService();
-    };  
-
-    virtual bool isSwitchable(){
-      return true;
-    }    
-
-    virtual bool handleConnectService(){
-      DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
-      // network connection is established so we now try to connect the device to its protocol
-      if (udpID == -1) {
-        udpID = hwm.network->requestUDPslotID(localPort);   // the network will create or reuse a udp slot and give its ID to us
-      }
-      if (udpID == -1) return false;                            // can't get any UDP connectivity => try again until next queryTime expired
-      
-      DEBUG_INFO("udp(%i) got UDP slot #%i",localPort,udpID);      
-      setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
-      destination.lastQueryTime = 0;                           // with the valid UDP we just got so we force ping to be triggered immediately
-      return true;
-    }
-
-    virtual bool handleDisconnectService(){
-      DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
-      destination.lastQueryTime = 0;                                // force immediate ping attempt
-      if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
-      //setStateDisconnected();
-      return true;
-    }    
-  
-    void setStateQueryingDevice(){
-      //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
-      // network is connected but not the OSC device is not answering
-      DeviceInterface::setStatePending();
-      state.subState = destination.ip.toString();      
-      state.progress = -1;      
-    }
-
-    virtual bool ping() override{
-      destination.lastQueryTime = millis();       
-      OSCMessage msg(destination.echoCommand.c_str());
-      return sendOSCMessage(&msg);
-    }
-
-    void determineQoS(){      
-      /* we got a echoCommand echo, so we calculate the latency
-      Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
-      ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
-      */
-      unsigned long rawLatency = millis() - destination.lastQueryTime;
-
-      // filtre les valeurs incoherentes , par exemple si l'interface est deconnectée
-      if (rawLatency < 500){
-        // α entre 0.1 (très lisse) et 0.3 (réactif)
-        #define LAT_ALPHA 0.2f                                 
-
-        if (rawLatency < 500) {
-            destination.latency =
-                destination.latency * (1.0f - LAT_ALPHA) +
-                rawLatency * LAT_ALPHA;
-
-            destination.latency = (uint16_t)destination.latency;
-
-            float delta = abs((int)rawLatency - (int)destination.latency);
-
-            destination.jitter =
-                destination.jitter * 0.75f +
-                delta * 0.25f;                      
-            }                  
-
-      }
-
-      DEBUG_PRINT("\t latency: %i, jitter:%i",destination.latency,destination.jitter);      
-
-      // Sécurité bornes
-      if (destination.latency > 500) destination.latency = 500;
-      
-      if (destination.latency <= 15 && destination.jitter <= 5)
-        state.qualityColor = GUI::green;    
-      else if (destination.latency <= 30 && destination.jitter <= 5)
-        state.qualityColor = GUI::blue;    
-      else if (destination.latency <= 50 && destination.jitter <= 20)
-        state.qualityColor = GUI::yellow;    
-      // Au-delà : problème réseau
-      else
-        state.qualityColor = GUI::red;    
-    }      
-
   private:    
     uint8_t connectAttemptCount = 0;
     bool udpConnectionLost = false;
     int udpID = -1;
     
     //UDP* udp = nullptr; // DIRECT UDP
+
+
+      void dumpOSCMessage(OSCMessage& msg){
+        #ifdef DEBUG
+          int argCount = msg.size();
+          
+          DEBUG_INFO(">>(%s,%i->%i) %s",destination.ip.toString().c_str(),localPort, remotePort, msg.getAddress());
+
+          //DEBUG_PRINT(" | args:%d ", argCount);
+
+          for (int i = 0; i < argCount; i++) {
+
+            char type = msg.getType(i);
+
+            switch(type) {
+
+              case 'i': { // int32
+                int32_t v = msg.getInt(i);
+                DEBUG_PRINT("[i:%ld] ", (long)v);
+                break;
+              }
+
+              case 'f': { // float
+                float v = msg.getFloat(i);
+                DEBUG_PRINT("[f:%f] ", v);
+                break;
+              }
+
+              case 's': { // string
+                char buffer[64];
+                msg.getString(i, buffer, sizeof(buffer));
+                DEBUG_PRINT("[s:%s] ", buffer);
+                break;
+              }
+
+              case 'b': { // blob
+                int size = msg.getBlobLength(i);
+                const uint8_t* data = msg.getBlob(i);
+                DEBUG_PRINT("[b:%d bytes] ", size);
+                break;
+              }
+
+              case 'd': { // double
+                double v = msg.getDouble(i);
+                DEBUG_PRINT("[d:%f] ", v);
+                break;
+              }
+
+              case 'T': DEBUG_PRINT("[T:true] "); break;
+              case 'F': DEBUG_PRINT("[F:false] "); break;
+              case 'N': DEBUG_PRINT("[N:nil] "); break;
+              case 'I': DEBUG_PRINT("[I:inf] "); break;
+
+              default:
+                DEBUG_PRINT("[?:%c] ", type);
+                break;
+            }
+          }
+        #endif    
+      }
+
 
 };
 
