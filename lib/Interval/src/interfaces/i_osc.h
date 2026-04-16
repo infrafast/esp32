@@ -26,27 +26,50 @@ static bool strStartsWith(const char* s, const char* prefix) {
 }
 
 // serialization de message OSC
+// ============================================================
+// Helpers de sérialisation OSC
+// ============================================================
+
 class MemoryPrint : public Print {
 public:
   MemoryPrint(uint8_t* buf, size_t maxLen)
-    : _buf(buf), _maxLen(maxLen), _len(0) {}
+    : _buf(buf), _maxLen(maxLen), _len(0), _overflow(false) {}
 
   size_t write(uint8_t b) override {
-    if (_len >= _maxLen) return 0;
+    if (_len >= _maxLen) {
+      _overflow = true;
+      return 0;
+    }
     _buf[_len++] = b;
+    return 1;
+  }
+
+  size_t length() const { return _len; }
+  bool overflow() const { return _overflow; }
+
+private:
+  uint8_t* _buf;
+  size_t _maxLen;
+  size_t _len;
+  bool _overflow;
+};
+
+class CountingPrint : public Print {
+public:
+  CountingPrint() : _len(0) {}
+
+  size_t write(uint8_t) override {
+    ++_len;
     return 1;
   }
 
   size_t length() const { return _len; }
 
 private:
-  uint8_t* _buf;
-  size_t _maxLen;
   size_t _len;
 };
 
 struct OscQueueNode {
-  String address;
   uint8_t* data = nullptr;
   size_t len = 0;
   OscQueueNode* next = nullptr;
@@ -62,96 +85,112 @@ public:
   }
 
   bool enqueue(OSCMessage& msg) {
-    // enqueue une copie d'un message OSC
-    size_t msgLen = msg.size();
+    if (msg.hasError()) {
+      return false;
+    }
 
-    // Sécurité minimale : allouer au moins 64 octet, meme si pas de parametres au message
-    size_t allocLen = (msgLen > 0) ? msgLen : 64;
+    // 1) Mesure exacte de la taille sérialisée OSC
+    CountingPrint counter;
+    msg.send(counter);
+    size_t serializedLen = counter.length();
 
-    uint8_t* temp = new uint8_t[allocLen];
-    if (!temp) return false;
+    if (serializedLen == 0) {
+      return false;
+    }
 
-    MemoryPrint mp(temp, allocLen);
+    // 2) Allocation buffer exact
+    uint8_t* buf = new uint8_t[serializedLen];
+    if (!buf) {
+      return false;
+    }
+
+    // 3) Sérialisation réelle
+    MemoryPrint mp(buf, serializedLen);
     msg.send(mp);
 
-    size_t actualLen = mp.length();
-
-    // Si rien n'a été écrit → invalide
-    if (actualLen == 0) {
-      delete[] temp;
+    if (mp.overflow() || mp.length() != serializedLen) {
+      delete[] buf;
       return false;
     }
 
-    // Vérifie doublon
+    // 4) Détection doublon (optionnel, comme dans votre version)
     for (OscQueueNode* cur = head; cur != nullptr; cur = cur->next) {
-      if (cur->len == actualLen && memcmp(cur->data, temp, actualLen) == 0) {
-        delete[] temp;
+      if (cur->len == serializedLen && memcmp(cur->data, buf, serializedLen) == 0) {
+        delete[] buf;
         return false;
       }
     }
 
-    // Ajuste la taille si nécessaire
-    uint8_t* finalBuf = temp;
-    if (actualLen != allocLen) {
-      finalBuf = new uint8_t[actualLen];
-      if (!finalBuf) {
-        delete[] temp;
-        return false;
-      }
-      memcpy(finalBuf, temp, actualLen);
-      delete[] temp;
-    }
-
-    // Création node
+    // 5) Création noeud
     OscQueueNode* node = new OscQueueNode();
     if (!node) {
-      delete[] finalBuf;
+      delete[] buf;
       return false;
     }
 
-    node->data = finalBuf;
-    node->len = actualLen;
+    node->data = buf;
+    node->len = serializedLen;
     node->next = nullptr;
 
-    // FIFO
-    if (!tail) {
+    // 6) FIFO append
+    if (tail == nullptr) {
       head = tail = node;
     } else {
       tail->next = node;
       tail = node;
     }
 
-    count++;
+    ++count;
     return true;
   }
 
-
-  // Déqueue uniquement si delayBetweenTwoSend ms écoulées depuis le dernier envoi = latency
+  // Déqueue uniquement si delayBetweenTwoSend ms écoulées depuis le dernier envoi
   bool dequeue(OSCMessage& outMsg, int delayBetweenTwoSend) {
-    if (!head){
+    if (head == nullptr) {
       return false;
     }
 
     unsigned long now = millis();
-    if ((now - lastSendTime) < delayBetweenTwoSend) {
+    if ((unsigned long)(now - lastSendTime) < (unsigned long)delayBetweenTwoSend) {
       return false;
     }
 
     OscQueueNode* node = head;
 
-    for (size_t i = 0; i < node->len; i++) {
+    // Important : repartir d'un message vide
+    outMsg.empty();
+
+    for (size_t i = 0; i < node->len; ++i) {
       outMsg.fill(node->data[i]);
     }
 
-    head = head->next;
-    if (!head) tail = nullptr;
+    bool ok = !outMsg.hasError();
+
+    head = node->next;
+    if (head == nullptr) {
+      tail = nullptr;
+    }
 
     delete[] node->data;
     delete node;
-    count--;
+    --count;
 
-    lastSendTime = now;
-    return true;
+    if (ok) {
+      lastSendTime = now;
+    } else {
+      outMsg.empty();
+    }
+
+    return ok;
+  }
+
+  bool peekIsDue(int delayBetweenTwoSend) const {
+    if (head == nullptr) {
+      return false;
+    }
+
+    unsigned long now = millis();
+    return ((unsigned long)(now - lastSendTime) >= (unsigned long)delayBetweenTwoSend);
   }
 
   bool isEmpty() const {
@@ -163,12 +202,13 @@ public:
   }
 
   void clear() {
-    while (head) {
+    while (head != nullptr) {
       OscQueueNode* node = head;
       head = head->next;
       delete[] node->data;
       delete node;
     }
+
     tail = nullptr;
     count = 0;
   }
@@ -179,7 +219,6 @@ private:
   size_t count;
   unsigned long lastSendTime;
 };
-
 
 
 
@@ -259,7 +298,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       OSCMessage msgOut;
       if (queue.dequeue(msgOut, destination.latency)) {
         _sendOSCMessage(&msgOut);
-        dataProcessed = true;
+        dataProcessed = true;      
       }
 
       for (uint8_t i = 0; i < OSC_MESSAGE_PROCESSED_AT_ONCE; ++i) {
@@ -270,9 +309,10 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         connectAttemptCount = 0;
 
         process();
+       
         dataProcessed = true;
       }
-
+           
       if (!dataProcessed) {
         uint32_t now = millis();
 
@@ -298,7 +338,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
           }
         }
       }
-
       return dataProcessed;
     }
 
@@ -460,7 +499,16 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }      
 
     bool _sendOSCMessage(OSCMessage *msg){           
-      
+      if (msg == nullptr) {
+        DEBUG_ERROR(" **** FAIL (msg null) ****");
+        return false;
+      }
+
+      if (msg->hasError()) {
+        DEBUG_ERROR(" **** FAIL (OSC msg invalid) ****");
+        return false;
+      }
+
       bool success = false;
 
       dumpOSCMessage(*msg);
@@ -471,7 +519,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
           DEBUG_ERROR(" **** FAIL (UdpSlot null) ****");
           return false;
       }            
-     
+    
       UDP* udp = udpSlot->udp; 
 
       if (udp != nullptr){

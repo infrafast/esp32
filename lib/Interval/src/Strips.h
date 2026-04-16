@@ -425,11 +425,11 @@ class Strip: public EventListener{
         lastHoldUpdate = 0;
     }
 
-    virtual float increaseCallback(unsigned long /*time*/, uint8_t trigger){
+    virtual float increaseCallback(unsigned long time, uint8_t trigger){
       return applyProgressive(+1, trigger);
     }
 
-    virtual float decreaseCallback(unsigned long /*time*/, uint8_t trigger){
+    virtual float decreaseCallback(unsigned long time, uint8_t trigger){
       return applyProgressive(-1, trigger);
     }
 

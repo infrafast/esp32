@@ -1437,8 +1437,8 @@ uint16_t QoStoColor(QoS qos) {
       case QoS::POOR:           return TFT_ORANGE;   
       case QoS::CRITICAL:       return TFT_RED;      
       case QoS::NOTAPPLICABLE:  return TFT_WHITE;
-      case QoS::UNDETERMINED:   return 0x5AEB;        // = TFT_GREY
-      default:                  return TFT_WHITE;    // fallback
+      case QoS::UNDETERMINED:   
+      default:                  return 0x5AEB;    // TFT_GREY
   }
 }
 

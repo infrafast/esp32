@@ -1995,7 +1995,7 @@ void setup() {
               if (webAppConnected == false){
                 screen.id = SCREEN_UTILS;
                 screen.state = STATE_UTILS_CONNECTWEBAPP;
-              }  // when web app connect we go back to normal scree
+              }  // when web app connect we go back to normal screen
             break;
             case STATE_UTILS_TRIGGER_FWUPDATE_PROMPT:
               SWupdatePromptScreen(5000);

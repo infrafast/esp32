@@ -415,7 +415,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     virtual bool monitor() = 0; 
 
     virtual void determineQoS(){
-      if (state.enabled) state.QoSlevel = QoS::GOOD;
+      if (state.code == IF_READY) state.QoSlevel = QoS::GOOD;
       else state.QoSlevel = QoS::UNDETERMINED;
     };
 
@@ -475,7 +475,7 @@ class NetWorkService{
 
     void releaseCapacity(){
       if (!capacityReserved){
-        DEBUG_INFO("\t💪%s::releaseCapacity() skipped (not reserved)",
+        DEBUG_INFO("\t%s::releaseCapacity() skipped (not reserved)",
                     deviceInterface ? deviceInterface->interfaceName.c_str() : "<?>");
         return;
       }

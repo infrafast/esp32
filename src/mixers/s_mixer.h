@@ -113,11 +113,11 @@ class SendStrip : public StripMixerMixin<TwoSelectStrip> {
     virtual void deserializeProperty(String property) override{
       TwoSelectStrip::deserializeProperty(property);
       
-      allInput2MixbusValues.unreserve(sendReturnValues);    // release any previous value this prevents memory consumption when user change the dropdown
-      allBusMixValues.unreserve(busValues);                 // release any previous value this prevents memory consumption when user change the dropdown
+      mixer->allInput2MixbusValues.unreserve(sendReturnValues);    // release any previous value this prevents memory consumption when user change the dropdown
+      mixer->allBusMixValues.unreserve(busValues);                 // release any previous value this prevents memory consumption when user change the dropdown
       
-      sendReturnValues = allInput2MixbusValues.reserve(select1ID,select2ID);      // reserve the new value
-      busValues = allBusMixValues.reserve(select2ID);
+      sendReturnValues = mixer->allInput2MixbusValues.reserve(select1ID,select2ID);      // reserve the new value
+      busValues = mixer->allBusMixValues.reserve(select2ID);
 
       value = &sendReturnValues->value;           // value of the fader for a ch on the bus
       toggle1 = &sendReturnValues->toggle;        // the top toggle is linked to the ch mute on the bus
