@@ -497,9 +497,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     #define UNDEF_EXCEPTION "UndefinedException"
     String exception = UNDEF_EXCEPTION;
 
-    virtual uint8_t getServiceWeight(){
+    /*virtual uint8_t getServiceWeight() override{
       return 2; // consume 2 udp slot
-    }    
+    } */   
 
 
     AppleMIDIInterface(bool _configurable): MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){

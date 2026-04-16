@@ -451,7 +451,7 @@ class NetWorkService{
 
     }
 
-    #define SERVICES_WEIGHT_LIMIT  5
+    #define SERVICES_WEIGHT_LIMIT  4
     
     virtual uint8_t getServiceWeight(){
       return 1; // default
