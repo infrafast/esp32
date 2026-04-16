@@ -415,7 +415,9 @@ class WebApplicationService: public NetworkDevice{
 
     virtual bool monitorService() override{
       monitorInactivityTimeout();
-      return handleWeb(); // report if we processed any data
+      const bool processedData = handleWeb(); // report if we processed any data
+      processPendingDisable();
+      return processedData;
     }
 
     virtual void determineQoS() override{
@@ -474,6 +476,7 @@ class WebApplicationService: public NetworkDevice{
     void reportSocketClosed(){
       socketConnected = false;
       reportActivity();
+      requestDisable(true);
     }
 
     bool handleWeb(){
@@ -530,12 +533,15 @@ class WebApplicationService: public NetworkDevice{
     }
 
     void stopWebApp(){
+      internalShutdownInProgress = true;
       shutdownWSS();
       if (webServer != nullptr){
         delete webServer;
         webServer = nullptr;
       }
       socketConnected = false;
+      pendingDisable = false;
+      internalShutdownInProgress = false;
       DEBUG_INFO("WebAppservices down");
     }
 
@@ -562,15 +568,37 @@ class WebApplicationService: public NetworkDevice{
     WebSocketHandler webSocketHandler = nullptr;
     uint32_t lastActivityMs = 0;
     bool socketConnected = false;
+    bool pendingDisable = false;
+    bool internalShutdownInProgress = false;
+    bool websocketShutdownInProgress = false;
 
     char hdrContentType[120];
     char hdrContentLength[20];
 
+    void requestDisable(bool fromWebSocketCloseCallback = false){
+      if (fromWebSocketCloseCallback && (internalShutdownInProgress || websocketShutdownInProgress)){
+        DEBUG_INFO("[WEBAPP]\t\tIgnoring websocket-close disable request during shutdown");
+        return;
+      }
+      pendingDisable = true;
+    }
+
+    void processPendingDisable(){
+      if (!pendingDisable) return;
+      if (internalShutdownInProgress || websocketShutdownInProgress) return;
+
+      pendingDisable = false;
+      switchDevice(false);
+    }
+
     void shutdownWSS(){
+      pendingDisable = false;
       if (wss != nullptr){
+        websocketShutdownInProgress = true;
         wss->shutdown();
         delete wss;
         wss = nullptr;
+        websocketShutdownInProgress = false;
       }
     }
 
@@ -581,7 +609,7 @@ class WebApplicationService: public NetworkDevice{
       const uint32_t now = millis();
       if ((uint32_t)(now - lastActivityMs) > WEBAPP_INACTIVITY_TIMEOUT_MS){
         DEBUG_INFO("[WEBAPP]\t\tInactivity timeout reached (%ums), stopping service", WEBAPP_INACTIVITY_TIMEOUT_MS);
-        switchDevice(false);
+        requestDisable();
       }
     }
 };
