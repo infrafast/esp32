@@ -409,6 +409,9 @@ class WebApplicationService: public NetworkDevice{
     }
 
     void requestDisable(){
+      // Ignore close-callback disable requests triggered by an internal shutdown.
+      // Those callbacks can fire while switchDevice(false) is already tearing
+      // down the service and would otherwise leave a stale deferred disable.
       if (internalShutdownRequested || disableInProgress || !state.enabled) return;
       pendingDisable = true;
     }
@@ -506,6 +509,7 @@ class WebApplicationService: public NetworkDevice{
 
     void shutdownWSS(){
       if (wss != nullptr){
+        pendingDisable = false;
         disableInProgress = true;
         wss->shutdown();
         delete wss;
