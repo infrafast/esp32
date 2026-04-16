@@ -64,7 +64,8 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     virtual bool _begin(){     // called by init()
-      DEBUG_INFO("%s::_begin() void",interfaceName.c_str());
+      return begin();
+      //DEBUG_INFO("%s::_begin() void",interfaceName.c_str());
       return true;
     };        
 
