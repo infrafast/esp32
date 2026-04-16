@@ -453,10 +453,13 @@ class NetWorkService{
 
     #define SERVICES_WEIGHT_LIMIT  5
     
-    bool serviceLocked = true; // by default locked to avoid monitoring straight after startup
-
     virtual uint8_t getServiceWeight(){
       return 1; // default
+    }
+
+    bool isServiceLocked() const {
+      if (!deviceInterface) return true;
+      return deviceInterface->state.label == IF_STATE_LOCKED;
     }
 
 
@@ -480,7 +483,7 @@ class NetWorkService{
                   deviceInterface ? deviceInterface->interfaceName.c_str() : "<?>",
                   getServiceWeight());
 
-      // then we check if any enabled interface that was serviceLocked can be unlocked
+      // then we check if any enabled interface currently in LOCKED state can be unlocked
       unlockWaitingEnabledServices();
       /*
         Un service locké n’a pas réservé de budget (reserveCapacity() n’incrémente que si ça passe).
@@ -534,10 +537,10 @@ class NetWorkService{
 
     // ---- NEW: tries to unlock + (re)enable services waiting for capacity ----
     /*
-    Objectif : parcourir les interfaces enabled et serviceLocked, et tenter de les activer tant que possible.
+    Objectif : parcourir les interfaces enabled et verrouillées (state=LOCKED), et tenter de les activer tant que possible.
     Comme ton enable() :
     appelle reserveCapacity() (qui réserve le budget si possible),
-    met serviceLocked et l’état (LOCKED ou tentative de connect),
+    met l’état (LOCKED ou tentative de connect),
     …le plus sûr est de réutiliser enable() pour éviter de dupliquer la logique de budget.    
     */
     static void unlockWaitingEnabledServices(){
@@ -549,7 +552,7 @@ class NetWorkService{
         if (!iface || !iface->deviceInterface) continue;
 
         if (!iface->deviceInterface->state.enabled) continue;  // only those enabled by user
-        if (!iface->serviceLocked) continue;                   // only those currently locked
+        if (!iface->isServiceLocked()) continue;               // only those currently locked
 
         if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) break;
 
@@ -578,9 +581,7 @@ class NetWorkService{
     void enable(){
       DEBUG_INFO("%s->enable()", deviceInterface->interfaceName.c_str());
 
-      serviceLocked = reserveCapacity();
-
-      if (serviceLocked){
+      if (reserveCapacity()){
         setStateLocked();
       }else{
         // attempts to enable devices may happen while network is not yet connected
@@ -612,7 +613,7 @@ class NetWorkService{
       if (hwm.network->state == DISCONNECTED){
         deviceInterface->state.progress = hwm.network->networkConnectAttemptProgress;
         deviceInterface->state.subState = hwm.network->SSID;
-      }else if (!serviceLocked){
+      }else if (!isServiceLocked()){
         return monitorService();
       }
 
