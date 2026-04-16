@@ -516,8 +516,8 @@ class NetWorkService{
 
       // Refuser si l'ajout dépasserait ou atteindrait la limite
       // (choisis > ou >= selon ta règle exacte)
-      if (enabledServicesWeightSum + w >= SERVICES_WEIGHT_LIMIT) {
-        DEBUG_INFO("\t💪capacity %i+%i >= %i => LOCKED",
+      if (enabledServicesWeightSum + w > SERVICES_WEIGHT_LIMIT) {
+        DEBUG_INFO("\t💪capacity %i+%i > %i => LOCKED",
                     enabledServicesWeightSum, w, SERVICES_WEIGHT_LIMIT);
         return true; // limit = true
       }
@@ -566,7 +566,7 @@ class NetWorkService{
         if (!iface->deviceInterface->state.enabled) continue;  // only those enabled by user
         if (!iface->isServiceLocked()) continue;               // only those currently locked
 
-        if (enabledServicesWeightSum >= SERVICES_WEIGHT_LIMIT) break;
+        if (enabledServicesWeightSum > SERVICES_WEIGHT_LIMIT) break;
 
         // Reuse existing logic:
         // - reserveCapacity() will book the budget if available
