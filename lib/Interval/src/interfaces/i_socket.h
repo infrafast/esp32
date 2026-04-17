@@ -47,13 +47,21 @@ class NetworkSocket: public NetworkDevice{
       }
 
       #define PULSE_CHECK_DELAY kTimeoutInterval*1.1
-      if (millis() - destination.lastRxTime > PULSE_CHECK_DELAY) {
+      uint32_t now = millis();
+      if (now - destination.lastRxTime > PULSE_CHECK_DELAY) {
         if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN) {
-          ping();
-          dataProcessed = true;
+          // Throttle pulse checks so we don't spam ping() every monitor loop while waiting for an answer.
+          // If a previous ping is still pending, we only retry after another pulse interval.
+          bool canPing = !destination.pingPending || (now - destination.lastPingSentAt > PULSE_CHECK_DELAY);
+          if (canPing) {
+            // Fallback timestamp for implementations that don't set lastPingSentAt in ping().
+            destination.lastPingSentAt = now;
+            ping();
+            dataProcessed = true;
+          }
         } else {
           if (handleConnectService()){
-            destination.lastRxTime = millis();  // wait next round
+            destination.lastRxTime = now;  // wait next round
             setStatePending("green medium","Searching MixingStation");
           }
           else setStateError("Thread socket-open failed");
