@@ -491,6 +491,8 @@ public:
       btData.buttonId = getID();
       startDebouceTime = millis();
 
+      DEBUG_ERROR("!!!");
+
       if (state != edge) { // released
         if (pushedTime < dClic_reactivity && !pendingDoubleClicDetection) {
           pendingDoubleClicDetection = true;

@@ -748,18 +748,17 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       #endif
 
       Event::disableAllEventDumps();
-      /*Event::disableEventDump(EVENT_ANALOG_BUTTON);
-      Event::disableEventDump(EVENT_DIGITAL_BUTTON);
-      Event::disableEventDump(EVENT_BATTERY_REFRESHED);
-      Event::disableEventDump(EVENT_NETWORK_CONNECTED);
-      Event::disableEventDump(EVENT_NETWORK_CONNECTION_CHANGED);
-      Event::disableEventDump(EVENT_NETWORK_DISCONNECTED);*/      
+      //Event::enableEventDump(EVENT_DIGITAL_BUTTON);
+      //Event::enableEventDump(EVENT_NETWORK_CONNECTED);
+      //Event::enableEventDump(EVENT_NETWORK_CONNECTION_CHANGED);
+      //Event::enableEventDump(EVENT_NETWORK_DISCONNECTED);
       //Event::enableEventDump(EVENT_SOCKET_ERROR);
       //Event::enableEventDump(EVENT_SOCKET_CLOSE);
       //Event::enableEventDump(EVENT_SOCKET_MESSAGE);
       //Event::enableEventDump(EVENT_WEBAPP_STARTED);
       //Event::enableEventDump(EVENT_BATTERY_REFRESHED);
       //Event::enableEventDump(EVENT_INTERFACE_MESSAGE);      
+      Event::enableEventDump(EVENT_ANALOG_BUTTON);
 
       // *********************************
       // SKELETONS & DATA SETS

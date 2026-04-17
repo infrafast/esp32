@@ -350,11 +350,9 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     virtual void process(){
       fireEvent(evtOSC);  //simply propagate the data
     }    
-    
-    #ifdef DEBUG
-      char oscDump[256];
-    #endif
 
+    char addr[64];    
+    
     int readOSC(){
         UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);   // request UDP slot
         udp = nullptr;
@@ -380,7 +378,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
                 DEBUG_INFO("readOSC: %i\n", oscIn.getError());
                 return 0;   // message invalide
             }else{
-              char addr[64];
               oscIn.getAddress(addr, 0);
 
               destination.lastRxTime = millis();
@@ -400,7 +397,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
               #ifdef DEBUG
                 dump(oscIn, oscDump, sizeof(oscDump));              
-                DEBUG_INFO("<<%s(%s,%i) %s",addr,destination.ip.toString().c_str(),remotePort, oscDump);              
+                DEBUG_INFO("<<(%s,%i) %s %s",destination.ip.toString().c_str(),remotePort, addr, oscDump);              
               #endif
               
             }              
@@ -413,21 +410,38 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         return 0;
     }
 
+    #ifdef DEBUG
+      char oscDump[256];
+    #endif
+
     char* dump(OSCMessage &msg, char* buffer, size_t bufferSize) {
+      if (bufferSize == 0) return buffer;
+      buffer[0] = '\0';
+
       size_t offset = 0;
       for (int i = 0; i < msg.size(); i++) {
         if (offset >= bufferSize) break;
-        if (msg.isInt(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%d ", msg.getInt(i));
-        else if (msg.isFloat(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%f ", msg.getFloat(i));
-        else if (msg.isString(i)) {
+
+        if (msg.isInt(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "%d ", msg.getInt(i));
+        } else if (msg.isFloat(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "%f ", msg.getFloat(i));
+        } else if (msg.isString(i)) {
           char txt[128];
-          if (msg.getString(i, txt, sizeof(txt)) > 0) offset += snprintf(buffer + offset, bufferSize - offset,"%s ", txt);
+          if (msg.getString(i, txt, sizeof(txt)) > 0) {
+            offset += snprintf(buffer + offset, bufferSize - offset, "%s ", txt);
+          }
+        } else if (msg.isBoolean(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "%s ", msg.getBoolean(i) ? "true" : "false");
+        } else if (msg.isDouble(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "%lf ", msg.getDouble(i));
+        } else if (msg.isBlob(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "[blob:%d] ", msg.getBlobLength(i));
+        } else {
+          offset += snprintf(buffer + offset, bufferSize - offset, "[type:%c] ", msg.getType(i));
         }
-        else if (msg.isBoolean(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%s ", msg.getBoolean(i) ? "true" : "false");
-        else if (msg.isDouble(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%lf ", msg.getDouble(i));
-        else if (msg.isBlob(i)) offset += snprintf(buffer + offset, bufferSize - offset,"[blob:%d] ", msg.getBlobLength(i));
-        else offset += snprintf(buffer + offset, bufferSize - offset,"[type:%c] ", msg.getType(i));
       }
+
       return buffer;
     }
 
@@ -511,7 +525,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
       bool success = false;
 
-      dumpOSCMessage(*msg);
+      #ifdef DEBUG
+        msg->getAddress(addr, 0);      
+        dump(*msg, oscDump, sizeof(oscDump));              
+        DEBUG_INFO(">>(%s,%i) %s %s",destination.ip.toString().c_str(),remotePort, addr, oscDump);            
+      #endif
+    
 
       UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
 
@@ -541,65 +560,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     
     //UDP* udp = nullptr; // DIRECT UDP
 
-
-      void dumpOSCMessage(OSCMessage& msg){
-        #ifdef DEBUG
-          int argCount = msg.size();
-          
-          DEBUG_INFO(">>(%s,%i->%i) %s",destination.ip.toString().c_str(),localPort, remotePort, msg.getAddress());
-
-          //DEBUG_PRINT(" | args:%d ", argCount);
-
-          for (int i = 0; i < argCount; i++) {
-
-            char type = msg.getType(i);
-
-            switch(type) {
-
-              case 'i': { // int32
-                int32_t v = msg.getInt(i);
-                DEBUG_PRINT("[i:%ld] ", (long)v);
-                break;
-              }
-
-              case 'f': { // float
-                float v = msg.getFloat(i);
-                DEBUG_PRINT("[f:%f] ", v);
-                break;
-              }
-
-              case 's': { // string
-                char buffer[64];
-                msg.getString(i, buffer, sizeof(buffer));
-                DEBUG_PRINT("[s:%s] ", buffer);
-                break;
-              }
-
-              case 'b': { // blob
-                int size = msg.getBlobLength(i);
-                const uint8_t* data = msg.getBlob(i);
-                DEBUG_PRINT("[b:%d bytes] ", size);
-                break;
-              }
-
-              case 'd': { // double
-                double v = msg.getDouble(i);
-                DEBUG_PRINT("[d:%f] ", v);
-                break;
-              }
-
-              case 'T': DEBUG_PRINT("[T:true] "); break;
-              case 'F': DEBUG_PRINT("[F:false] "); break;
-              case 'N': DEBUG_PRINT("[N:nil] "); break;
-              case 'I': DEBUG_PRINT("[I:inf] "); break;
-
-              default:
-                DEBUG_PRINT("[?:%c] ", type);
-                break;
-            }
-          }
-        #endif    
-      }
 
 
 };

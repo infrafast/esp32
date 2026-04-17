@@ -194,8 +194,7 @@ class Input2MixbusStrip : public SendStrip{
     }    
 
     void toggleCHBUSmute(){
-      *toggle1 = !*toggle1;
-      mixer->setCHBUSmute(select1ID, select2ID, toggle1 ? 1 : 0);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
+      mixer->setCHBUSmute(select1ID, select2ID, !*toggle1);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
     }
 };
 

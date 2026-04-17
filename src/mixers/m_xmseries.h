@@ -581,7 +581,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       // we need to find the right pattern and replace the 2 placeholders
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
-      sendOSC(pathBuffer, mute ? 1 : 0);    
+      sendOSC(pathBuffer, mute);    
     }
 
   protected:    
