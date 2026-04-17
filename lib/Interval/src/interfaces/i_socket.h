@@ -18,12 +18,14 @@ class NetworkSocket: public NetworkDevice{
     uint16_t length;
     char message[MAX_SOCKET_MESSAGE_LEN];
     int code;
+    unsigned long receivedAt;
   };
 
   SocketDataCopy socketQueue[SOCKET_QUEUE_SIZE];
   volatile uint8_t queueHead = 0;   // prochain message à lire
   volatile uint8_t queueTail = 0;   // prochain slot d’écriture
   volatile uint8_t queueCount = 0;
+  unsigned long currentMessageReceivedAt = 0;
 
   Event evtSock = Event(nullptr);
 
@@ -41,7 +43,10 @@ class NetworkSocket: public NetworkDevice{
       uint8_t processed = 0;
 
       while (processed < SOCKET_MESSAGE_PROCESSED_AT_ONCE && (msg = dequeueSocketMessage()) != nullptr) {
+        currentMessageReceivedAt = msg->receivedAt;
+        destination.lastRxTime = currentMessageReceivedAt;
         route(msg->message, msg->length);
+        currentMessageReceivedAt = 0;
         dataProcessed = true;
         processed++;
       }
@@ -150,6 +155,7 @@ class NetworkSocket: public NetworkDevice{
     slot.message[copyLen] = '\0';
     slot.length = copyLen;
     slot.code = data->code;
+    slot.receivedAt = data->receivedAt;
 
     queueTail = (queueTail + 1) % SOCKET_QUEUE_SIZE;
     queueCount++;
