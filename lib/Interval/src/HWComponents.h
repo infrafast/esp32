@@ -29,6 +29,7 @@ struct SocketData{
   uint16_t length;
   const char* message="";
   int code;
+  unsigned long receivedAt = 0;
 };
 
 ////////////////////////////////////////////////////////////
@@ -1638,6 +1639,7 @@ class WiFiEth : public Network{
           evtSock.type = EVENT_SOCKET_MESSAGE;
           socketData.message = message;
           socketData.length = length;
+          socketData.receivedAt = millis();
           fireEvent(evtSock);
         }
         break;
