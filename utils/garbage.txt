@@ -1,4 +1,0 @@
-    🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.on/val","method":"POST","body":{"value":1}}
-ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.on
-ℹ       MixingStation::CH_BUS_MUTE ch=0 bus=2 mute=true
-ℹ       MixingStation->handleChBusMute(1,3,1)

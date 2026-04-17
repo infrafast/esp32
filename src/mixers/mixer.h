@@ -175,8 +175,7 @@ public:
     */
     TwoIndexValueList allInput2MixbusValues;
     OneIndexValueList allBusMixValues;
-    OneIndexValueList allChMainValues;
-
+    OneIndexValueList allChMainValues;  
 
     // properties that are synced
     DataSetSynced* inputNamesDS = nullptr;
@@ -190,6 +189,9 @@ public:
 
     // event system to decouple mixer implementation from strip management
     JsonDocument payload;                     // data from the mixer
+
+    // define if the mixer sends an echo after it receives a command, by default, it is the case
+    bool echoing = true;
 
     //// pure virtual utilities ////
     virtual bool restoreMixerProfile() = 0;

@@ -170,31 +170,34 @@ class Input2MixbusStrip : public SendStrip{
     }
 
 
-    virtual float increaseCallback(unsigned long time,uint8_t trigger) override{
-      float delta = Strip::increaseCallback(time,trigger);
-      if (delta != 0.0) setChBusLevel();
-      return delta;
-    }    
 
     virtual float decreaseCallback(unsigned long time,uint8_t trigger) override{
-      float delta = Strip::decreaseCallback(time,trigger);
-      if (delta != 0.0) setChBusLevel();
+      float newVal = *value;
+      float delta = applyProgressive(&newVal, -1, trigger);
+      if (delta != 0.0) setChBusLevel(newVal);
       return delta;
     }      
+
+    virtual float increaseCallback(unsigned long time, uint8_t trigger) override{
+      float newVal = *value;
+      float delta = applyProgressive(&newVal, +1, trigger);
+      if (delta != 0.0) setChBusLevel(newVal);
+      return delta;            
+    }
 
     virtual bool actionCallback(uint8_t trigger) override{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
-      toggleCHBUSmute();
+      toggleCHBUSmute(!*toggle1);
       return true;        
     }
 
-    void setChBusLevel(){
-      mixer->setCHBUSlevel(select1ID, select2ID, *value);  // select1ID = chID, select2ID = busID
+    void setChBusLevel(float val){
+      mixer->setCHBUSlevel(select1ID, select2ID, val);  // select1ID = chID, select2ID = busID
     }    
 
-    void toggleCHBUSmute(){
-      mixer->setCHBUSmute(select1ID, select2ID, !*toggle1);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
+    void toggleCHBUSmute(bool mute){
+      mixer->setCHBUSmute(select1ID, select2ID, mute);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
     }
 };
 

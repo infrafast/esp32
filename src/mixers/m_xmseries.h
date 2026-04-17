@@ -274,6 +274,9 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       return true;
     }
 
+    #define XAIR_PROTOCOL "xair"
+    #define XM_PROTOCOL "x32"
+
     virtual bool deserializeMixerDefinitionFromFile(const char* filename){
       String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename); 
 
@@ -306,6 +309,15 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       mixerDef->groupCount    = doc["groupCount"]    | mixerDef->groupCount;
       
       protocolName           = doc["protocol"]     | protocolName;
+
+      // depending on the protocol name, we set other internal properties
+      if (protocolName == XAIR_PROTOCOL){
+        // ...
+      }else if (protocolName == XM_PROTOCOL){
+        echoing = false;
+      }else{
+        // ...
+      }
 
 
       DEBUG_INFO("channelCount:%u busCOunt:%u auxCount:%u fxCount:%u mainCount:%u mtxCount:%u DCACount:%u fxSndCount:%u groupCount:%u",mixerDef->channelCount, mixerDef->busCount, mixerDef->auxCount, mixerDef->fxCount, mixerDef->mainCount, mixerDef->mtxCount, mixerDef->DCAcount, mixerDef->fxSndCount, mixerDef->groupCount);
@@ -574,6 +586,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       const char* pattern = protocol[XM_CH_BUS_MIX_LEVEL].c_str(); 
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);         
       sendOSC(pathBuffer, level);
+      if (!echoing) allInput2MixbusValues.get(chIndex,busIndex)->value = level; // as X32 is not echoing the command, the value has to be forced manually assuming it was changed.
     }
 
     virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override{
@@ -582,6 +595,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
       sendOSC(pathBuffer, mute);    
+      if (!echoing) allInput2MixbusValues.get(chIndex,busIndex)->toggle = mute; // as X32 is not echoing the command, the value has to be forced manually assuming it was changed.
     }
 
   protected:    
