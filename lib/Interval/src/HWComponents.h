@@ -474,10 +474,87 @@ public:
 
   virtual void init() {
     HWComponent2State::init();
-    refresh();
+    processRefresh(true);
+    startRefreshTask();
   }
 
   bool refresh(bool force = false) {
+    (void)force;
+    return false;
+  }
+
+  virtual void stop() override {
+    stopRefreshTask();
+    HWComponent2State::stop();
+  }
+
+  virtual int getID() = 0;
+  virtual void setID(uint8_t id) = 0;
+
+protected:
+
+  void emitButtonEvent(uint8_t eventId, unsigned long eventTime) {
+    btData.id = eventId;
+    btData.buttonId = getID();
+    btData.time = eventTime;
+    fireEvent(evtBtn);   // remplace par fireEvent(&evt) si ton code n'a pas encore migré en référence
+  }
+
+private:
+  static constexpr uint32_t BUTTON_REFRESH_TASK_DELAY_MS = 1;
+  int edge;
+  bool holdEntered = false;
+  bool pendingDoubleClicDetection = false;
+  unsigned long startTimeBetween2Clics = 0;
+  unsigned long startPushTime = 0;
+  unsigned long startDebouceTime = 0;
+
+  TaskHandle_t refreshTaskHandle = nullptr;
+
+  static void refreshTaskEntry(void* pvParameters) {
+    Button* self = static_cast<Button*>(pvParameters);
+    if (!self) {
+      vTaskDelete(NULL);
+      return;
+    }
+
+    while (true) {
+      self->processRefresh(false);
+      vTaskDelay(pdMS_TO_TICKS(BUTTON_REFRESH_TASK_DELAY_MS));
+    }
+  }
+
+  void startRefreshTask() {
+    if (refreshTaskHandle != nullptr) {
+      return;
+    }
+
+    BaseType_t ok = xTaskCreatePinnedToCore(
+      &Button::refreshTaskEntry,
+      "btnRefresh",
+      4096,
+      this,
+      1,
+      &refreshTaskHandle,
+      1
+    );
+
+    if (ok != pdPASS) {
+      refreshTaskHandle = nullptr;
+      DEBUG_ERROR("%s refresh task creation failed", id.c_str());
+    }
+  }
+
+  void stopRefreshTask() {
+    if (refreshTaskHandle == nullptr) {
+      return;
+    }
+
+    vTaskDelete(refreshTaskHandle);
+    refreshTaskHandle = nullptr;
+  }
+
+  bool processRefresh(bool force = false) {
     refreshed = force;
 
     if (millis() - startDebouceTime < DEBOUCE_TIME) {
@@ -561,26 +638,6 @@ public:
 
     return refreshed;
   }
-
-  virtual int getID() = 0;
-  virtual void setID(uint8_t id) = 0;
-
-protected:
-
-  void emitButtonEvent(uint8_t eventId, unsigned long eventTime) {
-    btData.id = eventId;
-    btData.buttonId = getID();
-    btData.time = eventTime;
-    fireEvent(evtBtn);   // remplace par fireEvent(&evt) si ton code n'a pas encore migré en référence
-  }
-
-private:
-  int edge;
-  bool holdEntered = false;
-  bool pendingDoubleClicDetection = false;
-  unsigned long startTimeBetween2Clics = 0;
-  unsigned long startPushTime = 0;
-  unsigned long startDebouceTime = 0;
 
   virtual void read() = 0;
 };
