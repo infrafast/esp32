@@ -398,7 +398,7 @@ public:
 
     Returns the pointer to the object matching (i1, i2), or nullptr.
     */
-    TwoIndexValue* get(uint8_t i1, uint8_t i2) const {
+    TwoIndexValue* get(uint8_t i1, uint8_t i2) {
         return list.get(
             [i1, i2](const TwoIndexValue& v) {
                 return (v.i1 == i1) && (v.i2 == i2);

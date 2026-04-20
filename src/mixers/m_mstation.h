@@ -250,7 +250,10 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     virtual void route(const char *message,uint16_t length) override{
 
       //DEBUG_INFO("%s::process(%s,%i)",interfaceName.c_str(),message,length);
-      destination.lastRxTime = millis(); 
+      if (currentMessageReceivedAt == 0) {
+        currentMessageReceivedAt = millis();
+      }
+      destination.lastRxTime = currentMessageReceivedAt;
     
       if (length + 1 > RX_MAX){
         DEBUG_ERROR("%s::process(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
@@ -494,7 +497,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     void processMixerIdentity(const char* path, JsonVariant body) {
       if (destination.pingPending) { // ensure we didn't receive the frame "out of a ping"
-        unsigned long rawLatency = millis() - destination.lastPingSentAt;
+        unsigned long responseAt = currentMessageReceivedAt ? currentMessageReceivedAt : millis();
+        unsigned long rawLatency = responseAt - destination.lastPingSentAt;
         calculateLatencyAndJitter(rawLatency);
         destination.pingPending = false;
       }

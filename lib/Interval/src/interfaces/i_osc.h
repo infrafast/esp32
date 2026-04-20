@@ -26,27 +26,50 @@ static bool strStartsWith(const char* s, const char* prefix) {
 }
 
 // serialization de message OSC
+// ============================================================
+// Helpers de sérialisation OSC
+// ============================================================
+
 class MemoryPrint : public Print {
 public:
   MemoryPrint(uint8_t* buf, size_t maxLen)
-    : _buf(buf), _maxLen(maxLen), _len(0) {}
+    : _buf(buf), _maxLen(maxLen), _len(0), _overflow(false) {}
 
   size_t write(uint8_t b) override {
-    if (_len >= _maxLen) return 0;
+    if (_len >= _maxLen) {
+      _overflow = true;
+      return 0;
+    }
     _buf[_len++] = b;
+    return 1;
+  }
+
+  size_t length() const { return _len; }
+  bool overflow() const { return _overflow; }
+
+private:
+  uint8_t* _buf;
+  size_t _maxLen;
+  size_t _len;
+  bool _overflow;
+};
+
+class CountingPrint : public Print {
+public:
+  CountingPrint() : _len(0) {}
+
+  size_t write(uint8_t) override {
+    ++_len;
     return 1;
   }
 
   size_t length() const { return _len; }
 
 private:
-  uint8_t* _buf;
-  size_t _maxLen;
   size_t _len;
 };
 
 struct OscQueueNode {
-  String address;
   uint8_t* data = nullptr;
   size_t len = 0;
   OscQueueNode* next = nullptr;
@@ -62,96 +85,112 @@ public:
   }
 
   bool enqueue(OSCMessage& msg) {
-    // enqueue une copie d'un message OSC
-    size_t msgLen = msg.size();
+    if (msg.hasError()) {
+      return false;
+    }
 
-    // Sécurité minimale : allouer au moins 64 octet, meme si pas de parametres au message
-    size_t allocLen = (msgLen > 0) ? msgLen : 64;
+    // 1) Mesure exacte de la taille sérialisée OSC
+    CountingPrint counter;
+    msg.send(counter);
+    size_t serializedLen = counter.length();
 
-    uint8_t* temp = new uint8_t[allocLen];
-    if (!temp) return false;
+    if (serializedLen == 0) {
+      return false;
+    }
 
-    MemoryPrint mp(temp, allocLen);
+    // 2) Allocation buffer exact
+    uint8_t* buf = new uint8_t[serializedLen];
+    if (!buf) {
+      return false;
+    }
+
+    // 3) Sérialisation réelle
+    MemoryPrint mp(buf, serializedLen);
     msg.send(mp);
 
-    size_t actualLen = mp.length();
-
-    // Si rien n'a été écrit → invalide
-    if (actualLen == 0) {
-      delete[] temp;
+    if (mp.overflow() || mp.length() != serializedLen) {
+      delete[] buf;
       return false;
     }
 
-    // Vérifie doublon
+    // 4) Détection doublon (optionnel, comme dans votre version)
     for (OscQueueNode* cur = head; cur != nullptr; cur = cur->next) {
-      if (cur->len == actualLen && memcmp(cur->data, temp, actualLen) == 0) {
-        delete[] temp;
+      if (cur->len == serializedLen && memcmp(cur->data, buf, serializedLen) == 0) {
+        delete[] buf;
         return false;
       }
     }
 
-    // Ajuste la taille si nécessaire
-    uint8_t* finalBuf = temp;
-    if (actualLen != allocLen) {
-      finalBuf = new uint8_t[actualLen];
-      if (!finalBuf) {
-        delete[] temp;
-        return false;
-      }
-      memcpy(finalBuf, temp, actualLen);
-      delete[] temp;
-    }
-
-    // Création node
+    // 5) Création noeud
     OscQueueNode* node = new OscQueueNode();
     if (!node) {
-      delete[] finalBuf;
+      delete[] buf;
       return false;
     }
 
-    node->data = finalBuf;
-    node->len = actualLen;
+    node->data = buf;
+    node->len = serializedLen;
     node->next = nullptr;
 
-    // FIFO
-    if (!tail) {
+    // 6) FIFO append
+    if (tail == nullptr) {
       head = tail = node;
     } else {
       tail->next = node;
       tail = node;
     }
 
-    count++;
+    ++count;
     return true;
   }
 
-
-  // Déqueue uniquement si delayBetweenTwoSend ms écoulées depuis le dernier envoi = latency
+  // Déqueue uniquement si delayBetweenTwoSend ms écoulées depuis le dernier envoi
   bool dequeue(OSCMessage& outMsg, int delayBetweenTwoSend) {
-    if (!head){
+    if (head == nullptr) {
       return false;
     }
 
     unsigned long now = millis();
-    if ((now - lastSendTime) < delayBetweenTwoSend) {
+    if ((unsigned long)(now - lastSendTime) < (unsigned long)delayBetweenTwoSend) {
       return false;
     }
 
     OscQueueNode* node = head;
 
-    for (size_t i = 0; i < node->len; i++) {
+    // Important : repartir d'un message vide
+    outMsg.empty();
+
+    for (size_t i = 0; i < node->len; ++i) {
       outMsg.fill(node->data[i]);
     }
 
-    head = head->next;
-    if (!head) tail = nullptr;
+    bool ok = !outMsg.hasError();
+
+    head = node->next;
+    if (head == nullptr) {
+      tail = nullptr;
+    }
 
     delete[] node->data;
     delete node;
-    count--;
+    --count;
 
-    lastSendTime = now;
-    return true;
+    if (ok) {
+      lastSendTime = now;
+    } else {
+      outMsg.empty();
+    }
+
+    return ok;
+  }
+
+  bool peekIsDue(int delayBetweenTwoSend) const {
+    if (head == nullptr) {
+      return false;
+    }
+
+    unsigned long now = millis();
+    return ((unsigned long)(now - lastSendTime) >= (unsigned long)delayBetweenTwoSend);
   }
 
   bool isEmpty() const {
@@ -163,12 +202,13 @@ public:
   }
 
   void clear() {
-    while (head) {
+    while (head != nullptr) {
       OscQueueNode* node = head;
       head = head->next;
       delete[] node->data;
       delete node;
     }
+
     tail = nullptr;
     count = 0;
   }
@@ -179,7 +219,6 @@ private:
   size_t count;
   unsigned long lastSendTime;
 };
-
 
 
 
@@ -259,7 +298,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       OSCMessage msgOut;
       if (queue.dequeue(msgOut, destination.latency)) {
         _sendOSCMessage(&msgOut);
-        dataProcessed = true;
+        dataProcessed = true;      
       }
 
       for (uint8_t i = 0; i < OSC_MESSAGE_PROCESSED_AT_ONCE; ++i) {
@@ -270,9 +309,10 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         connectAttemptCount = 0;
 
         process();
+       
         dataProcessed = true;
       }
-
+           
       if (!dataProcessed) {
         uint32_t now = millis();
 
@@ -288,12 +328,16 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
               connectAttemptCount++;
               dataProcessed = true;
             } else {
-              handleConnectService();
+              if (handleConnectService()){
+                setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
+                destination.lastRxTime = 0;                               // with the valid UDP we just got so we force ping to be triggered immediately                
+              }else{
+                setStateError("Can't connect (UDP failed)");
+              }
             }
           }
         }
       }
-
       return dataProcessed;
     }
 
@@ -306,11 +350,9 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     virtual void process(){
       fireEvent(evtOSC);  //simply propagate the data
     }    
-    
-    #ifdef DEBUG
-      char oscDump[256];
-    #endif
 
+    char addr[64];    
+    
     int readOSC(){
         UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);   // request UDP slot
         udp = nullptr;
@@ -336,7 +378,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
                 DEBUG_INFO("readOSC: %i\n", oscIn.getError());
                 return 0;   // message invalide
             }else{
-              char addr[64];
               oscIn.getAddress(addr, 0);
 
               destination.lastRxTime = millis();
@@ -356,7 +397,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
               #ifdef DEBUG
                 dump(oscIn, oscDump, sizeof(oscDump));              
-                DEBUG_INFO("<<%s(%s,%i) %s",addr,destination.ip.toString().c_str(),remotePort, oscDump);              
+                DEBUG_INFO("<<(%s,%i) %s %s",destination.ip.toString().c_str(),remotePort, addr, oscDump);              
               #endif
               
             }              
@@ -369,21 +410,38 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         return 0;
     }
 
+    #ifdef DEBUG
+      char oscDump[256];
+    #endif
+
     char* dump(OSCMessage &msg, char* buffer, size_t bufferSize) {
+      if (bufferSize == 0) return buffer;
+      buffer[0] = '\0';
+
       size_t offset = 0;
       for (int i = 0; i < msg.size(); i++) {
         if (offset >= bufferSize) break;
-        if (msg.isInt(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%d ", msg.getInt(i));
-        else if (msg.isFloat(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%f ", msg.getFloat(i));
-        else if (msg.isString(i)) {
+
+        if (msg.isInt(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "%d ", msg.getInt(i));
+        } else if (msg.isFloat(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "%f ", msg.getFloat(i));
+        } else if (msg.isString(i)) {
           char txt[128];
-          if (msg.getString(i, txt, sizeof(txt)) > 0) offset += snprintf(buffer + offset, bufferSize - offset,"%s ", txt);
+          if (msg.getString(i, txt, sizeof(txt)) > 0) {
+            offset += snprintf(buffer + offset, bufferSize - offset, "%s ", txt);
+          }
+        } else if (msg.isBoolean(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "%s ", msg.getBoolean(i) ? "true" : "false");
+        } else if (msg.isDouble(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "%lf ", msg.getDouble(i));
+        } else if (msg.isBlob(i)) {
+          offset += snprintf(buffer + offset, bufferSize - offset, "[blob:%d] ", msg.getBlobLength(i));
+        } else {
+          offset += snprintf(buffer + offset, bufferSize - offset, "[type:%c] ", msg.getType(i));
         }
-        else if (msg.isBoolean(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%s ", msg.getBoolean(i) ? "true" : "false");
-        else if (msg.isDouble(i)) offset += snprintf(buffer + offset, bufferSize - offset,"%lf ", msg.getDouble(i));
-        else if (msg.isBlob(i)) offset += snprintf(buffer + offset, bufferSize - offset,"[blob:%d] ", msg.getBlobLength(i));
-        else offset += snprintf(buffer + offset, bufferSize - offset,"[type:%c] ", msg.getType(i));
       }
+
       return buffer;
     }
 
@@ -405,8 +463,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       if (udpID == -1) return false;                            // can't get any UDP connectivity => try again until next queryTime expired
       
       DEBUG_INFO("udp(%i) got UDP slot #%i",localPort,udpID);      
-      setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
-      destination.lastRxTime = 0;                             // with the valid UDP we just got so we force ping to be triggered immediately
       return true;
     }
 
@@ -457,10 +513,24 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }      
 
     bool _sendOSCMessage(OSCMessage *msg){           
-      
+      if (msg == nullptr) {
+        DEBUG_ERROR(" **** FAIL (msg null) ****");
+        return false;
+      }
+
+      if (msg->hasError()) {
+        DEBUG_ERROR(" **** FAIL (OSC msg invalid) ****");
+        return false;
+      }
+
       bool success = false;
 
-      dumpOSCMessage(*msg);
+      #ifdef DEBUG
+        msg->getAddress(addr, 0);      
+        dump(*msg, oscDump, sizeof(oscDump));              
+        DEBUG_INFO(">>(%s,%i) %s %s",destination.ip.toString().c_str(),remotePort, addr, oscDump);            
+      #endif
+    
 
       UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);
 
@@ -468,7 +538,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
           DEBUG_ERROR(" **** FAIL (UdpSlot null) ****");
           return false;
       }            
-     
+    
       UDP* udp = udpSlot->udp; 
 
       if (udp != nullptr){
@@ -490,65 +560,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     
     //UDP* udp = nullptr; // DIRECT UDP
 
-
-      void dumpOSCMessage(OSCMessage& msg){
-        #ifdef DEBUG
-          int argCount = msg.size();
-          
-          DEBUG_INFO(">>(%s,%i->%i) %s",destination.ip.toString().c_str(),localPort, remotePort, msg.getAddress());
-
-          //DEBUG_PRINT(" | args:%d ", argCount);
-
-          for (int i = 0; i < argCount; i++) {
-
-            char type = msg.getType(i);
-
-            switch(type) {
-
-              case 'i': { // int32
-                int32_t v = msg.getInt(i);
-                DEBUG_PRINT("[i:%ld] ", (long)v);
-                break;
-              }
-
-              case 'f': { // float
-                float v = msg.getFloat(i);
-                DEBUG_PRINT("[f:%f] ", v);
-                break;
-              }
-
-              case 's': { // string
-                char buffer[64];
-                msg.getString(i, buffer, sizeof(buffer));
-                DEBUG_PRINT("[s:%s] ", buffer);
-                break;
-              }
-
-              case 'b': { // blob
-                int size = msg.getBlobLength(i);
-                const uint8_t* data = msg.getBlob(i);
-                DEBUG_PRINT("[b:%d bytes] ", size);
-                break;
-              }
-
-              case 'd': { // double
-                double v = msg.getDouble(i);
-                DEBUG_PRINT("[d:%f] ", v);
-                break;
-              }
-
-              case 'T': DEBUG_PRINT("[T:true] "); break;
-              case 'F': DEBUG_PRINT("[F:false] "); break;
-              case 'N': DEBUG_PRINT("[N:nil] "); break;
-              case 'I': DEBUG_PRINT("[I:inf] "); break;
-
-              default:
-                DEBUG_PRINT("[?:%c] ", type);
-                break;
-            }
-          }
-        #endif    
-      }
 
 
 };

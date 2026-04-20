@@ -497,9 +497,9 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     #define UNDEF_EXCEPTION "UndefinedException"
     String exception = UNDEF_EXCEPTION;
 
-    virtual uint8_t getServiceWeight(){
+    /*virtual uint8_t getServiceWeight() override{
       return 2; // consume 2 udp slot
-    }    
+    } */   
 
 
     AppleMIDIInterface(bool _configurable): MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
@@ -564,7 +564,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
         case EVENT_DIRECTORY_SERVICE_REFRESHED:{       
           rtpDirectory = (RtpDirectory*)evt.data;
           populateSessionOptions();     // regenerate the config data set
-          if (!serviceLocked) recallState();        // recall the state we had before refresh request, except if current state is locked          
+          if (!isServiceLocked()) recallState();    // recall the state we had before refresh request, except if current state is locked          
           state.broadcastState = true; // communicate the new state
           state.broadcastConfig = true; // the new populatedSessions have to be communicated to the web app dropdown
         }

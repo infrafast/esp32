@@ -113,11 +113,11 @@ class SendStrip : public StripMixerMixin<TwoSelectStrip> {
     virtual void deserializeProperty(String property) override{
       TwoSelectStrip::deserializeProperty(property);
       
-      allInput2MixbusValues.unreserve(sendReturnValues);    // release any previous value this prevents memory consumption when user change the dropdown
-      allBusMixValues.unreserve(busValues);                 // release any previous value this prevents memory consumption when user change the dropdown
+      mixer->allInput2MixbusValues.unreserve(sendReturnValues);    // release any previous value this prevents memory consumption when user change the dropdown
+      mixer->allBusMixValues.unreserve(busValues);                 // release any previous value this prevents memory consumption when user change the dropdown
       
-      sendReturnValues = allInput2MixbusValues.reserve(select1ID,select2ID);      // reserve the new value
-      busValues = allBusMixValues.reserve(select2ID);
+      sendReturnValues = mixer->allInput2MixbusValues.reserve(select1ID,select2ID);      // reserve the new value
+      busValues = mixer->allBusMixValues.reserve(select2ID);
 
       value = &sendReturnValues->value;           // value of the fader for a ch on the bus
       toggle1 = &sendReturnValues->toggle;        // the top toggle is linked to the ch mute on the bus
@@ -170,32 +170,34 @@ class Input2MixbusStrip : public SendStrip{
     }
 
 
-    virtual float increaseCallback(unsigned long time,uint8_t trigger) override{
-      float delta = Strip::increaseCallback(time,trigger);
-      if (delta != 0.0) setChBusLevel();
-      return delta;
-    }    
 
     virtual float decreaseCallback(unsigned long time,uint8_t trigger) override{
-      float delta = Strip::decreaseCallback(time,trigger);
-      if (delta != 0.0) setChBusLevel();
+      float newVal = *value;
+      float delta = applyProgressive(&newVal, -1, trigger);
+      if (delta != 0.0) setChBusLevel(newVal);
       return delta;
     }      
+
+    virtual float increaseCallback(unsigned long time, uint8_t trigger) override{
+      float newVal = *value;
+      float delta = applyProgressive(&newVal, +1, trigger);
+      if (delta != 0.0) setChBusLevel(newVal);
+      return delta;            
+    }
 
     virtual bool actionCallback(uint8_t trigger) override{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
-      toggleCHBUSmute();
+      toggleCHBUSmute(!*toggle1);
       return true;        
     }
 
-    void setChBusLevel(){
-      mixer->setCHBUSlevel(select1ID, select2ID, *value);  // select1ID = chID, select2ID = busID
+    void setChBusLevel(float val){
+      mixer->setCHBUSlevel(select1ID, select2ID, val);  // select1ID = chID, select2ID = busID
     }    
 
-    void toggleCHBUSmute(){
-      *toggle1 = !*toggle1;
-      mixer->setCHBUSmute(select1ID, select2ID, toggle1 ? 1 : 0);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
+    void toggleCHBUSmute(bool mute){
+      mixer->setCHBUSmute(select1ID, select2ID, mute);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
     }
 };
 

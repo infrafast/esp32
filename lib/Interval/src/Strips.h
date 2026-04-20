@@ -357,7 +357,7 @@ class Strip: public EventListener{
       return false;
     }
 
-    float applyProgressive(int8_t dir, uint8_t trigger){
+    float applyProgressive(float* fVal, int8_t dir, uint8_t trigger){
       if (dir != 1 && dir != -1) return 0.0f;
 
       // CLIC (ou autre) => pas fixe
@@ -368,14 +368,14 @@ class Strip: public EventListener{
         float step = amp * cfg.clickStepRatio;
         if (step <= 0.0f) return 0.0f;
 
-        float newValue = *value + (float)dir * step;
+        float newValue = *fVal + (float)dir * step;
         if (newValue > valueMax) newValue = valueMax;
         if (newValue < valueMin) newValue = valueMin;
 
-        float delta = newValue - *value;
+        float delta = newValue - *fVal;
         if (delta == 0.0f) return 0.0f;
 
-        *value = newValue;
+        *fVal = newValue;
         return fabsf(delta); // delta positif comme ton code
       }
 
@@ -384,7 +384,7 @@ class Strip: public EventListener{
       if (!holdArmed || holdDir != dir){
         holdArmed = true;
         holdDir = dir;
-        holdStartValue = *value;
+        holdStartValue = *fVal;
         holdStartMillis = now;
         lastHoldUpdate = 0; // update immédiat
       }
@@ -408,14 +408,14 @@ class Strip: public EventListener{
       if (newValue > valueMax) newValue = valueMax;
       if (newValue < valueMin) newValue = valueMin;
 
-      float delta = newValue - *value;
+      float delta = newValue - *fVal;
       if (delta == 0.0f) return 0.0f;
 
       if (cfg.minDeltaToApply > 0.0f && fabsf(delta) < cfg.minDeltaToApply) {
         return 0.0f;
       }
 
-      *value = newValue;
+      *fVal = newValue;
       return fabsf(delta);
     }
 
@@ -425,12 +425,12 @@ class Strip: public EventListener{
         lastHoldUpdate = 0;
     }
 
-    virtual float increaseCallback(unsigned long /*time*/, uint8_t trigger){
-      return applyProgressive(+1, trigger);
+    virtual float increaseCallback(unsigned long time, uint8_t trigger){
+      return applyProgressive(value, +1, trigger);
     }
 
-    virtual float decreaseCallback(unsigned long /*time*/, uint8_t trigger){
-      return applyProgressive(-1, trigger);
+    virtual float decreaseCallback(unsigned long time, uint8_t trigger){
+      return applyProgressive(value,-1, trigger);
     }
 
     virtual uint8_t getNumberOfProperties(){

@@ -308,12 +308,12 @@ class Widget : public GUI {
     }
 
     virtual bool refresh(bool force = false) {
-      bool changed = force;
-
       if (x == nullptr || y == nullptr || fColor == nullptr || bColor == nullptr || brightness == nullptr) {
         refreshed = false;
-        return refreshed;
+        return false;
       }
+
+      bool changed = force;
 
       if (oldX != *x ||
           oldY != *y ||

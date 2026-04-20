@@ -1437,8 +1437,8 @@ uint16_t QoStoColor(QoS qos) {
       case QoS::POOR:           return TFT_ORANGE;   
       case QoS::CRITICAL:       return TFT_RED;      
       case QoS::NOTAPPLICABLE:  return TFT_WHITE;
-      case QoS::UNDETERMINED:   return 0x5AEB;        // = TFT_GREY
-      default:                  return TFT_WHITE;    // fallback
+      case QoS::UNDETERMINED:   
+      default:                  return 0x5AEB;    // TFT_GREY
   }
 }
 
@@ -2382,7 +2382,9 @@ void handleConfigConnection(){
   }else{
   // socket is not connected so we launch the webapp
     if (app.webAppService != nullptr){
-      app.webAppService->switchDevice(true);
+      // Do not re-run enable flow when already enabled.
+      // Repeated switchDevice(true) calls can reserve network capacity multiple times on Ethernet.
+      if (!app.webAppService->state.enabled) app.webAppService->switchDevice(true);
     }
     if (app.webAppService != nullptr && app.webAppService->state.code == IF_READY){
       screen.id = SCREEN_UTILS;
@@ -2831,6 +2833,8 @@ void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *re
   DEBUG_INFO("\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
   //DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
   app.webAppConnected = false;
+  // Keep the web service alive and only refresh activity timer here.
+  // Stopping the service from this callback could delete the websocket server while listen() is on the stack.
   if (app.webAppService != nullptr) app.webAppService->reportSocketClosed();
 }
 

@@ -14,14 +14,6 @@
 #define MIXER_DEFINITION_PATH "/"
 
 
-/*
-values shared between strips and mixers
-*/
-TwoIndexValueList allInput2MixbusValues;
-
-OneIndexValueList allBusMixValues,
-                  allChMainValues;
-
 class DataSetSynced;
 
 class Synchronizer{
@@ -152,29 +144,24 @@ struct BaseMixerDefinition{
 };
 
 #define ADDRESS_CH_NAME "/chname/%d"
-DropDownAddress addressCHname = DropDownAddress(ADDRESS_CH_NAME);
-
 #define ADDRESS_BUS_NAME "/busname/%d"
-DropDownAddress addressBUSname = DropDownAddress(ADDRESS_BUS_NAME);
-
 #define ADDRESS_FX_NAME "/fxname/%d"
-DropDownAddress addressFXname = DropDownAddress(ADDRESS_FX_NAME);
-
 #define ADDRESS_AUX_NAME "/auxname/%d"
-DropDownAddress addressAUXname = DropDownAddress(ADDRESS_AUX_NAME);
-
 #define ADDRESS_MAIN_NAME "/mainname/%d"
-DropDownAddress addressMAINname = DropDownAddress(ADDRESS_MAIN_NAME);
-
 #define ADDRESS_DCA_NAME "/dcaname/%d"
-DropDownAddress addressDCAname = DropDownAddress(ADDRESS_DCA_NAME);  
+
+inline DropDownAddress addressCHname(ADDRESS_CH_NAME);
+inline DropDownAddress addressBUSname(ADDRESS_BUS_NAME);
+inline DropDownAddress addressFXname(ADDRESS_FX_NAME);
+inline DropDownAddress addressAUXname(ADDRESS_AUX_NAME);
+inline DropDownAddress addressMAINname(ADDRESS_MAIN_NAME);
+inline DropDownAddress addressDCAname(ADDRESS_DCA_NAME);
 
 
 // strip action / event
 enum{
   STRIP_REFRESH_VISIBLE
 };
-
 
 
 class MixerBase {
@@ -184,18 +171,28 @@ public:
       MixerBase* mixer = nullptr;
     };
 
+    /*
+    values shared between strips and mixers
+    */
+    TwoIndexValueList allInput2MixbusValues;
+    OneIndexValueList allBusMixValues;
+    OneIndexValueList allChMainValues;  
+
     // properties that are synced
-    DataSetSynced* inputNamesDS;
-    DataSetSynced* mixbusNamesDS;  
-    DataSetSynced* auxNamesDS;  
-    DataSetSynced* fxNamesDS;
-    DataSetSynced* mainNamesDS;
-    DataSetSynced* dcaNamesDS;
+    DataSetSynced* inputNamesDS = nullptr;
+    DataSetSynced* mixbusNamesDS = nullptr;
+    DataSetSynced* auxNamesDS = nullptr;
+    DataSetSynced* fxNamesDS = nullptr;
+    DataSetSynced* mainNamesDS = nullptr;
+    DataSetSynced* dcaNamesDS = nullptr;
 
     virtual ~MixerBase() {}
 
     // event system to decouple mixer implementation from strip management
     JsonDocument payload;                     // data from the mixer
+
+    // define if the mixer sends an echo after it receives a command, by default, it is the case
+    bool echoing = true;
 
     //// pure virtual utilities ////
     virtual bool restoreMixerProfile() = 0;
@@ -533,7 +530,7 @@ public:
       String mixerIP_Port;
 
       if (mixerID.ip == IPAddress(0, 0, 0, 0)) mixerIP_Port = "virtual offline";     // if mixer IP = 0.0.0.0 it means we are connected to a virtual offline mixer (ex. mixing station)
-      else mixerIP_Port = mixerID.ip.toString(),":",this->remotePort;
+      else mixerIP_Port = concatStrings(mixerID.ip.toString(),":",this->remotePort);
 
       this->state.details = concatStrings(mixerID.name," ",mixerID.model," ",mixerIP_Port);
     }
@@ -555,7 +552,7 @@ public:
 
 };
 
-void Synchronizer::reset(){
+inline void Synchronizer::reset(){
   DEBUG_INFO("Synchronizer:reset()");      
   // resetting all sync counters
   totalToSync = 0;
@@ -571,7 +568,7 @@ void Synchronizer::reset(){
 }
     
 
-int8_t Synchronizer::update(/*uint16_t latency*/){  
+inline int8_t Synchronizer::update(/*uint16_t latency*/){  
   #define SYNC_LOCK_TIMEOUT 1000      // une seconde laisse le temps au data de se flusher et se resynchro
   //if (latency<20) latency = 20;   // minimum latency of 20ms to avoid too much request / flood
   if (datasets.empty()) {
@@ -600,7 +597,7 @@ int8_t Synchronizer::update(/*uint16_t latency*/){
   }else dsIndex++;
 
   // computing the overall progress
-  int8_t progress = (totalToSync == 0) ? 100 : map(syncedSoFar, 0, totalToSync, 0, 100);      
+  int8_t progress = (totalToSync == 0) ? 100 : (syncedSoFar * 100) / totalToSync;      
   if (progress >=100){
     synced = true;
     progress = 100;
