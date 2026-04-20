@@ -133,9 +133,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
     
     virtual bool ping() override{
-      destination.lastPingSentAt = millis();
-      destination.pingPending = true;
-
       hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));
       return true;
     }
@@ -248,13 +245,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     // Main processor : JSON PATH ROUTER
     ///////////////////////////////////////    
     virtual void route(const char *message,uint16_t length) override{
-
-      //DEBUG_INFO("%s::process(%s,%i)",interfaceName.c_str(),message,length);
-      if (currentMessageReceivedAt == 0) {
-        currentMessageReceivedAt = millis();
-      }
-      destination.lastRxTime = currentMessageReceivedAt;
-    
+   
       if (length + 1 > RX_MAX){
         DEBUG_ERROR("%s::process(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
       } 
@@ -310,6 +301,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }  
 
     // ------------------ Path Handlers ------------------
+
+    ///////////////////////////////// PING REPLY = Mixer was found //////////////////////////
+    virtual void echo(){
+
+    }    
+
 
     void processState(const char* path, JsonVariant body) {
       #define MS_IDLE         "idle"
@@ -495,27 +492,25 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
-    void processMixerIdentity(const char* path, JsonVariant body) {
-      if (destination.pingPending) { // ensure we didn't receive the frame "out of a ping"
-        unsigned long responseAt = currentMessageReceivedAt ? currentMessageReceivedAt : millis();
-        unsigned long rawLatency = responseAt - destination.lastPingSentAt;
-        calculateLatencyAndJitter(rawLatency);
-        destination.pingPending = false;
-      }
+    void echo(void* data) {
+      auto body = *static_cast<JsonVariant*>(data);
 
-      #define OFFLINE "offline"
       IPAddress ip;
       ip.fromString(body["ipAddress"] | "");
-      String name  = body["manufacturer"] | OFFLINE;
+
+      String name  = body["manufacturer"] | "offline";
       String model = body["currentModel"] | "";
 
-      if (name != OFFLINE) {
-        setMixer(name, model, ip);
+      if (name != "offline") {
+        setMixer(name, model, ip);                                // process the data 
       } else {
-        hwm.network->clientSocketSend(get(MSPATH_APP_STATE));
+        hwm.network->clientSocketSend(get(MSPATH_APP_STATE));     //echo contains wrong data, we ask the mixer state
       }
     }
 
+    void processMixerIdentity(const char* path, JsonVariant body) {
+      _reply(&body);  
+    }
 
     void processMixersAvailable(char* rx, size_t len) {
       JsonDocument filter;

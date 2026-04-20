@@ -46,6 +46,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
 
     Event message;
 
+    bool dataProcessed;         // generic flag used to tells if we had some data in or out of the interface
 
     DeviceInterface(const String&, const String&, bool);
     ~DeviceInterface();
@@ -753,6 +754,22 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     }
 
     virtual bool ping() = 0;    
+    virtual void echo(void* data) = 0;
+
+    // this function is the internal TOP method called when you receive an answered from the device ping, showing it is live
+    // it calculates the latency and calls the  method that actually implements the mecasim that processes the data from the derived class, like device dientification, etc...
+    virtual void _reply(void* data){
+      calculateLatencyAndJitter();
+      echo(data);   //handover to derived class
+    }
+
+    // this function is the internal TOP method called when we want to query network to see if device is live
+    // it sets the timeout and calls the  method that actually implements the ping mecasim from the derived class
+    virtual bool _target(){
+      destination.lastPingTime = millis();
+      dataProcessed = true;       // the ping throws some data out
+      return ping();
+    }
 
     // network devices listen to network event
     virtual bool _begin() override{     // called by init()
@@ -769,12 +786,13 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       switchNetworkService(_enabled); // we use our own
     }   
 
-    void calculateLatencyAndJitter(unsigned long rawLatency){
-      /* we got a echoCommand echo, so we calculate the latency
-      we determine latency and jitter based on the ping response time, we use an EWMA to smooth the values and avoid spikes, we also set a max latency of 500ms to avoid crazy values in case of network issues
-      Il y a plusieurs façons correctes de moyenner une latence, selon ce que tu veux obtenir. Je te donne les 3 méthodes classiques, de la plus simple à la plus propre pour un système embarqué.
-      ✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)                
+    void calculateLatencyAndJitter(){
+      /* 
+        we got an echo, so we calculate the latency
+        we determine latency and jitter based on the ping response time, we use an EWMA to smooth the values and avoid spikes, we also set a max latency of 500ms to avoid crazy values in case of network issues                    
       */
+      unsigned long rawLatency = millis() - destination.lastPingTime;
+
       const unsigned long MAX_VALID_LATENCY = 500;
       const float LAT_ALPHA = 0.20f;
       const float JIT_ALPHA = 0.25f;
@@ -785,11 +803,11 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
       const float previousLatency = destination.latency;
 
-      if (destination.latency == 0) {
-        destination.latency = (uint16_t)rawLatency;
-        destination.jitter  = 0;
+      if (destination.latency == 0) {     
+        destination.latency = (uint16_t)rawLatency; // first value, just store it
+        destination.jitter  = 0;                    // and no jitter
       } else {
-        float filteredLatency =
+        float filteredLatency =                       //✅ Méthode 1 — Moyenne glissante exponentielle (RECOMMANDÉE) très utilisé en réseau (TCP, Wi-Fi, etc.)  
             previousLatency * (1.0f - LAT_ALPHA) +
             rawLatency * LAT_ALPHA;
 

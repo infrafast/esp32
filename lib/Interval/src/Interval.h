@@ -94,15 +94,15 @@ class TargetEcho{
   public:
     bool alive = false;
     unsigned long lastRxTime ;    
-    uint16_t latency = 30;      // normal latency on TCP/IP lan
-    uint16_t jitter = 5;
+    uint16_t latency = 0;      
+    uint16_t jitter = 0;
     String host;
     IPAddress ip;  
     TargetEcho(String h):host(h){} 
     String echoCommand = "";
 
-    unsigned long lastPingSentAt = 0;
-    bool pingPending = false;    
+    unsigned long lastPingTime = 0;
+    //bool pingPending = false;    
 
 };
 

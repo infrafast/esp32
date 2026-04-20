@@ -288,46 +288,42 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }        
 
     #define OSC_PING_DELAY 3000
-    #define OSC_MESSAGE_PROCESSED_AT_ONCE 3 // process
+    #define OSC_MESSAGE_PROCESSED_AT_ONCE 3
 
-    uint32_t lastPingTime = 0;
-
-    virtual bool monitorService() override {
-      bool dataProcessed = false;
+   virtual bool monitorService() override {
+      dataProcessed = false;
 
       OSCMessage msgOut;
-      if (queue.dequeue(msgOut, destination.latency)) {
-        _sendOSCMessage(&msgOut);
-        dataProcessed = true;      
+      if (queue.dequeue(msgOut, destination.latency)) {   // here we dequeue only one message at once, we could try to dequeue 2 using a for loop
+        dataProcessed = _sendOSCMessage(&msgOut);        
       }
 
+      // read a burst of incoming OSC message as data arrived
       for (uint8_t i = 0; i < OSC_MESSAGE_PROCESSED_AT_ONCE; ++i) {
         int8_t dataAvailable = readOSC();
-        if (dataAvailable <= 0) break;
+        if (dataAvailable <= 0) break;  // UDP stream is empty, we exit
 
-        if (state.code != IF_READY) setStateConnected();
-        connectAttemptCount = 0;
+        dataProcessed = true; // we received some data
 
-        process();
-       
-        dataProcessed = true;
+        if (state.code != IF_READY) setStateConnected();  // in case we were not yet in the proper state, we set it
+        connectAttemptCount = 0;        // we got some data so reset the counter
+
+        process();        // method to process the incoming data       
+        
       }
            
       if (!dataProcessed) {
         uint32_t now = millis();
 
         if (now - destination.lastRxTime > OSC_PING_DELAY &&
-            now - lastPingTime > OSC_PING_DELAY) {
+            now - destination.lastPingTime > OSC_PING_DELAY) {    // we only ping if we didn't receive data within the delay
 
           if (connectAttemptCount >= 2) {
             if (state.label != IF_STATE_PENDING) setStateQueryingDevice();
             connectAttemptCount = 0;
           } else {
-            if (ping()) {
-              lastPingTime = now;
-              connectAttemptCount++;
-              dataProcessed = true;
-            } else {
+            if (_target()) connectAttemptCount++;
+            else {
               if (handleConnectService()){
                 setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
                 destination.lastRxTime = 0;                               // with the valid UDP we just got so we force ping to be triggered immediately                
@@ -338,6 +334,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
           }
         }
       }
+
       return dataProcessed;
     }
 
@@ -348,7 +345,9 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }
 
     virtual void process(){
-      fireEvent(evtOSC);  //simply propagate the data
+      //by default, we simply propagate the data to whoever has register as event listener
+      // the event OSC which is throw hold a pointer to the OPSCin data which has just arrived
+      fireEvent(evtOSC);  
     }    
 
     char addr[64];    
@@ -382,18 +381,8 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
               destination.lastRxTime = millis();
 
-              // see if it's a ping, we measure
-              if (destination.echoCommand == addr) {
-                if (destination.pingPending) {
-                  unsigned long rawLatency = millis() - destination.lastPingSentAt;
-                  calculateLatencyAndJitter(rawLatency);
-                  destination.pingPending = false;
-                }
-
-                UDPIP = udp->remoteIP();
-                UDPPort = udp->remotePort();
-              }
-
+              // see if it's the reply to a _target (/ping) command => we call internal method to trigger latency calculation and user processing
+              if (destination.echoCommand == addr) _reply(&oscIn);
 
               #ifdef DEBUG
                 dump(oscIn, oscDump, sizeof(oscDump));              
@@ -408,6 +397,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         }
     
         return 0;
+    }
+
+
+    virtual void echo(void* data) override{
+      UDPIP = udp->remoteIP();
+      UDPPort = udp->remotePort();      
     }
 
     #ifdef DEBUG
@@ -469,7 +464,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     virtual bool handleDisconnectService() override{
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
       destination.lastRxTime = 0;                                // force immediate ping attempt
-      destination.pingPending = false;          // clear any pending ping
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
       queue.clear();      
       return true;
@@ -483,19 +477,9 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       state.progress = -1;      
     }
 
-    /*virtual bool ping() override{
-      destination.lastRxTime = millis();       
-      OSCMessage msg(destination.echoCommand.c_str()); 
-      return send(msg);
-    }*/
-
     virtual bool ping() override {
-      OSCMessage msg(destination.echoCommand.c_str());
-
-      destination.lastPingSentAt = millis();
-      destination.pingPending = true;
-
-      return _sendOSCMessage(&msg);
+      OSCMessage msg(destination.echoCommand.c_str());      
+      return _sendOSCMessage(&msg);                     // no enqueing , direct send for the ping
     }    
 
 

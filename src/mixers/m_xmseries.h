@@ -354,37 +354,6 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         int m2 = -1;
         int match = MATCH_NONE;
 
-        ////////////////////// PING ////////////////////////
-        if (strEquals(addr, XMSERIES_PING_CMD)) {    
-          IPAddress ip;
-
-          if (CONNECT_DISCOVER == connectMethod) {
-            oscIn.getString(0, pathBuffer);   // index 0 = IP address
-            if (ip.fromString(pathBuffer)) {
-              if (
-                  ip[0] != destination.ip[0] || ip[1] != destination.ip[1] ||
-                  ip[2] != destination.ip[2] || ip[3] != destination.ip[3]
-              ){
-                  DEBUG_WARN("Mixer IP differs from UDP packet %s->%s", pathBuffer, UDPIP.toString());
-                  destination.ip = UDPIP;     // could be destination.ip = ip but this will not work
-              }
-            } else {
-              DEBUG_ERROR("String reçue mais IP invalide");
-            }
-
-            remotePort = UDPPort;
-          }
-
-          oscIn.getString(1, pathBuffer);   // mixer name
-          String name = pathBuffer;
-
-          oscIn.getString(2, pathBuffer);   // mixer model
-          String model = mapModelToSeries(pathBuffer);
-
-          setMixer(name, model, destination.ip);
-          return;
-        }
-
         ////////////////////// CONFIG NAME ROUTES ////////////////////////
 
         match = matchProtocol(XM_CH_CONFIG_NAME, addr, m1, m2);
@@ -459,11 +428,48 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     /////////////////////////////////
     /// PRISE EN CHARGE DES ROUTES
     /////////////////////////////////
-
+    
     void handleNameRoute(DataSetSynced* ds, const char* label, int index) {
       oscIn.getString(0, pathBuffer);
       //DEBUG_INFO("%s(%d) = %s", label, index, pathBuffer);
       ds->set(index - 1, pathBuffer);
+    }
+
+    ///////////////////////////////// PING REPLY = Mixer was found //////////////////////////
+    virtual void echo(void* data) override{
+      
+      // mixer replied to the ping command with some data, we know these data is an OSC message pointer
+      NetworkOSC::echo(data);
+      OSCMessage* osc = (OSCMessage*) data;
+
+      // we will extract the IP address of the mixer
+      IPAddress ip;
+
+      // auto connect method = we have to sets the destination ip and retrieve port information
+      if (CONNECT_DISCOVER == connectMethod) {
+        osc->getString(0, pathBuffer);   // index 0 = IP address
+        if (ip.fromString(pathBuffer)) {
+          if (
+              ip[0] != destination.ip[0] || ip[1] != destination.ip[1] ||
+              ip[2] != destination.ip[2] || ip[3] != destination.ip[3]
+          ){
+              DEBUG_WARN("Mixer IP differs from UDP packet %s->%s", pathBuffer, UDPIP.toString());
+              // we changed the ip address which is a broadcast one to the real ip of the mixer
+              destination.ip = UDPIP;     // could be destination.ip = ip but this will not work
+          }
+        } else {
+          DEBUG_ERROR("String reçue mais IP invalide");
+        }
+        remotePort = UDPPort;
+      }
+
+      osc->getString(1, pathBuffer);   // mixer name
+      String name = pathBuffer;
+
+      osc->getString(2, pathBuffer);   // mixer model
+      String model = mapModelToSeries(pathBuffer);
+
+      setMixer(name, model, destination.ip);
     }
 
     ////////////////////////////////
@@ -490,6 +496,9 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       return m;
     }
 
+    // standard command to be implemented to ping the device
+    // this calls the one from the base class which sends the "ping" OSC command
+    // and in addition, we specilize it to alternate between port to guess 
     virtual bool ping() override{
       // in case we are in discovery mode, we alternate the value of the port using 
       if (CONNECT_DISCOVER == connectMethod && state.code != IF_READY){        
@@ -518,11 +527,11 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       return NetworkOSC::handleConnectService();
     }
 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////                                     ////////////////////////////
     /////////////////////////////////// CORE FUNCTION MIXER RELATED REQUEST ////////////////////////////
     ///////////////////////////////////                                     ////////////////////////////    
-    ///////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
     
     /////////////////////////////
     ///////// GETTERS ///////////

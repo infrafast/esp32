@@ -18,14 +18,12 @@ class NetworkSocket: public NetworkDevice{
     uint16_t length;
     char message[MAX_SOCKET_MESSAGE_LEN];
     int code;
-    unsigned long receivedAt;
   };
 
   SocketDataCopy socketQueue[SOCKET_QUEUE_SIZE];
   volatile uint8_t queueHead = 0;   // prochain message à lire
   volatile uint8_t queueTail = 0;   // prochain slot d’écriture
   volatile uint8_t queueCount = 0;
-  unsigned long currentMessageReceivedAt = 0;
 
   Event evtSock = Event(nullptr);
 
@@ -37,42 +35,34 @@ class NetworkSocket: public NetworkDevice{
 
     virtual bool monitorService() override{   
 
-      bool dataProcessed = false;
+      dataProcessed = false;
 
       SocketDataCopy* msg = nullptr;
       uint8_t processed = 0;
 
       while (processed < SOCKET_MESSAGE_PROCESSED_AT_ONCE && (msg = dequeueSocketMessage()) != nullptr) {
-        currentMessageReceivedAt = msg->receivedAt;
-        destination.lastRxTime = currentMessageReceivedAt;
         route(msg->message, msg->length);
-        currentMessageReceivedAt = 0;
-        dataProcessed = true;
+        dataProcessed = true;               // we received some data so we flag it
         processed++;
       }
 
-      #define PULSE_CHECK_DELAY kTimeoutInterval*1.1
-      uint32_t now = millis();
-      if (now - destination.lastRxTime > PULSE_CHECK_DELAY) {
-        if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN) {
-          // Throttle pulse checks so we don't spam ping() every monitor loop while waiting for an answer.
-          // If a previous ping is still pending, we only retry after another pulse interval.
-          bool canPing = !destination.pingPending || (now - destination.lastPingSentAt > PULSE_CHECK_DELAY);
-          if (canPing) {
-            // Fallback timestamp for implementations that don't set lastPingSentAt in ping().
-            destination.lastPingSentAt = now;
-            ping();
-            dataProcessed = true;
+      if (!dataProcessed){
+        #define PULSE_CHECK_DELAY kTimeoutInterval*1.1        // we have to wait a bit longer than a socket receive timeout
+        uint32_t now = millis();
+        if (now - destination.lastRxTime > PULSE_CHECK_DELAY &&
+            now - destination.lastPingTime > PULSE_CHECK_DELAY) {
+          // ping the device if we have a valid socket
+          if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN) _target(); // this sets dataProcessed to true
+          else {
+            if (handleConnectService()){
+              destination.lastRxTime = now;  // wait next round
+              setStatePending("green medium","Searching MixingStation");
+            }
+            else setStateError("Thread socket-open failed");
           }
-        } else {
-          if (handleConnectService()){
-            destination.lastRxTime = now;  // wait next round
-            setStatePending("green medium","Searching MixingStation");
-          }
-          else setStateError("Thread socket-open failed");
         }
-      }  
-      
+      }
+
       return dataProcessed;
     }  
 
@@ -130,7 +120,6 @@ class NetworkSocket: public NetworkDevice{
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
       destination.lastRxTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
       hwm.network->clientSocketClose(); 
-      destination.pingPending = false;          // clear any pending ping
       if (state.enabled == false) setStateDisabled();
       return true;
     }    
@@ -155,7 +144,6 @@ class NetworkSocket: public NetworkDevice{
     slot.message[copyLen] = '\0';
     slot.length = copyLen;
     slot.code = data->code;
-    slot.receivedAt = data->receivedAt;
 
     queueTail = (queueTail + 1) % SOCKET_QUEUE_SIZE;
     queueCount++;

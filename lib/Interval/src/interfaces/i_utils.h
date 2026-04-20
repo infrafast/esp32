@@ -221,6 +221,7 @@ class DirectoryInterface: public NetworkDevice{
       }      
 
       virtual bool ping(){return true;}
+      virtual void echo(void* data){}
       
       virtual void determineQoS() override{
         this->state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
@@ -428,6 +429,7 @@ class WebApplicationService: public NetworkDevice{
     }
 
     virtual bool ping() override{return true;}
+    virtual void echo(void* data){}
 
     virtual bool handleConnectService() override{
       bool started = startWebApp();

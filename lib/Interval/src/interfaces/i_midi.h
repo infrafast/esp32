@@ -98,8 +98,8 @@ class MIDIInterface: public DeviceInterface{
     virtual bool monitor() override{  
       if (dataAvailable){
         fireEvent(message);     // will be processed by strip that are registered to this interface event
-        dataAvailable = false;
-        return true;  // we have processed data
+        dataAvailable = false;  // acknowledge processing, actually it should be dequeuing a midi message queue instead as it limtis the processing of 1 message and we may loose some
+        return true;            // we have processed data
       }
       return false; // no data processed
     }
@@ -778,7 +778,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }      
 
     virtual bool monitor() override{
-      bool dataProcessed = MIDIInterface::monitor();      
+      dataProcessed = MIDIInterface::monitor();      
       dataProcessed |= monitorNetwork();      
       return dataProcessed;
     }

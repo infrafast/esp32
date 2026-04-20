@@ -1886,12 +1886,12 @@ void setup() {
 
       for (const auto& interface : interfaceRepo.interfaces){
         
-        bool dataProcessed = interface->update();      // return value drive the icon to indicate data being processed        
+        bool dataInOrOut = interface->update();      // return value drive the icon to indicate data being processed        
 
         Strip* currentStrip = getSelectedStrip();
         if (currentStrip != nullptr && currentStrip->interface == interface){               // the interface that has just been updated is the one used by the focused strip
           interfaceIconColor = QoStoColor(interface->state.QoSlevel);                                   // set color to interface QoS color
-          interfaceIconBrightness = dataProcessed?GUI::systemBrightness*0.3f:GUI::systemBrightness;                  // and blink the icon upon data receive
+          interfaceIconBrightness = dataInOrOut?GUI::systemBrightness*0.3f:GUI::systemBrightness;                  // and blink the icon upon data receive
         }
         
         if (interface->state.broadcastState){
