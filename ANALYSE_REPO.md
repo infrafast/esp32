@@ -1,26 +1,60 @@
-# Analyse du dépôt ESP32
+# Revue de `ANALYSE_REPO.md` (mise à jour)
+
+## Verdict rapide
+Le document précédent donnait une bonne intuition globale, mais il contenait plusieurs inexactitudes structurelles qui le rendaient trompeur pour un nouveau contributeur.
+
+## Corrections importantes
+
+### 1) Fichier central inexistant
+L'analyse mentionnait `src/FullApplication.h` comme pièce maîtresse.
+
+- **Problème** : ce fichier n'existe pas dans le dépôt.
+- **Référence correcte** : le point d'entrée actif est `src/main.cpp`, qui inclut `src/MixerApplication.h`, puis s'appuie sur `Interval.h` (dans `lib/Interval/src/Interval.h`).
+
+### 2) Point d'entrée mal identifié
+L'analyse mettait `src/TestApplication.h` au centre du runtime.
+
+- **Problème** : `src/main.cpp` inclut actuellement `MixerApplication.h`, pas `TestApplication.h`.
+- **Impact** : la description du flux de démarrage n'était pas alignée avec l'état réel du build.
+
+### 3) Architecture applicative à recentrer
+Le document parlait d'un « serveur de mixage » dans `FullApplication.h`.
+
+- **Réalité actuelle** :
+  - le cœur applicatif est porté par la librairie locale `Interval` (`lib/Interval/src/*`),
+  - des mixins/spécialisations mixer vivent dans `src/mixers/*`,
+  - l'initialisation spécifique du mode mixer est faite dans `src/MixerApplication.h` (création de `MixingStation`, `XMSeries`, `StripSkeleton`, puis `app.init()`).
+
+### 4) Pipeline d'assets : juste sur le principe, mais fragile en pratique
+La partie `preparefiles.py` était globalement correcte (minification + gzip), mais incomplète sur les risques.
+
+- Minification CSS/JS/HTML basée sur des API externes (`toptal.com`) : dépendance réseau forte.
+- Chemins codés en dur (`K:` et `src\data\webapp`) : faible portabilité.
+- Exécution systématique de `workflow()` à l'import du script : usage peu flexible en CI/CD.
+
+## Analyse consolidée du dépôt
 
 ## Aperçu général
-- Projet PlatformIO ciblant la carte Seeed XIAO ESP32-S3 et utilisant le framework Arduino avec un système de fichiers LittleFS pour embarquer des ressources web et des polices personnalisées.【F:platformio.ini†L1-L56】
-- L'application principale s'appuie sur une architecture modulaire centrée sur un serveur de mixage audio, des interfaces réseau et un rendu graphique via des polices OpenFontRender.【F:src/FullApplication.h†L1-L120】【F:src/FullApplication.h†L121-L192】
+- Projet PlatformIO pour **Seeed XIAO ESP32-S3** avec **Arduino** et **LittleFS** (`board_build.filesystem = littlefs`).
+- Deux environnements principaux : `dev` (avec `DEBUG`) et `prod` (flags USB orientés MIDI).
+- Forte orientation « contrôleur audio/mixer » avec pile réseau optionnelle (`USE_NETWORK`) et librairie applicative embarquée (`Interval`).
 
-## Organisation du code
-- `src/TestApplication.h` fournit un point d'entrée minimal qui initialise l'application complète et rafraîchit la logique métier dans la boucle principale, activant les composants réseau via le drapeau `USE_NETWORK`.【F:src/TestApplication.h†L1-L18】
-- `src/FullApplication.h` déclare les structures centrales :
-  - Gestion du serveur de mixage (`MixerServer`) et suivi d'état des interfaces connectées.【F:src/FullApplication.h†L121-L192】
-  - Typographie personnalisée pour les icônes (`MyIcon`) et gestion de progression pour les synchronisations réseau.【F:src/FullApplication.h†L93-L151】【F:src/FullApplication.h†L152-L192】
-- `preparefiles.py` automatise la minification et la compression des ressources web avant téléversement sur le filesystem embarqué, en s'appuyant sur des services web pour minifier CSS/JS/HTML et sur `gzip` pour compresser les fichiers sélectionnés.【F:preparefiles.py†L1-L132】【F:preparefiles.py†L133-L208】
+## Organisation actuelle du code
+- `src/main.cpp` : entrypoint compilé, délègue à `MixerApplication.h`.
+- `src/MixerApplication.h` : compose les mixers (`MixingStation`, `XMSeries`) et enregistre des `StripSkeleton` avant `app.init()`.
+- `src/TestApplication.h` : variante minimale de setup/loop, utile comme harness simple mais non utilisée par défaut.
+- `lib/Interval/src/` : couche cœur (gestion app, interfaces, composants hardware, strips, sync, utilitaires).
 
-## Dépendances et configuration PlatformIO
-- Sélectionne explicitement la version `espressif32@6.4.0` (correspondant à Arduino-ESP32 2.0.11) afin de garantir la compatibilité avec l'interface Ethernet et TinyUSB, avec de nombreux commentaires pour documenter les essais de versions alternatives.【F:platformio.ini†L9-L40】
-- Liste des bibliothèques externes majeures : AppleMIDI/USBMIDI pour la connectivité musicale, EspTinyUSB pour la pile USB, OpenFontRender/TJpg_Decoder pour l'affichage, aWOT/HttpClient pour le web, ESP32Ping et ESP-FTP-Server-Lib pour les communications réseau.【F:platformio.ini†L33-L74】
-- Deux environnements PlatformIO (`dev` et `prod`) permettent d'activer des drapeaux de compilation distincts, dont `DEBUG` en développement et la désactivation des CDC USB en production.【F:platformio.ini†L76-L96】
+## Dépendances et configuration
+- `platform = espressif32@6.4.0` avec commentaires d'historique de compatibilité.
+- Dépendances importantes : AppleMIDI/USBMIDI, EspTinyUSB, OpenFontRender, aWOT, HttpClient, ESP32Ping, ESP-FTP-Server-Lib, etc.
+- Plusieurs libs sont aussi vendoriées/locales (`lib/Ethernet`, `lib/mWebSockets`, `lib/Interval`), ce qui est cohérent avec des patches projet.
 
-## Scripts et utilitaires
-- `preparefiles.py` propose également un workflow complet (`workflow()`) qui purge le dossier de destination, minifie les ressources et prépare les fichiers LittleFS en compressant automatiquement les extensions cibles tout en respectant des exceptions configurables.【F:preparefiles.py†L168-L213】
-- `map_folder.bat` (appelé depuis `prep_data_folder`) est intégré dans le pipeline pour synchroniser les ressources depuis un lecteur réseau ou externe avant la compression finale.【F:preparefiles.py†L133-L167】
+## Points de vigilance recommandés
+1. **Fiabilité build assets** : prévoir fallback local si API de minification indisponibles.
+2. **Portabilité scripts** : remplacer les chemins `K:`/backslashes hardcodés par des chemins paramétrables.
+3. **Maintenabilité** : clarifier la relation entre dépendances `lib_deps` et libs locales patchées pour éviter les divergences silencieuses.
+4. **Documentation d'entrée** : expliciter noir sur blanc que le chemin runtime principal passe par `main.cpp -> MixerApplication.h -> Interval`.
 
-## Pistes de vérification future
-- Documenter ou ajouter des tests automatisés pour vérifier la disponibilité des services de minification externes utilisés par `preparefiles.py`.
-- Consolider l'initialisation et la gestion mémoire des composants graphiques (ex. `StripSkeleton`) mentionnée dans les commentaires de `FullApplication.h` pour prévenir les crashs liés aux pointeurs nuls.【F:src/FullApplication.h†L1-L32】
-
+## Conclusion
+Le fond de l'ancienne analyse était utile, mais la cartographie des fichiers clés était partiellement obsolète. Cette version remet l'analyse en phase avec la structure effectivement présente dans le dépôt.
