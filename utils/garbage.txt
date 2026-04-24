@@ -1,7 +1,4 @@
-ℹ       +------------------------------+
-ℹ       | ALL NETWORK OBJECTED CLEANED |
-ℹ       +------------------------------+
-ℹ       MixingStation::handleDisconnectService()
+    MixingStation::handleDisconnectService()
 ℹ       WiFiEth~6::clientSocketClose()
 ℹ       WiFiEth~6::clientSocketClose() skipped: network not connected (state:0 media:0)
 ℹ       XMSeries::handleDisconnectService()
@@ -12,13 +9,12 @@
 ℹ       AppleMIDI::handleDisconnectService()
 ℹ       AppleMIDI::setStateDisabled()⚫
 ℹ       [WSS]           skip graceful shutdown (network down)
--------> FREEZE
+------> FREEZE
 ℹ               !!! socketCloseCallback =>code:1001 length:0
 
 ℹ       WebApplication::down
 ℹ       WebApplication:setStateDisconnected()🔴
-ℹ       WebApplication:setStateDisconnected(no connection)🔴
-ℹ       startWifi(infrafast,Mf9k8iie2), wifiEnabled=1, status: Disconnected, MAC:F0:9E:9E:3B:FC:90       => got IP:192.168.2.2  ...all WiFi object instantiated
+ℹ       WebApplication:setStateDisconnected(no connection)🔴     => got IP:192.168.2.2  ...all WiFi object instantiated
 
 ℹ       +------------------------------------------------+
 ℹ       | WiFiEth~6 changed state => cable:2, media:2    |
