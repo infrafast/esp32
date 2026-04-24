@@ -1900,13 +1900,9 @@ class WiFiEth : public Network{
             if (server != NULL){delete server; server  = NULL;} 
             DEBUG_INFO("C");
             stopSocketOpenTask();
-            if (wsWiFiClient != nullptr){
-              wsWiFiClient->close(WebSocketCloseCode::GOING_AWAY, true, "network down", strlen("network down"));
-            }
+            // Do not close/delete websocket clients here: on abrupt network loss,
+            // close() can attempt a write on an invalid socket and crash.
             DEBUG_INFO("D");
-            if (wsEthClient != nullptr){
-              wsEthClient->close(WebSocketCloseCode::GOING_AWAY, true, "network down", strlen("network down"));
-            }
             DEBUG_INFO("E");
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
             DEBUG_INFO("F");
