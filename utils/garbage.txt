@@ -1,0 +1,17 @@
+ℹ       +----------------------+
+ℹ       | NETWORK DISCONNECTED |
+ℹ       +----------------------+
+ℹ       A
+ℹ       B
+ℹ       C
+ℹ       socketOpenTask stopped
+ℹ       WebSocket state reset
+ℹ       D
+ℹ       E
+ℹ       F
+ℹ       +------------------------------+
+ℹ       | ALL NETWORK OBJECTED CLEANED |
+ℹ       +------------------------------+
+ℹ       MixingStation::handleDisconnectService()
+ℹ       WiFiEth~6::clientSocketClose()[110334][E][WiFiClient.cpp:422] write(): fail on fd 49, errno: 113, "Software caused connection abort"
+Guru Meditation Error: Core  1 panic'ed (LoadProhibited). Exception was unhandled.
