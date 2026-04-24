@@ -1797,6 +1797,9 @@ class WiFiEth : public Network{
       }else if (state == CONNECTED) {
         //ethernet has priority over wifi, hence if we are connected by WiFi but the cable is plugged, we disconnect WiFi
         if (media == WIFI_MEDIA && cable == LinkON){
+          DEBUG_INFO("+--------------------------*---------------+");
+          DEBUG_INFO("| NETWORK PLUGGED ETH WHILE WIFI CONNECTED |");
+          DEBUG_INFO("+------------------------------------------+");           
           evtNet.type = EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED;
           fireEvent(evtNet);        
           disconnectWifi();
@@ -1907,9 +1910,9 @@ class WiFiEth : public Network{
             lastActiveMedia = NO_MEDIA;
             if (!ethEnabled) networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
             else networkConnectivityIcon = ICON_MIXETHWIFI; 
-            DEBUG_INFO("+----------------------------+");           
-            DEBUG_INFO(" ALL NETWORK OBJECTED CLEANED");
-            DEBUG_INFO("+----------------------------+");
+            DEBUG_INFO("+------------------------------+");           
+            DEBUG_INFO("| ALL NETWORK OBJECTED CLEANED |");
+            DEBUG_INFO("+------------------------------+");
 
             ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
             evtNet.type = EVENT_NETWORK_DISCONNECTED;
