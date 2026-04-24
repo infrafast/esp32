@@ -1656,6 +1656,22 @@ class WiFiEth : public Network{
       pendingPort = 0;      
     }
 
+    void stopSocketOpenTask(){
+      if (socketOpenTaskHandle != nullptr && socketOpenTaskHandle != xTaskGetCurrentTaskHandle()) {
+        TickType_t start = xTaskGetTickCount();
+        while (socketOpenJobState == SOCKET_JOB_RUNNING && (xTaskGetTickCount() - start) < pdMS_TO_TICKS(500)) {
+          vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
+        if (socketOpenJobState == SOCKET_JOB_RUNNING) {
+          DEBUG_WARN("socketOpenTask still running, forcing task delete");
+          vTaskDelete(socketOpenTaskHandle);
+        }
+      }
+
+      resetWSstate();
+    }
+
 
     bool refresh(bool force=false) {
     
@@ -1878,9 +1894,10 @@ class WiFiEth : public Network{
             DEBUG_INFO("B");
             if (server != NULL){delete server; server  = NULL;} 
             DEBUG_INFO("C");
-            if (wsWiFiClient != nullptr){delete wsWiFiClient; wsWiFiClient = nullptr; resetWSstate();}
+            stopSocketOpenTask();
+            if (wsWiFiClient != nullptr){delete wsWiFiClient; wsWiFiClient = nullptr;}
             DEBUG_INFO("D");
-            if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr; resetWSstate();}
+            if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr;}
             DEBUG_INFO("E");
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
             DEBUG_INFO("F");
@@ -2103,22 +2120,28 @@ class WiFiEth : public Network{
 
       bool success = false;
 
-      if (media == CABLE_MEDIA) {
-        if (wsEthClient != nullptr) {
-          success = wsEthClient->open(
-            pendingHost.c_str(),
-            pendingPort,
-            pendingPath.c_str()
-          );
+      if (xSemaphoreTake(networkBusy, pdMS_TO_TICKS(2000)) == pdTRUE) {
+        if (media == CABLE_MEDIA) {
+          if (wsEthClient != nullptr) {
+            success = wsEthClient->open(
+              pendingHost.c_str(),
+              pendingPort,
+              pendingPath.c_str()
+            );
+          }
+        } else {
+          if (wsWiFiClient != nullptr) {
+            success = wsWiFiClient->open(
+              pendingHost.c_str(),
+              pendingPort,
+              pendingPath.c_str()
+            );
+          }
         }
+
+        xSemaphoreGive(networkBusy);
       } else {
-        if (wsWiFiClient != nullptr) {
-          success = wsWiFiClient->open(
-            pendingHost.c_str(),
-            pendingPort,
-            pendingPath.c_str()
-          );
-        }
+        DEBUG_WARN("socketOpenTask: networkBusy timeout");
       }
 
       if (!success) {
