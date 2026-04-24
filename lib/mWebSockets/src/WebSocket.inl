@@ -87,10 +87,11 @@ void WebSocket<NetClient>::close(
   }
 }
 template <class NetClient> void WebSocket<NetClient>::terminate() {
-  if (m_client.connected()) {
+  const bool isConnected = m_client.connected();
+  if (isConnected) {
     m_client.flush();
+    m_client.stop();
   }
-  m_client.stop();
   m_readyState = WebSocketReadyState::CLOSED;
   SAFE_DELETE_ARRAY(m_protocol);
   _clearDataBuffer();
