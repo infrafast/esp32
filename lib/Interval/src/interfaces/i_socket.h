@@ -41,6 +41,7 @@ class NetworkSocket: public NetworkDevice{
       uint8_t processed = 0;
 
       while (processed < SOCKET_MESSAGE_PROCESSED_AT_ONCE && (msg = dequeueSocketMessage()) != nullptr) {
+        destination.lastRxTime = millis();  // timestamp of data reception, used to calculate latency and jitter
         route(msg->message, msg->length);
         dataProcessed = true;               // we received some data so we flag it
         processed++;
@@ -50,12 +51,12 @@ class NetworkSocket: public NetworkDevice{
         #define PULSE_CHECK_DELAY kTimeoutInterval*1.1        // we have to wait a bit longer than a socket receive timeout
         uint32_t now = millis();
         if (now - destination.lastRxTime > PULSE_CHECK_DELAY &&
-            now - destination.lastPingTime > PULSE_CHECK_DELAY) {
+            now - destination.lastPingTx > PULSE_CHECK_DELAY) {
           // ping the device if we have a valid socket
           if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN) pulseCheck(); // this sets dataProcessed to true
           else {
             if (handleConnectService()){
-              destination.lastRxTime = now;  // wait next round
+              destination.lastPingTx = now;  // wait next round
               setStatePending("green medium","Searching MixingStation");
             }
             else setStateError("Thread socket-open failed");
@@ -70,7 +71,7 @@ class NetworkSocket: public NetworkDevice{
 
     void onEvent(const Event& evt) override {
       NetworkDevice::onEvent(evt);
-      destination.lastRxTime = millis();   // do not query device imemdiately, let time for the state to stabilize
+      destination.lastRxTime = millis();   // do not query device immediately, let time for the state to stabilize
 
       switch(evt.type){
         case EVENT_SOCKET_OPEN:
@@ -118,7 +119,7 @@ class NetworkSocket: public NetworkDevice{
 
     virtual bool handleDisconnectService(){
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
-      destination.lastRxTime = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
+      destination.lastPingTx = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
       hwm.network->clientSocketClose(); 
       if (state.enabled == false) setStateDisabled();
       return true;

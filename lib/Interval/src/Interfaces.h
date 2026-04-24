@@ -591,6 +591,8 @@ class NetWorkService{
       if(_enable) enable();
       else disable();
       destination.lastRxTime = 0; // immediate state query
+      destination.lastPingTx = 0; // reset ping timestamp
+      destination.lastPingRx = 0; // reset ping timestamp
     }
 
     void enable(){
@@ -759,6 +761,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     // this function is the internal TOP method called when you receive an answered from the device ping, showing it is live
     // it calculates the latency and calls the  method that actually implements the mecasim that processes the data from the derived class, like device dientification, etc...
     virtual void pulseBeat(void* data){
+      destination.lastPingRx = millis();   // we set the reception timestamp as soon as we receive the ping response, so we can calculate the latency and jitter based on the difference between the ping transmission timestamp and the reception timestamp  
       calculateLatencyAndJitter();
       echo(data);   //handover to derived class
     }
@@ -766,7 +769,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     // this function is the internal TOP method called when we want to query network to see if device is live
     // it sets the timeout and calls the  method that actually implements the ping mecasim from the derived class
     virtual bool pulseCheck(){
-      destination.lastPingTime = millis();
+      DEBUG_INFO("NetworkDevice(%s)::pulseCheck() (%lu)",interfaceName.c_str(), millis());
       dataProcessed = true;       // the ping throws some data out
       return ping();
     }
@@ -791,7 +794,8 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
         we got an echo, so we calculate the latency
         we determine latency and jitter based on the ping response time, we use an EWMA to smooth the values and avoid spikes, we also set a max latency of 500ms to avoid crazy values in case of network issues                    
       */
-      unsigned long rawLatency = millis() - destination.lastPingTime;
+
+      unsigned long rawLatency = destination.lastPingRx - destination.lastPingTx; // tx is set when we send the ping, rx is set when we receive the echo, so the difference is the round trip time (RTT) which is a common way to measure latency in network communication
 
       const unsigned long MAX_VALID_LATENCY = 500;
       const float LAT_ALPHA = 0.20f;
@@ -830,10 +834,12 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
         destination.jitter = MAX_VALID_LATENCY;
       }
 
-      DEBUG_INFO("📉 %s latency:%u jitter:%u raw:%lu",
+      DEBUG_INFO("📉 %s latency:%u jitter:%u lastPingRx:(%lu)-lastPingTx:(%lu)=raw:(%lu)",
                 interfaceName.c_str(),
                 destination.latency,
                 destination.jitter,
+                destination.lastPingRx,
+                destination.lastPingTx,
                 rawLatency);
     } 
 

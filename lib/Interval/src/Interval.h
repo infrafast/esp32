@@ -93,17 +93,20 @@ bool useUSBMidi = false;
 class TargetEcho{
   public:
     bool alive = false;
-    unsigned long lastRxTime ;    
-    uint16_t latency = 0;      
-    uint16_t jitter = 0;
+
     String host;
     IPAddress ip;  
-    TargetEcho(String h):host(h){} 
+
     String echoCommand = "";
 
-    unsigned long lastPingTime = 0;
-    //bool pingPending = false;    
+    unsigned long lastRxTime ;    // timestamp of last received response, used to calculate latency and jitter
+    unsigned long lastPingTx = 0;   // used to know when we have to send a ping to check if the device is still alive
+    unsigned long lastPingRx = 0;   // used to calculate latency and jitter
 
+    uint16_t latency = 0;      
+    uint16_t jitter = 0;
+
+    TargetEcho(String h):host(h){} 
 };
 
 typedef std::function<void(TargetEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité

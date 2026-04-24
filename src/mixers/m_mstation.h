@@ -134,6 +134,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     
     virtual bool ping() override{
       hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));
+      destination.lastPingTx = millis();
       return true;
     }
 
@@ -277,7 +278,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         DEBUG_WARN("\tNo Path");
         return;
       }else{
-        DEBUG_INFO("←←←🌐 %s::path ✅ %s",interfaceName.c_str(),path);
+        DEBUG_INFO("←←←🌐 %s::path ✅ %s (%lu)",interfaceName.c_str(),path, millis());
       }
 
       const Route* r = findRoute(path);
@@ -977,18 +978,18 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       return false;
     }
 
-    virtual void determineQoS() override{      
+    virtual void determineQoS() override{    
       if (state.code != IF_READY) state.QoSlevel = QoS::UNDETERMINED;
       else
-      if (destination.latency <= 15 && destination.jitter <= 5)  state.QoSlevel = QoS::GOOD;    
+      if (destination.latency <= 50 && destination.jitter <= 10) state.QoSlevel = QoS::GOOD;    
       else
-      if (destination.latency <= 30 && destination.jitter <= 5) state.QoSlevel = QoS::MEDIUM;    
+      if (destination.latency <= 100 && destination.jitter <= 20) state.QoSlevel = QoS::MEDIUM;    
       else
-      if (destination.latency <= 50 && destination.jitter <= 20)  state.QoSlevel = QoS::POOR;    
+      if (destination.latency <= 200 && destination.jitter <= 40)  state.QoSlevel = QoS::POOR;    // yellow
       else
       // Au-delà : problème réseau
       state.QoSlevel = QoS::CRITICAL;    
-    }       
+    }    
         
     
 };

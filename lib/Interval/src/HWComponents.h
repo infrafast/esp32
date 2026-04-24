@@ -1500,13 +1500,14 @@ class WiFiEth : public Network{
         if (wsEthClient!= nullptr){      
           if (wsEthClient->getReadyState() == WebSocketReadyState::OPEN){
             wsEthClient->send(WebSocketDataType::TEXT, message, strlen(message));
-            DEBUG_INFO("🌐→→→ %s",message);
+            DEBUG_INFO("🌐→→→ %s (%lu)",message, millis());
+            
           }
         }
       }else{
         if (wsWiFiClient!= nullptr){      
           wsWiFiClient->send(WebSocketDataType::TEXT, message, strlen(message));
-          DEBUG_INFO("🌐→→→ %s",message);
+          DEBUG_INFO("🌐→→→ %s (%lu)",message, millis());
         }
       }      
     }

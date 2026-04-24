@@ -298,7 +298,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         int8_t dataAvailable = readOSC();
         if (dataAvailable <= 0) break;  // UDP stream is empty, we exit
 
-        dataProcessed = true; // we received some data
+        dataProcessed = true; // we received some data        
 
         if (state.code != IF_READY) setStateConnected();  // in case we were not yet in the proper state, we set it
         connectAttemptCount = 0;        // we got some data so reset the counter
@@ -311,7 +311,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
         uint32_t now = millis();
 
         if (now - destination.lastRxTime > OSC_PING_DELAY &&
-            now - destination.lastPingTime > OSC_PING_DELAY) {    // we only ping if we didn't receive data within the delay
+            now - destination.lastPingTx > OSC_PING_DELAY) {    // we only ping if we didn't receive data within the delay
 
           if (connectAttemptCount >= 2) {
             if (state.label != IF_STATE_PENDING) setStateQueryingDevice();
@@ -321,7 +321,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
             else {
               if (handleConnectService()){
                 setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
-                destination.lastRxTime = 0;                               // with the valid UDP we just got so we force ping to be triggered immediately                
+                destination.lastPingTx = 0;                               // with the valid UDP we just got so we force ping to be triggered immediately                
               }else{
                 setStateError("Can't connect (UDP failed)");
               }
@@ -464,7 +464,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
     virtual bool handleDisconnectService() override{
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
-      destination.lastRxTime = 0;                                // force immediate ping attempt
+      destination.lastPingTx = 0;                                // force immediate ping attempt
       if (udpID != -1) hwm.network->releaseUDPSlot(&udpID);          // release any valid UDP slot we would have acquired 
       queue.clear();      
       return true;
@@ -480,6 +480,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
     virtual bool ping() override {
       OSCMessage msg(destination.echoCommand.c_str());      
+      destination.lastPingTx = millis();
       return _sendOSCMessage(&msg);                     // no enqueing , direct send for the ping
     }    
 
