@@ -1654,10 +1654,12 @@ class WiFiEth : public Network{
       pendingHost = "";
       pendingPath = "";
       pendingPort = 0;      
+      DEBUG_INFO("WebSocket state reset");
     }
 
     void stopSocketOpenTask(){
       if (socketOpenTaskHandle != nullptr && socketOpenTaskHandle != xTaskGetCurrentTaskHandle()) {
+        DEBUG_WARN("stopSocketOpenTask() called while task is running, waiting for completion...");        
         TickType_t start = xTaskGetTickCount();
         while (socketOpenJobState == SOCKET_JOB_RUNNING && (xTaskGetTickCount() - start) < pdMS_TO_TICKS(500)) {
           vTaskDelay(pdMS_TO_TICKS(10));
@@ -1668,7 +1670,7 @@ class WiFiEth : public Network{
           vTaskDelete(socketOpenTaskHandle);
         }
       }
-
+      DEBUG_INFO("socketOpenTask stopped");
       resetWSstate();
     }
 
