@@ -411,8 +411,16 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
         match = matchProtocol(XM_CH_LR_MUTE, addr, m1, m2);
         if (match == MATCH_1INT) {
-          //fireChMainMute(m1, oscIn.getInt(0));
-          handleChMainMute(m1, oscIn.getInt(0));
+          
+          // xair and x32 have different way of treating channel mute: Xair cannot mute channel on buses, there is only a main mute, hence this handler may be call by xair to mute a ch
+          if (protocolName == XAIR_PROTOCOL) {
+            // do the mute "virtually" on all buses
+            for (int busIndex=0; busIndex<mixerDef->busCount; busIndex++){
+              handleChBusMute(m1, busIndex+1, oscIn.getInt(0));                 // bus index starts at 1 on behringer
+            }
+          } else if (protocolName == XM_PROTOCOL){      
+            handleChMainMute(m1, oscIn.getInt(0));
+          }
           return;
         }
 
@@ -595,7 +603,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       const char* pattern = protocol[XM_CH_BUS_MIX_LEVEL].c_str(); 
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);         
       sendOSC(pathBuffer, level);
-      if (!echoing) allInput2MixbusValues.get(chIndex,busIndex)->value = level; // as X32 is not echoing the command, the value has to be forced manually assuming it was changed.
+      if (!echoing) allInput2MixbusValues.get(chIndex,busIndex)->value = level; // as X32 is not echoing the command, the value has to be mirrored manually assuming it was changed.
     }
 
     virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override{
@@ -604,7 +612,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);
       sendOSC(pathBuffer, mute);    
-      if (!echoing) allInput2MixbusValues.get(chIndex,busIndex)->toggle = mute; // as X32 is not echoing the command, the value has to be forced manually assuming it was changed.
+      if (!echoing) allInput2MixbusValues.get(chIndex,busIndex)->toggle = mute; // as X32 is not echoing the command, the value has to be mirrored manually assuming it was changed.
     }
 
   protected:    

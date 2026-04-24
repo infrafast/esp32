@@ -76,6 +76,14 @@ public:
     return true;
   }  
 
+  /* event processing coming from the strip, like user interaction, visibility change, focus change, etc... 
+   we can also receive events from the mixer here if we want to update the strip state based on some mixer event 
+   (for instance if we want to update the color of the strip based on the channel level or something like this), 
+   this is a powerful method that allow us to decouple the mixer implementation from the strip management and have a clean separation 
+   of concerns between the two, we can for instance have a generic implementation of a fader strip that can work with any mixer implementation
+    as long as it follows the same interface, and we can also have specific implementations for specific mixers 
+   if we want to take advantage of some specific features of these mixers
+  */
   virtual void processAction(int action,JsonDocument& data) override{  
 
     if (baseStrip == nullptr || !baseStrip->visible || boundInterface == nullptr) return;
@@ -84,10 +92,9 @@ public:
     if (!baseStrip->visible) return;
 
     switch (action){
-      case STRIP_REFRESH_VISIBLE:         
-        
-      if (boundInterface->state.code != IF_READY) return;      
-
+      // called to force periodic refresh by the mixer
+      case STRIP_REFRESH_VISIBLE:                 
+        if (boundInterface->state.code != IF_READY) return;      
         getValues(); // strip is visible so we get its values
         if (baseStrip->focused) getConfig(); // plus get the toplabel name if it has focus 
       break;
@@ -174,31 +181,24 @@ class Input2MixbusStrip : public SendStrip{
     virtual float decreaseCallback(unsigned long time,uint8_t trigger) override{
       float newVal = *value;
       float delta = applyProgressive(&newVal, -1, trigger);
-      if (delta != 0.0) setChBusLevel(newVal);
+      if (delta != 0.0) mixer->setCHBUSlevel(select1ID, select2ID, newVal);  // select1ID = chID, select2ID = busID
       return delta;
     }      
 
     virtual float increaseCallback(unsigned long time, uint8_t trigger) override{
       float newVal = *value;
       float delta = applyProgressive(&newVal, +1, trigger);
-      if (delta != 0.0) setChBusLevel(newVal);
+      if (delta != 0.0) mixer->setCHBUSlevel(select1ID, select2ID, newVal);  // select1ID = chID, select2ID = busID
       return delta;            
     }
 
     virtual bool actionCallback(uint8_t trigger) override{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
-      toggleCHBUSmute(!*toggle1);
+      mixer->setCHBUSmute(select1ID, select2ID, !*toggle1);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
       return true;        
     }
 
-    void setChBusLevel(float val){
-      mixer->setCHBUSlevel(select1ID, select2ID, val);  // select1ID = chID, select2ID = busID
-    }    
-
-    void toggleCHBUSmute(bool mute){
-      mixer->setCHBUSmute(select1ID, select2ID, mute);  // select1ID = chID, select2ID = busID, if muting we set level to 0, if unmuting we set it to the current value (which may be different from 0 if the level was changed while muted)
-    }
 };
 
 StripSkeleton* stripInput2mixbusSkel;
