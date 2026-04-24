@@ -1914,9 +1914,9 @@ class WiFiEth : public Network{
             lastActiveMedia = NO_MEDIA;
             if (!ethEnabled) networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
             else networkConnectivityIcon = ICON_MIXETHWIFI; 
-            DEBUG_INFO("+----------------------------+");           
-            DEBUG_INFO(" ALL NETWORK OBJECTED CLEANED");
-            DEBUG_INFO("+----------------------------+");
+            DEBUG_INFO("+------------------------------+");           
+            DEBUG_INFO("| ALL NETWORK OBJECTED CLEANED |");
+            DEBUG_INFO("+------------------------------+");
 
             ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
             evtNet.type = EVENT_NETWORK_DISCONNECTED;
