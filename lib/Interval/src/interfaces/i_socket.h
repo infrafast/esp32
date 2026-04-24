@@ -52,7 +52,7 @@ class NetworkSocket: public NetworkDevice{
         if (now - destination.lastRxTime > PULSE_CHECK_DELAY &&
             now - destination.lastPingTime > PULSE_CHECK_DELAY) {
           // ping the device if we have a valid socket
-          if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN) _target(); // this sets dataProcessed to true
+          if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN) pulseCheck(); // this sets dataProcessed to true
           else {
             if (handleConnectService()){
               destination.lastRxTime = now;  // wait next round

@@ -435,7 +435,7 @@ public:
         unsigned long now = millis();
         uint16_t visibleStripRefreshRate = 60000; // by default we refresh every minute
 
-        if (this->state.QoSlevel < QoS::GOOD) visibleStripRefreshRate = 10000; // if QoS is bad, we reduce to every 10s
+        if (this->state.QoSlevel < QoS::GOOD) visibleStripRefreshRate = 10000; // if QoS is bad, we reduce to every 10s, this value should always be above the ping delay
 
         if ((now - lastVisibleStripRefreshAt) >= visibleStripRefreshRate) {
           lastVisibleStripRefreshAt = now;

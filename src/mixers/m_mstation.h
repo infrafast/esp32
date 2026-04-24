@@ -302,12 +302,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     // ------------------ Path Handlers ------------------
 
-    ///////////////////////////////// PING REPLY = Mixer was found //////////////////////////
-    virtual void echo(){
-
-    }    
-
-
     void processState(const char* path, JsonVariant body) {
       #define MS_IDLE         "idle"
       #define MS_CONNECTING   "connecting"
@@ -369,18 +363,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         deviceInterface->state.subState = state;        
       }
 
-    }
-
-    void setStateBGSyncing(){
-      DEBUG_INFO("%s: setStateBGSyncing()",deviceInterface->interfaceName.c_str());
-      setStateLive();
-      deviceInterface->state.subState = MS_BGSYNC ;
-      deviceInterface->state.details = concatStrings("Background Syncing... ", deviceInterface->state.details);
-    } 
-
-
-    void getMixerDefinition(){      
-      hwm.network->clientSocketSend(get(MSPATH_MIXER_DEFINITION)); // retrieve name, etc...            
     }
 
     void processMixerDefinition(char* rx, size_t len) {
@@ -492,6 +474,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
+   ///////////////////////////////// PING REPLY = Mixer was found //////////////////////////  
     void echo(void* data) {
       auto body = *static_cast<JsonVariant*>(data);
 
@@ -509,7 +492,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
     void processMixerIdentity(const char* path, JsonVariant body) {
-      _reply(&body);  
+      pulseBeat(&body);  
     }
 
     void processMixersAvailable(char* rx, size_t len) {
@@ -648,10 +631,21 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       }
     }    
 
+    void getMixerDefinition(){      
+      hwm.network->clientSocketSend(get(MSPATH_MIXER_DEFINITION)); // retrieve name, etc...            
+    }
+
+
 
     //////////////////////////////////////////////////////////////
     ///                      DEVICE STATES                    ///
     /////////////////////////////////////////////////////////////
+    void setStateBGSyncing(){
+      DEBUG_INFO("%s: setStateBGSyncing()",deviceInterface->interfaceName.c_str());
+      setStateLive();
+      deviceInterface->state.subState = MS_BGSYNC ;
+      deviceInterface->state.details = concatStrings("Background Syncing... ", deviceInterface->state.details);
+    } 
 
     void setStateDisconnected() override{
       DeviceInterface::setStateDisconnected(lang.getString("MixingStation unreachable")->c_str());      

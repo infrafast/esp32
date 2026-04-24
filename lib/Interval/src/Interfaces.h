@@ -758,14 +758,14 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
 
     // this function is the internal TOP method called when you receive an answered from the device ping, showing it is live
     // it calculates the latency and calls the  method that actually implements the mecasim that processes the data from the derived class, like device dientification, etc...
-    virtual void _reply(void* data){
+    virtual void pulseBeat(void* data){
       calculateLatencyAndJitter();
       echo(data);   //handover to derived class
     }
 
     // this function is the internal TOP method called when we want to query network to see if device is live
     // it sets the timeout and calls the  method that actually implements the ping mecasim from the derived class
-    virtual bool _target(){
+    virtual bool pulseCheck(){
       destination.lastPingTime = millis();
       dataProcessed = true;       // the ping throws some data out
       return ping();
@@ -798,6 +798,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       const float JIT_ALPHA = 0.25f;
 
       if (rawLatency == 0 || rawLatency > MAX_VALID_LATENCY) {
+        DEBUG_WARN("rawLatency=%i",rawLatency);
         return;
       }
 

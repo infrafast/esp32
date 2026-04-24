@@ -293,11 +293,6 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
    virtual bool monitorService() override {
       dataProcessed = false;
 
-      OSCMessage msgOut;
-      if (queue.dequeue(msgOut, destination.latency)) {   // here we dequeue only one message at once, we could try to dequeue 2 using a for loop
-        dataProcessed = _sendOSCMessage(&msgOut);        
-      }
-
       // read a burst of incoming OSC message as data arrived
       for (uint8_t i = 0; i < OSC_MESSAGE_PROCESSED_AT_ONCE; ++i) {
         int8_t dataAvailable = readOSC();
@@ -322,7 +317,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
             if (state.label != IF_STATE_PENDING) setStateQueryingDevice();
             connectAttemptCount = 0;
           } else {
-            if (_target()) connectAttemptCount++;
+            if (pulseCheck()) connectAttemptCount++;
             else {
               if (handleConnectService()){
                 setStateQueryingDevice();                                 // we are not yet connected to the OSC device, we will try by sending a ping
@@ -333,6 +328,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
             }
           }
         }
+      }
+
+      // sending
+      OSCMessage msgOut;
+      if (queue.dequeue(msgOut, destination.latency)) {   // here we dequeue only one message at once, we could try to dequeue 2 using a for loop
+        dataProcessed |= _sendOSCMessage(&msgOut);        
       }
 
       return dataProcessed;
@@ -381,14 +382,14 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
               destination.lastRxTime = millis();
 
-              // see if it's the reply to a _target (/ping) command => we call internal method to trigger latency calculation and user processing
-              if (destination.echoCommand == addr) _reply(&oscIn);
-
               #ifdef DEBUG
                 dump(oscIn, oscDump, sizeof(oscDump));              
                 DEBUG_INFO("<<(%s,%i) %s %s",destination.ip.toString().c_str(),remotePort, addr, oscDump);              
               #endif
-              
+
+              // see if it's the reply to a _target (/ping) command => we call internal method to trigger latency calculation and user processing
+              if (destination.echoCommand == addr) pulseBeat(&oscIn);
+             
             }              
             // ✔ message valide
             // retour : au moins 1, même si aucun argument
