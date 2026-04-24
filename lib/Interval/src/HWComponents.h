@@ -569,8 +569,6 @@ private:
       btData.buttonId = getID();
       startDebouceTime = millis();
 
-      DEBUG_ERROR("!!!");
-
       if (state != edge) { // released
         if (pushedTime < dClic_reactivity && !pendingDoubleClicDetection) {
           pendingDoubleClicDetection = true;
@@ -1875,21 +1873,18 @@ class WiFiEth : public Network{
             internet.latency = 0;
 
             //if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
+            DEBUG_INFO("A");
             if (client != NULL){client->stop(); delete client; client = NULL;} 
+            DEBUG_INFO("B");
             if (server != NULL){delete server; server  = NULL;} 
+            DEBUG_INFO("C");
             if (wsWiFiClient != nullptr){delete wsWiFiClient; wsWiFiClient = nullptr; resetWSstate();}
+            DEBUG_INFO("D");
             if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr; resetWSstate();}
+            DEBUG_INFO("E");
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
+            DEBUG_INFO("F");
             
-            // specific destruction to WIFI or ETH
-            /*if (lastActiveMedia == CABLE_MEDIA){
-              // eth
-              EthernetBonjour.stop();
-            }else if (lastActiveMedia == WIFI_MEDIA){
-              // wifi
-              MDNS.end();
-            }*/
-
             lastActiveMedia = NO_MEDIA;
             if (!ethEnabled) networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
             else networkConnectivityIcon = ICON_MIXETHWIFI; 

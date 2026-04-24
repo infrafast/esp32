@@ -1006,8 +1006,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
    void onEvent(const Event& evt) override {
       switch (evt.type) {
         case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:
+          DEBUG_INFO("[EVENT] Plugged Ethernet cable while WiFi connected");
           sendTerminateMessageToWebApp("Network connection changed. Close this page");         // the browser becomes unavialble, so terminate the application
-          if (webAppService != nullptr) webAppService->stopWebApp();
           stopInterfaces();
         break;
         case EVENT_NETWORK_CONNECTED:

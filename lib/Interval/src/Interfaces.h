@@ -841,7 +841,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
       // recive the event propagated from Appmanager
       switch(evt.type){
         case EVENT_NETWORK_DISCONNECTED:
-          disable();
+          handleDisconnectService();
           break;
         case EVENT_NETWORK_CONNECTED:
           if (hwm.network->state == CONNECTED){

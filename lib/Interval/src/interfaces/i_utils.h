@@ -227,7 +227,7 @@ class DirectoryInterface: public NetworkDevice{
         this->state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
       }
 
-      virtual bool handleDisconnectService(){
+      virtual bool handleDisconnectService() override{
         DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
         if (hwm.network->lastActiveMedia == CABLE_MEDIA){
           // eth
@@ -410,6 +410,11 @@ class WebApplicationService: public NetworkDevice{
       return true;
     }
 
+    virtual bool stop() override{
+      DEBUG_INFO("%s::stop()",interfaceName.c_str()); 
+      return handleDisconnectService();
+    }
+
     virtual void setStatePending(const char* led = "green medium", const char* details = lang.getString("Scanning network")->c_str()){
       setStateConnected();  // web interface when pending is in fact connected...
     }
@@ -543,7 +548,7 @@ class WebApplicationService: public NetworkDevice{
         webServer = nullptr;
       }
       socketConnected = false;
-      DEBUG_INFO("WebAppservices down");
+      DEBUG_INFO("%s::down",interfaceName.c_str());          
     }
 
     void setWSServer(){
