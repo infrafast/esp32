@@ -1,0 +1,24 @@
+ AppleMIDI->disable()
+ℹ               AppleMIDI::releaseCapacity() skipped (not reserved)
+ℹ       AppleMIDI::setStateDisabled()⚫
+ℹ       AppleMIDI::handleDisconnectService()
+ℹ       AppleMIDI::setStateDisabled()⚫
+ℹ       [WSS]           skip graceful shutdown (network down)
+----> FREEZE
+        !!! socketCloseCallback =>code:1001 length:0
+
+ℹ       WebApplication::down
+ℹ       WebApplication:setStateDisconnected()🔴
+ℹ       WebApplication:setStateDisconnected(no connection)🔴
+ℹ       startWifi(infrafast,Mf9k8iie2), wifiEnabled=1, status: Disconnected, MAC:F0:9E:9E:3B:FC:90       => got IP:192.168.2.2  ...all WiFi object instantiated
+
+ℹ       +------------------------------------------------+
+ℹ       | WiFiEth~6 changed state => cable:2, media:2    |
+ℹ       +------------------------------------------------+
+
+ℹ        => got IP:192.168.0.56
+ℹ       +-------------------+
+ℹ       [ping] 8.8.8.8
+ℹ       | NETWORK CONNECTED |
+ℹ       +-------------------+
+ℹ       MixingStation->enable()
