@@ -1,11 +1,19 @@
- AppleMIDI->disable()
+ℹ       +------------------------------+
+ℹ       | ALL NETWORK OBJECTED CLEANED |
+ℹ       +------------------------------+
+ℹ       MixingStation::handleDisconnectService()
+ℹ       WiFiEth~6::clientSocketClose()
+ℹ       WiFiEth~6::clientSocketClose() skipped: network not connected (state:0 media:0)
+ℹ       XMSeries::handleDisconnectService()
+ℹ       sysOSC::handleDisconnectService()
+ℹ       AppleMIDI->disable()
 ℹ               AppleMIDI::releaseCapacity() skipped (not reserved)
 ℹ       AppleMIDI::setStateDisabled()⚫
 ℹ       AppleMIDI::handleDisconnectService()
 ℹ       AppleMIDI::setStateDisabled()⚫
 ℹ       [WSS]           skip graceful shutdown (network down)
-----> FREEZE
-        !!! socketCloseCallback =>code:1001 length:0
+-------> FREEZE
+ℹ               !!! socketCloseCallback =>code:1001 length:0
 
 ℹ       WebApplication::down
 ℹ       WebApplication:setStateDisconnected()🔴
@@ -20,5 +28,3 @@
 ℹ       +-------------------+
 ℹ       [ping] 8.8.8.8
 ℹ       | NETWORK CONNECTED |
-ℹ       +-------------------+
-ℹ       MixingStation->enable()
