@@ -30,7 +30,8 @@ template <class NetServer, class NetClient, uint8_t _>
 void WebSocketServer<NetServer, NetClient, _>::shutdown() {
   for (auto &ws : m_sockets) {                                  // patched : https://github.com/skaarj1989/mWebSockets/discussions/67# 
     if (ws) {
-      ws->close(WebSocketCloseCode::GOING_AWAY, true);
+      // On unstable/disconnected links, close() may block while trying to send
+      // a close frame. We tear down the socket object directly instead.
       delete ws;
       ws = nullptr;
     }

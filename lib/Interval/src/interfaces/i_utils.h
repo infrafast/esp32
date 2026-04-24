@@ -580,7 +580,15 @@ class WebApplicationService: public NetworkDevice{
 
     void shutdownWSS(){
       if (wss != nullptr){
-        wss->shutdown();
+        Network* configMedia = hwm.configMedia;
+        const bool networkReadyForGracefulShutdown =
+          (configMedia != nullptr && configMedia->state == CONNECTED && configMedia->media != NO_MEDIA);
+
+        if (networkReadyForGracefulShutdown){
+          wss->shutdown();
+        }else{
+          DEBUG_INFO("[WSS]\t\tskip graceful shutdown (network down)");
+        }
         delete wss;
         wss = nullptr;
       }
