@@ -151,7 +151,7 @@ class AnalogIn : public HWComponent{
       pinMode(CSPin, INPUT);
       id = concatStrings("AnalogIn~", p);
     }
-    
+
     bool refresh(bool force=false){
       refreshed = force;
       uint16_t v = analogRead(CSPin);
@@ -1054,7 +1054,7 @@ class Network : public HWComponent2State{
       WiFiEnabled = true ;      
     }
 
- 
+
   protected:
     JsonList* wiFiList;
     uint8_t wiFiIndex;
@@ -1110,8 +1110,15 @@ class WiFiEth : public Network{
       /*pinMode(rstPin, OUTPUT);
       digitalWrite(rstPin,LOW);     // this has to be done before anything, including init and powerring on
       */
-     
 
+
+    }
+
+    ~WiFiEth(){
+      stopSocketOpenTask();
+      if (wsWiFiClient != nullptr){ delete wsWiFiClient; wsWiFiClient = nullptr; }
+      if (wsEthClient != nullptr){ delete wsEthClient; wsEthClient = nullptr; }
+      if (instance == this) instance = nullptr;
     }
 
     virtual void init(){
@@ -1507,13 +1514,18 @@ class WiFiEth : public Network{
     virtual void clientSocketClose(WebSocketCloseCode code = WebSocketCloseCode::NORMAL_CLOSURE) {
       DEBUG_INFO("%s::clientSocketClose()", id.c_str());
       const char reason[] = {"application close"};
+      if (state != CONNECTED || media == NO_MEDIA) {
+        DEBUG_INFO("%s::clientSocketClose() skipped: network not connected (state:%d media:%d)", id.c_str(), state, media);
+        socketOpenJobState = SOCKET_JOB_IDLE;
+        return;
+      }
 
       if (media == CABLE_MEDIA) {
-        if (wsEthClient != nullptr) {
+        if (wsEthClient != nullptr && wsEthClient->getReadyState() == WebSocketReadyState::OPEN) {
           wsEthClient->close(code, true, reason, strlen(reason));
         }
       } else {
-        if (wsWiFiClient != nullptr) {
+        if (wsWiFiClient != nullptr && wsWiFiClient->getReadyState() == WebSocketReadyState::OPEN) {
           wsWiFiClient->close(code, true, reason, strlen(reason));
         }
       }
