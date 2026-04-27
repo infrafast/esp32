@@ -605,22 +605,24 @@ private:
     } else {
       if (state == edge) {
         pushedTime = millis() - startPushTime;
+        const bool holdThresholdReached = (pushedTime >= push_reactivity);
 
-        if (pushedTime >= push_reactivity) {
+        if (!pendingDoubleClicDetection && usesLed) {
+          if (holdThresholdReached) {
+            ledcWrite(0, 255);
+          } else {
+            uint8_t dutyCycle = map(pushedTime, 0, push_reactivity, 0, 255);
+            ledcWrite(0, dutyCycle);
+          }
+        }
+
+        if (holdThresholdReached) {
           if (!holdEntered) {
             holdEntered = true;
             emitButtonEvent(BUTTON_ENTER_HOLD, pushedTime - push_reactivity);
           }
 
           emitButtonEvent(BUTTON_HOLD, pushedTime - push_reactivity);
-
-          if (usesLed) {
-            ledcWrite(0, 255);
-          }
-
-        } else if (!pendingDoubleClicDetection && usesLed && pushedTime < push_reactivity) {
-          uint8_t dutyCycle = map(pushedTime, 0, push_reactivity, 0, 255);
-          ledcWrite(0, dutyCycle);
         }
       } else {
         pushedTime = 0;
