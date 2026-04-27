@@ -606,7 +606,7 @@ private:
       if (state == edge) {
         pushedTime = millis() - startPushTime;
 
-        if (pushedTime > push_reactivity) {
+        if (pushedTime >= push_reactivity) {
           if (!holdEntered) {
             holdEntered = true;
             emitButtonEvent(BUTTON_ENTER_HOLD, pushedTime - push_reactivity);

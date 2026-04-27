@@ -340,9 +340,13 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }
 
     
-    bool send(OSCMessage& msg){
-      return queue.enqueue(msg);            // queued send
-      //return _sendOSCMessage(&msg);       // direct send
+    bool send(OSCMessage& msg, bool immediate = false){
+      
+      if (immediate) {
+        return _sendOSCMessage(&msg);
+      } else {
+        return queue.enqueue(msg);
+      }
     }
 
     virtual void process(){
