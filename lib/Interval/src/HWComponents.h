@@ -629,13 +629,13 @@ private:
       }
     } else if (state == edge) {
       pushedTime = now - startPushTime;
-      if (pushedTime > push_reactivity) {
+      if (pushedTime >= push_reactivity) {
         if (!holdEntered) {
           holdEntered = true;
           emitButtonEvent(BUTTON_ENTER_HOLD, pushedTime - push_reactivity);
+          emitButtonEvent(BUTTON_HOLD, pushedTime - push_reactivity);
           lastHoldEventTime = now;
-        }
-        if (now - lastHoldEventTime >= 20) {
+        } else if (now - lastHoldEventTime >= 20) {
           emitButtonEvent(BUTTON_HOLD, pushedTime - push_reactivity);
           lastHoldEventTime = now;
         }
