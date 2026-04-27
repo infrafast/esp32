@@ -506,9 +506,14 @@ private:
   int edge;
   bool holdEntered = false;
   bool pendingDoubleClicDetection = false;
+  bool stableStateInitialized = false;
+  bool stableState = false;
+  bool lastRawState = false;
+  unsigned long lastRawChangeTime = 0;
   unsigned long startTimeBetween2Clics = 0;
   unsigned long startPushTime = 0;
-  unsigned long startDebouceTime = 0;
+  unsigned long pendingSimpleClickDuration = 0;
+  unsigned long lastHoldEventTime = 0;
 
   TaskHandle_t refreshTaskHandle = nullptr;
 
@@ -557,82 +562,93 @@ private:
 
   bool processRefresh(bool force = false) {
     refreshed = force;
+    unsigned long now = millis();
+    read();
+    bool rawState = state;
 
-    if (millis() - startDebouceTime < DEBOUCE_TIME) {
-      return refreshed;
+    if (!stableStateInitialized || force) {
+      stableState = rawState;
+      lastRawState = rawState;
+      stableStateInitialized = true;
+      lastRawChangeTime = now;
     }
 
-    read();
-    HWComponent2State::refresh(force);
+    if (rawState != lastRawState) {
+      lastRawState = rawState;
+      lastRawChangeTime = now;
+    }
 
-    if (refreshed) {
+    bool stateChanged = false;
+    if (force || ((now - lastRawChangeTime) >= DEBOUCE_TIME && rawState != stableState)) {
+      stableState = rawState;
+      stateChanged = true;
+      state = stableState;
+    } else {
+      state = stableState;
+    }
+
+    refreshed = HWComponent2State::refresh(force || stateChanged);
+
+    if (stateChanged) {
       btData.buttonId = getID();
-      startDebouceTime = millis();
 
-      if (state != edge) { // released
-        if (pushedTime < dClic_reactivity && !pendingDoubleClicDetection) {
-          pendingDoubleClicDetection = true;
-          startTimeBetween2Clics = millis();
-        } else {
+      if (state == edge) { // pressed
+        holdEntered = false;
+        pushedTime = 0;
+        startPushTime = now;
+        lastHoldEventTime = now;
+
+        if (pendingDoubleClicDetection && (now - startTimeBetween2Clics) <= dClic_reactivity) {
           pendingDoubleClicDetection = false;
+          doubleClic = true;
+          emitButtonEvent(BUTTON_DOUBLE_CLIC, now - startTimeBetween2Clics);
+        } else {
+          doubleClic = false;
+        }
+      } else { // released
+        pushedTime = now - startPushTime;
 
-          if (!doubleClic) {
-            if (holdEntered) {
-              emitButtonEvent(BUTTON_RELEASE_HOLD, pushedTime - push_reactivity);
-            }else if (pushedTime > push_reactivity / 3) {
-              emitButtonEvent(BUTTON_LONG_CLIC, pushedTime);
-            } else {
-              emitButtonEvent(BUTTON_SIMPLE_CLIC, pushedTime);
-            }
-          }
+        if (holdEntered) {
+          emitButtonEvent(BUTTON_RELEASE_HOLD, pushedTime - push_reactivity);
+          pendingDoubleClicDetection = false;
+          doubleClic = false;
+        } else if (!doubleClic && pushedTime < dClic_reactivity) {
+          pendingDoubleClicDetection = true;
+          startTimeBetween2Clics = now;
+          pendingSimpleClickDuration = pushedTime;
+        } else if (!doubleClic) {
+          emitButtonEvent(BUTTON_LONG_CLIC, pushedTime);
+          pendingDoubleClicDetection = false;
+        } else {
+          doubleClic = false;
         }
 
         if (usesLed) {
           ledcWrite(0, 255);
         }
-
-      } else { // pressed
-        doubleClic = false;
-        holdEntered = false;
-        startPushTime = millis();
-
-        if (pendingDoubleClicDetection) {
-          doubleClic = true;
-          emitButtonEvent(BUTTON_DOUBLE_CLIC, millis() - startTimeBetween2Clics);
-        }
       }
-
-    } else {
-      if (state == edge) {
-        pushedTime = millis() - startPushTime;
-
-        if (pushedTime > push_reactivity) {
-          if (!holdEntered) {
-            holdEntered = true;
-            emitButtonEvent(BUTTON_ENTER_HOLD, pushedTime - push_reactivity);
-          }
-
+    } else if (state == edge) {
+      pushedTime = now - startPushTime;
+      if (pushedTime > push_reactivity) {
+        if (!holdEntered) {
+          holdEntered = true;
+          emitButtonEvent(BUTTON_ENTER_HOLD, pushedTime - push_reactivity);
+          lastHoldEventTime = now;
+        }
+        if (now - lastHoldEventTime >= 20) {
           emitButtonEvent(BUTTON_HOLD, pushedTime - push_reactivity);
-
-          if (usesLed) {
-            ledcWrite(0, 255);
-          }
-
-        } else if (!pendingDoubleClicDetection && usesLed && pushedTime < push_reactivity) {
-          uint8_t dutyCycle = map(pushedTime, 0, push_reactivity, 0, 255);
-          ledcWrite(0, dutyCycle);
+          lastHoldEventTime = now;
         }
-      } else {
-        pushedTime = 0;
-
-        if (millis() - startTimeBetween2Clics > dClic_reactivity && pendingDoubleClicDetection) {
-          pendingDoubleClicDetection = false;
-
-          if (!doubleClic) {
-            emitButtonEvent(BUTTON_SIMPLE_CLIC, pushedTime);
-          }
+        if (usesLed) {
+          ledcWrite(0, 255);
         }
+      } else if (!pendingDoubleClicDetection && usesLed) {
+        uint8_t dutyCycle = map(pushedTime, 0, push_reactivity, 0, 255);
+        ledcWrite(0, dutyCycle);
       }
+    } else if (pendingDoubleClicDetection && (now - startTimeBetween2Clics) > dClic_reactivity) {
+      pendingDoubleClicDetection = false;
+      emitButtonEvent(BUTTON_SIMPLE_CLIC, pendingSimpleClickDuration);
     }
 
     return refreshed;
@@ -715,20 +731,16 @@ private:
     // for 3 button with 1st resistor 47Kohm, other resistance should be: 24k, 68k  
 
   virtual void read() override {
+    input->refresh();
     float avg = RESOLUTION / float(bCount);
+    state = LOW;
 
     if (input->value > (bCount - 0.5f) * avg) {
       state = LOW;
     } else {
-      int lowLimit = 0;
-      int highLimit = 0;
-
       for (int i = 0; i < bCount; i++) {
-        if (i > 0) {
-          lowLimit = round(((i - 1) + 0.5f) * avg);
-        }
-
-        highLimit = round((i + 0.5f) * avg);
+        int lowLimit = (i > 0) ? round(((i - 1) + 0.5f) * avg) : 0;
+        int highLimit = round((i + 0.5f) * avg);
         /* measured values
           LEFT RANGE DETECTION: 0-683       ==> measured : 0
           CENTER RANGE DETECTION: 683-2048  ==> measured : 1326-1570
@@ -738,9 +750,8 @@ private:
 
 
         if (input->value >= lowLimit && input->value < highLimit) {
-          if (i == virtualID) {
-            state = HIGH;
-          }
+          state = (i == virtualID) ? HIGH : LOW;
+          break;
         }
       }
     }
