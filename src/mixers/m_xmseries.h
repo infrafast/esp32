@@ -710,7 +710,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       oscOut.empty();
       oscOut.setAddress(address);
       oscOut.add(value);
-      send(oscOut);
+      send(oscOut,true);    // send immediately, do not wait for the end of the loop to send the message
     }    
 
 };

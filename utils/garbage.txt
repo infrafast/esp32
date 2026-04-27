@@ -1,3 +1,18 @@
-ℹ       🌐→→→ {"path":"/app/mixers/current","method":"GET","body":null} (958845)
-ℹ       ←←←🌐 MixingStation::path ✅ /app/mixers/current (958989)
-ℹ       📉 MixingStation latency:124 jitter:22 lastPingRx:(958995)-lastPingTx:(958850)=raw:(145)
+getConfig input2mixbus
+ℹ       >>(192.168.0.16,10024) /ch/01/config/name 
+ℹ       >>(192.168.0.16,10024) /bus/3/config/name 
+ℹ       >>(192.168.0.16,10024) /ch/01/mix/on 
+ℹ       >>(192.168.0.16,10024) /bus/3/mix/on 
+ℹ       <<(192.168.0.16,10024) /bus/3/mix/on 1 
+ℹ       XMSeries->handleBusMute(3,1)
+ℹ       <<(192.168.0.16,10024) /ch/02/mix/03/level 0.387500 
+ℹ       XMSeries->handleChBusMixLevel(2,3,0.39)
+ℹ       <<(192.168.0.16,10024) /ch/01/mix/03/level 0.675000 
+ℹ       XMSeries->handleChBusMixLevel(1,3,0.68)
+ℹ       <<(192.168.0.16,10024) /ch/04/mix/03/level 0.375000 
+ℹ       XMSeries->handleChBusMixLevel(4,3,0.38)
+ℹ       <<(192.168.0.16,10024) /ch/03/mix/03/level 0.631250 
+ℹ       XMSeries->handleChBusMixLevel(3,3,0.63)
+ℹ       <<(192.168.0.16,10024) /ch/01/config/name Kick 
+ℹ       >>(192.168.0.16,10024) /ch/02/mix/03/level 
+ℹ       >>(192.168.0.16,10024) /ch/01/mix/03/level 
