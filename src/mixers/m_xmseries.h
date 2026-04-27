@@ -412,14 +412,14 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         match = matchProtocol(XM_CH_LR_MUTE, addr, m1, m2);
         if (match == MATCH_1INT) {
           
-          // xair and x32 have different way of treating channel mute: Xair cannot mute channel on buses, there is only a main mute, hence this handler may be call by xair to mute a ch
+          // xair and x32 have different way of treating channel mute: Xair cannot mute channel on buses, there is only a main mute (the XM_CH_LR_MUTE = XM_CH_BUS_MUTE), hence this handler may be call by xair to mute a ch
           if (protocolName == XAIR_PROTOCOL) {
             // do the mute "virtually" on all buses
             for (int busIndex=0; busIndex<mixerDef->busCount; busIndex++){
               handleChBusMute(m1, busIndex+1, oscIn.getInt(0));                 // bus index starts at 1 on behringer
             }
           } else if (protocolName == XM_PROTOCOL){      
-            handleChMainMute(m1, oscIn.getInt(0));
+            handleChMainMute(m1, oscIn.getInt(0));        // normal processing
           }
           return;
         }

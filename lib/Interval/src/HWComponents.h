@@ -535,7 +535,7 @@ private:
       "btnRefresh",
       4096,
       this,
-      1,
+      3,
       &refreshTaskHandle,
       1
     );
@@ -1501,7 +1501,7 @@ class WiFiEth : public Network{
           if (wsEthClient->getReadyState() == WebSocketReadyState::OPEN){
             wsEthClient->send(WebSocketDataType::TEXT, message, strlen(message));
             DEBUG_INFO("🌐→→→ %s (%lu)",message, millis());
-            
+
           }
         }
       }else{
