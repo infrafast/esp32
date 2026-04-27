@@ -158,6 +158,7 @@ public:
       // SYSTEM_OFF 
       else if (onOff.state == ON_OFF_TRIGGER){
         // else a button has to be pressed to startup
+        #define DEBOUCE_TIME 20
         delay(DEBOUCE_TIME);        
         while(onOff.state == ON_OFF_TRIGGER && startupState == SYSTEM_OFF) {          
           bool released = onOff.refresh();
@@ -421,7 +422,7 @@ public:
 
     void setButtonReactivity(uint16_t push, uint16_t dClic){
       for (uint8_t b=0;b<MAXB;b++){
-        buttons[b]->dClic_reactivity = dClic;
+        buttons[b]->doubleClickGap = dClic;
         buttons[b]->push_reactivity = push;
       }
     }

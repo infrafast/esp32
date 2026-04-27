@@ -758,7 +758,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //Event::enableEventDump(EVENT_WEBAPP_STARTED);
       //Event::enableEventDump(EVENT_BATTERY_REFRESHED);
       //Event::enableEventDump(EVENT_INTERFACE_MESSAGE);      
-      //Event::enableEventDump(EVENT_ANALOG_BUTTON);
+      Event::enableEventDump(EVENT_ANALOG_BUTTON);
 
       // *********************************
       // SKELETONS & DATA SETS

@@ -395,7 +395,7 @@ private:
 #define DEFAULT_PUSH_DELAY 500
 #define DEFAULT_DCLIC_DELAY 250
 
-#define DEBOUCE_TIME 20
+
 
 #define DCLIC_DETECTION_PUSHDOWNMAXTIME LONG_PUSH_DELAY-1       // pour detecter un double clic, le premier clic doit etre court   200
 
@@ -454,10 +454,12 @@ public:
   ButtonEvent evtBtn;
 
   unsigned long pushedTime = 0;
-  bool doubleClic = false;
+
   bool usesLed = true;
   uint16_t push_reactivity = DEFAULT_PUSH_DELAY;
-  uint16_t dClic_reactivity = DEFAULT_DCLIC_DELAY;
+
+  uint16_t maxClickDuration = 180;
+  uint16_t doubleClickGap = DEFAULT_DCLIC_DELAY;  
 
   ButtonData btData = {};
 
@@ -469,7 +471,7 @@ public:
     : HWComponent2State(p, !e, d) {
     edge = e;
     push_reactivity = push;
-    dClic_reactivity = dClic;
+    doubleClickGap = dClic;
     evtBtn.data = &btData;
   }
 
@@ -508,15 +510,19 @@ private:
   // BUTTON_DEBOUNCE_MS = temps de stabilité requis
   // => ici ~2 samples requis pour valider un changement
   static constexpr uint32_t BUTTON_SAMPLE_MS = 5;
-  static constexpr uint32_t BUTTON_DEBOUNCE_MS = 10;
+  static constexpr uint32_t BUTTON_PRESS_DEBOUNCE_MS = 5;
+  static constexpr uint32_t BUTTON_RELEASE_DEBOUNCE_MS = 15;
 
 
   int edge;
   bool holdEntered = false;
-  bool pendingDoubleClicDetection = false;
-  unsigned long startTimeBetween2Clics = 0;
+
+  unsigned long pendingClickDuration = 0;
+  unsigned long firstClickReleasedAt = 0;
+  bool waitingSecondClick = false;
+  bool secondClickInProgress = false;
+
   unsigned long startPushTime = 0;
-    unsigned long pendingClickDuration = 0;
   
   static constexpr uint32_t HOLD_REPEAT_MS = 100;      //throttle the hold event to avoid too much events emission when holding the button. This value is independent of push_reactivity, and should be lower than it to avoid missing events when holding the button for a long time. Adjust according to your needs.
   unsigned long lastHoldEventTime = 0;
@@ -631,7 +637,11 @@ private:
         rawStateChangedAt = now;
       }
 
-      if ((now - rawStateChangedAt) >= BUTTON_DEBOUNCE_MS && debouncedState != rawState) {
+      uint32_t debounceDelay = (rawState == edge)
+      ? BUTTON_PRESS_DEBOUNCE_MS
+      : BUTTON_RELEASE_DEBOUNCE_MS;
+
+      if ((now - rawStateChangedAt) >= debounceDelay && debouncedState != rawState) {
         debouncedState = rawState;
         state = debouncedState;
         HWComponent2State::refresh(false);
@@ -645,21 +655,38 @@ private:
       btData.buttonId = getID();
 
       if (state != edge) { // released
-        if (pushedTime < dClic_reactivity && !pendingDoubleClicDetection) {
-          pendingClickDuration = pushedTime;
-          pendingDoubleClicDetection = true;
-          startTimeBetween2Clics = millis();
-        } else {
-          pendingDoubleClicDetection = false;
-          if (!doubleClic) {
-            if (holdEntered) {
-              emitButtonEvent(BUTTON_RELEASE_HOLD, pushedTime - push_reactivity);
-            }else if (pushedTime > push_reactivity / 3) {
-              emitButtonEvent(BUTTON_LONG_CLIC, pushedTime);
-            } else {
-              emitButtonEvent(BUTTON_SIMPLE_CLIC, pushedTime);
-            }
+        unsigned long clickDuration = millis() - startPushTime;
+        pushedTime = clickDuration;
+
+        if (holdEntered) {
+          emitButtonEvent(BUTTON_RELEASE_HOLD, pushedTime - push_reactivity);
+          waitingSecondClick = false;
+          secondClickInProgress = false;
+        }
+        else if (secondClickInProgress) {
+          secondClickInProgress = false;
+
+          if (clickDuration <= maxClickDuration) {
+            emitButtonEvent(BUTTON_DOUBLE_CLIC, millis() - firstClickReleasedAt);
+            waitingSecondClick = false;
+          } else {
+            // 2e appui trop long : on valide finalement le 1er clic simple
+            emitButtonEvent(BUTTON_SIMPLE_CLIC, pendingClickDuration);
+            waitingSecondClick = false;
           }
+        }
+        else if (clickDuration <= maxClickDuration) {
+          pendingClickDuration = clickDuration;
+          firstClickReleasedAt = millis();
+          waitingSecondClick = true;
+        }
+        else if (clickDuration > push_reactivity / 3) {
+          emitButtonEvent(BUTTON_LONG_CLIC, clickDuration);
+          waitingSecondClick = false;
+        }
+        else {
+          emitButtonEvent(BUTTON_SIMPLE_CLIC, clickDuration);
+          waitingSecondClick = false;
         }
 
         if (usesLed) {
@@ -667,23 +694,24 @@ private:
         }
 
       } else { // pressed
-        doubleClic = false;
         holdEntered = false;
         lastHoldEventTime = 0;
         startPushTime = millis();
 
-        if (pendingDoubleClicDetection) {
-          doubleClic = true;
-          emitButtonEvent(BUTTON_DOUBLE_CLIC, millis() - startTimeBetween2Clics);
+        if (waitingSecondClick && (millis() - firstClickReleasedAt <= doubleClickGap)) {
+          secondClickInProgress = true;
+        } else {
+          waitingSecondClick = false;
+          secondClickInProgress = false;
         }
       }
 
     } else {
-      if (state == edge) {
+      if (state == edge) { // still pressed
         pushedTime = millis() - startPushTime;
         const bool holdThresholdReached = (pushedTime >= push_reactivity);
 
-        if (!pendingDoubleClicDetection && usesLed) {
+        if (!waitingSecondClick && usesLed) {
           if (holdThresholdReached) {
             ledcWrite(0, 255);
           } else {
@@ -693,29 +721,27 @@ private:
         }
 
         if (holdThresholdReached) {
-          unsigned long holdTime = pushedTime - push_reactivity;
-
           if (!holdEntered) {
             holdEntered = true;
+            emitButtonEvent(BUTTON_ENTER_HOLD, pushedTime - push_reactivity);
+          }
+
+          if (millis() - lastHoldEventTime >= HOLD_REPEAT_MS) {
             lastHoldEventTime = millis();
-            emitButtonEvent(BUTTON_ENTER_HOLD, holdTime);
-            emitButtonEvent(BUTTON_HOLD, holdTime);
-          } else if (millis() - lastHoldEventTime >= HOLD_REPEAT_MS) {
-            lastHoldEventTime = millis();
-            emitButtonEvent(BUTTON_HOLD, holdTime);
+            emitButtonEvent(BUTTON_HOLD, pushedTime - push_reactivity);
           }
         }
-      } else {
-        pushedTime = 0;
-        if (millis() - startTimeBetween2Clics > dClic_reactivity && pendingDoubleClicDetection) {
-          pendingDoubleClicDetection = false;
 
-          if (!doubleClic) {
-            emitButtonEvent(BUTTON_SIMPLE_CLIC, pendingClickDuration);
-          }
+      } else { // still released
+        pushedTime = 0;
+
+        if (waitingSecondClick && (millis() - firstClickReleasedAt > doubleClickGap)) {
+          waitingSecondClick = false;
+          emitButtonEvent(BUTTON_SIMPLE_CLIC, pendingClickDuration);
         }
       }
     }
+
 
     return refreshed;
   }
