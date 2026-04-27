@@ -395,7 +395,7 @@ private:
 #define DEFAULT_PUSH_DELAY 500
 #define DEFAULT_DCLIC_DELAY 250
 
-#define DEBOUCE_TIME 25
+#define DEBOUCE_TIME 20
 
 #define DCLIC_DETECTION_PUSHDOWNMAXTIME LONG_PUSH_DELAY-1       // pour detecter un double clic, le premier clic doit etre court   200
 
@@ -502,13 +502,14 @@ protected:
   }
 
 private:
-  static constexpr uint32_t BUTTON_REFRESH_TASK_DELAY_MS = 1;
+  static constexpr uint32_t BUTTON_REFRESH_TASK_DELAY_MS = 5;
   int edge;
   bool holdEntered = false;
   bool pendingDoubleClicDetection = false;
   unsigned long startTimeBetween2Clics = 0;
   unsigned long startPushTime = 0;
   unsigned long startDebouceTime = 0;
+  unsigned long pendingClickDuration = 0;
 
   TaskHandle_t refreshTaskHandle = nullptr;
 
@@ -571,11 +572,11 @@ private:
 
       if (state != edge) { // released
         if (pushedTime < dClic_reactivity && !pendingDoubleClicDetection) {
+          pendingClickDuration = pushedTime;
           pendingDoubleClicDetection = true;
           startTimeBetween2Clics = millis();
         } else {
           pendingDoubleClicDetection = false;
-
           if (!doubleClic) {
             if (holdEntered) {
               emitButtonEvent(BUTTON_RELEASE_HOLD, pushedTime - push_reactivity);
@@ -626,12 +627,11 @@ private:
         }
       } else {
         pushedTime = 0;
-
         if (millis() - startTimeBetween2Clics > dClic_reactivity && pendingDoubleClicDetection) {
           pendingDoubleClicDetection = false;
 
           if (!doubleClic) {
-            emitButtonEvent(BUTTON_SIMPLE_CLIC, pushedTime);
+            emitButtonEvent(BUTTON_SIMPLE_CLIC, pendingClickDuration);
           }
         }
       }
@@ -716,7 +716,7 @@ private:
     // https://docs.google.com/spreadsheets/d/1G6wTsAxZDnVvzIDBkg5LrhhY1T7q4p_pDSZ6owvBCMA/edit?usp=sharing
     // for 3 button with 1st resistor 47Kohm, other resistance should be: 24k, 68k  
 
-  virtual void read() override {
+  virtual void OLDread() {
     float avg = RESOLUTION / float(bCount);
 
     if (input->value > (bCount - 0.5f) * avg) {
@@ -747,7 +747,42 @@ private:
       }
     }
   }
+
+  virtual void read() override {
+    uint16_t value = analogRead(input->CSPin);
+    float avg = RESOLUTION / float(bCount);
+
+    state = LOW; // état relâché par défaut pour edge = HIGH
+
+    if (value > (bCount - 0.5f) * avg) {
+      return;
+    }
+
+    for (int i = 0; i < bCount; i++) {
+      int lowLimit = 0;
+
+      if (i > 0) {
+        lowLimit = round(((i - 1) + 0.5f) * avg);
+      }
+
+      int highLimit = round((i + 0.5f) * avg);
+          /* measured values
+            LEFT RANGE DETECTION: 0-683       ==> measured : 0
+            CENTER RANGE DETECTION: 683-2048  ==> measured : 1326-1570
+            RIGHT RANGE DETECTION: 2048-3413  ==> measured : 2660-2778
+
+          */
+
+      if (value >= lowLimit && value < highLimit) {
+        state = (i == virtualID) ? HIGH : LOW;
+        return;
+      }
+    }
+  }
+
+
 };
+
 
 uint8_t LadderButton::bCount = 0;
 

@@ -758,7 +758,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       //Event::enableEventDump(EVENT_WEBAPP_STARTED);
       //Event::enableEventDump(EVENT_BATTERY_REFRESHED);
       //Event::enableEventDump(EVENT_INTERFACE_MESSAGE);      
-      //Event::enableEventDump(EVENT_ANALOG_BUTTON);
+      Event::enableEventDump(EVENT_ANALOG_BUTTON);
 
       // *********************************
       // SKELETONS & DATA SETS
@@ -1525,12 +1525,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   void moduleLongClic(uint8_t buttonID){
     if (buttonID == hwm->buttons[MIDDLEB]->getID()){
       switchBank();
-      //LogUDP::sendLog("moduleLongClic",hwm->network->udp);
     }else if(buttonID == hwm->buttons[LEFTB]->getID()){
-      //LogUDP::sendLog("testOSC",hwm->network->udp);
+      stripScroll(buttonID);
     }else{
-      //testHttpRequest();
-      //LogUDP::sendLog("testHTTP",hwm->network->udp);
+      stripScroll(buttonID);
     }
   }
 
