@@ -504,14 +504,19 @@ protected:
   }
 
 private:
-  static constexpr uint32_t BUTTON_REFRESH_TASK_DELAY_MS = 5;
+  // BUTTON_SAMPLE_MS = fréquence d’échantillonnage (polling)
+  // BUTTON_DEBOUNCE_MS = temps de stabilité requis
+  // => ici ~2 samples requis pour valider un changement
+  static constexpr uint32_t BUTTON_SAMPLE_MS = 5;
+  static constexpr uint32_t BUTTON_DEBOUNCE_MS = 10;
+
+
   int edge;
   bool holdEntered = false;
   bool pendingDoubleClicDetection = false;
   unsigned long startTimeBetween2Clics = 0;
   unsigned long startPushTime = 0;
-  unsigned long startDebouceTime = 0;
-  unsigned long pendingClickDuration = 0;
+    unsigned long pendingClickDuration = 0;
   
   static constexpr uint32_t HOLD_REPEAT_MS = 100;      //throttle the hold event to avoid too much events emission when holding the button. This value is independent of push_reactivity, and should be lower than it to avoid missing events when holding the button for a long time. Adjust according to your needs.
   unsigned long lastHoldEventTime = 0;
@@ -521,6 +526,12 @@ private:
   static Button* registeredButtons[MAX_BUTTONS];
   static uint8_t registeredButtonCount;
   static TaskHandle_t globalRefreshTaskHandle;
+
+  //debounce management
+  bool rawState = false;
+  bool lastRawState = false;
+  bool debouncedState = false;
+  unsigned long rawStateChangedAt = 0;  
 
   bool registered = false;
 
@@ -565,7 +576,7 @@ private:
         }
       }
 
-      vTaskDelay(pdMS_TO_TICKS(BUTTON_REFRESH_TASK_DELAY_MS));
+      vTaskDelay(pdMS_TO_TICKS(BUTTON_SAMPLE_MS));
     }
   }
 
@@ -602,16 +613,36 @@ private:
   bool processRefresh(bool force = false) {
     refreshed = force;
 
-    if (millis() - startDebouceTime < DEBOUCE_TIME) {
-      return refreshed;
-    }
+    unsigned long now = millis();
 
     read();
-    HWComponent2State::refresh(force);
+    rawState = state;
+
+    if (force) {
+      lastRawState = rawState;
+      debouncedState = rawState;
+      rawStateChangedAt = now;
+      state = debouncedState;
+      previousState = state;
+      refreshed = true;
+    } else {
+      if (rawState != lastRawState) {
+        lastRawState = rawState;
+        rawStateChangedAt = now;
+      }
+
+      if ((now - rawStateChangedAt) >= BUTTON_DEBOUNCE_MS && debouncedState != rawState) {
+        debouncedState = rawState;
+        state = debouncedState;
+        HWComponent2State::refresh(false);
+      } else {
+        state = debouncedState;
+        refreshed = false;
+      }
+    }
 
     if (refreshed) {
       btData.buttonId = getID();
-      startDebouceTime = millis();
 
       if (state != edge) { // released
         if (pushedTime < dClic_reactivity && !pendingDoubleClicDetection) {
