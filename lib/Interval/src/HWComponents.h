@@ -510,8 +510,8 @@ private:
   // BUTTON_DEBOUNCE_MS = temps de stabilité requis
   // => ici ~2 samples requis pour valider un changement
   static constexpr uint32_t BUTTON_SAMPLE_MS = 5;
-  static constexpr uint32_t BUTTON_PRESS_DEBOUNCE_MS = 5;
-  static constexpr uint32_t BUTTON_RELEASE_DEBOUNCE_MS = 15;
+  static constexpr uint32_t BUTTON_PRESS_DEBOUNCE_MS = 5; 
+  static constexpr uint32_t BUTTON_RELEASE_DEBOUNCE_MS = 15;      //10 gagne en reactivité en restant tolerant au bounce
 
 
   int edge;
