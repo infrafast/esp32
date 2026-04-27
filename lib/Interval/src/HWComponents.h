@@ -476,7 +476,8 @@ public:
   virtual void init() {
     HWComponent2State::init();
     processRefresh(true);
-    startRefreshTask();
+    registerButton();
+    startGlobalRefreshTask();
   }
 
   bool refresh(bool force = false) {
@@ -485,7 +486,8 @@ public:
   }
 
   virtual void stop() override {
-    stopRefreshTask();
+    unregisterButton();
+    stopGlobalRefreshTaskIfUnused();
     HWComponent2State::stop();
   }
 
@@ -510,50 +512,91 @@ private:
   unsigned long startPushTime = 0;
   unsigned long startDebouceTime = 0;
   unsigned long pendingClickDuration = 0;
+  
+  static constexpr uint32_t HOLD_REPEAT_MS = 100;      //throttle the hold event to avoid too much events emission when holding the button. This value is independent of push_reactivity, and should be lower than it to avoid missing events when holding the button for a long time. Adjust according to your needs.
+  unsigned long lastHoldEventTime = 0;
+ 
+  static constexpr uint8_t MAX_BUTTONS = 5;
 
-  TaskHandle_t refreshTaskHandle = nullptr;
+  static Button* registeredButtons[MAX_BUTTONS];
+  static uint8_t registeredButtonCount;
+  static TaskHandle_t globalRefreshTaskHandle;
 
-  static void refreshTaskEntry(void* pvParameters) {
-    Button* self = static_cast<Button*>(pvParameters);
-    if (!self) {
-      vTaskDelete(NULL);
+  bool registered = false;
+
+  void registerButton() {
+    if (registered) return;
+
+    if (registeredButtonCount >= MAX_BUTTONS) {
+      DEBUG_ERROR("%s button registry full", id.c_str());
       return;
     }
 
+    registeredButtons[registeredButtonCount++] = this;
+    registered = true;
+  }
+
+  void unregisterButton() {
+    if (!registered) return;
+
+    for (uint8_t i = 0; i < registeredButtonCount; i++) {
+      if (registeredButtons[i] == this) {
+        for (uint8_t j = i; j < registeredButtonCount - 1; j++) {
+          registeredButtons[j] = registeredButtons[j + 1];
+        }
+
+        registeredButtons[registeredButtonCount - 1] = nullptr;
+        registeredButtonCount--;
+        registered = false;
+        return;
+      }
+    }
+  }
+
+  static void globalRefreshTaskEntry(void* pvParameters) {
+    (void)pvParameters;
+
     while (true) {
-      self->processRefresh(false);
+      for (uint8_t i = 0; i < registeredButtonCount; i++) {
+        Button* btn = registeredButtons[i];
+
+        if (btn != nullptr) {
+          btn->processRefresh(false);
+        }
+      }
+
       vTaskDelay(pdMS_TO_TICKS(BUTTON_REFRESH_TASK_DELAY_MS));
     }
   }
 
-  void startRefreshTask() {
-    if (refreshTaskHandle != nullptr) {
+  static void startGlobalRefreshTask() {
+    if (globalRefreshTaskHandle != nullptr) {
       return;
     }
 
     BaseType_t ok = xTaskCreatePinnedToCore(
-      &Button::refreshTaskEntry,
-      "btnRefresh",
+      &Button::globalRefreshTaskEntry,
+      "btnRefreshAll",
       4096,
-      this,
+      nullptr,
       3,
-      &refreshTaskHandle,
+      &globalRefreshTaskHandle,
       1
     );
 
     if (ok != pdPASS) {
-      refreshTaskHandle = nullptr;
-      DEBUG_ERROR("%s refresh task creation failed", id.c_str());
+      globalRefreshTaskHandle = nullptr;
+      DEBUG_ERROR("global button refresh task creation failed");
     }
   }
 
-  void stopRefreshTask() {
-    if (refreshTaskHandle == nullptr) {
-      return;
-    }
+  static void stopGlobalRefreshTaskIfUnused() {
+    if (registeredButtonCount > 0) return;
 
-    vTaskDelete(refreshTaskHandle);
-    refreshTaskHandle = nullptr;
+    if (globalRefreshTaskHandle != nullptr) {
+      vTaskDelete(globalRefreshTaskHandle);
+      globalRefreshTaskHandle = nullptr;
+    }
   }
 
   bool processRefresh(bool force = false) {
@@ -595,6 +638,7 @@ private:
       } else { // pressed
         doubleClic = false;
         holdEntered = false;
+        lastHoldEventTime = 0;
         startPushTime = millis();
 
         if (pendingDoubleClicDetection) {
@@ -618,12 +662,17 @@ private:
         }
 
         if (holdThresholdReached) {
+          unsigned long holdTime = pushedTime - push_reactivity;
+
           if (!holdEntered) {
             holdEntered = true;
-            emitButtonEvent(BUTTON_ENTER_HOLD, pushedTime - push_reactivity);
+            lastHoldEventTime = millis();
+            emitButtonEvent(BUTTON_ENTER_HOLD, holdTime);
+            emitButtonEvent(BUTTON_HOLD, holdTime);
+          } else if (millis() - lastHoldEventTime >= HOLD_REPEAT_MS) {
+            lastHoldEventTime = millis();
+            emitButtonEvent(BUTTON_HOLD, holdTime);
           }
-
-          emitButtonEvent(BUTTON_HOLD, pushedTime - push_reactivity);
         }
       } else {
         pushedTime = 0;
@@ -642,6 +691,10 @@ private:
 
   virtual void read() = 0;
 };
+
+Button* Button::registeredButtons[Button::MAX_BUTTONS] = { nullptr };
+uint8_t Button::registeredButtonCount = 0;
+TaskHandle_t Button::globalRefreshTaskHandle = nullptr;
 
 class DigitalButton : public Button {
 public:
