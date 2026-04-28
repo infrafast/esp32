@@ -145,9 +145,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         oscOut.setAddress(XMSERIES_XREMOTE_CMD);   // envoi differé
         send(oscOut);           
         */
-
-        OSCMessage keepPushing(XMSERIES_XREMOTE_CMD);
-        _sendOSCMessage(&keepPushing);   // envoi immediat Sinon un backlog sortant peut retarder le keepalive, Comme c’est un keepalive critique, je l'envoi directement au lieu de passer par send() :
+        sendOSC(XMSERIES_XREMOTE_CMD, true);   // envoi immediat Sinon un backlog sortant peut retarder le keepalive, Comme c’est un keepalive critique, je l'envoi directement au lieu de passer par send() :
         lastXremote = now;
       }
 
@@ -602,7 +600,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       // we need to find the right pattern and replace the 2 placeholders
       const char* pattern = protocol[XM_CH_BUS_MIX_LEVEL].c_str(); 
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex, busIndex, pattern);         
-      sendOSC(pathBuffer, level);
+      sendOSC(pathBuffer, level, true);   // immediate send
       if (!echoing) allInput2MixbusValues.get(chIndex,busIndex)->value = level; // as X32 is not echoing the command, the value has to be mirrored manually assuming it was changed.
     }
 
@@ -699,18 +697,18 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     }
 
     ////////////////////////////
-    inline void sendOSC(const char* address) {
+    inline void sendOSC(const char* address, bool immediate = false) {
       oscOut.empty();
       oscOut.setAddress(address);
-      send(oscOut);
+      send(oscOut, immediate);
     }    
 
     template<typename T>
-    inline void sendOSC(const char* address, T value) {
+    inline void sendOSC(const char* address, T value, bool immediate = false) {
       oscOut.empty();
       oscOut.setAddress(address);
       oscOut.add(value);
-      send(oscOut,true);    // send immediately, do not wait for the end of the loop to send the message
+      send(oscOut,immediate);    // send immediately, do not wait for the end of the loop to send the message
     }    
 
 };

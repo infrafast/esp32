@@ -4,6 +4,8 @@
 #include "mixers/mixer.h"
 #include "mixers/values.h"
 
+// STRIPS TO IMPLEMENT: SEE https://github.com/onyx-and-iris/xair-api-python
+
 class StripMixer{
   public:
     
