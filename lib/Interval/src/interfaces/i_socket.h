@@ -20,10 +20,10 @@ class NetworkSocket: public NetworkDevice{
     int code;
   };
 
-  SocketDataCopy socketQueue[SOCKET_QUEUE_SIZE];
-  volatile uint8_t queueHead = 0;   // prochain message à lire
-  volatile uint8_t queueTail = 0;   // prochain slot d’écriture
-  volatile uint8_t queueCount = 0;
+  SocketDataCopy socketQueueRx[SOCKET_QUEUE_SIZE];
+  volatile uint8_t queueHeadRx = 0;   // prochain message à lire
+  volatile uint8_t queueTailRx = 0;   // prochain slot d’écriture
+  volatile uint8_t queueCountRx = 0;
 
   Event evtSock = Event(nullptr);
 
@@ -40,7 +40,7 @@ class NetworkSocket: public NetworkDevice{
       SocketDataCopy* msg = nullptr;
       uint8_t processed = 0;
 
-      while (processed < SOCKET_MESSAGE_PROCESSED_AT_ONCE && (msg = dequeueSocketMessage()) != nullptr) {
+      while (processed < SOCKET_MESSAGE_PROCESSED_AT_ONCE && (msg = dequeueSocketMessageRx()) != nullptr) {
         destination.lastRxTime = millis();  // timestamp of data reception, used to calculate latency and jitter
         route(msg->message, msg->length);
         dataProcessed = true;               // we received some data so we flag it
@@ -102,7 +102,7 @@ class NetworkSocket: public NetworkDevice{
         break;
         case EVENT_SOCKET_MESSAGE:
           SocketData* data = (SocketData*)evt.data;
-          enqueueSocketMessage(data);
+          enqueueSocketMessageRx(data);
         break;              
       }
     }    
@@ -126,15 +126,15 @@ class NetworkSocket: public NetworkDevice{
     }    
 
   protected:
-    bool enqueueSocketMessage(const SocketData* data) {
+    bool enqueueSocketMessageRx(const SocketData* data) {
     if (data == nullptr || data->message == nullptr) return false;
 
-    if (queueCount >= SOCKET_QUEUE_SIZE) {
-      DEBUG_WARN("%s::enqueueSocketMessage() queue full, dropping message", interfaceName.c_str());
+    if (queueCountRx >= SOCKET_QUEUE_SIZE) {
+      DEBUG_WARN("%s::enqueueSocketMessageRx() queue full, dropping message", interfaceName.c_str());
       return false;
     }
 
-    SocketDataCopy& slot = socketQueue[queueTail];
+    SocketDataCopy& slot = socketQueueRx[queueTailRx];
 
     uint16_t copyLen = data->length;
     if (copyLen >= MAX_SOCKET_MESSAGE_LEN) {
@@ -146,23 +146,23 @@ class NetworkSocket: public NetworkDevice{
     slot.length = copyLen;
     slot.code = data->code;
 
-    queueTail = (queueTail + 1) % SOCKET_QUEUE_SIZE;
-    queueCount++;
-    dataAvailable = (queueCount > 0);
+    queueTailRx = (queueTailRx + 1) % SOCKET_QUEUE_SIZE;
+    queueCountRx++;
+    dataAvailable = (queueCountRx > 0);
 
     return true;
   }
 
-  SocketDataCopy* dequeueSocketMessage() {
-    if (queueCount == 0) {
+  SocketDataCopy* dequeueSocketMessageRx() {
+    if (queueCountRx == 0) {
       dataAvailable = false;
       return nullptr;
     }
 
-    SocketDataCopy* out = &socketQueue[queueHead];
-    queueHead = (queueHead + 1) % SOCKET_QUEUE_SIZE;
-    queueCount--;
-    dataAvailable = (queueCount > 0);
+    SocketDataCopy* out = &socketQueueRx[queueHeadRx];
+    queueHeadRx = (queueHeadRx + 1) % SOCKET_QUEUE_SIZE;
+    queueCountRx--;
+    dataAvailable = (queueCountRx > 0);
 
     return out;
 }

@@ -1,3 +1,66 @@
+     🌐→→→ {"path":"/app/mixers/current","method":"GET","body":null} (211578)
+ℹ       ←←←🌐 MixingStation::path ✅ /app/mixers/current (211671)
+ℹ       📉 MixingStation latency:86 jitter:12 lastPingRx:(211677)-lastPingTx:(211584)=raw:(93)
+⚠️
+
+
+                 ENTER HOLD STRIP              
+
+
+
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.763772}} (213986)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (214040)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.77)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.758416}} (214089)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (214136)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.77)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.748926}} (214224)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (214267)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.77)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.73592}} (214314)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (214394)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.77)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.71899}} (214442)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (214490)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.77)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.698081}} (214537)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (214580)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.77)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.672933}} (214628)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (214705)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.77)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.644106}} (214753)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (214800)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.77)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.612461}} (214849)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.574784}} (214968)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (215014)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.77)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.535234}} (215062)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (215106)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.76)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.493089}} (215154)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (215197)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.76)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.448575}} (215245)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (215291)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.76)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.403712}} (215338)
+ℹ       ←←←🌐 MixingStation::path ✅ /console/data/get/ch.0.mix.sends.2.lvl (215377)
+ℹ       MixingStation->handleChBusMixLevel(1,3,0.76)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.360911}} (215432)
+ℹ       🌐→→→ {"path":"/console/data/set/ch.0.mix.sends.2.lvl/val","method":"POST","body":{"value":0.316494}} (215521)
+⚠️
+
+
+                 RELEASE HOLD STRIP              
+
+
+
+
+
+//////////////////////////////////////
+
 
 i_osc:
 - roll back no RX queue
