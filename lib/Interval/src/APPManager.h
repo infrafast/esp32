@@ -1368,8 +1368,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           }
         break;
         case SCREEN_BANK:
-          if (buttonID == hwm->buttons[MIDDLEB]->getID()) switchBankLayout();
-          else moduleReleaseClic(buttonID, time);
+          if (buttonID == hwm->buttons[MIDDLEB]->getID()) 
+            ;//switchBank(); //switchBankLayout();
+          else 
+            moduleReleaseClic(buttonID, time);
         break;
       }
     }
@@ -1514,7 +1516,40 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   void moduleEnterholdClic(uint8_t buttonID, unsigned long time){
     // perform the behaviour defined in the config file
     // at the moment, this is hard coded
-    stripEnterHold(buttonID, time, BUTTON_HOLD);
+      switch(screen.id){
+        case SCREEN_STARTUP:
+
+        break;
+        case SCREEN_WIZARD:
+
+        break;
+        case SCREEN_MENU:
+          handleMenuButton(buttonID);
+        break;
+        case SCREEN_PROMPT:
+
+        break;
+        case SCREEN_UTILS:
+          switch(screen.state){
+            case STATE_UTILS_SEARCHING_CONNECTION:
+
+            break;
+            case STATE_UTILS_INFO:
+            break;
+            case STATE_UTILS_WEBAPPCONNECTED:
+            break;
+            case STATE_UTILS_BRIGHTNESS:
+            break;
+          }
+        break;
+        case SCREEN_BANK:
+          if (buttonID == hwm->buttons[MIDDLEB]->getID()) switchBank(); //switchBankLayout();
+          //in all case, we inform the strip
+          stripEnterHold(buttonID, time, BUTTON_HOLD);
+        break;
+      }
+
+    
   }
 
 
@@ -1524,7 +1559,8 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
   void moduleLongClic(uint8_t buttonID){
     if (buttonID == hwm->buttons[MIDDLEB]->getID()){
-      switchBank();
+      //switchBank();
+      switchBankLayout();
     }else if(buttonID == hwm->buttons[LEFTB]->getID()){
       stripScroll(buttonID);
     }else{

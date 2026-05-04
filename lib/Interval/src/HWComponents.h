@@ -2054,18 +2054,12 @@ class WiFiEth : public Network{
             internet.latency = 0;
 
             //if (udp != NULL){udp->stop(); delete udp; udp = NULL;}           
-            DEBUG_INFO("A");
             if (client != NULL){client->stop(); delete client; client = NULL;} 
-            DEBUG_INFO("B");
             if (server != NULL){delete server; server  = NULL;} 
-            DEBUG_INFO("C");
             stopSocketOpenTask();
             // Do not close/delete websocket clients here: on abrupt network loss,
             // close() can attempt a write on an invalid socket and crash.
-            DEBUG_INFO("D");
-            DEBUG_INFO("E");
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
-            DEBUG_INFO("F");
             
             lastActiveMedia = NO_MEDIA;
             if (!ethEnabled) networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
