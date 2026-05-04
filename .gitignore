@@ -10,3 +10,4 @@ lib/Ethernet/src/EthernetIcmp.h
 lib/Ethernet/src/EthernetICMP.h
 __pycache__
 garbage.txt
+.DS_Store
