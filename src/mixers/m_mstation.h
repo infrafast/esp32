@@ -772,13 +772,16 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     */
     void subscribeQuery(const char* path, const char* format="val"){         
       // drop the request to subscribeQuery to a change of this data and get immediate value
-      hwm.network->clientSocketSend(post(MSPATH_SUBSCRIBE,bodyPathFormat(path,format)));  // forge a MS get json query
+      //hwm.network->clientSocketSend(post(MSPATH_SUBSCRIBE,bodyPathFormat(path,format)));  // direct send
+      enqueueSocketMessageTx(post(MSPATH_SUBSCRIBE,bodyPathFormat(path,format)));
+
     }    
 
 
     void unsubscribeQuery(const char* path, const char* format="val"){         
       // drop the request to subscribeQuery to a change of this data and get immediate value
-      hwm.network->clientSocketSend(post(MSPATH_UNSUBSCRIBE,bodyPathFormat(path,format)));  // forge a MS get json query
+      //hwm.network->clientSocketSend(post(MSPATH_UNSUBSCRIBE,bodyPathFormat(path,format)));  // direct send
+      enqueueSocketMessageTx(post(MSPATH_UNSUBSCRIBE,bodyPathFormat(path,format)));
     } 
 
     //////////////////////////////////////
@@ -787,7 +790,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     virtual void setCHBUSlevel(int chIndex, int busIndex, float level) override {      
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex - 1, busIndex - 1, MSDATA_CH_BUS_LVL);
       // level est une valeur normalisée 0.0 -> 1.0
-      setdataQuery(pathBuffer, level, "norm");
+      setdataQuery(pathBuffer, level, "norm");      // immediate send to avoid "letency" when moving the fader
     }
 
     virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override {    
@@ -797,7 +800,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     ////// setters helpers
     template<typename T>
-    void setdataQuery(const char* path, T value, const char* format = "val") {
+    void setdataQuery(const char* path, T value, const char* format = "val", bool immediate=false) {
       /*
       {
         "path": "/console/data/set/path/val",
@@ -815,7 +818,10 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       char bodyBuffer[64];
       serializeJson(body, bodyBuffer, sizeof(bodyBuffer));
 
-      hwm.network->clientSocketSend(post(fullPath.c_str(), bodyBuffer));
+      if (immediate)
+        hwm.network->clientSocketSend(post(fullPath.c_str(), bodyBuffer));  // direct send
+      else
+        enqueueSocketMessageTx(post(fullPath.c_str(), bodyBuffer));       // queued
     }    
 
     ////////////////////////////////////////

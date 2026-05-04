@@ -13,6 +13,8 @@ class NetworkSocket: public NetworkDevice{
   #define MAX_SOCKET_MESSAGE_LEN kBufferMaxSize
   #define SOCKET_QUEUE_SIZE 5
   #define SOCKET_MESSAGE_PROCESSED_AT_ONCE 3
+  #define SOCKET_TX_QUEUE_SIZE 12
+  #define SOCKET_TX_MESSAGE_SENT_AT_ONCE 8
 
   struct SocketDataCopy {
     uint16_t length;
@@ -21,9 +23,17 @@ class NetworkSocket: public NetworkDevice{
   };
 
   SocketDataCopy socketQueueRx[SOCKET_QUEUE_SIZE];
-  volatile uint8_t queueHeadRx = 0;   // prochain message à lire
-  volatile uint8_t queueTailRx = 0;   // prochain slot d’écriture
+  volatile uint8_t queueHeadRx = 0;   // prochain message RX à lire
+  volatile uint8_t queueTailRx = 0;   // prochain slot RX d’écriture
   volatile uint8_t queueCountRx = 0;
+
+  // Queue statique d’émission : évite de flooder la socket quand plusieurs setters
+  // appellent hwm.network->clientSocketSend() en rafale.
+  SocketDataCopy socketQueueTx[SOCKET_TX_QUEUE_SIZE];
+  volatile uint8_t queueHeadTx = 0;   // prochain message TX à envoyer
+  volatile uint8_t queueTailTx = 0;   // prochain slot TX d’écriture
+  volatile uint8_t queueCountTx = 0;
+  uint32_t lastSocketTxTime = 0; // dernier envoi TX différé, utilisé pour respecter destination.latency
 
   Event evtSock = Event(nullptr);
 
@@ -46,6 +56,11 @@ class NetworkSocket: public NetworkDevice{
         dataProcessed = true;               // we received some data so we flag it
         processed++;
       }
+
+      // Envoi différé : on ne sort qu’un petit nombre de messages par passage
+      // dans monitorService(), au lieu d’envoyer immédiatement depuis les setters.
+      uint8_t sent = flushSocketMessageTx();
+      if (sent > 0) dataProcessed = true;
 
       if (!dataProcessed){
         #define PULSE_CHECK_DELAY kTimeoutInterval*1.1        // we have to wait a bit longer than a socket receive timeout
@@ -82,6 +97,7 @@ class NetworkSocket: public NetworkDevice{
           onSocketConnected();    
         break;
         case EVENT_SOCKET_CLOSE:{
+          clearSocketMessageTx();  // évite d’envoyer d’anciens ordres après reconnexion
           SocketEvent* evtSock = (SocketEvent*)&evt;
           SocketData* socketData = (SocketData*)evtSock->data;        
           // this is called when closing socket => so could be by handleDisconnectService or because we lost the connection
@@ -126,6 +142,92 @@ class NetworkSocket: public NetworkDevice{
     }    
 
   protected:
+    bool enqueueSocketMessageTx(const char* message) {
+      if (message == nullptr) return false;
+
+      uint16_t copyLen = strlen(message);
+      if (copyLen >= MAX_SOCKET_MESSAGE_LEN) {
+        copyLen = MAX_SOCKET_MESSAGE_LEN - 1;
+        DEBUG_WARN("%s::enqueueSocketMessageTx() message truncated", interfaceName.c_str());
+      }
+
+      // Si la queue est pleine, on envoie directement le nouveau message.
+      if (queueCountTx >= SOCKET_TX_QUEUE_SIZE) {
+        DEBUG_WARN(
+          "%s::enqueueSocketMessageTx() queue full (%d/%d), sending newest TX message directly",
+          interfaceName.c_str(),
+          queueCountTx,
+          SOCKET_TX_QUEUE_SIZE
+        );
+
+        if (hwm.network != nullptr &&
+            hwm.network->clientSocketState() == WebSocketReadyState::OPEN) {
+          hwm.network->clientSocketSend(message);
+          lastSocketTxTime = millis();
+          return true;
+        }
+
+        DEBUG_WARN("%s::enqueueSocketMessageTx() direct send failed: socket not open", interfaceName.c_str());
+        return false;
+      }
+
+      SocketDataCopy& slot = socketQueueTx[queueTailTx];
+      memcpy(slot.message, message, copyLen);
+      slot.message[copyLen] = '\0';
+      slot.length = copyLen;
+      slot.code = 0;
+
+      queueTailTx = (queueTailTx + 1) % SOCKET_TX_QUEUE_SIZE;
+      queueCountTx++;
+
+      return true;
+    }
+
+    SocketDataCopy* dequeueSocketMessageTx() {
+      if (queueCountTx == 0) return nullptr;
+
+      SocketDataCopy* out = &socketQueueTx[queueHeadTx];
+      queueHeadTx = (queueHeadTx + 1) % SOCKET_TX_QUEUE_SIZE;
+      queueCountTx--;
+
+      return out;
+    }
+
+    uint8_t flushSocketMessageTx() {
+      if (hwm.network->clientSocketState() != WebSocketReadyState::OPEN) return 0;
+      if (queueCountTx == 0) return 0;
+
+      uint32_t now = millis();
+      uint32_t txDelay = (destination.latency > 0) ? (uint32_t)destination.latency : 0;
+
+      // Non bloquant : si le délai mesuré avec MixingStation n'est pas écoulé,
+      // on garde le message en queue et monitorService() retentera au prochain passage.
+      if (lastSocketTxTime != 0 && (now - lastSocketTxTime) < txDelay) return 0;
+
+      uint8_t sent = 0;
+      SocketDataCopy* msg = nullptr;
+
+      while (sent < SOCKET_TX_MESSAGE_SENT_AT_ONCE &&
+             (msg = dequeueSocketMessageTx()) != nullptr) {
+        hwm.network->clientSocketSend(msg->message);
+        lastSocketTxTime = now;
+        sent++;
+
+        // Avec SOCKET_TX_MESSAGE_SENT_AT_ONCE > 1, on évite quand même d'envoyer
+        // plusieurs messages dans le même tour si destination.latency impose un délai.
+        if (txDelay > 0) break;
+      }
+
+      return sent;
+    }
+
+    void clearSocketMessageTx() {
+      queueHeadTx = 0;
+      queueTailTx = 0;
+      queueCountTx = 0;
+      lastSocketTxTime = 0;
+    }
+
     bool enqueueSocketMessageRx(const SocketData* data) {
     if (data == nullptr || data->message == nullptr) return false;
 
