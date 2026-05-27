@@ -285,7 +285,7 @@ class BLEMIDIInterface: public MIDIInterface{
     }
 
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-      DEBUG_INFO("\tnBLEMIDIInterface::sendNoteOn(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
+      DEBUG_INFO("\nBLEMIDIInterface::sendNoteOn(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
       if (state.code == IF_READY) bleMIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);      
       else return false;
       return true; 

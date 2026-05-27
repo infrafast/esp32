@@ -66,9 +66,12 @@ bool useUSBMidi = false;
   #define DEBUG_PRINT(...) if (!useUSBMidi) if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(500))) { debugMon.printf(__VA_ARGS__); debugMon.flush(); xSemaphoreGive(serialMutex);} else (void)0
   
   // Macros publiques
-  #define DEBUG_INFO(...)  DEBUG_PRINT("\nℹ\t" __VA_ARGS__)    //✅
-  #define DEBUG_WARN(...)  DEBUG_PRINT("\n⚠️\t" __VA_ARGS__)
-  #define DEBUG_ERROR(...) DEBUG_PRINT("\n❌\t" __VA_ARGS__)
+#define DEBUG_BASE(prefix, fmt, ...) \
+    DEBUG_PRINT("\n(%lu) %s\t" fmt, millis(), prefix, ##__VA_ARGS__)
+
+#define DEBUG_INFO(fmt, ...)  DEBUG_BASE("ℹ", fmt, ##__VA_ARGS__)
+#define DEBUG_WARN(fmt, ...)  DEBUG_BASE("⚠️", fmt, ##__VA_ARGS__)
+#define DEBUG_ERROR(fmt, ...) DEBUG_BASE("❌", fmt, ##__VA_ARGS__)
   
 
 #else
