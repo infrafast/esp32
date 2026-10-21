@@ -4,7 +4,6 @@
 .vscode/launch.json
 .vscode/ipch
 .DS_Store
-include/MIDIUSB.h
 utils/MIDIUSB.h
 lib/Ethernet/src/EthernetIcmp.h
 lib/Ethernet/src/EthernetICMP.h

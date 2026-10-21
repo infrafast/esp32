@@ -8,8 +8,6 @@
 MixingStation* msMixer;
 XMSeries* xmMixer;
 
-
-
 void setup(){
     
     msMixer = new MixingStation();    // a mixer has to be notified when webapp is started so it starts synchronisationo of data

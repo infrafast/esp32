@@ -39,4 +39,11 @@ Utility utility;
 #include "TestMIDIHelper.h"*/
 
 
+#if !defined(PROD)
+  // Keep DEBUG local to the application translation unit. This prevents the
+  // third-party AppleMIDI library from enabling its SerialMon-only debug code.
+  #define DEBUG 1
+  #define SerialMon Serial
+#endif
+
 #include "MixerApplication.h"

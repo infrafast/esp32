@@ -10,8 +10,13 @@
 #include <hardware/BLEMIDI_ESP32.h>
 //#include <hardware/BLEMIDI_ArduinoBLE.h>
 
-#include "MIDIUSB_shim.h"   // required by USB-MIDI.h
-#include <USB-MIDI.h>     // sysex but do not work
+#ifndef DEBUG
+  // Arduino-USBMIDI requires MIDIUSB.h. On ESP32 this is provided by the
+  // project shim, while dev builds use USBMIDISimul below and do not need the
+  // hardware USB MIDI transport at all.
+  #include "MIDIUSB_shim.h"
+  #include <USB-MIDI.h>
+#endif
 
 #include "tusb.h"     //tinyUSB for tud_mounted detection
 
