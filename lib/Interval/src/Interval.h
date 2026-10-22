@@ -2501,14 +2501,14 @@ void bankScreenBuilder(uint8_t subScreen){
 
   if (app.disabledBankRendering == true) return;
 
-  bool oversize = (subScreen >= app.banks.size());
-
   GUI::defaultBcolor = TFT_BGCOLOR;
   GUI::defaultFcolor = TFT_FCOLOR;
   GUI::cls();
   
   Interval::Bank* bank = app.banks[subScreen];
   //DEBUG_PRINT("\n\n\n---------------------------------bankScreenBuilder ");
+
+  bool oversize = (subScreen >= app.banks.size());
 
   if (bank != nullptr && !oversize){
 

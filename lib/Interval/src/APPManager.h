@@ -1734,7 +1734,9 @@ void setup() {
       screen.state = hwm->persistants.getUChar(PERSISTANT_SCREEN_STATE,0);
       //DEBUG_PRINT("\t read: id=%d / state:%d",screen.id,screen.state);
       // prevents wrong branching
-      if (screen.id == SCREEN_BANK && screen.state > banks.size()-1) screen.state = 0;
+      if (screen.id == SCREEN_BANK){
+        if (banks.size() == 0 || screen.state >= banks.size()) screen.state = 0;
+      }
       if (screen.id == SCREEN_WIZARD && screen.state > STATE_WIZARD_USER_STEP4) screen.state = STATE_WIZARD_LANG_STEP1;
       //DEBUG_PRINT("\t => id=%d / state:%d",screen.id,screen.state);
       // branch the first available strip

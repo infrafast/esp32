@@ -297,6 +297,8 @@ public:
         startupState = NO_FS_STARTUP;
       }
 
+      bootScreen(startupState); 
+
       #ifdef DEBUG
         // if we are in debug mode, we use the usb as a serial interface in all case, no matter the user boot up by long press or not
         //serialMutex = xSemaphoreCreateMutex();             
@@ -311,7 +313,7 @@ public:
         }
       #endif
 
-      bootScreen(startupState); 
+      
 
       // the below code is equivalent to setting RST , which also works for W5500
       /*pinMode(D7, OUTPUT);

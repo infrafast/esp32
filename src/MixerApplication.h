@@ -1,4 +1,7 @@
 #define USE_NETWORK
+
+#undef DEBUG
+
 #include "Interval.h"
 
 #include "mixers/m_mstation.h"
