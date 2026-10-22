@@ -10,9 +10,9 @@
 #include <hardware/BLEMIDI_ESP32.h>
 //#include <hardware/BLEMIDI_ArduinoBLE.h>
 
-#ifndef DEBUG
+#ifdef PROD
   // Arduino-USBMIDI requires MIDIUSB.h. On ESP32 this is provided by the
-  // project shim, while dev builds use USBMIDISimul below and do not need the
+  // project shim, while non-production builds use USBMIDISimul below and do not need the
   // hardware USB MIDI transport at all.
   #include "MIDIUSB_shim.h"
   #include <USB-MIDI.h>
@@ -39,7 +39,7 @@ struct MidiData{
   unsigned length;  
 };
 
-#ifdef DEBUG
+#ifndef PROD
   class USBMIDISimul{
     public:
       USBMIDISimul(){}

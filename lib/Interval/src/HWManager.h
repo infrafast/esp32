@@ -21,7 +21,9 @@
 #include <driver/rtc_io.h>
 
 #include <USB.h>
-#include <midiusb.h>     //tinyUSB
+#ifdef PROD
+  #include <midiusb.h>     // TinyUSB hardware transport (production only)
+#endif
 
 
 //////////////////////////////////////////////
@@ -89,7 +91,9 @@ public:
     Network *network = nullptr;
     Network *configMedia = nullptr;    
   
-    MIDIusb* tinyMIDIusb = nullptr;           // <===== tinyUSB
+    #ifdef PROD
+      MIDIusb* tinyMIDIusb = nullptr;
+    #endif
 
     String configURL="0.0.0.0";
 
@@ -237,6 +241,8 @@ public:
     void useMIDI(){
       useUSBMidi = true;        // used to display appropriate icon for battery charging or cable
 
+      #ifdef PROD
+
       /*
       USB.onEvent(usbEventCallback);
       //USBSerial.onEvent(usbEventCallback);
@@ -264,7 +270,8 @@ public:
       // with tinyUSB we initialize the USB midi stack, then MIDI HELPERS from Lathoud MIDIUSB will work
       tinyMIDIusb = new MIDIusb;
       tinyMIDIusb->setBaseEP(2);
-      tinyMIDIusb->begin();           
+      tinyMIDIusb->begin();
+      #endif
     }
 
     virtual void init() {            
