@@ -1,0 +1,212 @@
+{
+  "2.0": {
+    "archive_sha256": "816f48444a10b10940ad6487be7759d7bb7c74b2495aaf69b204603db69626e4",
+    "named_groups": [
+      [
+        "ESP_D10_MOSI",
+        "TFT_MOSI",
+        "U6_MOSI"
+      ],
+      [
+        "ESP_D3_TFT_CS",
+        "TFT_CS"
+      ],
+      [
+        "ESP_D5_ETH_CS",
+        "U6_CS"
+      ],
+      [
+        "ESP_D6_TFT_DC",
+        "TFT_DC"
+      ],
+      [
+        "ESP_D7_RESET",
+        "TFT_RST",
+        "U6_RST"
+      ],
+      [
+        "ESP_D8_SCLK",
+        "TFT_CLK",
+        "U6_SCLK"
+      ],
+      [
+        "ESP_D9_MISO",
+        "U6_MISO"
+      ],
+      [
+        "ESP_GND",
+        "TFT_GND",
+        "U6_GND1",
+        "U6_GND2",
+        "U6_GND3"
+      ],
+      [
+        "TFT_PWR",
+        "U6_3V3_1",
+        "U6_3V3_2",
+        "UPWR_OUTPUT"
+      ],
+      [
+        "U6_INT"
+      ],
+      [
+        "U6_NC"
+      ]
+    ],
+    "paths": {
+      "ESP_D5_ETH_CS -> U6_CS": {
+        "carrier_mm": 39.92,
+        "ideal_module_ground_bridges_mm": 39.92
+      },
+      "ESP_D7_RESET -> U6_RST": {
+        "carrier_mm": 36.076,
+        "ideal_module_ground_bridges_mm": 36.076
+      },
+      "ESP_D8_SCLK -> U6_SCLK": {
+        "carrier_mm": 52.586,
+        "ideal_module_ground_bridges_mm": 52.586
+      },
+      "ESP_D9_MISO -> U6_MISO": {
+        "carrier_mm": 39.811,
+        "ideal_module_ground_bridges_mm": 39.811
+      },
+      "ESP_D10_MOSI -> U6_MOSI": {
+        "carrier_mm": 58.141,
+        "ideal_module_ground_bridges_mm": 58.141
+      },
+      "ESP_D8_SCLK -> TFT_CLK": {
+        "carrier_mm": 108.746,
+        "ideal_module_ground_bridges_mm": 108.746
+      },
+      "ESP_D10_MOSI -> TFT_MOSI": {
+        "carrier_mm": 110.709,
+        "ideal_module_ground_bridges_mm": 110.709
+      },
+      "ESP_GND -> TFT_GND": {
+        "carrier_mm": 132.836,
+        "ideal_module_ground_bridges_mm": 132.836
+      },
+      "UPWR_OUTPUT -> U6_3V3_1": {
+        "carrier_mm": 32.958,
+        "ideal_module_ground_bridges_mm": 32.958
+      },
+      "ESP_GND -> U6_GND1": {
+        "carrier_mm": 202.682,
+        "ideal_module_ground_bridges_mm": 69.67
+      },
+      "ESP_GND -> U6_GND2": {
+        "carrier_mm": 200.142,
+        "ideal_module_ground_bridges_mm": 69.67
+      },
+      "ESP_GND -> U6_GND3": {
+        "carrier_mm": 69.67,
+        "ideal_module_ground_bridges_mm": 69.67
+      }
+    }
+  },
+  "2.2": {
+    "archive_sha256": "e54ce7f20fed21e5af8e3364e44150f06e8e662e9860993b7cdabde0eb5ed2c9",
+    "named_groups": [
+      [
+        "ESP_D10_MOSI",
+        "TFT_MOSI",
+        "U6_MOSI"
+      ],
+      [
+        "ESP_D3_TFT_CS",
+        "TFT_CS"
+      ],
+      [
+        "ESP_D5_ETH_CS",
+        "U6_CS"
+      ],
+      [
+        "ESP_D6_TFT_DC",
+        "TFT_DC"
+      ],
+      [
+        "ESP_D7_RESET",
+        "TFT_RST",
+        "U6_RST"
+      ],
+      [
+        "ESP_D8_SCLK",
+        "TFT_CLK",
+        "U6_SCLK"
+      ],
+      [
+        "ESP_D9_MISO",
+        "U6_MISO"
+      ],
+      [
+        "ESP_GND",
+        "TFT_GND",
+        "U6_GND1",
+        "U6_GND2",
+        "U6_GND3"
+      ],
+      [
+        "TFT_PWR",
+        "U6_3V3_1",
+        "U6_3V3_2",
+        "UPWR_OUTPUT"
+      ],
+      [
+        "U6_INT"
+      ],
+      [
+        "U6_NC"
+      ]
+    ],
+    "paths": {
+      "ESP_D5_ETH_CS -> U6_CS": {
+        "carrier_mm": 39.92,
+        "ideal_module_ground_bridges_mm": 39.92
+      },
+      "ESP_D7_RESET -> U6_RST": {
+        "carrier_mm": 35.754,
+        "ideal_module_ground_bridges_mm": 35.754
+      },
+      "ESP_D8_SCLK -> U6_SCLK": {
+        "carrier_mm": 52.813,
+        "ideal_module_ground_bridges_mm": 52.813
+      },
+      "ESP_D9_MISO -> U6_MISO": {
+        "carrier_mm": 38.199,
+        "ideal_module_ground_bridges_mm": 38.199
+      },
+      "ESP_D10_MOSI -> U6_MOSI": {
+        "carrier_mm": 56.904,
+        "ideal_module_ground_bridges_mm": 56.904
+      },
+      "ESP_D8_SCLK -> TFT_CLK": {
+        "carrier_mm": 108.974,
+        "ideal_module_ground_bridges_mm": 108.974
+      },
+      "ESP_D10_MOSI -> TFT_MOSI": {
+        "carrier_mm": 110.507,
+        "ideal_module_ground_bridges_mm": 110.507
+      },
+      "ESP_GND -> TFT_GND": {
+        "carrier_mm": 128.963,
+        "ideal_module_ground_bridges_mm": 128.963
+      },
+      "UPWR_OUTPUT -> U6_3V3_1": {
+        "carrier_mm": 36.661,
+        "ideal_module_ground_bridges_mm": 36.661
+      },
+      "ESP_GND -> U6_GND1": {
+        "carrier_mm": 198.865,
+        "ideal_module_ground_bridges_mm": 127.931
+      },
+      "ESP_GND -> U6_GND2": {
+        "carrier_mm": 196.325,
+        "ideal_module_ground_bridges_mm": 127.931
+      },
+      "ESP_GND -> U6_GND3": {
+        "carrier_mm": 127.931,
+        "ideal_module_ground_bridges_mm": 127.931
+      }
+    }
+  }
+}
