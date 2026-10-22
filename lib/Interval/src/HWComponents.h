@@ -1132,7 +1132,7 @@ class Network : public HWComponent2State{
     virtual String getIP() = 0;
     
     virtual void init(){
-      //if (debug) DEBUG_PRINT("\n%s.init()",id.c_str());
+      if (debug) DEBUG_INFO("%s::init()", id.c_str());
       WiFi.setAutoConnect(false); 
       WiFi.setAutoReconnect(false);      
     }

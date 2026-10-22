@@ -37,6 +37,14 @@
 //                                        D6 =
 #define RST_PIN           (gpio_num_t)D7 //GPIO_NUM_44
 
+#ifndef HW_INIT_TFT_BEFORE_COMPONENTS
+  #define HW_INIT_TFT_BEFORE_COMPONENTS 0
+#endif
+
+#if HW_INIT_TFT_BEFORE_COMPONENTS != 0 && HW_INIT_TFT_BEFORE_COMPONENTS != 1
+  #error "HW_INIT_TFT_BEFORE_COMPONENTS must be 0 or 1"
+#endif
+
 enum{
   LEFTB,
   RIGHTB,
@@ -109,7 +117,11 @@ public:
       #endif           
 
       #ifdef USE_NETWORK
-        network = new WiFiEth(ETH_CS_PIN,RST_PIN,true,false);
+        #ifdef DEBUG
+          network = new WiFiEth(ETH_CS_PIN,RST_PIN,true,true);
+        #else
+          network = new WiFiEth(ETH_CS_PIN,RST_PIN,true,false);
+        #endif
         configMedia = network;
       #else
         network = new NoNetwork(true);
@@ -274,7 +286,14 @@ public:
       #endif
     }
 
-    virtual void init() {            
+    void initTFT(){
+      tft.init();
+      tft.fillScreen(TFT_BLACK);
+      tft.setSwapBytes(true);
+      setScreenAndButtonRotation();
+    }
+
+    virtual void init() {
       GenericComponent::init();            
       
       persistants.begin("interval", false);     
@@ -285,16 +304,26 @@ public:
       // get the power
       wakeUp(500); // you have to press button for more than 500ms to wake up, otherwise we do not start.    
 
+      // Start only the debug console early enough to capture hardware init.
+      // Full USB/DFU setup remains in useCDC() below.
+      #ifdef DEBUG
+        debugMon.begin(115200);
+        DEBUG_INFO("Hardware init order: %s", HW_INIT_TFT_BEFORE_COMPONENTS ? "TFT before components" : "components before TFT");
+      #endif
+
       setPowerRail(ON);        
+
+      #if HW_INIT_TFT_BEFORE_COMPONENTS
+        initTFT();
+      #endif
 
       //init all other devices      
 
       for(int i = 0; i < hwComponents.size(); i++) hwComponents.get(i)->init();
 
-      tft.init(1);  //tft.invertDisplay(1);            
-      tft.fillScreen(TFT_BLACK);  
-      tft.setSwapBytes(true);
-      setScreenAndButtonRotation();
+      #if !HW_INIT_TFT_BEFORE_COMPONENTS
+        initTFT();
+      #endif
 
       USB.productName("FOOTSWITCH");
       USB.manufacturerName("Interval");
