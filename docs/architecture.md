@@ -1,295 +1,295 @@
-# Architecture d'Interval Footswitch
+# Interval Footswitch Architecture
 
-## Rôle et état de référence
+## Purpose and reference state
 
-Ce document est la référence architecturale du projet : structure, responsabilités, patterns et procédure d'extension. Les travaux demandés, hypothèses à tester et critères de validation sont suivis dans [la roadmap](roadmap.md). Les consignes de contribution sont dans [AGENT.md](../AGENT.md).
+This document is the project's architectural reference: structure, responsibilities, patterns, and extension procedures. Requested work, hypotheses to test, and validation criteria are tracked in [the roadmap](roadmap.md). Contribution instructions are in [AGENT.md](../AGENT.md).
 
-Consolidation du 24 octobre 2026 à partir du code de `main`, de `ANALYSE_REPO.md`, de `lib/Interval/README.md` et de l'audit PCB révisé le 22 octobre. Les constats historiques de l'audit sont datés et ne remplacent pas l'état actuel du code.
+Consolidated on October 24, 2026 from the code on `main`, `ANALYSE_REPO.md`, `lib/Interval/README.md`, and the PCB audit revised on October 22. Historical audit findings are dated and do not replace the current code state. This documentation is maintained in English.
 
-## 1. Structure et responsabilités
+## 1. Structure and responsibilities
 
-| Emplacement | Responsabilité |
+| Location | Responsibility |
 |---|---|
-| `src/main.cpp` | Sélection de l'application active : `MixerApplication.h` |
-| `src/MixerApplication.h` | Activation réseau, création des consoles, déclaration des strips, `setup()/loop()` |
-| `src/TestApplication.h` | Application de test alternative, non sélectionnée |
-| `lib/Interval/src/Interval.h` | Intégration du framework, utilitaires, événements, configuration et ressources communes |
-| `APPManager.h`, `Banks.h` | Orchestration applicative et organisation des banques |
-| `HWManager.h`, `HWComponents.h` | Rail d'alimentation, boutons, batterie, réseau, écran, modes USB et arrêt |
-| `GUIManager.h`, `GUIComponents.h` | Composition et rendu de l'interface locale |
-| `Interfaces.h`, `interfaces/` | Contrats et transports des périphériques |
-| `DataManagement.h` | Adresses, datasets, dépôts et sérialisation des paramètres |
-| `Strips.h`, `strips/` | Modèles de strips, fabrique et implémentations réutilisables |
-| `src/mixers/` | Abstraction console, adaptateurs, valeurs partagées et strips métier |
-| `data/webapp/` | Ressources web compressées, traductions et bibliothèques de messages |
-| `platformio.ini`, scripts Python racine | Compilation, configuration TFT et préparation des mises à jour |
+| `src/main.cpp` | Selects the active application: `MixerApplication.h` |
+| `src/MixerApplication.h` | Enables networking, creates mixers, declares strips, provides `setup()/loop()` |
+| `src/TestApplication.h` | Alternative test application, not selected |
+| `lib/Interval/src/Interval.h` | Framework integration, utilities, events, configuration, and common resources |
+| `APPManager.h`, `Banks.h` | Application orchestration and bank organization |
+| `HWManager.h`, `HWComponents.h` | Power rail, buttons, battery, network, display, USB modes, and shutdown |
+| `GUIManager.h`, `GUIComponents.h` | Local interface composition and rendering |
+| `Interfaces.h`, `interfaces/` | Device contracts and transports |
+| `DataManagement.h` | Addresses, datasets, repositories, and parameter serialization |
+| `Strips.h`, `strips/` | Strip models, factory, and reusable implementations |
+| `src/mixers/` | Mixer abstraction, adapters, shared values, and domain-specific strips |
+| `data/webapp/` | Compressed web resources, translations, and message libraries |
+| `platformio.ini`, root Python scripts | Builds, TFT configuration, and update preparation |
 
-Les noms sans chemin dans cette table désignent `lib/Interval/src/`.
+Names without a path in this table refer to `lib/Interval/src/`.
 
-## 2. Cycle applicatif
+## 2. Application lifecycle
 
-`setup()` crée `MixingStation` et `XMSeries`, enregistre les squelettes `input2mixbus` et `inputGain`, puis appelle `app.init()`. `loop()` appelle `app.refresh()`.
+`setup()` creates `MixingStation` and `XMSeries`, registers the `input2mixbus` and `inputGain` skeletons, then calls `app.init()`. `loop()` calls `app.refresh()`.
 
-Les nouvelles fonctionnalités doivent s'intégrer dans ce cycle : configuration déclarative au démarrage, traitement périodique borné dans les méthodes de surveillance et événements. Ne pas ajouter une boucle d'attente réseau bloquante au traitement courant.
+New features must integrate with this lifecycle: declarative setup at startup, bounded periodic processing in monitoring methods, and events. Do not add a blocking network wait loop to routine processing.
 
-Le matériel possède son propre cycle : activation du rail, initialisation de l'écran et des composants, montage LittleFS, sélection du mode USB, puis surveillance. L'arrêt modifie aussi les niveaux des broches avant coupure du rail ; les essais doivent couvrir démarrage à froid et réveil après arrêt logiciel.
+Hardware has its own lifecycle: power rail activation, display and component initialization, LittleFS mounting, USB mode selection, then monitoring. Shutdown also changes pin levels before switching off the rail; tests must cover cold startup and wake-up after software shutdown.
 
-### Ordre TFT / W5500 actuel
+### Current TFT / W5500 order
 
-`HW_INIT_TFT_BEFORE_COMPONENTS` accepte 0 ou 1 dans `HWManager.h` :
+`HW_INIT_TFT_BEFORE_COMPONENTS` accepts 0 or 1 in `HWManager.h`:
 
-- 1 : `initTFT()` avant l'initialisation des composants, donc avant le réseau.
-- 0 : composants avant `initTFT()`, ordre historique.
-- `env:dev` définit explicitement 1.
-- `env:prod` ne définit pas cette option et utilise actuellement la valeur par défaut 0.
+- 1: `initTFT()` before component initialization, therefore before networking.
+- 0: components before `initTFT()`, the historical order.
+- `env:dev` explicitly defines 1.
+- `env:prod` does not define this option and currently uses the default value 0.
 
-Le reset TFT et W5500 est partagé. Le changement d'ordre en développement est une variante de diagnostic présente dans le code, pas une preuve de résolution matérielle ni une validation de production.
+The TFT and W5500 reset line is shared. The development initialization-order change is a diagnostic variant present in the code, not proof of a hardware fix or production validation.
 
-## 3. Patterns et contrats
+## 3. Patterns and contracts
 
-### Interfaces et adaptateurs
+### Interfaces and adapters
 
-`DeviceInterface` combine `SerializableParameters`, `EventDispatcher` et `EventListener`. Ses instances s'inscrivent dans `interfaceRepo`. Le contrat couvre notamment `begin()`, `end()`, `monitor()`, la sérialisation/restauration des propriétés et les transitions d'état. Les fonctions `_begin()` et `update()` assurent une partie du cycle commun : préserver leur comportement lors d'une surcharge.
+`DeviceInterface` combines `SerializableParameters`, `EventDispatcher`, and `EventListener`. Its instances register in `interfaceRepo`. The contract includes `begin()`, `end()`, `monitor()`, property serialization/restoration, and state transitions. The `_begin()` and `update()` functions implement part of the common lifecycle: preserve their behavior when overriding them.
 
-`NetworkDevice` ajoute réseau, ports, événements de connexion et surveillance de présence. Les transports concrets comprennent `NetworkOSC` et `NetworkSocket`. Les états incluent ready, disconnected, pending, error, disabled, offline et syncing ; utiliser les mécanismes existants plutôt qu'un booléen parallèle.
+`NetworkDevice` adds networking, ports, connection events, and presence monitoring. Concrete transports include `NetworkOSC` and `NetworkSocket`. States include ready, disconnected, pending, error, disabled, offline, and syncing; use the existing mechanisms rather than a parallel boolean.
 
-### Abstraction console et composition par templates
+### Mixer abstraction and template composition
 
-`MixerBase` expose les opérations métier indépendantes du protocole, dont demandes et écritures des niveaux/mutes de bus et d'envois. `MixerDevice<NetworkBase>` compose ce contrat avec un transport :
+`MixerBase` exposes protocol-independent domain operations, including requests and writes for bus and send levels/mutes. `MixerDevice<NetworkBase>` composes this contract with a transport:
 
-- `MixingStation : MixerDevice<NetworkSocket>` ;
+- `MixingStation : MixerDevice<NetworkSocket>`;
 - `XMSeries : MixerDevice<NetworkOSC>`.
 
-Le constructeur de `MixerDevice` associe explicitement son `DeviceInterface*` à son `MixerBase*`. `MixerBase::fromDeviceInterface()` résout cette association. Éviter les conversions supposant que toutes les interfaces sont une console concrète donnée.
+The `MixerDevice` constructor explicitly associates its `DeviceInterface*` with its `MixerBase*`. `MixerBase::fromDeviceInterface()` resolves this association. Avoid conversions that assume every interface is a particular concrete mixer.
 
-### Fabrique de strips et composition de comportements
+### Strip factory and behavior composition
 
-`StripSkeleton` décrit un type, un groupe, un constructeur et les adresses de propriétés. Sa construction l'enregistre dans `stripFactory`. La fabrique reconstruit les instances à partir de leur identifiant ; cet identifiant fait donc partie du format persistant.
+`StripSkeleton` describes a type, group, constructor, and property addresses. Its constructor registers it in `stripFactory`. The factory reconstructs instances from their identifier; this identifier is therefore part of the persistent format.
 
-`Strip` fournit les événements, le rendu et le comportement commun. `OneSelectStrip` et `TwoSelectStrip` ajoutent des sélections alimentées par datasets. `StripMixerMixin<BaseStripT>` compose un strip visuel avec la logique console.
+`Strip` provides events, rendering, and common behavior. `OneSelectStrip` and `TwoSelectStrip` add dataset-driven selections. `StripMixerMixin<BaseStripT>` composes a visual strip with mixer logic.
 
-Dans `s_mixer.h`, la visibilité déclenche les demandes de valeurs et le focus les demandes de configuration. Les rafraîchissements périodiques utilisent `STRIP_REFRESH_VISIBLE` et vérifient l'état `IF_READY`. Une interface peut être assignée après construction ou remplacée : la liaison console doit être résolue à nouveau si elle change.
+In `s_mixer.h`, visibility triggers value requests and focus triggers configuration requests. Periodic refreshes use `STRIP_REFRESH_VISIBLE` and check the `IF_READY` state. An interface may be assigned after construction or replaced: the mixer binding must be resolved again if it changes.
 
-### Événements, datasets et paramètres
+### Events, datasets, and parameters
 
-Le framework utilise un mécanisme observateur (`EventDispatcher/EventListener`) pour découpler producteurs et consommateurs. Un pointeur attaché à un événement n'implique pas un transfert de propriété ; ne pas le conserver au-delà de sa durée de validité.
+The framework uses an observer mechanism (`EventDispatcher/EventListener`) to decouple producers and consumers. A pointer attached to an event does not imply ownership transfer; do not retain it beyond its valid lifetime.
 
-`DataSet` inscrit ses valeurs dans un `DataRepository` et se désinscrit à sa destruction. `DynamicDataSet` délègue à un `DataProvider`. `SerializableParameters` décrit les adresses et peut créer les datasets de configuration associés. `dataRepo` sert notamment aux squelettes ; `IFdataRepo` sépare les paramètres des interfaces.
+`DataSet` registers its values in a `DataRepository` and unregisters on destruction. `DynamicDataSet` delegates to a `DataProvider`. `SerializableParameters` describes addresses and can create associated configuration datasets. `dataRepo` serves skeletons, among other users; `IFdataRepo` separates interface parameters.
 
-Les consoles utilisent `DataSetSynced` et `Synchronizer` pour récupérer les noms et propager leurs changements à l'application web. Les capacités maximales du code ne doivent pas être confondues avec celles du modèle de console détecté. Vérifier les conversions entre indices internes et adresses du protocole, souvent numérotées à partir de 1.
+Mixers use `DataSetSynced` and `Synchronizer` to retrieve names and propagate changes to the web application. Maximum capacities in the code must not be confused with those of the detected mixer model. Check conversions between internal indices and protocol addresses, which often start at 1.
 
-### Valeurs partagées et durée de vie
+### Shared values and lifetimes
 
-`values.h` fournit `OneIndexValueList` et `TwoIndexValueList`, reposant sur des réservations. Deux strips visant la même clé reçoivent le même objet : niveaux et mutes restent cohérents par pointeurs partagés.
+`values.h` provides `OneIndexValueList` and `TwoIndexValueList`, based on reservations. Two strips targeting the same key receive the same object: levels and mutes remain consistent through shared pointers.
 
-Chaque `reserve(...)` doit avoir son `unreserve(...)` correspondant. Le dernier retrait détruit l'objet ; un pointeur restant devient invalide. Libérer l'ancienne réservation lors d'un changement de sélection et à la destruction, initialiser les pointeurs, vérifier les liaisons nulles. Cette règle décrit le contrat à respecter : les strips existants ne sont pas tous une implémentation complète et sûre de ce contrat.
+Each `reserve(...)` must have a corresponding `unreserve(...)`. The last release destroys the object; any remaining pointer becomes invalid. Release the previous reservation on selection changes and at destruction, initialize pointers, and check null bindings. This describes the required contract: existing strips are not all complete and safe implementations of it.
 
-## 4. Ajouter une fonctionnalité
+## 4. Adding a feature
 
-### Nouveau strip
+### New strip
 
-1. Décrire la demande et ses critères dans la roadmap, en indiquant si le backend est déjà disponible.
-2. Choisir `Strip`, `OneSelectStrip` ou `TwoSelectStrip`. Pour une console, réutiliser `StripMixerMixin`.
-3. Définir un identifiant stable et implémenter les méthodes abstraites : action, sérialisation/restauration des propriétés, focus, visibilité et labels ; composer les widgets adaptés aux formes et au zoom.
-4. Créer le callback constructeur, puis le `StripSkeleton` et enregistrer ses adresses dans l'ordre attendu par les sélections. Suivre le montage de `src/MixerApplication.h`.
-5. Pour une console, implémenter `getConfig()`, `getValues()` et les callbacks d'augmentation/diminution/action via `MixerBase`. Réutiliser les valeurs partagées et les bornes/conversions du domaine.
-6. Préserver le cycle d'inscription aux événements. Si `init()` est surchargée, examiner ce que fait la classe de base et ne pas perdre ses effets utiles.
-7. Vérifier création, sauvegarde/rechargement, changement de sélection/interface, déconnexion/reconnexion, visibilité/focus, formes graphiques, suppression et cohérence entre deux strips de même clé.
+1. Describe the request and its criteria in roadmap, indicating whether the backend is already available.
+2. Choose `Strip`, `OneSelectStrip`, or `TwoSelectStrip`. For a mixer, reuse `StripMixerMixin`.
+3. Define a stable identifier and implement abstract methods: action, property serialization/restoration, focus, visibility, and labels; compose widgets suitable for supported shapes and zoom.
+4. Create the constructor callback, then the `StripSkeleton`, and register its addresses in the order expected by the selections. Follow the setup in `src/MixerApplication.h`.
+5. For a mixer, implement `getConfig()`, `getValues()`, and increase/decrease/action callbacks through `MixerBase`. Reuse shared values and domain limits/conversions.
+6. Preserve the event subscription lifecycle. If `init()` is overridden, inspect the base implementation and preserve its necessary effects.
+7. Check creation, save/reload, selection/interface changes, disconnection/reconnection, visibility/focus, graphical shapes, deletion, and consistency between two strips sharing a key.
 
-`Input2MixbusStrip` illustre les requêtes et setters. `inputGainStrip::setInputGain()` contient encore une implémentation commentée : ne pas copier ce squelette en le considérant terminé. Le strip OSC générique comporte aussi du code incomplet, à examiner avant réutilisation.
+`Input2MixbusStrip` illustrates requests and setters. `inputGainStrip::setInputGain()` still contains a commented-out implementation: do not copy this skeleton as though it were complete. The generic OSC strip also contains incomplete code that must be examined before reuse.
 
-### Nouvelle interface ou nouvelle console
+### New interface or mixer
 
-1. Séparer le transport de la logique métier. Étendre `DeviceInterface` ou un transport existant ; pour une console, suivre `MixerDevice<Transport>`.
-2. Choisir un nom et un groupe stables ; exposer les propriétés par `Address` et `registerDataSetAddress()`.
-3. Implémenter démarrage, arrêt et surveillance ; gérer perte réseau, reconnexion et changements de propriétés sans bloquer `app.refresh()`.
-4. Définir sérialisation, restauration, états et événements. Préserver l'inscription/désinscription et les budgets de services réseau existants.
-5. Pour une console, respecter `MixerBase`, les couples request/set, les datasets de noms, la découverte/identification et les limites du modèle. Répercuter les écritures et retours dans les valeurs partagées.
-6. Instancier l'interface dans l'application active et vérifier son exposition à la configuration web.
-7. Valider entrées invalides, limites d'indices, mode hors ligne, synchronisation et compatibilité des configurations sauvegardées.
+1. Separate transport from domain logic. Extend `DeviceInterface` or an existing transport; for a mixer, follow `MixerDevice<Transport>`.
+2. Choose a stable name and group; expose properties through `Address` and `registerDataSetAddress()`.
+3. Implement startup, shutdown, and monitoring; handle network loss, reconnection, and property changes without blocking `app.refresh()`.
+4. Define serialization, restoration, states, and events. Preserve subscriptions/unsubscriptions and existing network service budgets.
+5. For a mixer, follow `MixerBase`, request/set pairs, name datasets, discovery/identification, and model limits. Reflect writes and responses in shared values.
+6. Instantiate the interface in the active application and verify its exposure to web configuration.
+7. Validate invalid inputs, index limits, offline operation, synchronization, and compatibility with saved configurations.
 
-### Mémoire et robustesse
+### Memory and robustness
 
-Employer des buffers bornés dans les chemins de parsing/transport, vérifier les tailles et résultats d'allocation, documenter qui possède les objets. Le code mélange `std::vector`, LinkedList et allocations dynamiques : conserver les contrats existants et mesurer avant une migration de conteneur. Une refonte générale de mémoire ne fait pas partie de cette consolidation documentaire.
+Use bounded buffers in parsing/transport paths, check sizes and allocation results, and document object ownership. The code mixes `std::vector`, LinkedList, and dynamic allocations: preserve existing contracts and measure before migrating containers. A general memory redesign is outside this documentation consolidation.
 
-## 5. Construction, dépendances et ressources
+## 5. Builds, dependencies, and resources
 
-La référence des options de build est `platformio.ini` : `espressif32@6.4.0`, Arduino, Seeed XIAO ESP32-S3, LittleFS, console 115200 bauds.
+The build-option reference is `platformio.ini`: `espressif32@6.4.0`, Arduino, Seeed XIAO ESP32-S3, LittleFS, 115200-baud console.
 
-| Environnement | Particularités |
+| Environment | Specifics |
 |---|---|
-| `dev` | DEBUG, ordre TFT avant composants, scripts pre/post et production d'archives |
-| `prod` | release, PROD=1, USB OTG/TinyUSB avec CDC au démarrage désactivé, script pre TFT uniquement |
+| `dev` | DEBUG, TFT before components, pre/post scripts, and archive generation |
+| `prod` | release, PROD=1, USB OTG/TinyUSB with boot CDC disabled, TFT pre-script only |
 
-Commandes de compilation : `pio run -e dev` et `pio run -e prod`. La compilation dev déclenche des effets sur les fichiers et une destination externe : inspecter les scripts avant exécution. Une compilation réussie ne prouve pas le fonctionnement matériel.
+Build commands: `pio run -e dev` and `pio run -e prod`. The dev build has file side effects and an external destination: inspect scripts before running them. A successful build does not prove hardware operation.
 
-`prescript.py` injecte `USER_SETUP_LOADED`, le pilote `ILI9341_2_DRIVER`, les broches TFT, les transactions SPI et une fréquence demandée de 48 MHz. Les réglages génériques de TFT_eSPI ne sont donc pas la référence effective de ce montage.
+`prescript.py` injects `USER_SETUP_LOADED`, the `ILI9341_2_DRIVER` driver, TFT pins, SPI transactions, and a requested frequency of 48 MHz. Generic TFT_eSPI settings are therefore not the effective reference for this hardware.
 
-Les dépendances combinent registre PlatformIO, URL Git et bibliothèques embarquées localement. Certaines références sont épinglées, d'autres non. Ethernet, mWebSockets et TFT_eSPI contiennent des adaptations ou réglages locaux : ne pas les remplacer aveuglément. `Interfaces_LEGACY.h` est un fichier historique, pas le modèle conseillé pour de nouvelles interfaces.
+Dependencies combine the PlatformIO registry, Git URLs, and locally bundled libraries. Some references are pinned; others are not. Ethernet, mWebSockets, and TFT_eSPI contain local adaptations or settings: do not replace them blindly. `Interfaces_LEGACY.h` is historical, not the recommended model for new interfaces.
 
-### Web et mise à jour
+### Web resources and updates
 
-`data/webapp/` contient principalement des ressources gzip, traductions, polices et images. `preparefiles.py` et sa variante macOS assurent la préparation des assets. L'analyse initiale relève un chemin source `K:`, un helper Windows, des appels aux services de minification Toptal et un déclenchement de workflow à l'import. Ces contraintes de portabilité sont suivies dans la roadmap ; le code source web éditable n'est pas à présumer disponible à partir des seuls fichiers compressés.
+`data/webapp/` mainly contains gzip resources, translations, fonts, and images. `preparefiles.py` and its macOS variant prepare assets. The initial analysis notes a `K:` source path, a Windows helper, calls to Toptal minification services, and workflow execution on import. These portability constraints are tracked in roadmap; editable web source must not be assumed available from compressed files alone.
 
-`gzfw_to_data.py` compresse le firmware dans `data/`. `make_tgz.py` utilise la version `_V`, archive `data/` et déplace l'archive ainsi que le firmware compressé vers `/Volumes/web/fwupdate`, en créant le dossier si nécessaire. Le build dev couple donc compilation et préparation de déploiement. Le build prod ne déclenche pas ces deux post-scripts.
+`gzfw_to_data.py` compresses firmware into `data/`. `make_tgz.py` uses version `_V`, archives `data/`, and moves the archive and compressed firmware to `/Volumes/web/fwupdate`, creating the folder if needed. The dev build therefore couples compilation and deployment preparation. The prod build does not trigger these two post-scripts.
 
-Les constantes du framework indiquent `infrafast.fr`, `/fwupdate/`, `/webapp` et l'extension `.tgz`. Ne pas déduire le protocole HTTP/TLS de ces seuls noms.
+Framework constants specify `infrafast.fr`, `/fwupdate/`, `/webapp`, and the `.tgz` extension. Do not infer HTTP/TLS behavior from these names alone.
 
-Les zones de fort impact sont `Interval.h`, `src/mixers/`, `platformio.ini` et les scripts de préparation : vérifier leurs effets transversaux avant modification.
+High-impact areas are `Interval.h`, `src/mixers/`, `platformio.ini`, and preparation scripts: check their cross-cutting effects before changes.
 
-## 6. Audit matériel PCB 2.0 / 2.2 — référence historique
+## 6. PCB 2.0 / 2.2 hardware audit — historical reference
 
-Le rapport ci-dessous conserve les mesures, preuves et limites de l'audit du 21 octobre, révisé le 22 octobre 2026, sur le code `58ba13a`. Sa chronologie d'initialisation est historique : voir l'ordre actuel en section 2. Les essais et corrections proposées ont été déplacés dans la roadmap ; ils ne sont pas déclarés réalisés.
+The report below preserves measurements, evidence, and limitations from the October 21 audit, revised on October 22, 2026, against code `58ba13a`. Its initialization timeline is historical: see the current order in section 2. Proposed tests and fixes were moved to roadmap; they are not recorded as completed.
 
+### Audit context
 
-Audit initial du 21 octobre 2026, **révisé le 22 octobre après confirmation que le W5500 est soudé sur U6, et non U7**. Code étudié au commit `58ba13a`, inchangé pour les fichiers d'initialisation depuis l'audit initial, et mêmes archives Gerber. Aucun changement de firmware ni de routage n'a été effectué pendant cet audit.
+Initial audit dated October 21, 2026, **revised on October 22 after confirmation that the W5500 is soldered on U6, not U7**. Code examined at commit `58ba13a`, with initialization files unchanged between the initial audit and its revision, and the same Gerber archives. No firmware or routing changes were made during that audit.
 
-## Conclusion
+### Conclusion
 
-**Avec le W5500 sur U6, la suppression de la liaison centrale de masse devient le changement matériel à tester en priorité.** Le trajet du cuivre du support entre GND XIAO et GND inférieur de U6 passe de **69,7 à 127,9 mm**, alors que les pistes SPI vers U6 changent très peu. Un fil direct vers ce GND U6 reproduit la fonction de la liaison retirée en 2.2, sans modifier le firmware.
+**With the W5500 on U6, removal of the central ground connection is the hardware change to test first.** The carrier-board copper path from XIAO GND to the lower U6 GND increases from **69.7 to 127.9 mm**, while SPI traces to U6 change very little. A direct wire to that U6 GND reproduces the function of the connection removed in 2.2 without modifying firmware.
 
-Cela renforce une hypothèse de retour de masse perturbé ou défectueux, **sans démontrer la cause de la panne** : les pistes de masse sont plus larges en 2.2 et le module relie normalement ses trois GND en interne. Les connexions idéales SPI, reset et alimentation restent compatibles avec le code. Les deux révisions partagent aussi une initialisation sensible aux états de démarrage : le W5500 est interrogé avant le premier pilotage logiciel du reset partagé et du CS écran.
+This strengthens the hypothesis of a disturbed or defective ground return, **without proving the cause of failure**: ground traces are wider in 2.2, and the module normally connects its three GND pins internally. Ideal SPI, reset, and power connections remain compatible with the code. Under the historical initialization order, both revisions also share startup-state sensitivity: the W5500 is queried before software first drives the shared reset and display CS.
 
-Le défaut décrit est donc : W5500 non détecté sur **U6**, couleurs fausses avec **le même XIAO et le même TFT**. L'identité du module W5500 essayé sur les deux PCB n'est pas établie ; son état et ses soudures restent à vérifier. Le contexte U7 du rapport initial est remplacé par U6 dans les calculs, essais et illustrations ci-dessous.
+The reported fault is therefore: W5500 not detected on **U6**, incorrect colors with **the same XIAO and TFT**. Whether the same W5500 module was tested on both PCBs is not established; its condition and solder joints still need checking. The original report's U7 context is replaced by U6 in the calculations, tests, and illustrations below.
 
-## Périmètre et méthode
+### Scope and method
 
-Les deux ZIP contiennent les couches cuivre, sérigraphie, masques, contour et fichiers de perçage. Ils ne contiennent ni schéma, ni nomenclature, ni modèles des composants ou empilage électrique détaillé. Les modules TFT et W5500 ont leur électronique propre, absente de ces fichiers.
+The two ZIP archives contain copper layers, silkscreen, masks, board outline, and drill files. They contain no schematic, bill of materials, component models, or detailed electrical stackup. The TFT and W5500 modules have their own electronics, absent from these files.
 
-J'ai décodé les deux couches cuivre et reconstruit leurs continuités géométriques avec Gerbonara/Shapely, en reliant les couches par les perçages métallisés, **y compris les trous oblongs**. Les pastilles CMS sont évaluées sur leur propre couche : une piste passant dessous sur l'autre couche ne constitue pas une connexion. Les broches sont identifiées par la sérigraphie et le brochage XIAO. Une deuxième lecture indépendante confirme les continuités principales.
+The audit decoded both copper layers and reconstructed their geometric connectivity with Gerbonara/Shapely, linking layers through plated holes, **including slots**. SMD pads were evaluated on their own layer: a trace passing underneath on the other layer does not form a connection. Pins were identified using silkscreen and XIAO pinout. A second independent reading confirmed the main connections.
 
-Les **27 groupes de connexions nommées** comparés sont identiques ; leur inventaire est conservé dans [connexions-verifiees.json](audit-pcb-2.0-2.2/connexions-verifiees.json). Cela couvre les points explicitement identifiés dans cet audit, sans constituer une netlist complète du produit assemblé.
+The **27 named connection groups** compared are identical; their inventory is preserved in [connexions-verifiees.json](audit-pcb-2.0-2.2/connexions-verifiees.json). This covers explicitly identified audit points, not a complete netlist of the assembled product.
 
-La révision U6 reconstruit à nouveau les continuités critiques et les trajets à partir des deux ZIP. Le script [analyse_gerbers.py](audit-pcb-2.0-2.2/analyse_gerbers.py) régénère les illustrations et [mesures-u6.json](audit-pcb-2.0-2.2/mesures-u6.json), avec les empreintes SHA-256 des archives. Un second modèle relie idéalement les trois GND de U6 pour distinguer les chemins du support seul de ceux rendus possibles par le module ; il ne modélise ni ses résistances internes ni ses inductances.
+The U6 revision reconstructs critical connectivity and paths again from both ZIP archives. The [analyse_gerbers.py](audit-pcb-2.0-2.2/analyse_gerbers.py) script regenerates illustrations and [mesures-u6.json](audit-pcb-2.0-2.2/mesures-u6.json), including archive SHA-256 hashes. A second model ideally connects U6's three GND pins to distinguish carrier-only paths from those enabled by the module; it models neither internal resistance nor inductance.
 
-Il s'agit d'une vérification de connectivité et d'une reconstitution de la chronologie logicielle, **pas d'une simulation SPICE ou d'une mesure de carte**. Les continuités supposent une fabrication conforme aux Gerbers ; elles ne prouvent pas la qualité des soudures, métallisations ou composants montés.
+This is a connectivity check and reconstruction of software timing, **not a SPICE simulation or board measurement**. Connectivity assumes manufacturing matches the Gerbers; it does not prove solder, plating, or assembled component quality.
 
-## 1. Ce que le code exige
+### 6.1. What the code requires
 
-La configuration effective est injectée par [prescript.py](../prescript.py). `USER_SETUP_LOADED` fait que la configuration générique de TFT_eSPI ne détermine pas ces broches.
+Effective configuration is injected by [prescript.py](../prescript.py). Because of `USER_SETUP_LOADED`, generic TFT_eSPI configuration does not determine these pins.
 
-| Signal | XIAO | GPIO | Destination | Comparaison 2.0 / 2.2 |
+| Signal | XIAO | GPIO | Destination | 2.0 / 2.2 comparison |
 |---|---|---:|---|---|
-| Activation du rail périphériques | D4 | 5 | EN de l'alimentation commutée, actif HIGH | Identique |
-| CS Ethernet | D5 | 6 | U6 CS, actif LOW ; également U7 CS | Identique |
-| CS écran | D3 | 4 | TFT CS, actif LOW | Identique |
-| Commande/données écran | D6 | 43 | TFT DC | Identique |
-| Reset commun | D7 | 44 | TFT RST et W5500 RST | Identique |
-| Horloge SPI | D8 | 7 | TFT CLK et U6 SCLK ; également U7 | Identique |
-| MOSI | D10 | 9 | TFT MOSI et U6 MOSI ; également U7 | Identique |
-| MISO | D9 | 8 | U6 MISO ; également U7 | Identique |
+| Peripheral rail enable | D4 | 5 | Switched supply EN, active HIGH | Identical |
+| Ethernet CS | D5 | 6 | U6 CS, active LOW; also U7 CS | Identical |
+| Display CS | D3 | 4 | TFT CS, active LOW | Identical |
+| Display command/data | D6 | 43 | TFT DC | Identical |
+| Shared reset | D7 | 44 | TFT RST and W5500 RST | Identical |
+| SPI clock | D8 | 7 | TFT CLK and U6 SCLK; also U7 | Identical |
+| MOSI | D10 | 9 | TFT MOSI and U6 MOSI; also U7 | Identical |
+| MISO | D9 | 8 | U6 MISO; also U7 | Identical |
 
-Le connecteur TFT représenté comporte sept broches et **ne ramène pas de MISO/SDO**. Une contention sur MISO ne doit donc pas être attribuée à cet écran sans autre connexion matérielle. Un CS écran indéterminé peut néanmoins lui faire recevoir des commandes indésirables.
+The depicted TFT connector has seven pins and **does not expose MISO/SDO**. MISO contention must therefore not be attributed to this display without another hardware connection. An undefined display CS can nevertheless cause it to receive unwanted commands.
 
-Les connexions des résistances et des entrées analogiques vérifiées sont également identiques. Les différences initialement suspectées à cet endroit provenaient de croisements entre couches.
+Checked resistor and analog-input connections are also identical. Initially suspected differences there resulted from crossings between layers.
 
-## 2. Exécution virtuelle du démarrage
+### 6.2. Virtual execution of historical startup
 
-Les références principales sont [HWManager.h](../lib/Interval/src/HWManager.h), [HWComponents.h](../lib/Interval/src/HWComponents.h), [w5100.cpp](../lib/Ethernet/src/utility/w5100.cpp) et [TFT_eSPI.cpp](../lib/TFT_eSPI/TFT_eSPI.cpp).
+Main references are [HWManager.h](../lib/Interval/src/HWManager.h), [HWComponents.h](../lib/Interval/src/HWComponents.h), [w5100.cpp](../lib/Ethernet/src/utility/w5100.cpp), and [TFT_eSPI.cpp](../lib/TFT_eSPI/TFT_eSPI.cpp). Line numbers below refer to the historical audited revision.
 
-| Étape | Action effectivement exécutée | Conséquence matérielle |
+| Step | Action performed | Hardware consequence |
 |---|---|---|
-| Construction et attente du bouton | Rail périphériques initialement désactivé | Les périphériques ne sont pas encore en fonctionnement normal |
-| `HWManager.h:281` | GPIO5 passe HIGH | L'alimentation commutée doit monter correctement |
-| `HWManager.h:285` | Initialisation des composants, réseau enregistré en premier | Le W5500 est traité avant le TFT |
-| `HWComponents.h:1290` | `Ethernet.init(GPIO6)`, puis `Ethernet.begin(...)` | Préparation de la détection Ethernet |
-| `w5100.cpp:101` | Attente de **560 ms**, puis configuration SPI/CS Ethernet | Il existe déjà une attente importante avant les premiers échanges |
-| Détection Ethernet | Reset logiciel et tests de registres via SPI, dont `VERSIONR == 4` | Nécessite une alimentation, une masse et un reset physique déjà valides |
-| `HWManager.h:287` | `tft.init(1)` configure enfin CS TFT et GPIO44 | Le matériel détermine leur état pendant la première tentative Ethernet |
-| `TFT_eSPI.cpp:677` | Reset HIGH 5 ms, LOW **20 ms**, HIGH ; attente **150 ms** | Le W5500 reçoit lui aussi ce reset, après sa première initialisation |
-| Configuration TFT | Écriture du format pixels et du contrôle mémoire, sortie de veille ; attente **120 ms** | Des commandes mal reçues peuvent produire un affichage incorrect |
+| Construction and button wait | Peripheral rail initially disabled | Peripherals are not yet operating normally |
+| `HWManager.h:281` | GPIO5 goes HIGH | Switched power must rise correctly |
+| `HWManager.h:285` | Component initialization, networking registered first | W5500 is processed before TFT |
+| `HWComponents.h:1290` | `Ethernet.init(GPIO6)`, then `Ethernet.begin(...)` | Prepares Ethernet detection |
+| `w5100.cpp:101` | **560 ms** wait, then Ethernet SPI/CS configuration | A substantial delay already exists before initial exchanges |
+| Ethernet detection | Software reset and SPI register tests, including `VERSIONR == 4` | Power, ground, and physical reset must already be valid |
+| `HWManager.h:287` | `tft.init(1)` finally configures TFT CS and GPIO44 | Hardware determines their states during the first Ethernet attempt |
+| `TFT_eSPI.cpp:677` | Reset HIGH 5 ms, LOW **20 ms**, HIGH; **150 ms** wait | W5500 also receives this reset after its first initialization |
+| TFT configuration | Pixel-format and memory-control writes, sleep exit; **120 ms** wait | Incorrectly received commands may cause display errors |
 
-Le code de reset matériel propre à `WiFiEth` existe, mais sa configuration initiale et son appel sont commentés (`HWComponents.h:1257` et `:1288`).
+The `WiFiEth` hardware-reset implementation exists, but its initial configuration and call are commented out (`HWComponents.h:1257` and `:1288` in the audited revision).
 
-**Le reset TFT de 20 ms n'est pas trop court pour le W5500** : sa spécification exige au moins 500 µs à LOW. L'ordre d'initialisation et les états avant la première communication sont plus suspects qu'un manque de largeur de cette impulsion. Le commentaire « 500 ns » dans la méthode inutilisée ne correspond pas à la spécification. [Source : fiche constructeur W5500, §5.5.1](https://docs.wiznet.io/img/products/w5500/W5500_ds_v110e.pdf).
+**The 20 ms TFT reset is not too short for W5500**: its specification requires at least 500 µs LOW. Initialization order and states before the first communication are more suspect than insufficient pulse width. The “500 ns” comment in the unused method does not match the specification. [Source: W5500 datasheet, §5.5.1](https://docs.wiznet.io/img/products/w5500/W5500_ds_v110e.pdf).
 
-Cette fragilité existe sur les deux versions. Elle ne démontre donc pas la régression 2.2. De plus, la bibliothèque peut retenter la détection si elle n'a jamais réussi ; une première détection manquée ne suffit pas à expliquer une panne permanente.
+This weakness exists in both revisions. It therefore does not demonstrate the 2.2 regression. Moreover, the library may retry detection if it has never succeeded; one failed initial detection does not by itself explain a permanent failure.
 
-À l'arrêt, le firmware place notamment le reset en `INPUT_PULLDOWN` et les CS à LOW avant de couper le rail (`HWManager.h:397`). Il faut donc comparer aussi un démarrage après extinction logicielle et un démarrage après retrait complet de l'alimentation.
+At shutdown, the firmware places reset in `INPUT_PULLDOWN` and CS lines LOW before cutting power (`HWManager.h:397` in the audited revision). Compare startup after software shutdown with startup after complete power removal.
 
-## 3. Différences réelles dans le cuivre
+### 6.3. Actual copper differences
 
-### Retour de masse
+#### Ground return
 
-![Comparaison des retours de masse](audit-pcb-2.0-2.2/comparaison-masses.png)
+![Ground-return comparison](audit-pcb-2.0-2.2/comparaison-masses.png)
 
-En 2.0, une piste centrale relie directement la masse de la zone alimentation au GND inférieur de U6, vers `(38,735 ; 26,035) mm`, puis au réseau de masse de la partie droite.
+In 2.0, a central trace directly connects the power-area ground to the lower U6 GND, around `(38.735; 26.035) mm`, then to the right-hand ground network.
 
-En 2.2, cette liaison centrale a disparu. Le retour entre la zone XIAO/alimentation et la partie droite passe par :
+In 2.2, this central connection is absent. The return between the XIAO/power area and the right-hand side follows:
 
-`GND XIAO → CN2 → pastille oblongue batterie négative → U16/U15 → U5 → GND inférieur U6`.
+`XIAO GND → CN2 → negative battery slotted pad → U16/U15 → U5 → lower U6 GND`.
 
-Le GND inférieur de U6 se trouve désormais au bout d'une branche remontant depuis U5, au lieu d'être relié directement à la zone alimentation. Le réseau de masse se prolonge aussi vers TFT/U7 et les GND supérieurs de U6.
+The lower U6 GND is now at the end of a branch extending from U5 instead of directly connected to the power area. The ground network also extends toward TFT/U7 and the upper U6 GND pins.
 
-La transition de couche sur la pastille négative de batterie, centrée vers `(1,831 ; 13,537) mm`, devient donc critique. Le fichier `Drill_PTH_Through.DRL` la déclare bien métallisée. **Une métallisation absente ou défectueuse à cet endroit peut couper la masse des périphériques en 2.2**, alors que la 2.0 dispose de la liaison centrale. Ce serait un défaut réel de fabrication à vérifier ; il n'est pas démontré par le ZIP.
+The layer transition at the negative battery pad, centered around `(1.831; 13.537) mm`, therefore becomes critical. `Drill_PTH_Through.DRL` does declare it plated. **Missing or defective plating here can disconnect peripheral ground in 2.2**, whereas 2.0 has the central connection. This would be an actual manufacturing defect to check; it is not demonstrated by the ZIP archive.
 
-En outre, aucune des deux versions ne comporte de plan de masse continu sous le bus SPI. Le retour des courants rapides se fait par des pistes éloignées, et non immédiatement sous les signaux. Le changement de leur trajet peut modifier les perturbations même si un multimètre indique une continuité.
+Neither version has a continuous ground plane beneath SPI. Fast return currents follow distant traces rather than running immediately beneath the signals. Their changed route may alter interference even when a multimeter shows continuity.
 
-### Longueurs et largeurs : ce qu'elles permettent de conclure
+#### Lengths and widths: what they establish
 
-Estimations de chemins de centreligne à partir du cuivre, arrondies ; elles excluent les liaisons internes des modules, les contacts et les boîtiers.
+Rounded centerline path estimates from copper; these exclude internal module connections, contacts, and packages.
 
-| Trajet | 2.0 | 2.2 | Lecture |
+| Path | 2.0 | 2.2 | Interpretation |
 |---|---:|---:|---|
-| XIAO → U6 CS | 39,9 mm | 39,9 mm | Inchangé |
-| XIAO → U6 SCLK | 52,6 mm | 52,8 mm | Pratiquement inchangé |
-| XIAO → U6 MOSI | 58,1 mm | 56,9 mm | Pratiquement inchangé |
-| XIAO → U6 MISO | 39,8 mm | 38,2 mm | Un peu plus court |
-| XIAO → U6 RST | 36,1 mm | 35,8 mm | Pratiquement inchangé |
-| Sortie alimentation commutée → 3V3 U6 | 33,0 mm | 36,7 mm | Un peu plus long, mais plus large |
-| XIAO → TFT CLK | 108,7 mm | 109,0 mm | Pratiquement inchangé |
-| XIAO → TFT MOSI | 110,7 mm | 110,5 mm | Pratiquement inchangé |
-| XIAO GND → U6 GND inférieur | **69,7 mm** | **127,9 mm** | **+58,2 mm, soit environ +84 % sur le support seul** |
-| XIAO GND → U6 GND supérieur gauche | 202,7 mm | 198,9 mm | Support seul, avant les ponts internes du module |
-| XIAO GND → U6 GND supérieur droit | 200,1 mm | 196,3 mm | Support seul, avant les ponts internes du module |
-| XIAO GND → TFT GND | 132,8 mm | 129,0 mm | Pas d'allongement global vers l'écran |
+| XIAO → U6 CS | 39.9 mm | 39.9 mm | Unchanged |
+| XIAO → U6 SCLK | 52.6 mm | 52.8 mm | Nearly unchanged |
+| XIAO → U6 MOSI | 58.1 mm | 56.9 mm | Nearly unchanged |
+| XIAO → U6 MISO | 39.8 mm | 38.2 mm | Slightly shorter |
+| XIAO → U6 RST | 36.1 mm | 35.8 mm | Nearly unchanged |
+| Switched supply output → U6 3V3 | 33.0 mm | 36.7 mm | Slightly longer, but wider |
+| XIAO → TFT CLK | 108.7 mm | 109.0 mm | Nearly unchanged |
+| XIAO → TFT MOSI | 110.7 mm | 110.5 mm | Nearly unchanged |
+| XIAO GND → lower U6 GND | **69.7 mm** | **127.9 mm** | **+58.2 mm, approximately +84% on the carrier alone** |
+| XIAO GND → upper-left U6 GND | 202.7 mm | 198.9 mm | Carrier alone, before internal module bridges |
+| XIAO GND → upper-right U6 GND | 200.1 mm | 196.3 mm | Carrier alone, before internal module bridges |
+| XIAO GND → TFT GND | 132.8 mm | 129.0 mm | No overall increase toward the display |
 
-Les pistes SPI restent à environ **0,15 mm**. Les pistes principales d'alimentation et de masse passent d'environ **0,40 à 0,60 mm**. Une explication par des pistes de puissance devenues plus fines serait donc incorrecte.
+SPI traces remain approximately **0.15 mm** wide. Main power and ground traces increase from approximately **0.40 to 0.60 mm**. An explanation based on narrower power traces would therefore be incorrect.
 
-**Le module U6 change le réseau de masse de la carte assemblée.** Ses GND1, GND2 et GND3 sont normalement communs sur son propre circuit. Les deux trajets de plus de 190 mm du tableau ne sont donc pas les seuls chemins réels : le GND inférieur fournit aussi un accès aux broches supérieures via le module. En reliant idéalement ces trois broches dans le modèle, le plus court chemin de cuivre du support vers leur réseau commun reste de 69,7 mm en 2.0 contre 127,9 mm en 2.2. Cette abstraction ne décrit pas le partage des courants ni le comportement des fronts SPI ; vérifier la continuité réelle entre les trois GND du module et leurs soudures.
+**Module U6 changes the assembled board's ground network.** Its GND1, GND2, and GND3 are normally common on its own PCB. The two paths over 190 mm in the table are therefore not the only actual paths: the lower GND also provides access to the upper pins through the module. Ideally connecting all three pins in the model leaves the shortest carrier copper path to their common network at 69.7 mm in 2.0 versus 127.9 mm in 2.2. This abstraction does not describe current sharing or SPI-edge behavior; check actual continuity between the module's three GND pins and their solder joints.
 
-L'allongement de 84 % ne signifie pas une résistance effective accrue de 84 %. À titre d'illustration, pour une même épaisseur de cuivre et un trajet uniformément élargi de 0,4 à 0,6 mm, la résistance de cette branche n'augmenterait que d'environ 22 %, avant les chemins parallèles. Cela ne suffit pas à expliquer à soi seul une chute importante de la tension 3,3 V. La géométrie des boucles et la qualité des contacts restent les hypothèses à vérifier.
+An 84% length increase does not imply an 84% increase in effective resistance. For illustration, with equal copper thickness and a uniformly widened path from 0.4 to 0.6 mm, that branch's resistance would increase by only approximately 22%, before parallel paths. This alone is insufficient to explain a major 3.3 V voltage drop. Loop geometry and contact quality remain hypotheses to check.
 
-La bibliothèque demande 48 MHz pour le TFT et 14 MHz pour Ethernet. Avec les diviseurs du framework installé et une APB à 80 MHz, les fréquences attendues sont environ 40 MHz et 13,3 MHz ; ce sont des valeurs déduites du code, à mesurer. À ces vitesses, les fronts, les retours de masse et les dérivations vers U7 non monté comptent autant que la longueur globale.
+The library requests 48 MHz for TFT and 14 MHz for Ethernet. With the installed framework's dividers and an 80 MHz APB, expected frequencies are approximately 40 MHz and 13.3 MHz; these are inferred from code and need measurement. At these speeds, edges, ground returns, and branches to unpopulated U7 matter as much as overall length.
 
-Le contrôle géométrique n'a pas révélé de court-circuit idéal entre les réseaux SPI identifiés. Il ne remplace pas le DRC du projet CAO ni le contrôle de la carte fabriquée.
+The geometric check found no ideal short circuit between identified SPI nets. It does not replace CAD DRC or inspection of the manufactured board.
 
+Tests and proposed fixes are in [the roadmap](roadmap.md).
 
-Les essais et propositions de correction figurent dans [la roadmap](roadmap.md).
+### 6.4. Measurement points
 
-## Points de mesure
+![Measurement and rework points](audit-pcb-2.0-2.2/points-mesure.png)
 
-![Repères de mesure et de retouche](audit-pcb-2.0-2.2/points-mesure.png)
-
-Coordonnées en millimètres dans le repère Gerber, vue depuis le dessus. Les broches carrées sont des repères d'orientation ; utiliser aussi la sérigraphie, surtout en retournant la carte.
+Coordinates in millimeters in the Gerber reference frame, viewed from above. Square pads indicate orientation; also use silkscreen, especially when turning the board over.
 
 | Point | X | Y |
 |---|---:|---:|
-| GND XIAO | -18,875 | 23,840 |
-| Reset XIAO D7 | -6,175 | 23,840 |
-| **GND U6 inférieur droit — point B du strap** | **38,735** | **26,035** |
-| GND U6 supérieur gauche | 36,195 | 46,355 |
-| GND U6 supérieur droit | 38,735 | 46,355 |
-| 3V3 U6, rangée inférieure | 33,655 et 36,195 | 26,035 |
-| RST U6, rangée inférieure | 28,575 | 26,035 |
-| CS U6, rangée supérieure | 28,575 | 46,355 |
-| SCLK U6, rangée supérieure | 31,115 | 46,355 |
-| MOSI U6, rangée supérieure | 33,655 | 46,355 |
-| MISO U6, rangée inférieure | 26,035 | 26,035 |
-| GND TFT | 76,280 | 14,729 |
-| Alimentation TFT | 76,280 | 17,269 |
-| CLK TFT | 76,280 | 19,809 |
-| MOSI TFT | 76,280 | 22,349 |
-| RST TFT | 76,280 | 24,889 |
-| DC TFT | 76,280 | 27,429 |
-| CS TFT | 76,280 | 29,969 |
-| Centre du trou oblong négatif batterie | 1,831 | 13,537 |
+| XIAO GND | -18.875 | 23.840 |
+| XIAO D7 reset | -6.175 | 23.840 |
+| **Lower-right U6 GND — jumper point B** | **38.735** | **26.035** |
+| Upper-left U6 GND | 36.195 | 46.355 |
+| Upper-right U6 GND | 38.735 | 46.355 |
+| U6 3V3, lower row | 33.655 and 36.195 | 26.035 |
+| U6 RST, lower row | 28.575 | 26.035 |
+| U6 CS, upper row | 28.575 | 46.355 |
+| U6 SCLK, upper row | 31.115 | 46.355 |
+| U6 MOSI, upper row | 33.655 | 46.355 |
+| U6 MISO, lower row | 26.035 | 26.035 |
+| TFT GND | 76.280 | 14.729 |
+| TFT power | 76.280 | 17.269 |
+| TFT CLK | 76.280 | 19.809 |
+| TFT MOSI | 76.280 | 22.349 |
+| TFT RST | 76.280 | 24.889 |
+| TFT DC | 76.280 | 27.429 |
+| TFT CS | 76.280 | 29.969 |
+| Center of negative battery slot | 1.831 | 13.537 |
 
-## Traçabilité des archives
+### 6.5. Archive traceability
 
 ```text
 gerber 2.0.zip : 816f48444a10b10940ad6487be7759d7bb7c74b2495aaf69b204603db69626e4
 gerber 2.2.zip : e54ce7f20fed21e5af8e3364e44150f06e8e662e9860993b7cdabde0eb5ed2c9
 ```
 
-Avant une correction de CAO définitive, les éléments les plus utiles seraient le résultat des deux premiers essais, une capture rail/reset/CS au démarrage et les schémas/nomenclatures des modules et de l'alimentation. Ils permettraient de transformer les hypothèses électriques en correction ciblée.
+Before a definitive CAD correction, the most useful evidence would be results from the first two tests, a power/reset/CS startup capture, and schematics/bills of materials for the modules and supply. These would help turn electrical hypotheses into a targeted correction.

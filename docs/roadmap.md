@@ -1,135 +1,148 @@
-# Roadmap et suivi des modifications
+# Roadmap and Change Tracking
 
-## Rôle et règles de suivi
+## Purpose and tracking rules
 
-Ce document est la référence unique des demandes, travaux ouverts, validations et résultats d'audits. L'architecture stable est décrite dans [architecture.md](architecture.md) ; les règles de contribution dans [AGENT.md](../AGENT.md).
+This document is the single reference for requests, open work, validation, and audit results. Stable architecture is described in [architecture.md](architecture.md); contribution rules are in [AGENT.md](../AGENT.md).
 
-Consolidation documentaire du 24 octobre 2026. Les anciennes cases non cochées sont conservées comme demandes historiques **à requalifier**, sans supposer que le code actuel ne les implémente pas déjà. Les pistes issues d'une analyse restent des propositions, pas des fonctionnalités commandées ou validées.
+Documentation consolidated on October 24, 2026. Previously unchecked items remain historical requests **to be assessed**, without assuming that current code does not already implement them. Analysis-derived ideas remain proposals, not requested or validated features.
 
-Statuts : **À qualifier**, **À faire**, **En cours**, **À valider**, **Terminé**, **Abandonné**. Chaque nouvelle demande reçoit un identifiant stable, une origine, un périmètre, des critères d'acceptation et, à sa clôture, la preuve de validation et le commit concerné. Ne pas déclarer « Terminé » sur la seule présence d'une classe.
+Statuses: **To assess**, **To do**, **In progress**, **To validate**, **Done**, **Abandoned**. Each new request receives a stable ID, origin, scope, acceptance criteria, and, on completion, validation evidence and the relevant commit. Do not mark an item “Done” solely because a class exists.
 
-## 1. Demande documentaire
+All entries must be written in English. Every code change must be documented here, with the appropriate architecture and user-facing documentation updates, following `AGENT.md`.
 
-| ID | Demande | Statut | Critères / résultat |
+## 1. Documentation requests
+
+| ID | Request | Status | Criteria / result |
 |---|---|---|---|
-| DOC-01 | Séparer présentation utilisateur, architecture, suivi et consignes agent | Terminé — documentation | Création de README.md, docs/architecture.md, docs/roadmap.md et AGENT.md ; regroupement des trois anciens documents de projet |
-| DOC-02 | Centraliser le contenu des audits et conserver les supports en sous-dossiers | Terminé — documentation | Mesures et constats PCB dans l'architecture ; essais et corrections dans cette roadmap ; supports d'origine conservés |
-| DOC-03 | Vérifier l'application du modèle documentaire à chaque changement | Règle permanente | Aucun nouveau document de contenu ; mise à jour du fichier de référence concerné |
+| DOC-01 | Separate user overview, architecture, tracking, and agent instructions | Done — documentation | Created README.md, docs/architecture.md, docs/roadmap.md, and AGENT.md; consolidated the three previous project documents |
+| DOC-02 | Centralize audit content and retain supporting materials in subfolders | Done — documentation | PCB measurements and findings in architecture; tests and corrections in this roadmap; original supporting materials retained |
+| DOC-03 | Check documentation organization with every change | Permanent rule | No new content documentation; update the appropriate reference file |
+| DOC-04 | Translate all four project documents into English and require English documentation | Done — documentation | All four Markdown documents translated; identifiers, links, measurements, and historical limitations preserved; English-language rule added to AGENT.md |
+| DOC-05 | Require documentation for every code change | Done — documentation | AGENT.md requires roadmap updates for every code change and architecture/README updates according to impact; documentation is part of completion |
 
-### Résultat de l'audit documentaire
+### Documentation audit results
 
-- Aucun README racine, document d'architecture ou roadmap n'était présent dans l'arbre examiné.
-- `ANALYSE_REPO.md` regroupait présentation, architecture, consignes et pistes de modernisation : contenu redistribué entre les quatre références.
-- `lib/Interval/README.md` contenait une liste de demandes : reprise complète ci-dessous.
-- `docs/audit-pcb-2.0-2.2/README.md` mélangeait constats, essais et propositions : séparation entre architecture et roadmap, avec conservation des mesures et de leurs limites.
-- L'ancien ordre de démarrage n'est plus universel : `dev` active TFT avant composants ; `prod` conserve le défaut historique. Le rapport PCB est identifié comme historique.
-- Les anciens documents de projet regroupés sont supprimés pour éviter deux sources concurrentes.
-- Les README, changelogs et documents des dépendances distribuées, notamment sous `flash/` (esptool) et les bibliothèques tierces, restent des documents amont. Ils ne constituent pas des références de conception du projet et ne sont pas supprimés.
-- Le sous-dossier PCB conserve illustrations PNG, mesures JSON et script de reproduction existant. Aucun rapport distinct n'y sera ajouté.
+- No root README, architecture document, or roadmap existed in the original examined tree.
+- `ANALYSE_REPO.md` combined overview, architecture, instructions, and modernization ideas: content redistributed across the four references.
+- `lib/Interval/README.md` contained a request list: fully carried over below.
+- `docs/audit-pcb-2.0-2.2/README.md` combined findings, tests, and proposals: split between architecture and roadmap, preserving measurements and limitations.
+- The historical startup order is no longer universal: `dev` enables TFT before components; `prod` keeps the historical default. The PCB report is identified as historical.
+- Consolidated old project documents were removed to avoid competing sources.
+- READMEs, changelogs, and documents from distributed dependencies, especially `flash/` (esptool) and third-party libraries, remain upstream documents. They are not project design references and are not removed.
+- The PCB subfolder retains PNG illustrations, JSON measurements, and the existing reproduction script. No separate report will be added there.
 
-## 2. Fonctionnalités et points incomplets observés
+## 2. Observed features and incomplete areas
 
-| ID | Travail | Statut | Critères d'acceptation |
+| ID | Work | Status | Acceptance criteria |
 |---|---|---|---|
-| MIX-01 | Terminer le strip de gain d'entrée | À faire | Relier lecture/écriture au contrat console, borner et convertir les valeurs, gérer les retours ; vérifier les backends supportés et la persistance |
-| OSC-01 | Requalifier et terminer le strip OSC générique | À qualifier | Vérifier bibliothèque de messages, parsing, sérialisation et réception ; scénario émission/réception validé |
-| MEM-01 | Auditer les réservations et liaisons des strips console | À qualifier | Absence de pointeur non initialisé/dangling, libération sur changement/suppression, interface absente/remplacée gérée ; deux strips de même clé cohérents |
-| HW-01 | Comparer les deux ordres d'initialisation TFT/W5500 | À valider | Essais dev/prod, démarrages à froid et réveils, résultats Ethernet et couleurs enregistrés ; décision documentée avant généralisation |
+| MIX-01 | Complete the input-gain strip | To do | Connect reads/writes to the mixer contract, bound and convert values, handle responses; check supported backends and persistence |
+| OSC-01 | Assess and complete the generic OSC strip | To assess | Check message library, parsing, serialization, and reception; validate a send/receive scenario |
+| MEM-01 | Audit mixer-strip reservations and bindings | To assess | No uninitialized/dangling pointers; release on changes/deletion; handle missing/replaced interfaces; two strips with the same key remain consistent |
+| HW-01 | Compare both TFT/W5500 initialization orders | To validate | dev/prod tests, cold starts and wake-ups, Ethernet and color results recorded; decision documented before generalization |
 
-Ces points sont dérivés du code relu pour la consolidation ; ils ne constituent pas un audit exhaustif du firmware.
+These items derive from code reviewed for consolidation; they are not an exhaustive firmware audit.
 
-## 3. Demandes historiques de la bibliothèque Interval
+## 3. Historical Interval library requests
 
-Origine : toutes les cases non cochées de l'ancien `lib/Interval/README.md`. Aucun achèvement n'est déduit ici.
+Origin: all unchecked items in the former `lib/Interval/README.md`. No completion is inferred here.
 
-| ID | Demande conservée | Statut | Validation attendue |
+| ID | Preserved request | Status | Expected validation |
 |---|---|---|---|
-| INT-01 | Ajouter des templates supplémentaires avec exemples | À qualifier | Identifier les templates manquants ; exemples intégrés aux fichiers autorisés ou au code concerné |
-| INT-02 | Vérifier la consommation mémoire lors de la suppression de MenuSystem | À qualifier | Mesurer créations/suppressions répétées et mémoire récupérée |
-| INT-03 | Implémenter le destructeur de menuSystem, suppression de tous les MenuComponent puis ajustement de l'allocation | À qualifier | Vérifier l'ownership et l'allocateur actuel ; l'ancienne suggestion `realloc()` n'est pas une prescription sans cette vérification |
-| INT-04 | Ajouter le mode AP pour le wizard | À qualifier | Définir l'écart avec l'AccessPoint existant ; valider entrée/sortie du parcours |
-| INT-05 | Ajouter l'écran wizard | À qualifier | Parcours initial et retour à la configuration normale validés |
-| INT-06 | Ajouter l'icône de profil | À qualifier | Affichage et sélection cohérents |
-| INT-07 | Ajouter chargement et sauvegarde de profil | À qualifier | Aller-retour persistant et erreurs de lecture gérées |
-| INT-08 | Rendre Label compatible float et y déplacer le code concerné d'ArcMeter | À qualifier | Affichage numérique commun, formats et valeurs limites vérifiés |
-| INT-09 | Ajouter une icône aux éléments de menu | À qualifier | Rendu cohérent dans les menus concernés |
-| INT-10 | Ajouter icône et label au fichier de traduction | À qualifier | Clés, repli et changement de langue vérifiés |
-| INT-11 | Implémenter le texte des éléments de menu | À qualifier | Valeurs initiales et mises à jour affichées |
-| INT-12 | Implémenter le feedback des éléments de menu | À qualifier | Retour d'état synchronisé avec l'action |
-| INT-13 | Ajouter les fichiers multilingues chinois | À qualifier | Couverture des clés, polices et encodage vérifiés |
-| INT-14 | Ajouter/compléter les fichiers multilingues espagnols | À qualifier | Un `espanol.json.gz` existe déjà ; vérifier la couverture avant de considérer cette demande terminée |
+| INT-01 | Add more templates with examples | To assess | Identify missing templates; integrate examples into authorized files or the relevant code |
+| INT-02 | Check memory consumption when deleting MenuSystem | To assess | Measure repeated creation/deletion and recovered memory |
+| INT-03 | Implement the menuSystem destructor, delete all MenuComponent objects, then adjust allocation | To assess | Check ownership and current allocator; the historical `realloc()` suggestion is not a prescription without this check |
+| INT-04 | Add AP mode for the wizard | To assess | Define the gap relative to existing AccessPoint support; validate entering/leaving the flow |
+| INT-05 | Add a wizard screen | To assess | Validate initial setup flow and return to normal configuration |
+| INT-06 | Add a profile icon | To assess | Consistent display and selection |
+| INT-07 | Add profile loading and saving | To assess | Persistent round trip and read-error handling |
+| INT-08 | Make Label float-compatible and move the relevant ArcMeter code into it | To assess | Check shared numeric display, formatting, and boundary values |
+| INT-09 | Add icons to menu items | To assess | Consistent rendering in affected menus |
+| INT-10 | Add icon and label to the translation file | To assess | Check keys, fallback, and language switching |
+| INT-11 | Implement menu-item text | To assess | Display initial values and updates |
+| INT-12 | Implement menu-item feedback | To assess | State feedback synchronized with the action |
+| INT-13 | Add Chinese multilingual files | To assess | Check key coverage, fonts, and encoding |
+| INT-14 | Add/complete Spanish multilingual files | To assess | An `espanol.json.gz` file already exists; check coverage before marking the request complete |
 
-## 4. Maintenance issue de l'analyse du dépôt
+## 4. Maintenance from repository analysis
 
-Ces éléments reprennent les risques et opportunités de `ANALYSE_REPO.md`.
+These items preserve risks and opportunities from `ANALYSE_REPO.md`.
 
-| ID | Proposition | Statut | Critères d'acceptation |
+| ID | Proposal | Status | Acceptance criteria |
 |---|---|---|---|
-| TOOL-01 | Paramétrer les chemins source/destination des scripts | À qualifier | Plus de dépendance obligatoire à K: ou /Volumes/web/fwupdate ; conventions documentées dans l'architecture |
-| TOOL-02 | Séparer packaging et déplacement de déploiement | À qualifier | Build local déterministe, effets externes explicites et optionnels |
-| TOOL-03 | Prévoir une minification locale ou facultative | À qualifier | Préparation des assets possible sans service HTTP externe ; échec contrôlé |
-| TOOL-04 | Éviter le lancement du workflow lors d'un simple import des scripts | À qualifier | Import sans suppression, copie ni appel réseau involontaire |
-| DEP-01 | Inventorier les patchs locaux et références de dépendances | À qualifier | Origine/version/raison des adaptations décrites dans l'architecture ; mise à jour reproductible |
-| CI-01 | Vérifier automatiquement les compilations dev et prod | À qualifier | Deux environnements compilés, effets de packaging maîtrisés ; aucun nouveau fichier de workflow dans la présente demande documentaire |
+| TOOL-01 | Parameterize script source/destination paths | To assess | No mandatory dependency on K: or /Volumes/web/fwupdate; conventions documented in architecture |
+| TOOL-02 | Separate packaging from deployment moves | To assess | Deterministic local build, explicit and optional external side effects |
+| TOOL-03 | Provide local or optional minification | To assess | Asset preparation possible without an external HTTP service; controlled failure |
+| TOOL-04 | Avoid workflow execution on simple script import | To assess | Import without unintended deletion, copying, or network calls |
+| DEP-01 | Inventory local patches and dependency references | To assess | Adaptation origin/version/rationale described in architecture; reproducible updates |
+| CI-01 | Automatically check dev and prod builds | To assess | Both environments compiled, packaging side effects controlled; no new workflow file in this documentation task |
 
-## 5. Audit PCB 2.0 / 2.2 — suivi des essais
+## 5. PCB 2.0 / 2.2 audit — test tracking
 
-Origine : audit initial du 21 octobre 2026, révision U6 du 22 octobre, code étudié `58ba13a`. Les constats, brochages, mesures, illustrations, empreintes d'archives et limites de la méthode sont conservés dans [l'architecture](architecture.md). Aucun résultat de mesure sur carte n'est fourni par cet audit documentaire.
+Origin: initial audit dated October 21, 2026, U6 revision dated October 22, examined code `58ba13a`. Findings, pinouts, measurements, illustrations, archive hashes, and method limitations are preserved in [architecture](architecture.md). This documentation audit provides no board-measurement results.
 
-| ID | Action | Statut | Validation attendue |
+| ID | Action | Status | Expected validation |
 |---|---|---|---|
-| PCB-01 | Contrôler continuités et soudures des trois masses U6 et du TFT | À valider | Mesures hors tension, contrôle de la métallisation de la pastille batterie |
-| PCB-02 | Tester le strap GND XIAO → GND inférieur droit U6 | À valider | Même firmware, démarrages répétés ; noter séparément détection Ethernet et couleurs |
-| PCB-03 | Tester le retour GND TFT si nécessaire | À valider | Comparaison avec/sans retour supplémentaire après PCB-02 |
-| PCB-04 | Capturer rail local, reset, CS et SPI | À valider | Captures au démarrage et au réveil, référence de sonde adaptée |
-| PCB-05 | Définir la prochaine révision de PCB à partir des essais | Proposition à valider | Retour direct/plan GND, découplage, états CS et amortissement évalués ; aucune cause présentée comme démontrée |
-| PCB-06 | Étudier un reset W5500 distinct seulement si nécessaire | Proposition à valider | Chronologie et compatibilité électrique/firmware validées |
+| PCB-01 | Check continuity and solder joints for all three U6 grounds and TFT | To validate | Power-off measurements; inspect battery-pad plating |
+| PCB-02 | Test the XIAO GND → lower-right U6 GND jumper | To validate | Same firmware, repeated startups; record Ethernet detection and colors separately |
+| PCB-03 | Test the TFT ground return if necessary | To validate | Compare with/without additional return after PCB-02 |
+| PCB-04 | Capture local power rail, reset, CS, and SPI | To validate | Startup and wake-up captures, suitable probe reference |
+| PCB-05 | Define the next PCB revision from test results | Proposal to validate | Evaluate direct return/ground plane, decoupling, CS states, and damping; do not present any cause as proven |
+| PCB-06 | Study a separate W5500 reset only if needed | Proposal to validate | Validate timing and electrical/firmware compatibility |
 
-### Protocole et propositions conservés de l'audit
+### Protocol and proposals preserved from the audit
 
-Le protocole ci-dessous est conservé comme proposition historique. Pour comparer les PCB, fixer et noter la valeur de `HW_INIT_TFT_BEFORE_COMPONENTS` : l'ordre TFT d'abord est désormais activé dans dev. Ne pas mélanger un changement matériel et un changement de firmware dans le même essai.
+The protocol below is preserved as a historical proposal. When comparing PCBs, fix and record `HW_INIT_TFT_BEFORE_COMPONENTS`: TFT-first order is now enabled in dev. Do not combine a hardware change and a firmware change within the same test.
 
-## 4. Essais prioritaires, avec le firmware actuel
+### 5.1. Priority tests with a fixed firmware version
 
-Faire un seul changement à la fois et répéter plusieurs démarrages à froid ainsi que plusieurs extinctions/réveils.
+Make one change at a time and repeat several cold starts and shutdown/wake-up cycles.
 
-| Ordre | Essai | Résultat exploitable |
+| Order | Test | Useful result |
 |---|---|---|
-| 1 | Hors tension, mesurer GND XIAO ↔ chacun des trois GND U6 ↔ GND TFT. Contrôler leurs soudures et le passage entre faces de la pastille négative batterie | Une coupure ou une résistance anormale donne une cause matérielle directe |
-| 2 | Poser hors tension un fil de masse isolé, aussi direct que possible, entre **GND XIAO et GND inférieur droit U6** : points A-B sur l'illustration. Refaire les démarrages avec le même firmware | Si Ethernet redevient détectable, la liaison supprimée devient fortement impliquée ; si les couleurs reviennent aussi, une origine électrique commune est renforcée |
-| 3 | Garder A-B, puis ajouter un retour GND direct XIAO → TFT (A-C) si nécessaire | Distingue une amélioration propre à U6 d'une sensibilité supplémentaire de l'écran ; noter séparément Ethernet et couleurs |
-| 4 | Mesurer à l'oscilloscope le 3,3 V **entre les broches locales 3V3 et GND de U6**, puis aux bornes d'alimentation du TFT, pendant tout le démarrage | Une chute ou une montée incorrecte oriente vers alimentation, commutation ou découplage |
-| 5 | Capturer GPIO5/rail, RST U6, CS U6, CS TFT et SCLK, avec référence de masse locale courte | Vérifier la libération du reset avant la première trame Ethernet, les 20 ms LOW ultérieurs et les CS pendant les échanges de l'autre périphérique |
-| 6 | Si le TFT est démontable, le déconnecter hors tension puis tester U6 seul ; le W5500 étant soudé, commencer par les essais sans dessoudage | Une récupération Ethernet désigne une interaction par alimentation, reset ou SPI, sans identifier à elle seule laquelle |
-| 7 | Si alimentation/reset/CS sont corrects, observer SCLK et MOSI aux récepteurs et essayer une résistance série proche de la source | Une amélioration reproductible confirme une sensibilité à la qualité des fronts |
+| 1 | With power off, measure XIAO GND ↔ each of the three U6 GND pins ↔ TFT GND. Check their solder joints and inter-layer continuity at the negative battery pad | An open circuit or abnormal resistance provides a direct hardware cause |
+| 2 | With power off, install an insulated ground wire, as direct as possible, between **XIAO GND and lower-right U6 GND**: points A-B in the illustration in architecture. Repeat startups with the same firmware | If Ethernet becomes detectable again, the removed connection is strongly implicated; if colors also recover, a common electrical origin is more likely |
+| 3 | Retain A-B, then add a direct XIAO → TFT ground return (A-C) if needed | Distinguishes improvement specific to U6 from additional display sensitivity; record Ethernet and colors separately |
+| 4 | Use an oscilloscope to measure 3.3 V **between U6's local 3V3 and GND pins**, then at the TFT power terminals, throughout startup | A voltage drop or incorrect rise points toward supply, switching, or decoupling |
+| 5 | Capture GPIO5/rail, U6 RST, U6 CS, TFT CS, and SCLK with a short local ground reference | Check reset release before the first Ethernet frame, the later 20 ms LOW pulse under historical order, and CS states during the other peripheral's exchanges |
+| 6 | If TFT is removable, disconnect it with power off and test U6 alone; since W5500 is soldered, start with tests that require no desoldering | Ethernet recovery indicates interaction through power, reset, or SPI, without identifying which one by itself |
+| 7 | If power/reset/CS are correct, observe SCLK and MOSI at the receivers and try a series resistor near the source | A reproducible improvement confirms sensitivity to signal-edge quality |
 
-Pour le W5500 nu, la plage VDD spécifiée est **2,97 à 3,63 V**, par rapport à son GND local. Si le module comporte un régulateur ou une autre alimentation, mesurer aussi la tension réellement appliquée au circuit. [Source : W5500, §5.3](https://docs.wiznet.io/img/products/w5500/W5500_ds_v110e.pdf).
+For the bare W5500, specified VDD is **2.97 to 3.63 V**, relative to its local GND. If the module includes a regulator or another supply arrangement, also measure the voltage actually applied to the IC. [Source: W5500, §5.3](https://docs.wiznet.io/img/products/w5500/W5500_ds_v110e.pdf).
 
-Utiliser une connexion de sonde courte ou une mesure différentielle adaptée : les masses communes des instruments peuvent elles-mêmes créer un retour supplémentaire et masquer le défaut recherché.
+Use a short probe connection or a suitable differential measurement: common instrument grounds can themselves create an additional return and hide the fault being investigated.
 
-Pour les fausses couleurs, vérifier si les commandes TFT de format et de contrôle mémoire sont reçues correctement : l'initialisation écrit `PIXFMT (0x3A) = 0x55`, puis `MADCTL (0x36) = 0x08` ; la rotation réécrit ensuite `MADCTL`. Une couleur incorrecte ne prouve pas que l'écran a changé de mode : un bit perdu, une commande mal reçue ou des données pixels corrompues restent possibles. Le même XIAO et le même écran rendent l'hypothèse d'une différence de contrôleur ou de configuration persistante beaucoup moins convaincante.
+For incorrect colors, check whether TFT pixel-format and memory-control commands are received correctly: initialization writes `PIXFMT (0x3A) = 0x55`, then `MADCTL (0x36) = 0x08`; rotation later rewrites `MADCTL`. An incorrect color does not prove a display-mode change: a lost bit, incorrectly received command, or corrupted pixel data remains possible. Using the same XIAO and display makes a different controller or persistent configuration much less convincing.
 
-## 5. Corrections proposées pour une prochaine PCB compatible avec le code
+### 5.2. Proposed corrections for a future PCB compatible with the code
 
-1. **Rétablir un retour direct de masse vers U6 en priorité.** Relier largement la masse commune de la zone alimentation/XIAO au GND inférieur droit de U6, comme la 2.0, puis prévoir un plan de masse continu et cousu par des vias jusqu'aux périphériques. Conserver les trois GND U6 raccordés au plan et assurer un retour TFT proche du SPI. Ne plus dépendre d'un unique trou oblong mécanique pour le retour des périphériques. Le strap A-B doit idéalement confirmer cette piste avant une nouvelle fabrication.
+1. **Restore a direct ground return to U6 first.** Widely connect the common power/XIAO-area ground to lower-right U6 GND as in 2.0, then provide a continuous ground plane stitched with vias to the peripherals. Keep all three U6 GND pins connected to the plane and provide a TFT return close to SPI. Stop depending on a single mechanical slot for peripheral ground return. Ideally, jumper A-B should confirm this hypothesis before manufacturing a new board.
 
-2. **Prévoir du découplage local.** Placer les emplacements près des entrées d'alimentation des modules, avec des liaisons GND courtes : typiquement 100 nF et quelques µF. Déterminer les valeurs montées après identification des modules, de l'interrupteur d'alimentation et de leurs contraintes de stabilité et de courant de démarrage. Ajouter une grosse capacité au hasard peut aussi dégrader la montée du rail.
+2. **Provide local decoupling.** Place footprints near module supply inputs with short GND connections: typically 100 nF and a few µF. Determine fitted values after identifying the modules, power switch, and their stability and startup-current constraints. Randomly adding a large capacitor can also degrade rail rise.
 
-3. **Définir les états de démarrage des CS.** Prévoir un pull-up, typiquement 10 kΩ, sur chaque CS vers le **rail 3,3 V commuté des périphériques**, sous réserve des résistances déjà présentes sur les modules. Cela conserve les sélections actives à LOW attendues par le code. Le reset doit aussi avoir un niveau de repos défini ; vérifier sa polarisation existante avant d'ajouter une résistance. Éviter de tirer un périphérique éteint vers un rail permanent.
+3. **Define startup CS states.** Provide a pull-up, typically 10 kΩ, on each CS to the **switched peripheral 3.3 V rail**, subject to resistors already present on the modules. This preserves the active-LOW selections expected by the code. Reset also needs a defined idle level; check its existing bias before adding a resistor. Avoid pulling an unpowered peripheral toward a permanent rail.
 
-4. **Prévoir l'amortissement du SPI.** Ajouter des emplacements pour résistances série sur SCLK et MOSI, près du XIAO. Essayer par exemple 22–47 Ω, à ajuster sur les formes d'onde ; ce n'est pas une valeur garantie par les Gerbers. Pour MISO, la source est le W5500. Des emplacements sur CS/DC sont utiles si les mesures révèlent des fronts perturbés. Le placement près de la source suit les principes de terminaison série décrits dans le [guide de conception SPI TI TIDA-060045](https://www.ti.com/lit/pdf/tiduf78).
+4. **Provide SPI damping.** Add series-resistor footprints on SCLK and MOSI near the XIAO. Try, for example, 22–47 Ω, adjusted from observed waveforms; this is not a value guaranteed by the Gerbers. For MISO, the source is W5500. Footprints on CS/DC are useful if measurements reveal disturbed edges. Placement near the source follows the series-termination principles described in the [TI TIDA-060045 SPI design guide](https://www.ti.com/lit/pdf/tiduf78).
 
-5. **Limiter les dérivations inutilisées vers U7.** Les empreintes alternatives U6/U7 créent des branches sur le bus. Prévoir des liaisons sélectionnables ou des résistances 0 Ω permettant d'isoler l'empreinte non montée, sans changer les GPIO du firmware. Sur cette carte, il faut conserver U6 et l'écran. Garder une référence de masse proche des signaux.
+5. **Limit unused branches toward U7.** Alternative U6/U7 footprints create bus branches. Provide selectable connections or 0 Ω resistors to isolate the unpopulated footprint without changing firmware GPIOs. On this board, retain U6 and the display. Keep a ground reference close to signals.
 
-6. **Traiter séparément le reset partagé si les captures le justifient.** Le firmware actuel remet physiquement le W5500 à zéro pendant l'initialisation TFT. Un montage distinct de reset à la mise sous tension pour le W5500 peut éviter cela, mais demande une vraie validation de son délai, de la rampe du rail et de la procédure Ethernet après reset ESP32. Ne pas installer un simple gros condensateur sur GPIO44 ni mettre en opposition un superviseur et la sortie push-pull du XIAO. Ce point reste une option de conception, pas un correctif démontré de la régression.
+6. **Address shared reset separately if captures justify it.** Under historical initialization order, firmware physically resets W5500 during TFT initialization after the first Ethernet initialization. A separate W5500 power-on reset circuit can avoid this, but requires proper validation of its delay, rail ramp, and Ethernet procedure after ESP32 reset. Do not simply add a large capacitor on GPIO44 or drive a supervisor against the XIAO push-pull output. This remains a design option, not a proven fix for the regression.
 
-Les priorités 1 à 5 conservent le brochage, les polarités et le firmware actuels. Leur efficacité sur la panne doit être validée par les essais ci-dessus ; la priorité 6 demande une étude supplémentaire.
+Priorities 1–5 preserve the audited pinout, polarities, and firmware. Their effectiveness against the fault must be validated by the tests above; priority 6 requires further study.
 
+## 6. Validation log
 
-## 6. Journal des validations
+### October 24, 2026 — documentation consolidation
 
-### 24 octobre 2026 — consolidation documentaire
+Reviewed project documents and code integration points: active application, interfaces, strips, datasets, mixers, reservations, build options, and hardware order. Performed documentation checks for paths, content distribution, and preservation of PCB audit content.
 
-Lecture des documents de projet et des points d'intégration du code : application active, interfaces, strips, datasets, consoles, réservations, options de compilation et ordre matériel. Vérification documentaire des chemins, de la répartition et de la conservation du contenu de l'audit PCB.
+Commit: [8fcc973](https://github.com/infrafast/esp32/commit/8fcc973c459fa41ad7b91444512ced18e7704615).
 
-Cette intervention ne modifie ni firmware, ni routage PCB, ni bibliothèque tierce. Aucune compilation ni mesure matérielle n'a été exécutée pour cette réorganisation. Les fonctionnalités et corrections ouvertes ci-dessus ne sont donc pas déclarées validées.
+This intervention changed neither firmware, PCB routing, nor third-party libraries. No builds or hardware measurements were performed for the reorganization. Open features and corrections above are therefore not declared validated.
+
+### October 24, 2026 — English documentation and agent obligations
+
+Translated README.md, docs/architecture.md, docs/roadmap.md, and AGENT.md into English. Preserved filenames, identifiers, links, audit measurements, archive hashes, request IDs, statuses, and technical limitations. Normalized the nested PCB audit heading numbering to fit its host documents.
+
+Added mandatory English documentation and documentation requirements for every code change. Roadmap must track every code change; architecture and README must be updated according to implementation and user impact, and AGENT.md when contribution rules change.
+
+Validation: checked the four-file scope, link-target preservation, tracking IDs, measurement values, and archive hashes. No source files, build settings, dependency documentation, attachments, or hardware were changed; no builds or hardware tests were run.

@@ -1,29 +1,29 @@
 # Interval Footswitch
 
-Interval Footswitch est un contrôleur matériel programmable destiné au pilotage de consoles de mixage et d'équipements de scène. Ce dépôt contient le firmware ESP32-S3, le framework Interval, les ressources de configuration web et les outils de mise à jour.
+Interval Footswitch is a programmable hardware controller for mixing consoles and stage equipment. This repository contains the ESP32-S3 firmware, the Interval framework, web configuration resources, and update tools.
 
-## Présentation
+## Overview
 
-Le pédalier associe trois boutons, un écran TFT et une connexion réseau Wi-Fi/Ethernet. La configuration s'effectue depuis son interface web. L'application actuellement sélectionnée intègre deux adaptateurs de console : Mixing Station et Behringer X/M Series.
+The footswitch combines three buttons, a TFT display, and Wi-Fi/Ethernet connectivity. Configuration is performed through its web interface. The currently selected application integrates two mixer adapters: Mixing Station and Behringer X/M Series.
 
-Le framework comporte aussi des interfaces MIDI, OSC et socket. Leur disponibilité dépend de la configuration et de l'environnement compilé ; la présence d'une classe ne garantit pas qu'une fonction soit terminée ou validée sur scène.
+The framework also includes MIDI, OSC, and socket interfaces. Availability depends on configuration and the compiled environment; the presence of a class does not guarantee that a feature is complete or validated for live use.
 
-## Matériel et utilisation
+## Hardware and operation
 
-La cible configurée est le Seeed XIAO ESP32-S3, avec stockage LittleFS, écran ILI9341 et Ethernet W5500. Les banques et strips organisent les commandes affichées et déclenchées par les boutons.
+The configured target is the Seeed XIAO ESP32-S3, with LittleFS storage, an ILI9341 display, and W5500 Ethernet. Banks and strips organize the controls displayed and triggered by the buttons.
 
-L'application active enregistre un strip d'envoi entrée → bus. Un strip de gain est également enregistré, mais son émission de commande reste à terminer : il ne faut pas le considérer comme opérationnel.
+The active application registers an input-to-bus send strip. A gain strip is also registered, but command transmission still needs to be completed: it must not be considered operational.
 
-Les ressources web sont incluses dans `data/webapp/`. Les mises à jour regroupent firmware et ressources dans des archives `.tgz` ; leur préparation et les différences entre versions de développement et de production sont décrites dans l'architecture.
+Web resources are included in `data/webapp/`. Updates package firmware and resources into `.tgz` archives; their preparation and the differences between development and production builds are described in the architecture document.
 
 ## Documentation
 
-| Document | Usage |
+| Document | Purpose |
 |---|---|
-| [Architecture](docs/architecture.md) | Référence technique, patterns, ajout de strips/interfaces, compilation et audit matériel |
-| [Roadmap](docs/roadmap.md) | Évolutions, problèmes ouverts, validations et suivi des demandes |
-| [Consignes agent](AGENT.md) | Règles de contribution et organisation documentaire |
+| [Architecture](docs/architecture.md) | Technical reference, patterns, adding strips/interfaces, builds, and hardware audit |
+| [Roadmap](docs/roadmap.md) | Planned changes, open issues, validation, and request tracking |
+| [Agent instructions](AGENT.md) | Contribution rules and documentation organization |
 
-Ces trois documents sont les seules références de travail du projet. Le présent README reste une présentation pour les utilisateurs.
+These three documents are the project's only working references. This README remains a user-facing overview.
 
-Les sous-dossiers documentaires contiennent uniquement les pièces jointes et supports de vérification, notamment les illustrations et mesures de l'audit PCB. Les explications et le suivi sont centralisés dans les documents ci-dessus.
+Documentation subfolders contain only attachments and verification materials, including PCB audit illustrations and measurements. Explanations and tracking are centralized in the documents above. All project documentation is maintained in English.
