@@ -10,6 +10,7 @@ lib/Ethernet/src/EthernetICMP.h
 __pycache__
 garbage.txt
 .DS_Store
-gerber 2.0.zip
-gerber 2.2.zip
-0.23-165-gb4d1ae9.tgz
+*.zip
+*.tgz
+data/*.bin.gz
+data/firmware.bin.gz
