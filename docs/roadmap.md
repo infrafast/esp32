@@ -19,6 +19,7 @@ All entries must be written in English. Every code change must be documented her
 | DOC-03 | Check documentation organization with every change | Permanent rule | No new content documentation; update the appropriate reference file |
 | DOC-04 | Translate all four project documents into English and require English documentation | Done — documentation | All four Markdown documents translated; identifiers, links, measurements, and historical limitations preserved; English-language rule added to AGENT.md |
 | DOC-05 | Require documentation for every code change | Done — documentation | AGENT.md requires roadmap updates for every code change and architecture/README updates according to impact; documentation is part of completion |
+| DOC-06 | Require concise code comments for human maintainers | Done — documentation | AGENT.md requires English comments explaining purpose and rationale, using short headers and occasional inline notes without redundant or lengthy narration |
 
 ### Documentation audit results
 
@@ -146,3 +147,9 @@ Translated README.md, docs/architecture.md, docs/roadmap.md, and AGENT.md into E
 Added mandatory English documentation and documentation requirements for every code change. Roadmap must track every code change; architecture and README must be updated according to implementation and user impact, and AGENT.md when contribution rules change.
 
 Validation: checked the four-file scope, link-target preservation, tracking IDs, measurement values, and archive hashes. No source files, build settings, dependency documentation, attachments, or hardware were changed; no builds or hardware tests were run.
+
+### October 24, 2026 — concise code-comment rule
+
+Added DOC-06 at the user's request. AGENT.md now requires concise English comments in generated or modified code, explaining what it does and why, primarily in headers and occasionally inline for non-obvious details. Comments must stay accurate and support human maintenance without duplicating obvious code or becoming lengthy narratives.
+
+Validation: reviewed the rule against the requested level of detail and existing documentation obligations. Only AGENT.md and docs/roadmap.md were changed; no code or new files were created.

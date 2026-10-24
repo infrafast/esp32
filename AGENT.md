@@ -31,6 +31,14 @@ Read before making changes:
 - Update `AGENT.md` whenever contribution rules or agent obligations change.
 - A code change is not complete until the relevant documentation is current. Do not substitute a separate report, code comments alone, or a commit message for these updates. If a reference does not need an update, do not add redundant content merely to touch the file.
 
+## Code comments for human maintainers
+
+- Comment generated or modified code in English so a developer can understand what it does and why the approach was chosen.
+- Use concise header comments for classes, functions, or logical sections where they help explain purpose, responsibilities, or important constraints. Add brief inline comments only where a non-obvious step, workaround, assumption, or design decision needs explanation.
+- Keep comments proportional to complexity: usually a few lines in a header and occasional inline notes. Avoid long narratives, line-by-line explanations, and comments that merely repeat obvious code.
+- Emphasize rationale and maintenance-relevant details, such as ownership, units, protocol behavior, timing constraints, and trade-offs, when applicable.
+- Keep comments accurate when changing code. Prefer clear names and simple structure over compensating for unclear code with excessive comments. Code comments complement, but do not replace, the required updates to the project reference documents.
+
 ## Before and during a change
 
 - Check current code and effective options; an old report does not prove that the described behavior still exists.
