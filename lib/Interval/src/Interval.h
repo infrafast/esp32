@@ -36,6 +36,143 @@
 
 #include <array>
 #include <utility>
+#include <new>      // std::nothrow for ValueList node allocation
+#include <stdint.h>
+
+// Owns individually allocated objects so their addresses remain stable until release.
+// T must be default-constructible and expose a mutable reservation counter named count.
+// Matchers identify shared objects; initializers configure newly allocated objects.
+template<typename T>
+class ValueList {
+private:
+    struct Node {
+        T data;
+        Node* next;
+
+        Node() : data(), next(nullptr) {}
+    };
+
+    Node* head;
+
+public:
+    ValueList() : head(nullptr) {}
+
+    ~ValueList() {
+        clear();
+    }
+
+    // Avoid accidental copy of the linked list
+    ValueList(const ValueList&) = delete;
+    ValueList& operator=(const ValueList&) = delete;
+
+    template<typename Matcher, typename Initializer>
+    T* reserve(Matcher match, Initializer init) {
+        Node* current = head;
+
+        // Search for an existing object
+        while (current != nullptr) {
+            if (match(current->data)) {
+                current->data.count++;
+                return &current->data;
+            }
+            current = current->next;
+        }
+
+        // Not found -> create new node
+        Node* newNode = new (std::nothrow) Node();
+        if (newNode == nullptr) {
+            return nullptr;
+        }
+
+        // Initialize data using caller-provided logic
+        init(newNode->data);
+
+        // First reservation
+        newNode->data.count = 1;
+
+        // Insert at list head
+        newNode->next = head;
+        head = newNode;
+
+        return &newNode->data;
+    }
+
+    bool unreserve(T* ptr) {
+        if (ptr == nullptr) {
+            return false;
+        }
+
+        Node* current = head;
+        Node* previous = nullptr;
+
+        while (current != nullptr) {
+            if (&current->data == ptr) {
+                // Decrement only if count is not already zero
+                if (current->data.count > 0) {
+                    current->data.count--;
+                }
+
+                // Delete node if nobody uses it anymore
+                if (current->data.count == 0) {
+                    if (previous == nullptr) {
+                        head = current->next;
+                    } else {
+                        previous->next = current->next;
+                    }
+                    delete current;
+                }
+
+                return true;
+            }
+
+            previous = current;
+            current = current->next;
+        }
+
+        return false;
+    }
+
+    template<typename Matcher>
+    T* get(Matcher match) const {
+        Node* current = head;
+
+        while (current != nullptr) {
+            if (match(current->data)) {
+                return &current->data;
+            }
+            current = current->next;
+        }
+
+        return nullptr;
+    }
+
+    // Invalidates every pointer returned by this container.
+    void clear() {
+        Node* current = head;
+
+        while (current != nullptr) {
+            Node* next = current->next;
+            delete current;
+            current = next;
+        }
+
+        head = nullptr;
+    }
+
+    // Counts distinct objects, not total reservations.
+    uint16_t size() const {
+        uint16_t n = 0;
+        Node* current = head;
+
+        while (current != nullptr) {
+            n++;
+            current = current->next;
+        }
+
+        return n;
+    }
+};
+
 
 //#define USE_FTP
 

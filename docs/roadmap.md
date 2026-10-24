@@ -40,6 +40,7 @@ All entries must be written in English. Every code change must be documented her
 | MIX-01 | Complete the input-gain strip | To do | Connect reads/writes to the mixer contract, bound and convert values, handle responses; check supported backends and persistence |
 | OSC-01 | Assess and complete the generic OSC strip | To assess | Check message library, parsing, serialization, and reception; validate a send/receive scenario |
 | MEM-01 | Audit mixer-strip reservations and bindings | To assess | No uninitialized/dangling pointers; release on changes/deletion; handle missing/replaced interfaces; two strips with the same key remain consistent |
+| MEM-02 | Move the generic reservation container into Interval | Done — code; firmware build pending | ValueList<T> moved to lib/Interval/src/Interval.h; mixer structures and wrappers retained in src/mixers/values.h; existing API and behavior preserved; targeted host checks passed |
 | HW-01 | Compare both TFT/W5500 initialization orders | To validate | dev/prod tests, cold starts and wake-ups, Ethernet and color results recorded; decision documented before generalization |
 
 These items derive from code reviewed for consolidation; they are not an exhaustive firmware audit.
@@ -162,3 +163,13 @@ At the user's request, checked the existing rules: they already required establi
 Added DOC-07. AGENT.md now requires inspecting existing capabilities before implementation, prioritizing reuse and extension, preserving generic Interval versus application-specific code, using Interval.h only for necessary minimal framework glue when object-based integration is unsuitable, and preferring existing responsibility-owning files. New source/header files require a design rationale recorded with the reuse assessment in roadmap. The architecture documents the same dependency direction and extension policy.
 
 Validation: checked consistency with existing documentation restrictions, class contracts, and the current separation of Interval and mixer code. Only AGENT.md, docs/architecture.md, and docs/roadmap.md were changed; no source files were created or modified. No build or hardware test was needed for this documentation change.
+
+### October 24, 2026 — MEM-02: separate generic storage from mixer values
+
+At the user's request, moved the existing generic `ValueList<T>` template into `lib/Interval/src/Interval.h`, before framework integration includes. Added explicit standard includes for `std::nothrow` and fixed-width integers. Kept `OneIndexValue`, `TwoIndexValue`, `OneIndexValueList`, and `TwoIndexValueList` in `src/mixers/values.h`, which explicitly includes `Interval.h`.
+
+Reuse assessment: reused the existing linked-node implementation and matcher/initializer extension points unchanged. No new container, abstraction, source file, or dependency was introduced. The generic template depends only on the record's default construction and reservation counter; mixer keys and payload semantics remain in application code. Condensed the moved template's comments and translated touched example comments into English.
+
+Validation: verified a single template definition and unchanged template code after removing comments/whitespace. Compiled the extracted template with the actual mixer structures/wrappers using C++11, warnings as errors, AddressSanitizer, and UndefinedBehaviorSanitizer. Targeted runtime checks passed for generic non-mixer records, one/two-index sharing, reservation counts, unrelated insertion/removal pointer stability, head/middle/final release, clear, and destruction. LeakSanitizer could not run in this environment; reran successfully with leak detection disabled. Checked declaration placement and the existing Interval include guards/dependency direction.
+
+Limitations: PlatformIO is not installed here, so no complete dev/prod ESP32 build or hardware test was performed. The host check compiles extracted portable code, not the full Arduino header graph. Existing reservation-counter limits and caller lifetime/error-handling concerns are unchanged. Only the two existing source headers and architecture/roadmap documentation were modified; no repository files were created.

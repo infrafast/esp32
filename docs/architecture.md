@@ -80,7 +80,9 @@ Mixers use `DataSetSynced` and `Synchronizer` to retrieve names and propagate ch
 
 ### Shared values and lifetimes
 
-`values.h` provides `OneIndexValueList` and `TwoIndexValueList`, based on reservations. Two strips targeting the same key receive the same object: levels and mutes remain consistent through shared pointers.
+`lib/Interval/src/Interval.h` provides the generic `ValueList<T>` reservation container. It owns individually allocated nodes, keeps object addresses stable until their final release, and requires a default-constructible `T` with a mutable `count` member. Callers supply matchers and initializers; the container has no mixer dependencies.
+
+`src/mixers/values.h` includes `Interval.h` and retains the mixer-specific `OneIndexValue` / `TwoIndexValue` structures and `OneIndexValueList` / `TwoIndexValueList` wrappers, based on reservations. Two strips targeting the same key receive the same object: levels and mutes remain consistent through shared pointers.
 
 Each `reserve(...)` must have a corresponding `unreserve(...)`. The last release destroys the object; any remaining pointer becomes invalid. Release the previous reservation on selection changes and at destruction, initialize pointers, and check null bindings. This describes the required contract: existing strips are not all complete and safe implementations of it.
 
