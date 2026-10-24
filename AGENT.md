@@ -39,6 +39,16 @@ Read before making changes:
 - Emphasize rationale and maintenance-relevant details, such as ownership, units, protocol behavior, timing constraints, and trade-offs, when applicable.
 - Keep comments accurate when changing code. Prefer clear names and simple structure over compensating for unclear code with excessive comments. Code comments complement, but do not replace, the required updates to the project reference documents.
 
+## Reuse-first design and framework boundaries
+
+- Before implementing any change or new feature, inspect the existing capabilities, APIs, classes, and extension points. Apply this order: (1) reuse or compose existing behavior where sufficient; (2) improve or extend an existing abstraction when it falls short; (3) create a new abstraction only when neither option is suitable.
+- Prefer the smallest maintainable implementation. Avoid duplicated logic, parallel APIs, unnecessary wrappers, and speculative abstractions. When new code is necessary, make it reusable where the responsibility is genuinely generic, without adding complexity for hypothetical use cases.
+- Always preserve the framework/application boundary: reusable, application-independent code and classes belong in `lib/Interval/`; application-specific behavior belongs in user code, for example `src/MixerApplication.h` and `src/mixers/`. Interval must not depend on concrete mixer/application classes, protocol-specific mixer rules, or application configuration. Keep such specialization behind the existing contracts and extension points.
+- Prefer object-oriented composition and the existing class contracts. When necessary integration cannot reasonably be expressed within those objects, use `lib/Interval/src/Interval.h` for minimal framework glue, such as shared declarations, callbacks, or integration wiring. Keep domain logic in its owning application or mixer class; do not turn Interval.h into a catch-all implementation file or use it to bypass the framework/application boundary.
+- Prefer extending the existing file that owns the responsibility instead of creating a new source/header file. Place generic changes in the appropriate existing Interval library file and domain changes in the appropriate existing application file. Do not merge unrelated responsibilities merely to reduce file count.
+- Create a new source/header file only when the design justifies it, for example a distinct cohesive responsibility or a necessary dependency boundary. Record that justification in `docs/roadmap.md` and describe any architectural impact in `docs/architecture.md`. This exception does not relax the restriction on additional content documentation files.
+- In the request's roadmap entry, briefly record the existing capabilities considered, what is reused or extended, and why any new abstraction or file is necessary. Check this reasoning and the framework/application boundary before completion.
+
 ## Before and during a change
 
 - Check current code and effective options; an old report does not prove that the described behavior still exists.

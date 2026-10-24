@@ -86,6 +86,16 @@ Each `reserve(...)` must have a corresponding `unreserve(...)`. The last release
 
 ## 4. Adding a feature
 
+### Reuse-first extension policy and dependency direction
+
+For every change or new feature, first inspect existing framework capabilities, APIs, classes, and extension points. Reuse or compose them if sufficient; otherwise improve or extend the existing abstraction. Introduce a new abstraction only when those options do not fit. Keep the implementation small and maintainable, and make genuinely generic additions reusable without designing for hypothetical needs.
+
+The required dependency direction is application code toward Interval. Generic, application-independent facilities belong in `lib/Interval/`; application-specific behavior stays in user code such as `src/MixerApplication.h` and `src/mixers/`. Interval must not depend on concrete application/mixer classes or absorb their domain-specific protocol rules and configuration. Existing mixer abstractions remain application code unless a separate justified change extracts a genuinely generic facility.
+
+Prefer object-oriented integration through the established contracts. If necessary framework integration cannot reasonably be expressed within objects, put minimal shared declarations, callbacks, or wiring in `lib/Interval/src/Interval.h`. Keep actual behavior in the responsible classes and keep domain-specific wiring in the application; using Interval.h as glue must not reverse the dependency direction.
+
+Prefer the existing file that owns a responsibility: generic extensions go into the appropriate existing Interval file, while domain extensions go into the appropriate existing application file. A new source/header file is justified only by a clear design need, such as a distinct cohesive responsibility or a necessary dependency boundary. Do not create files merely to split a small change, or combine unrelated code merely to reduce file count. Record the reuse assessment and any new-file justification in roadmap, and update this architecture when the design changes. Additional content documentation files remain prohibited under AGENT.md.
+
 ### New strip
 
 1. Describe the request and its criteria in roadmap, indicating whether the backend is already available.

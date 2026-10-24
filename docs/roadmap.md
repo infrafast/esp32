@@ -20,6 +20,7 @@ All entries must be written in English. Every code change must be documented her
 | DOC-04 | Translate all four project documents into English and require English documentation | Done — documentation | All four Markdown documents translated; identifiers, links, measurements, and historical limitations preserved; English-language rule added to AGENT.md |
 | DOC-05 | Require documentation for every code change | Done — documentation | AGENT.md requires roadmap updates for every code change and architecture/README updates according to impact; documentation is part of completion |
 | DOC-06 | Require concise code comments for human maintainers | Done — documentation | AGENT.md requires English comments explaining purpose and rationale, using short headers and occasional inline notes without redundant or lengthy narration |
+| DOC-07 | Require reuse-first implementation and preserve framework/application boundaries | Done — documentation | AGENT.md and architecture define reuse → extend → create, generic Interval versus application code, limited Interval.h glue, and justified new source files |
 
 ### Documentation audit results
 
@@ -153,3 +154,11 @@ Validation: checked the four-file scope, link-target preservation, tracking IDs,
 Added DOC-06 at the user's request. AGENT.md now requires concise English comments in generated or modified code, explaining what it does and why, primarily in headers and occasionally inline for non-obvious details. Comments must stay accurate and support human maintenance without duplicating obvious code or becoming lengthy narratives.
 
 Validation: reviewed the rule against the requested level of detail and existing documentation obligations. Only AGENT.md and docs/roadmap.md were changed; no code or new files were created.
+
+### October 24, 2026 — reuse-first design and framework boundaries
+
+At the user's request, checked the existing rules: they already required established contracts and responsibility identification, but did not explicitly mandate the reuse → extend → create order or source-file creation policy.
+
+Added DOC-07. AGENT.md now requires inspecting existing capabilities before implementation, prioritizing reuse and extension, preserving generic Interval versus application-specific code, using Interval.h only for necessary minimal framework glue when object-based integration is unsuitable, and preferring existing responsibility-owning files. New source/header files require a design rationale recorded with the reuse assessment in roadmap. The architecture documents the same dependency direction and extension policy.
+
+Validation: checked consistency with existing documentation restrictions, class contracts, and the current separation of Interval and mixer code. Only AGENT.md, docs/architecture.md, and docs/roadmap.md were changed; no source files were created or modified. No build or hardware test was needed for this documentation change.
