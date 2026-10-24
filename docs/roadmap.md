@@ -41,9 +41,23 @@ All entries must be written in English. Every code change must be documented her
 | OSC-01 | Assess and complete the generic OSC strip | To assess | Check message library, parsing, serialization, and reception; validate a send/receive scenario |
 | MEM-01 | Audit mixer-strip reservations and bindings | To assess | No uninitialized/dangling pointers; release on changes/deletion; handle missing/replaced interfaces; two strips with the same key remain consistent |
 | MEM-02 | Move the generic reservation container into Interval | Done — code; firmware build pending | ValueList<T> moved to lib/Interval/src/Interval.h; mixer structures and wrappers retained in src/mixers/values.h; existing API and behavior preserved; targeted host checks passed |
+| MEM-03 | Gradually migrate suitable `ivanseidel/LinkedList` usages to `std::vector` | To assess | Inventory all uses and assess ownership, pointer/reference/iterator stability, insertion/removal patterns, worst-case capacity, heap usage and compatibility; migrate incrementally with targeted tests and dev/prod firmware builds; retain linked or fixed-capacity storage where technically justified |
 | HW-01 | Compare both TFT/W5500 initialization orders | To validate | dev/prod tests, cold starts and wake-ups, Ethernet and color results recorded; decision documented before generalization |
 
 These items derive from code reviewed for consolidation; they are not an exhaustive firmware audit.
+
+### MEM-03 — progressive standard-container migration
+
+Origin: user request, October 24, 2026. Objective: favor the standard C++ `std::vector<T>` over `ivanseidel/LinkedList` when it improves RAM efficiency, predictable allocation behavior, robustness, and maintainability. This is **not** a blanket replacement mandate.
+
+1. Inventory all `LinkedList` instances (including indirect wrappers), document element type, ownership, mutation and access patterns, current peak sizes, and any stored pointers/references/iterators.
+2. Prioritize straightforward indexed/append-oriented collections. Before each change, evaluate whether `std::vector` with an appropriate `reserve()` is compatible with required element and pointer stability; use fixed-capacity storage for allocation-sensitive real-time paths. Reserve only when justified by an established bound or measurement. Check allocation failure behavior and capacity enforcement.
+3. Migrate in small, independently verifiable groups while preserving public behavior, serialization/configuration format, and existing framework/application interfaces. Prefer adapting existing abstractions over introducing new files or redundant wrappers.
+4. Preserve architecture: reusable, domain-neutral collection code belongs under `lib/Interval`; mixer-specific semantics and bindings remain in `src/mixers`. Keep `Interval.h` glue minimal and justified. Do not move mixer logic into the generic framework.
+5. Specifically assess `ValueList<T>` from MEM-02: its reservation counters, sharing and node/pointer lifetime contract may require stable addresses, so do **not** directly substitute `std::vector` until these invariants are preserved or intentionally redesigned with tests.
+6. For each migration batch, record affected files, memory/heap and fragmentation observations where possible, ownership/lifetime checks, regression tests, dev/prod builds, hardware validation where appropriate, and the commit. Remove the `LinkedList` dependency only after confirming there are no remaining required uses.
+
+Acceptance: no behavioral regressions, no dangling references after container changes, measured or reasoned memory benefit, no unjustified runtime allocation in critical paths, all relevant tests passing, and roadmap/architecture documentation updated. Track each batch separately before marking MEM-03 Done.
 
 ## 3. Historical Interval library requests
 
@@ -173,3 +187,7 @@ Reuse assessment: reused the existing linked-node implementation and matcher/ini
 Validation: verified a single template definition and unchanged template code after removing comments/whitespace. Compiled the extracted template with the actual mixer structures/wrappers using C++11, warnings as errors, AddressSanitizer, and UndefinedBehaviorSanitizer. Targeted runtime checks passed for generic non-mixer records, one/two-index sharing, reservation counts, unrelated insertion/removal pointer stability, head/middle/final release, clear, and destruction. LeakSanitizer could not run in this environment; reran successfully with leak detection disabled. Checked declaration placement and the existing Interval include guards/dependency direction.
 
 Limitations: PlatformIO is not installed here, so no complete dev/prod ESP32 build or hardware test was performed. The host check compiles extracted portable code, not the full Arduino header graph. Existing reservation-counter limits and caller lifetime/error-handling concerns are unchanged. Only the two existing source headers and architecture/roadmap documentation were modified; no repository files were created.
+
+### October 24, 2026 — MEM-03: progressive migration request
+
+Added a user-requested, staged assessment and migration plan for `ivanseidel/LinkedList` to `std::vector` where appropriate. Explicitly protected the stable-address/reservation invariants of `ValueList<T>` and the generic Interval versus mixer-specific separation. Planning/documentation only: no source migration, builds, benchmarks, or hardware tests have yet been performed.
