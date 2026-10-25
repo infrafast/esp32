@@ -334,9 +334,9 @@ Acceptance: no behavioral regressions, no dangling references after container ch
 
 | ID | Work | Status | Acceptance criteria |
 |---|---|---|---|
-| DOC-01 | Validate Doxygen/Graphviz generation and optional web publication | To validate | Inspect representative Strip, Bank and DataProvider pages for useful relationships and confirm automatic site refresh after a subsequent source change. |
+| DOC-01 | Validate Doxygen/Graphviz generation and optional web publication | To validate | Confirm automatic site refresh after a subsequent source change, including updated Strip, Bank and DataProvider descriptions. |
 
-Origin: user request, October 25, 2026. Existing code declarations/comments are reused; dedicated Doxygen, workflow and VS Code configuration files supply generation and execution without changing firmware or adding a parallel UML model. Remaining validation covers visual usefulness and refresh after a source change. Generation, SVG presence and Pages deployment have passed Actions; no hardware validation is implied.
+Origin: user request, October 25, 2026. Existing code declarations/comments are reused; dedicated Doxygen, workflow and VS Code configuration files supply generation and execution without changing firmware or adding a parallel UML model. Remaining validation covers the deployed site refresh after a source change. Generation, SVG presence and Pages deployment have passed Actions; no hardware validation is implied.
 
 ## Other features and pending validation
 

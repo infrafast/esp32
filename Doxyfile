@@ -25,6 +25,7 @@ WARN_LOGFILE           = build/doxygen/warnings.log
 ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION         = NO
 SEARCH_INCLUDES        = NO
+INCLUDE_PATH           = lib/Ethernet/src
 # Bound per-class diagrams to keep the reference usable.
 HAVE_DOT               = YES
 CLASS_GRAPH            = YES

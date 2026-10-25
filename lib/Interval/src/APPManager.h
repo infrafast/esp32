@@ -28,7 +28,7 @@
 #include "interfaces/i_osc.h"
 
 
-///////////////////// WIDGET LOCATION & SIZE ////////////////////////
+//////////////////// WIDGET LOCATION & SIZE ////////////////////////
 #define OVERLAY_ICON_SIZE TFT_HEIGHT/15
 
 
@@ -50,44 +50,101 @@
 #include <WebSocketServer.hpp>    // https://github.com/skaarj1989/mWebSockets#meta     // use a local repository with SOCKETBUFFER SIZE CHANGED one because of https://github.com/skaarj1989/mWebSockets/issues/72
 using namespace net;
 
+/** @brief Attach handlers to a newly connected browser WebSocket. */
 void socketConnectionCallback(IWebSocket &ws);
 
 
-///////////////////// VOLATILE PARAMETERS ///////////////////////
+//////////////////// VOLATILE PARAMETERS ///////////////////////
 //#define V_USE_NETWORK       "myNetworkIP"
 
-// C to C++ class function wrapper
+/**
+ * @brief C to C++ class function wrapper
+ */
 void commonFileServerWrapper(Request &req, Response &res);
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void handleWebTaskWrapper(void * parameter);
 //void gzFileServer(Request &req, Response &res);
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void scanNetworksTaskWrapper(void * parameter);         // parrallel task
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void webServerTaskWrapper(void * parameter);            // parrallel task
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void WiFiRTPDiscoveryTask(void* parameter);             // parrallel task
+/** @brief Application extension point for the final setup workflow. */
 void defaultWizardStepFlow();
 
+/**
+ * @brief Build and animate a temporary progress page without selecting a new screen.
+ *
+ * Purge current widgets and call buildGUI() directly. screen.id/state remain
+ * unchanged, allowing stopGUIThread() to request their normal reconstruction.
+ */
 void startGUIThread(uint8_t, uint8_t);
+/**
+ * @brief Stop temporary progress rendering and invalidate the normal page.
+ *
+ * Notify the GUI task and call triggerRedraw(); briefly wait for task exit
+ * before the regular application loop resumes rendering the selected screen.
+ */
 void stopGUIThread();
 
+/**
+ * @brief Find the highest numeric archive version newer than the running firmware.
+ *
+ * Read the server directory listing and select valid numeric .tgz filenames.
+ * Versions are compared as floating-point numbers, not semantic version tuples.
+ * This function returns the selected URL/version; the caller opens the download.
+ * @param baseUrl URL of the HTML archive listing.
+ * @param currentVersion Running firmware version converted to a number.
+ * @param outHttp HTTP client used to fetch the listing; stopped after reading it.
+ * @param outRemoteVersion Selected version text when a newer file is found.
+ * @param outFileUrl Absolute URL of the selected archive.
+ * @return 1 for a newer archive, 0 if none is found, or a negative error code.
+ */
 int8_t findNewerRemoteFWUpdate(const String& baseUrl,
                                const String& currentVersion,
                                HttpClient& outHttp,
                                String& outRemoteVersion,
                                String& outFileUrl);
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void expandTGZstreamToFSTask(void* parameter);
+/**
+ * @brief Extract an update package and advance to the firmware-file check.
+ *
+ * Notify the browser, extract archive files, and release the extractor and
+ * parameters. Delete the stream only when params->ownsStream is true. Success
+ * selects CHECK_BINARY; failure opens an error prompt. Clear the download flag
+ * before returning so later update requests can show the appropriate screen.
+ */
 bool expandTGZstreamToFS(StreamParams* params);
+/**
+ * @brief Decompress and flash firmware from the supplied stream.
+ *
+ * Mark flashing in progress, configure progress callbacks and invoke the gzip
+ * updater. Success opens an OK prompt leading to restart; failure shows Abort.
+ * The helper deletes params and deletes its stream only when ownsStream is true.
+ */
 bool installGZBinaryFromStream(StreamParams* params);
+/** @brief Update the progress displayed during file transfer or flashing. */
 void updaterProgressCallback( uint8_t progress );
 
+/**
+ * @brief Flash an extracted firmware file when present, otherwise restore the screen.
+ *
+ * Open the compressed firmware, switch to single-file progress and start its
+ * installer task. The installer owns the file stream after successful handoff.
+ */
 void checkAndInstallBinaryFromFile();
 
+/** @brief Delete the requested file if it exists. */
 bool checkAndDeleteFile(const char* filename) ;
 
 #define VOID_JSON_ITEM "\"void\": 0"
 
-///////////////////// SCREEN APPLICATION MANAGEMENT ////////////////////////
+//////////////////// SCREEN APPLICATION MANAGEMENT ////////////////////////
 
 /**
- * Screen selection (ScreenUnion is defined in GUIManager.h):
+ * @brief Screen selection (ScreenUnion is defined in GUIManager.h):
  * - id chooses the main page, such as banks, menus or utilities.
  * - state gives that page its context: a bank index or a workflow step.
  * - focus is also part of change detection. triggerRedraw() changes it to
@@ -104,16 +161,18 @@ bool checkAndDeleteFile(const char* filename) ;
  * compares the combined value against oldScreen and rebuilds when different.
  * Multiple changes before that comparison result in the final selection only.
  */
-// Main pages. Keep their numeric order: persisted screen ids use these values.
+/**
+ * @brief Main pages. Keep their numeric order: persisted screen ids use these values.
+ */
 enum{
-  SCREEN_STARTUP,       // Startup logo.
-  SCREEN_WIZARD,        // First-time setup and application-specific setup.
-  SCREEN_MENU,          // Main settings menu; MenuSystem tracks its own selection.
-  SCREEN_BANK_SWITCH,   // Bank-selection menu; separate from the bank being played.
-  SCREEN_PROMPT,        // Message and up to three choices from promptParams.
-  SCREEN_UTILS,         // Information, connectivity, brightness and update workflows.
-  SCREEN_BYE,           // Status/error message or battery display before sleeping.
-  SCREEN_BANK,          // Play controls; state is a zero-based bank index.
+  SCREEN_STARTUP,       ///< Startup logo.
+  SCREEN_WIZARD,        ///< First-time setup and application-specific setup.
+  SCREEN_MENU,          ///< Main settings menu; MenuSystem tracks its own selection.
+  SCREEN_BANK_SWITCH,   ///< Bank-selection menu; separate from the bank being played.
+  SCREEN_PROMPT,        ///< Message and up to three choices from promptParams.
+  SCREEN_UTILS,         ///< Information, connectivity, brightness and update workflows.
+  SCREEN_BYE,           ///< Status/error message or battery display before sleeping.
+  SCREEN_BANK,          ///< Play controls; state is a zero-based bank index.
   SCREEN_MAX            // Page count, not a selectable page.
 };
 
@@ -131,42 +190,53 @@ enum{
   STATE_UTILS_SEARCHING_CONNECTION,
   STATE_UTILS_INFO,
   STATE_UTILS_BRIGHTNESS,
-  STATE_UTILS_CONNECTCONFIGMEDIA,       // Establish a configuration connection.
-  STATE_UTILS_CONNECTWEBAPP,            // Connection available; wait for the browser.
-  STATE_UTILS_WEBAPPCONNECTED,           // Browser session is connected.
+  STATE_UTILS_CONNECTCONFIGMEDIA,       ///< Establish a configuration connection.
+  STATE_UTILS_CONNECTWEBAPP,            ///< Connection available; wait for the browser.
+  STATE_UTILS_WEBAPPCONNECTED,           ///< Browser session is connected.
 
   // Update actions and progress screens.
-  STATE_UTILS_DOWNLOAD_FROM_URL,        // Start downloading/extracting the package.
+  STATE_UTILS_DOWNLOAD_FROM_URL,        ///< Start downloading/extracting the package.
   STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD,
-  STATE_UTILS_DISABLE_SWUPDATE_PROMPT,  // Save the preference, then restore the page.
-  STATE_UTILS_SHOW_PROGRESS_SINGLE,     // Display one transfer/flash progress value.
-  STATE_UTILS_RESTORE_SCREEN,           // Return to the saved bank or wizard.
-  STATE_UTILS_RESTART_DEVICE,           // Stop interfaces and restart the ESP32.
+  STATE_UTILS_DISABLE_SWUPDATE_PROMPT,  ///< Save the preference, then restore the page.
+  STATE_UTILS_SHOW_PROGRESS_SINGLE,     ///< Display one transfer/flash progress value.
+  STATE_UTILS_RESTORE_SCREEN,           ///< Return to the saved bank or wizard.
+  STATE_UTILS_RESTART_DEVICE,           ///< Stop interfaces and restart the ESP32.
   STATE_UTILS_SHUTDOWN,
 
   // Both goodbye states use the same visual builder, with different workflows.
-  STATE_BYE_MODAL_MESSAGE,              // Show a message and shut down interfaces.
-  STATE_BYE_GOSLEEP_MESSAGE,            // Wait for the battery display, then sleep.
+  STATE_BYE_MODAL_MESSAGE,              ///< Show a message and shut down interfaces.
+  STATE_BYE_GOSLEEP_MESSAGE,            ///< Wait for the battery display, then sleep.
 
-  STATE_UTILS_TRIGGER_FWUPDATE_PROMPT,  // Prepare the update question.
-  STATE_UTILS_CHECK_BINARY,             // Install extracted firmware if present.
+  STATE_UTILS_TRIGGER_FWUPDATE_PROMPT,  ///< Prepare the update question.
+  STATE_UTILS_CHECK_BINARY,             ///< Install extracted firmware if present.
   STATE_UTILS_INSTALLING_BINARY,
-  STATE_UTILS_SHOW_PROGRESS_MULTIPLE,   // Display archive/file progress.
+  STATE_UTILS_SHOW_PROGRESS_MULTIPLE,   ///< Display archive/file progress.
   STATE_UTILS_BLINK_ICON_TEXT
 };
 
 
+/** @brief Build the startup page or overlay from the supplied page state. */
 void startupScreenBuilder(uint8_t id);
+/** @brief Build the wizard page or overlay from the supplied page state. */
 void wizardScreenBuilder(uint8_t id);
+/** @brief Build the menu page or overlay from the supplied page state. */
 void menuScreenBuilder(uint8_t id);
+/** @brief Build the bank switch page or overlay from the supplied page state. */
 void bankSwitchScreenBuilder(uint8_t id);
+/** @brief Build the prompt page or overlay from the supplied page state. */
 void promptScreenBuiler(uint8_t id);
+/** @brief Build the utils page or overlay from the supplied page state. */
 void utilsScreenBuilder(uint8_t id);
+/** @brief Build the bye page or overlay from the supplied page state. */
 void byeScreenBuilder(uint8_t id);
+/** @brief Build the bank page or overlay from the supplied page state. */
 void bankScreenBuilder(uint8_t id);
+/** @brief Build the void overlay page or overlay from the supplied page state. */
 void voidOverlay(uint8_t id);
 
+/** @brief Build the base page or overlay from the supplied page state. */
 void baseOverLayBuilder(uint8_t id);
+/** @brief Build the bank page or overlay from the supplied page state. */
 void bankOverlayBuilder(uint8_t id);
 
 // Each page has a content builder and an overlay builder. Most share status
@@ -182,7 +252,9 @@ screenBuilder screens[SCREEN_MAX]={
   {SCREEN_BANK,bankScreenBuilder,bankOverlayBuilder},
 };
 
-/** Reply sent to the browser: callback names the action, value holds its data. */
+/**
+ * @brief Reply sent to the browser: callback names the action, value holds its data.
+ */
 struct JsonAnswer{
   String callback;
   String value = String(true);
@@ -196,43 +268,70 @@ struct JsonUserEvent{
 */
 
 typedef bool (*ParseJsonInputCallback)(JsonObject&,JsonAnswer*);
-//typedef void (*NetworkChangeStateCallback)(bool state);
-
+/** @brief Leave an unknown browser command unhandled for the default reply.
+ *
+ * typedef void (*NetworkChangeStateCallback)(bool state);
+ */
 bool defaultParseJsonInputCallback(JsonObject& jsonObject,JsonAnswer* jsonAnswer){
   DEBUG_INFO("defaultParseJsonInputCallback: %s",jsonObject["command"].as<String>().c_str());
   return false;
 }
 
+/** @brief Default callback returning an empty string. */
 String defaultStringReturn(){return "";};
+/** @brief Default callback with no action. */
 void defaultVoidReturn(){};
+/** @brief Default integer callback with no action. */
 void defaultVoidInt(int i){};
+/** @brief Default two-integer callback with no action. */
 void defaultVoidDoubleInt(int i,int j){};
+/** @brief Placeholder hook; no active operation in this implementation. */
 void defaultVoidBool(bool state){}
+/** @brief Build the default wizard page or overlay from the supplied page state. */
 void defaultWizardScreenBuilder();
+/** @brief Application extension point for the final setup workflow. */
 void defaultWizardStepFlow();
 
+/** @brief Open the device information page. */
 void info_item_selected(MenuComponent* p_menu_component);
+/** @brief Open browser configuration using the available network connection. */
 void config_menu_item_selected(MenuComponent* p_menu_component);
+/** @brief Go back within the menu, or restore the saved application page. */
 void back_menu_item_selected(MenuComponent* p_menu_component);
+/** @brief Profile-save menu hook; currently has no active body. */
 void save_profile_item_selected(MenuComponent* p_menu_component);
+/** @brief Load the language chosen from the menu. */
 void loadLangFromMenu_item_selected(MenuComponent* p_menu_component);
+/** @brief Resolve the selected bank name and open that bank screen. */
 void switchToBank_item_selected(MenuComponent* p_menu_component);
+/** @brief Save the opposite screen rotation and update button orientation. */
 void tft_rotation_item_selected(MenuComponent* p_menu_component);
+/** @brief Clear system settings and open the reset/sleep message. */
 void reset_item_selected(MenuComponent* p_menu_component);
+/** @brief Shut down interfaces and enter deep sleep. */
 void shutdown_menu_item_selected(MenuComponent* p_menu_component);
+/** @brief Handle entry into a submenu. */
 void menu_selected(MenuComponent* p_menu_component);
+/** @brief Open the brightness adjustment page. */
 void brightness_menu_item_selected(MenuComponent* p_menu_component);
+/** @brief Open the firmware update prompt without an automatic timeout. */
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component);
 
+/** @brief Choose the configuration-connection page or show the connected browser session. */
 void handleConfigConnection();  //
 
 
 #include "DataManagement.h"
 
-/** Shows the selected strip's labels, toggles and colors in the screen header. */
+/**
+ * @brief Shows the selected strip's labels, toggles and colors in the screen header.
+ */
 class StripHeaderWidget: public Top2Toggles{
   public:
     Strip* strip = nullptr;
+    /**
+     * @brief Initialize StripHeaderWidget and its configured member bindings.
+     */
     StripHeaderWidget(Strip* s, bool debug=false): strip(s),
         /*Top2Toggles(s->getTopLabel(),s->getBottomLabel(),&s->toggle1,&s->toggle2,&s->frontColor,&s->backColor,
                     &GUI::defaultFcolor, &GUI::silver, &GUI::fullBrightness, debug)*/
@@ -244,7 +343,9 @@ class StripHeaderWidget: public Top2Toggles{
     }
 
 
-    // Refresh the header when the selected strip changes or a redraw is requested.
+    /**
+     * @brief Refresh the header when the selected strip changes or a redraw is requested.
+     */
     virtual bool refresh(bool force=false){
 
       //if (strip == nullptr) return false;
@@ -263,6 +364,7 @@ class StripHeaderWidget: public Top2Toggles{
       return refreshed;
     }
 
+    /** @brief Bind the header to the selected strip data. */
     void setStripPointer(Strip* s) {
       //DEBUG_PRINT("\nsetStripPointer(");
       if (s == nullptr){
@@ -300,11 +402,13 @@ class StripHeaderWidget: public Top2Toggles{
 
 
 #define SHORTCUT_GROUP "shortcut"
-/** Provides the choices used to configure jump, macro and custom-command shortcuts. */
+/**
+ * @brief Provides the choices used to configure jump, macro and custom-command shortcuts.
+ */
 class Shortcuts: public DataProvider{
   public:
 
-    /////////////// SHORTCUTS ////////////////////
+    ////////////// SHORTCUTS ////////////////////
     SerializableParameters jumpToSD = SerializableParameters("jump", SHORTCUT_GROUP, &dataRepo);
     SerializableParameters macroSD = SerializableParameters("macro", SHORTCUT_GROUP, &dataRepo);
     SerializableParameters advancedSD = SerializableParameters("advanced", SHORTCUT_GROUP, &dataRepo);
@@ -315,6 +419,7 @@ class Shortcuts: public DataProvider{
     DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this);
     DynamicDataSet dsCommand = DynamicDataSet(new FreeTextAddress(ADDRESS_COMMAND, "command", REGEX_STRING) ,this);
 
+    /** @brief Initialize Shortcuts with the supplied configuration and bindings. */
     Shortcuts(String name):DataProvider(name){
       // *********************************
       // SHORTCUTS
@@ -336,6 +441,11 @@ class Shortcuts: public DataProvider{
       // DATASETS
       // *********************************
 
+    /**
+     * @brief Return the number of shortcut choices for the requested address.
+     *
+     * For strip ids, zero denotes a browser callback name rather than an array.
+     */
     virtual uint16_t getSize(String addrr){
       if (addrr == ADDRESS_STIPID) return 0;       // 0 => means this is not an array of data but a javascript callback name
       else if (addrr == ADDRESS_ACTION) return ADDRESS_ACTION_SIZE;
@@ -345,6 +455,9 @@ class Shortcuts: public DataProvider{
 
     }
 
+    /**
+     * @brief Return a shortcut choice or the browser callback name for strip ids.
+     */
     virtual const String* getValuePtr(String addrr, uint16_t index){
       if (addrr == ADDRESS_STIPID){
         return &getStripID;         //javascript local function callback
@@ -358,7 +471,9 @@ class Shortcuts: public DataProvider{
     }
 
     private:
-      // javascript function that generates the data locally
+      /**
+       * @brief javascript function that generates the data locally
+       */
       String getStripID = "getStripID";
 
       String dsDropDownActionsValues[ADDRESS_ACTION_SIZE] = {
@@ -384,9 +499,11 @@ class Shortcuts: public DataProvider{
 };
 
 
-///////////////////// MAIN APPLICATION CLASS ////////////////////////
+//////////////////// MAIN APPLICATION CLASS ////////////////////////
 
-/** Connects hardware events to application actions and keeps the local and web UI updated. */
+/**
+ * @brief Connects hardware events to application actions and keeps the local and web UI updated.
+ */
 class ApplicationManager : public GenericComponent,MenuComponentRenderer,public EventDispatcher, public EventListener{
   //
   public:
@@ -399,19 +516,19 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     Event evt;
 
-    ///////////////////// USER CALLBACKS ////////////////////////////////////////////////////
+    //////////////////// USER CALLBACKS ////////////////////////////////////////////////////
     ParseJsonInputCallback userParseJsonInputCallback = defaultParseJsonInputCallback;
     ReturnStringCallback userJsonPongCallback = defaultStringReturn;
     VoidCallback userWizardstepFlow = defaultWizardStepFlow;
     VoidDoubleIntCallback userScreenBuilder = defaultVoidDoubleInt;
 
-    ///////////////////// STRIPS & BANKS CONTAINERS AND DEFINITION ////////////////////////
+    //////////////////// STRIPS & BANKS CONTAINERS AND DEFINITION ////////////////////////
     //LinkedList<IntervalBank*> banks = LinkedList<IntervalBank*>();
-    std::vector<IntervalBank*> banks; // Banks available to the application.
+    std::vector<IntervalBank*> banks; ///< Banks available to the application.
 
     StripHeaderWidget* stripHeader = nullptr;
 
-    ///////////////////// OVERLAY ICONS ////////////////////////
+    //////////////////// OVERLAY ICONS ////////////////////////
 
     String apIcon,
           interfaceIcon = ICON_FORBID,
@@ -437,7 +554,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
                 
     String* byeIcon = &iconForbid; const uint16_t* byeIconColor = &GUI::defaultFcolor;
 
-    float interfaceIconBrightness = GUI::systemBrightness;      // used to blink icon when dataProcessed
+    float interfaceIconBrightness = GUI::systemBrightness;      ///< used to blink icon when dataProcessed
 
     String utilsBlinkLabel = "", utilsBlinkIcon = "";
 
@@ -455,9 +572,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     float pendingBarWidth = TFT_WIDTH;
    
-    bool disabledBankRendering = false;   // this is to stop rendering the bank  
+    bool disabledBankRendering = false;   ///< this is to stop rendering the bank
 
-    ///////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
+    //////////////////// MENU SYSTEM ATTRIBUTES AND MESSAGE ////////////////////////
 
     MenuSystem ms = MenuSystem(*this);
     MenuSystem* bankMenu = nullptr;
@@ -465,9 +582,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     Menu* langMenu = nullptr;
     Menu* confMenu = nullptr;
-    String menuTopText=" ", vBatLabel; //menuTitle
+    String menuTopText=" ", vBatLabel; ///< menuTitle
 
-    // Icon and color for one of the three visible menu positions.
+    /**
+     * @brief Icon and color for one of the three visible menu positions.
+     */
     struct MenuItems{
       String icon="";
       uint16_t color = GUI::menuInactiveIconColor;
@@ -499,11 +618,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     #define stripdatasets "stripdatasets"
     #define bulkconfig  "bulkConfig"
 
-    ///////////////////// UTILITIES ATTRIBUTES ////////////////////////
+    //////////////////// UTILITIES ATTRIBUTES ////////////////////////
 
     BankNavigator* navBar = nullptr;
 
-    // Message, button choices and destinations for a prompt; zero timeout waits for input.
+    /**
+     * @brief Prompt message, button choices, destinations and optional timeout.
+     *
+     * Message, button choices and destinations for a prompt; zero timeout waits for input.
+     */
     struct PromptParameters{
       String message;
       String labels[3];
@@ -526,7 +649,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
      String FSstat = "";
 
-    ///////////////// INTERFACES ///////////////////
+    //////////////// INTERFACES ///////////////////
     //OSCInterface osc;
     NetworkOSC* networkOSCinterface;
 
@@ -544,28 +667,30 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
     WebApplicationService* webAppService = nullptr;
 
-    String configClientIP; // ip of the client connect to the AP during configuration
+    String configClientIP; ///< ip of the client connect to the AP during configuration
 
-    String firmwareUpdateFilename="";       // from fileStream
-    String fwUpdateURL="";                   // from internet
+    String firmwareUpdateFilename="";       ///< from fileStream
+    String fwUpdateURL="";                   ///< from internet
 
     Shortcuts shortcuts = Shortcuts(SHORTCUT_GROUP);
 
-    ///////////////////////////////////////////////////////////////
-    //////////////////                        /////////////////////
-    //////////////////    MAIN CLASS START   //////////////////////
-    //////////////////                       //////////////////////
-    ///////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////
+    /////////////////                        /////////////////////
+    /////////////////    MAIN CLASS START   //////////////////////
+    /////////////////                       //////////////////////
+    //////////////////////////////////////////////////////////////
 
     virtual const char* getDispatcherName() const override{
       return id.c_str();
     }
 
+    /** @brief Return the name used to identify this listener in logs. */
     virtual const char* getListenerName()  override{
       return id.c_str();
     }
 
 
+    /** @brief Initialize ApplicationManager with the supplied configuration and bindings. */
     ApplicationManager(HardwareManager* h, GUIManager* g, bool debug=true): GenericComponent(debug),EventDispatcher(12){
       hwm = h;
       gui = g;
@@ -594,6 +719,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       };*/
     }
 
+    /** @brief Return the button refresh flag used by the application. */
     bool getButtonState(uint8_t B){
       return hwm->buttons[B]->refreshed;
     }
@@ -606,7 +732,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }*/
 
-    // Return the focused strip in the current bank, if available.
+    /**
+     * @brief Return the focused strip in the current bank, if available.
+     */
     Strip* getSelectedStrip(){
      if (screen.state >= banks.size()) return nullptr;
       IntervalBank* bank = banks[screen.state];
@@ -615,11 +743,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-    // Check once for a newer firmware version and offer the update when enabled.
-    // A successful internet check triggers this once per boot. A newer version
-    // enables the update menu and can open an automatic prompt if allowed.
-    // alreadyChecked is set before the request: reconnecting does not retry a
-    // failed check during the same boot.
+    /**
+     * @brief Check once for a newer firmware version and offer the update when enabled.
+     *
+     * A successful internet check triggers this once per boot. A newer version
+     * enables the update menu and can open an automatic prompt if allowed.
+     * alreadyChecked is set before the request: reconnecting does not retry a
+     * failed check during the same boot.
+     */
     void checkRemoteVersion(){
       static bool alreadyChecked = false;
       //  check is only done once to avoid slowing down workflow when network disconnect and reconnect (when called by ping callback)
@@ -659,22 +790,26 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-    // React to the internet check, then pass the result to listeners.
+    /**
+     * @brief React to the internet check, then pass the result to listeners.
+     */
     void internetCallBack(TargetEcho* internetEcho){
-      ///////////////////////// do what application manager has to do when internet is connected/disconnected
+      //////////////////////// do what application manager has to do when internet is connected/disconnected
       if (internetEcho->alive){
         DEBUG_INFO("[ping]\t\t%s : internet connected\n\n",internetEcho->host.c_str());
         checkRemoteVersion();
       }else{
         DEBUG_INFO("[ping]\t\t%s : No internet connection, skipping remote version check\n\n",internetEcho->host.c_str());
       }
-      ///////////////////////// then propagate the event
+      //////////////////////// then propagate the event
       evt.type = EVENT_INTERNET_PING;
       evt.data = internetEcho;
       fireEvent(evt);
     }
 
-    // Choose the battery icon, warning color and voltage label.
+    /**
+     * @brief Choose the battery icon, warning color and voltage label.
+     */
     void setBatIcon(){
       batIconColor = TFT_GREEN;
       switch(hwm->battery.batteryState){
@@ -696,7 +831,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       vBatLabel = concatStrings(*lang.getString("Battery"), ": ", hwm->battery.vBat, "v");
     }
 
-    // Show whether the configuration access point is available and connected.
+    /**
+     * @brief Show whether the configuration access point is available and connected.
+     */
     void setAPIcon(){
       if (hwm->ap == nullptr){
         apIcon = emptyString;
@@ -711,7 +848,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Show a steady connected color or animate the disconnected indicator.
+    /**
+     * @brief Show a steady connected color or animate the disconnected indicator.
+     */
     void setNetworkConnectivityColor(){
       if (hwm->network->state == CONNECTED){
         networkConnectivityIconGlowingRedColor.value = &GUI::unUsedColor;
@@ -721,7 +860,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Clear system settings and show a reset message before sleeping.
+    /**
+     * @brief Clear system settings and show a reset message before sleeping.
+     */
     void goToResetScreenAndSleep(String message){
       clearConfig();
       menuTopText = *lang.getString(message);
@@ -731,14 +872,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       screen.id = SCREEN_BYE; screen.state = STATE_BYE_GOSLEEP_MESSAGE;         //we could create a screen dedicated for reset
     }
 
-    // Show the battery status before the device returns to sleep.
+    /**
+     * @brief Show the battery status before the device returns to sleep.
+     */
     void goToBigBatteryIconScreenAndSleep(){
       byeIcon = &batIcon; byeIconColor = &batIconColor;
       screen.id = SCREEN_BYE;
       screen.state = STATE_BYE_GOSLEEP_MESSAGE;
     }
 
-    // Append banks from JSON and rebuild the bank menu.
+    /**
+     * @brief Append banks from JSON and rebuild the bank menu.
+     */
     IntervalBank* deserializeBanks(const String* bankJsonString){
       IntervalBank* bank = nullptr;
 
@@ -763,7 +908,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-    // Apply saved Wi-Fi, button timing and language settings.
+    /**
+     * @brief Apply saved Wi-Fi, button timing and language settings.
+     */
     void applySystemSettings(){
       // this function applies all settings from the systemCfg conf file
       wiFiList.deserialize(*systemCfg.getString(S_SSID));
@@ -783,7 +930,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     #define DEFAULT_PROFILE "default"
     #define SYSTEM_FILE_NAME "/settings.sys"
 
-    // Remove system settings and reset saved display preferences.
+    /**
+     * @brief Remove system settings and reset saved display preferences.
+     */
     void clearConfig(){
       // add a callback usere function userClearConfig()
       // delete all config files here, add the code to iterate FS on *.conf
@@ -801,7 +950,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     #define CUSTOM_LOGO_FILE "/custom.jpg"
 
 
-    // Initialize hardware, strip types, interfaces, settings and menus, then choose the startup screen.
+    /**
+     * @brief Initialize hardware, strip types, interfaces, settings and menus, then choose the startup screen.
+     */
     void init(String _defaultUserConf="{}"){
       defaultUserConf = _defaultUserConf;
       GenericComponent::init();
@@ -933,9 +1084,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       for (uint8_t i=0;i<SCREEN_MAX;i++) screenBuilders.add(&screens[i]);
 
-      ////////////////////////////////////////////////////////////////////////
+      ///////////////////////////////////////////////////////////////////////
       // REGISTER APPLICATION MANAGER AS AN EVENT LISTENER OF OTHERS COMPONENTS
-      ////////////////////////////////////////////////////////////////////////
+      ///////////////////////////////////////////////////////////////////////
       for (uint8_t i=0;i<MAXB;i++){
         hwm->buttons[i]->registerEventListener(this);   // ApplicationManager listen to switch event
       }
@@ -944,9 +1095,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       hwm->battery.registerEventListener(this);         // ApplicationManager listen to battery state
 
-      ////////////////////////////////////////////////////////////////////////
+      ///////////////////////////////////////////////////////////////////////
       // DESIGN MENU
-      ////////////////////////////////////////////////////////////////////////
+      ///////////////////////////////////////////////////////////////////////
       back_menu_item = new MenuItem(quitMenuString, &back_menu_item_selected);
       info_menu_item = new MenuItem(infoMenuString, &info_item_selected);
       config_menu_item = new MenuItem(configMenuString,&config_menu_item_selected);
@@ -1033,7 +1184,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       DEBUG_INFO("[APP] ***************************************************\n\n");
     }
 
-    // Load the selected profile's banks and restore the saved screen.
+    /**
+     * @brief Load the selected profile's banks and restore the saved screen.
+     */
     void startup(uint8_t startupScreen){
       DEBUG_INFO("[APP] ******************* startup *****************");
       // save the screen to be called (wiuard or bank)
@@ -1054,7 +1207,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       DEBUG_INFO("[APP] ******************* startup.end *****************\n\n");
     }
 
-    // Disable strip-facing interfaces that have no registered listeners.
+    /**
+     * @brief Disable strip-facing interfaces that have no registered listeners.
+     */
     void disableUnusedInterface(){
       // unsused interfaces are the one which are not referred by any instanciated strips
       for (const auto& interface : interfaceRepo.interfaces){
@@ -1066,23 +1221,26 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Ask the browser to fetch the bank configuration again over HTTP.
+    /**
+     * @brief Ask the browser to fetch the bank configuration again over HTTP.
+     */
     void webAppToRefreshBanks(){
       // the banks have to be send by POST http and not socket, hence we just tells the application:
       // now you need to request the banks to be send you back by placing a postQuery
       broadCast("{\"reloadBanks\":\"\"}");
     }
 
-    // *********************************
-    // EVENTS HANDLERS
-    // *********************************
-   // Handle network, button and battery changes, then forward the event to listeners.
-   // Important reactions before forwarding the event to listeners:
-   // - Ethernet inserted during Wi-Fi closes the browser session and stops interfaces.
-   // - A connected network saves the Wi-Fi choice and can serve configuration.
-   // - Connection changes update icons; button events go to gesture handlers.
-   // - Critical battery voltage opens the sleep screen unless USB power is present.
-   // Unhandled events are forwarded too.
+    /** @brief Handle relevant incoming events for this component.
+    *
+    * EVENTS HANDLERS
+    * Handle network, button and battery changes, then forward the event to listeners.
+    * Important reactions before forwarding the event to listeners:
+    * - Ethernet inserted during Wi-Fi closes the browser session and stops interfaces.
+    * - A connected network saves the Wi-Fi choice and can serve configuration.
+    * - Connection changes update icons; button events go to gesture handlers.
+    * - Critical battery voltage opens the sleep screen unless USB power is present.
+    * Unhandled events are forwarded too.
+    */
    void onEvent(const Event& evt) override {
       switch (evt.type) {
         case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:
@@ -1136,7 +1294,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       fireEvent(evt);   // propagate the event
     }
 
-    // Route a footswitch gesture to its click or hold handler.
+    /**
+     * @brief Route a footswitch gesture to its click or hold handler.
+     */
     void handleSwitchEvent(const Event& event) {
       ButtonData* btData = (ButtonData*) event.data;
       switch(btData->id){
@@ -1162,10 +1322,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-    // Use power-button gestures to open menus or toggle the selected interface.
-    // Long press toggles the menu. Double press on the bank screen toggles the
-    // selected strip's interface only if allowed; save the choice and mark its
-    // state for notification to the browser.
+    /** @brief Map power-button gestures to menu navigation and interface enable/disable.
+     *
+     * Use power-button gestures to open menus or toggle the selected interface.
+     * Long press toggles the menu. Double press on the bank screen toggles the
+     * selected strip's interface only if allowed; save the choice and mark its
+     * state for notification to the browser.
+     */
     void handleOnOffEvent(const Event& event){
       ButtonData* btData = (ButtonData*) event.data;
       switch(btData->id){
@@ -1207,13 +1370,17 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Open the prepared prompt and start its timer.
+    /**
+     * @brief Open the prepared prompt and start its timer.
+     */
     void promptScreen(){
       resetPromptTimer();
       screen.id = SCREEN_PROMPT;
     }
 
-    // Prepare a message with one confirmation button.
+    /**
+     * @brief Prepare a message with one confirmation button.
+     */
     void singlePromptScreen(String message,String label, uint8_t targetState = STATE_UTILS_RESTORE_SCREEN){
       promptParams.message = *lang.getString(message);
 
@@ -1230,10 +1397,13 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       promptScreen();     // branch to prompt screen
     }
 
-    // Offer the firmware update, or show its progress if already running.
-    // Left accepts, middle declines, right disables future automatic prompts.
-    // Timeout takes the middle choice: waiting never accepts an update.
-    // If download/flashing is already running, show its progress instead.
+    /**
+     * @brief Offer the firmware update, or show its progress if already running.
+     *
+     * Left accepts, middle declines, right disables future automatic prompts.
+     * Timeout takes the middle choice: waiting never accepts an update.
+     * If download/flashing is already running, show its progress instead.
+     */
     void SWupdatePromptScreen(uint16_t timeoutMs = 5000){
 
       if (downloadSreamInprogress){
@@ -1266,10 +1436,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-    //////////////////////////////////////////////////////////////
-    ////                BUTTONS CALLBACKS                  ///////
-    //////////////////////////////////////////////////////////////
-    // Open the screen assigned to the chosen prompt button.
+    /**
+     * @brief Open the screen assigned to the chosen prompt button.
+     */
     void branchFromPrompt(uint8_t target){
 
       uint8_t targetScreen = promptParams.targetScreens[target];
@@ -1280,6 +1449,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
+    /** @brief Follow the configured destination of a labeled prompt button. */
     void handlePromptClick(uint8_t buttonID){
       // we only handle buttons for which a label has been set
       if (buttonID == hwm->buttons[LEFTB]->getID() && promptParams.labels[0] != "") branchFromPrompt(0);
@@ -1287,6 +1457,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       else if (buttonID == hwm->buttons[RIGHTB]->getID() && promptParams.labels[2] != "") branchFromPrompt(2);
     }
 
+    /** @brief Start the prepared prompt countdown from the current time. */
     void resetPromptTimer(){
       //DEBUG_PRINT("\nresetPromptTimer()");
       promptTimeoutMax = (float)promptParams.timeoutMs;
@@ -1294,7 +1465,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       promptStartTime = millis();
     }
 
-    // Update the countdown; a timed-out prompt takes its middle-button choice.
+    /** @brief Update the countdown and take the middle choice when it expires.
+     *
+     * Update the countdown; a timed-out prompt takes its middle-button choice.
+     */
     void handlePromptTimeout(){
       promptTimeoutMax = promptParams.timeoutMs > 0 ? promptParams.timeoutMs : 1;
       if (promptParams.timeoutMs == 0){
@@ -1309,7 +1483,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Toggle between the menu and the saved application screen.
+    /**
+     * @brief Toggle between the menu and the saved application screen.
+     */
     void menuSwitchCallback(uint8_t buttonID, unsigned long time){
       if (screen.id == SCREEN_MENU){   //set GUI
         restoreScreen();
@@ -1318,7 +1494,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Handle a short press according to the current screen.
+    /**
+     * @brief Handle a short press according to the current screen.
+     */
     void simpleClicCallBack(uint8_t buttonID, unsigned long time){
       switch(screen.id){
         case SCREEN_STARTUP:
@@ -1359,7 +1537,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Handle a long press according to the current screen.
+    /**
+     * @brief Handle a long press according to the current screen.
+     */
     void longClicCallBack(uint8_t buttonID, unsigned long time){
       switch(screen.id){
         case SCREEN_STARTUP:
@@ -1400,7 +1580,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Handle a double press; the bank case currently sends a fixed web message.
+    /** @brief Handle double clicks; the bank case currently broadcasts a fixed test address.
+     *
+     * Handle a double press; the bank case currently sends a fixed web message.
+     */
     void doubleClicCallBack(uint8_t buttonID, unsigned long time){
       switch(screen.id){
         case SCREEN_STARTUP:
@@ -1432,7 +1615,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Finish a hold according to the current screen.
+    /**
+     * @brief Finish a hold according to the current screen.
+     */
     void releaseHoldCallback(uint8_t buttonID, unsigned long time){
       switch(screen.id){
         case SCREEN_STARTUP:
@@ -1474,7 +1659,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       }
     }
 
-    // Handle a continued hold, including repeated strip value changes.
+    /**
+     * @brief Handle a continued hold, including repeated strip value changes.
+     */
     void holdCallback(uint8_t buttonID, unsigned long time){
       switch(screen.id){
         case SCREEN_STARTUP:
@@ -1504,7 +1691,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-    // Route the start of a hold to the bank-screen handler.
+    /**
+     * @brief Route the start of a hold to the bank-screen handler.
+     */
     void enterHoldCallback(uint8_t buttonID, unsigned long time){
       switch(screen.id){
         case SCREEN_STARTUP:
@@ -1529,10 +1718,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
-  //////////////////////////////////////////////////////////////
-  ////                BUTTONS CALLBACKS UTILITIES        ///////
-  //////////////////////////////////////////////////////////////
-  // Browse the bank menu with side buttons and select with the middle button.
+  /**
+   * @brief Browse the bank menu with side buttons and select with the middle button.
+   */
   void handleSwitchScreen(uint8_t buttonID){
     //DEBUG_PRINT("\nhandleSwitchScreen");
     if (buttonID == hwm->buttons[MIDDLEB]->getID() ){
@@ -1545,12 +1733,15 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
   }
 
-  // Save the display brightness and request a redraw.
+  /**
+   * @brief Save the display brightness and request a redraw.
+   */
   void saveBrightness(){
     triggerRedraw();
     hwm->persistants.putFloat(PERSISTANT_BRIGHTNESS,GUI::systemBrightness);
   }
 
+  /** @brief Adjust and save brightness with side buttons, or return to the menu. */
   void handleClicBrightnessButton(uint8_t buttonID){
     #define STEP_BRIGHTNESS_INCREMENT BRIGHTNESS_MAX/10
     if (buttonID == hwm->buttons[MIDDLEB]->getID() || buttonID == hwm->onOff.getID()){
@@ -1562,7 +1753,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
   }
 
-  // Adjust brightness within the supported range.
+  /**
+   * @brief Adjust brightness within the supported range.
+   */
   void changeBrightness(uint8_t buttonID, float increment){
     if (buttonID == hwm->buttons[LEFTB]->getID()){
       if (GUI::systemBrightness > BRIGHTNESS_MIN) GUI::systemBrightness -= increment;
@@ -1573,7 +1766,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
   }
 
-  // Browse menu items or activate the selected item.
+  /**
+   * @brief Browse menu items or activate the selected item.
+   */
   void handleMenuButton(uint8_t buttonID){
     if (buttonID == hwm->buttons[MIDDLEB]->getID() || buttonID == hwm->onOff.getID()){
       ms.select();
@@ -1585,7 +1780,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
   }
 
-  // Use side buttons to select a strip and the middle button to trigger it.
+  /**
+   * @brief Use side buttons to select a strip and the middle button to trigger it.
+   */
   void moduleSimpleClic(uint8_t buttonID){
     // perform the behaviour defined in the config file
     // at the moment, this is hard coded
@@ -1601,7 +1798,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   }
 
 
-  // Toggle the current bank between details and zoom views.
+  /**
+   * @brief Toggle the current bank between details and zoom views.
+   */
   void switchBankLayout(){
     if (screen.state < banks.size()){
       Interval::Bank* bank = banks[screen.state];
@@ -1613,14 +1812,18 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     triggerRedraw();
   }
 
-  // Send repeated value changes to the selected strip.
+  /**
+   * @brief Send repeated value changes to the selected strip.
+   */
   void moduleHoldClic(uint8_t buttonID, unsigned long time){
     // perform the behaviour defined in the config file
     // at the moment, this is hard coded
     stripChangeValue(buttonID, time, BUTTON_HOLD);
   }
 
-  // Switch banks on a middle-button hold and call the strip hold-entry hook.
+  /**
+   * @brief Switch banks on a middle-button hold and call the strip hold-entry hook.
+   */
   void moduleEnterholdClic(uint8_t buttonID, unsigned long time){
     // perform the behaviour defined in the config file
     // at the moment, this is hard coded
@@ -1661,11 +1864,14 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   }
 
 
+  /** @brief Notify the selected strip that the held button was released. */
   void moduleReleaseClic(uint8_t buttonID, unsigned long time){
     stripReleaseHold(buttonID, time, BUTTON_HOLD);
   }
 
-  // Toggle the bank layout with the middle button, or move between strips.
+  /**
+   * @brief Toggle the bank layout with the middle button, or move between strips.
+   */
   void moduleLongClic(uint8_t buttonID){
     if (buttonID == hwm->buttons[MIDDLEB]->getID()){
       //switchBank();
@@ -1677,7 +1883,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
   }
 
-  // Write the current banks to the profile file.
+  /**
+   * @brief Write the current banks to the profile file.
+   */
   bool saveBanks(const String& bankFileName){
     bool success = false;
     // Ouvrir le fichier en écriture
@@ -1694,7 +1902,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     return success;
   }
 
-  // Load a profile's banks, using the welcome bank when its file is unavailable.
+  /**
+   * @brief Load a profile's banks, using the welcome bank when its file is unavailable.
+   */
   bool loadBanks(const String& bankFileName){
 
     String bankDefinition = "{\"Default\":{\"layout\":2,\"icon\":3,\"strips\":[{\"type\":\"text\",\"color\":2,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":0,\"id\":1,\"win\":0},\"properties\":[\"/text/Welcome\"]},{\"type\":\"text\",\"color\":3,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":1,\"id\":2,\"win\":0},\"properties\":[\"/text/Please\"]},{\"type\":\"text\",\"color\":5,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":2,\"id\":3,\"win\":0},\"properties\":[\"/text/goto\"]},{\"type\":\"text\",\"color\":7,\"icon\":5,\"size\":\"4x1\",\"interface\":\""SYSTEM_INTERFACE"\",\"position\":{\"x\":0,\"y\":3,\"id\":4,\"win\":0},\"properties\":[\"/text/configuration\"]}]}}";
@@ -1716,7 +1926,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
   }
 
 
-  // Build a JSON object containing each bank under its name.
+  /**
+   * @brief Build a JSON object containing each bank under its name.
+   */
   String serializeBanks(){
     JsonDocument bankDoc;
 
@@ -1775,7 +1987,9 @@ void setup() {
 
     #define MAX_POST_COMMAND_SIZE 4096 // Limite maximale pour éviter un abus de mémoire, utilisé par la fonction httpPost
 
-    // Send the browser the options it needs when opening the configuration page.
+    /**
+     * @brief Send the browser the options it needs when opening the configuration page.
+     */
     void getJsonStartup(String* returnedJsonStringData){
       JsonDocument doc;
       String tempJsonString="";
@@ -1797,7 +2011,9 @@ void setup() {
 
     }
 
-    // Collect datasets, interfaces, settings and banks for the web configuration.
+    /**
+     * @brief Collect datasets, interfaces, settings and banks for the web configuration.
+     */
     void serialize(String* returnedJsonStringData){
       // this build the full serialization of the application
 
@@ -1846,6 +2062,7 @@ void setup() {
     // Return to the saved bank or wizard step rather than a temporary menu,
     // prompt or progress page. Bank selections are saved in refresh(); the
     // wizard saves its own steps. An unavailable bank falls back to index zero.
+    /** @brief Return to the saved bank or wizard step and correct unavailable selections. */
     void restoreScreen(){
       //DEBUG_PRINT("\nrestoreScreen():");
       screen.id = hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
@@ -1861,21 +2078,26 @@ void setup() {
       //DEBUG_PRINT("\tgetFocusedStrip():%s, id:%i",getSelectedStrip() == nullptr?"null":getSelectedStrip()->getTopLabel()->c_str(),getSelectedStrip() == nullptr?0:getSelectedStrip()->index);
     }
 
+    /** @brief Select the main menu page. */
     void restoreMenu(){
       //DEBUG_PRINT("\nrestoreMenu()");
       screen.id = SCREEN_MENU;
     }
 
+    /** @brief Extract the icon prefix from a menu entry label. */
     String getIconFromString(const char* item){
       return String((char)item[0]);
     }
 
+    /** @brief Extract the text following the menu entry icon prefix. */
     String getNameFromString(const char* item){
       return String(item).substring(2);
     }
 
     std::vector<String> countryList;
-    // Build the language menu from the language files on the device.
+    /**
+     * @brief Build the language menu from the language files on the device.
+     */
     void buildLangMenu(){
       if (langMenu != nullptr) delete langMenu;
       langMenu = new Menu(langMenuString,menu_selected);
@@ -1892,18 +2114,23 @@ void setup() {
       }
     }
 
-    // Add the language choices and back item to the main menu.
+    /**
+     * @brief Add the language choices and back item to the main menu.
+     */
     void hookLangToMenu(){
       buildLangMenu();
       langMenu->add_item(back_menu_item);
       ms.get_root_menu().add_menu(langMenu);
     }
 
-    // Delete matching files in the given folder; '*' matches all files.
+    /** @brief Delete matching files in the supplied folder, without recursing into subfolders.
+     *
+     * Delete matching files in the given folder; '*' matches all files.
+     */
     void cleanFolder(String path, String fType) {
       File root = LittleFS.open(path);
       if (!root || !root.isDirectory()) {
-        ////DEBUG_PRINT("\nInvalid directory: %s", path.c_str());
+        ///DEBUG_PRINT("\nInvalid directory: %s", path.c_str());
         return;
       }
 
@@ -1921,9 +2148,9 @@ void setup() {
           if (shortName.endsWith(fType) || fType == "*") {
             String fullPath = concatStrings(path, "/", shortName);
             if (LittleFS.remove(fullPath)) {
-              ////DEBUG_PRINT("\nDeleted %s", fullPath.c_str());
+              ///DEBUG_PRINT("\nDeleted %s", fullPath.c_str());
             } else {
-              ////DEBUG_PRINT("\nFailed to delete %s", fullPath.c_str());
+              ///DEBUG_PRINT("\nFailed to delete %s", fullPath.c_str());
             }
           }
         }
@@ -1941,7 +2168,9 @@ void setup() {
       if (webAppService != nullptr) webAppService->handleWeb();
     }*/
 
-    // Find a named root-menu entry, select it and open the menu screen.
+    /**
+     * @brief Find a named root-menu entry, select it and open the menu screen.
+     */
     void jumpToMenu(const char* menuTitle){
       // we branch to the lang menu
       ms.reset();
@@ -1953,32 +2182,40 @@ void setup() {
       restoreMenu();
     }
 
-    // Mark the screen as changed so the next refresh rebuilds its widgets.
-    // Changing focus marks the screen as different even when id/state stay the
-    // same, for example after a layout change or an edit from the browser.
+    /**
+     * @brief Mark the screen as changed so the next refresh rebuilds its widgets.
+     *
+     * Changing focus marks the screen as different even when id/state stay the
+     * same, for example after a layout change or an edit from the browser.
+     */
     void triggerRedraw(){
       // this forces the GUI to be rebuild at next refresh
       //DEBUG_PRINT("\ntriggerRedraw()");
       screen.focus = screen.focus - 1;
     }
 
+    /** @brief Select the multi-file download progress page. */
     void setCloudDownloadProgressScreen(){
       iconProgress = ICON_CLOUD_DOWNLOAD;
       screen.id = SCREEN_UTILS;
       screen.state = STATE_UTILS_SHOW_PROGRESS_MULTIPLE;
     }
 
+    /** @brief Set the firmware-flashing icon and progress label. */
     void setBinaryFlashScreen(){
       iconProgress = ICON_FWUPDATE;
       updateProgressLabel = *lang.getString("Flashing firmware in progress, do not interrupt!");
     }
 
-    // Build content and overlay for id, passing state to both callbacks.
-    // Callback argument names may say "id", but they receive the sub-screen state.
-    // This creates widgets only: it does not assign screen.id/state, save the
-    // destination or run the page's workflow. The normal refresh path purges
-    // old widgets first. Upload progress can also call this directly through
-    // startGUIThread(), temporarily showing progress without changing screen.
+    /**
+     * @brief Build content and overlay for id, passing state to both callbacks.
+     *
+     * Callback argument names may say "id", but they receive the sub-screen state.
+     * This creates widgets only: it does not assign screen.id/state, save the
+     * destination or run the page's workflow. The normal refresh path purges
+     * old widgets first. Upload progress can also call this directly through
+     * startGUIThread(), temporarily showing progress without changing screen.
+     */
     void buildGUI(uint8_t id, uint8_t state){
       // then retrive the screen builder and its overlay by ID
       for(int i = 0; i < screenBuilders.size(); i++){
@@ -2001,7 +2238,9 @@ void setup() {
     }
 
     bool shutdownDone = false;
-    // End all interfaces and tell the browser that the session is closing.
+    /**
+     * @brief End all interfaces and tell the browser that the session is closing.
+     */
     void shutdownInterfaces(){
       // called when system stops
       DEBUG_INFO("shuting down interfaces");
@@ -2012,7 +2251,9 @@ void setup() {
       sendTerminateMessageToWebApp(); // tell the webapp to close
     }
 
-    // Stop interface connections when changing network media.
+    /**
+     * @brief Stop interface connections when changing network media.
+     */
     void stopInterfaces(){
       // called when network change its media and we need to correcly close all connection
       DEBUG_INFO("stoping down interfaces");
@@ -2023,10 +2264,13 @@ void setup() {
       sendTerminateMessageToWebApp(); // tell the webapp to close
     }
 
-    // Run hardware, interface, bank and display updates, then advance the current screen's workflow.
-    // Update order: hardware, interfaces, queued browser messages, banks,
-    // screen rebuilding/rendering, then the current page's workflow.
-    // A transition requested by that final workflow is rendered on the next pass.
+    /**
+     * @brief Run hardware, interface, bank and display updates, then advance the current screen's workflow.
+     *
+     * Update order: hardware, interfaces, queued browser messages, banks,
+     * screen rebuilding/rendering, then the current page's workflow.
+     * A transition requested by that final workflow is rendered on the next pass.
+     */
     bool refresh(bool force=false){
 
       yield();
@@ -2331,7 +2575,9 @@ void setup() {
     }
 
 
-    // Queue a message for connected browsers, or send it immediately when requested.
+    /**
+     * @brief Queue a message for connected browsers, or send it immediately when requested.
+     */
     void broadCast(String msg, bool immediate=false){
       if (webAppConnected){
         if (immediate) _wssBrodcast(msg);
@@ -2339,7 +2585,9 @@ void setup() {
       }
     }
 
-    // Send queued browser messages in their original order.
+    /**
+     * @brief Send queued browser messages in their original order.
+     */
     void processBroadcastQueue() {
       while (!broadcastQueue.empty()) {
         String msg = broadcastQueue.front();  // lire le 1er message
@@ -2348,7 +2596,9 @@ void setup() {
       }
     }
 
-    // Send a WebSocket message when the configuration connection is available.
+    /**
+     * @brief Send a WebSocket message when the configuration connection is available.
+     */
     void _wssBrodcast(String& msg){
       if (hwm->configMedia != nullptr){
         if (webAppConnected && hwm->configMedia->state == CONNECTED){
@@ -2358,14 +2608,19 @@ void setup() {
       }
     }
 
-    // Erase and reinitialize the ESP32 settings partition; files are handled separately.
+    /** @brief Reset this object to its initial state.
+     *
+     * Erase and reinitialize the ESP32 settings partition; files are handled separately.
+     */
     void reset(){
       nvs_flash_erase(); // erase the NVS partition and...
       nvs_flash_init(); // initialize the NVS partition.
       // next: delete conf file
     }
 
-    // Save an incoming stream to the appropriate folder and report transfer progress.
+    /**
+     * @brief Save an incoming stream to the appropriate folder and report transfer progress.
+     */
     bool streamToFile(Stream* stream, String filename){
 
       String path = "/";
@@ -2408,7 +2663,9 @@ void setup() {
       return true;
     }
 
-    // Tell the browser immediately that its session is ending.
+    /**
+     * @brief Tell the browser immediately that its session is ending.
+     */
     void sendTerminateMessageToWebApp(String message = "Finished") {
       // inform web interface immediately without queuing the message for next loop
       broadCast("{\"terminate\":\"" + message + "\"}", IMMEDIATE);
@@ -2476,7 +2733,9 @@ void setup() {
         };
 
 
-    // Route web commands and uploads, or serve web files with compression when available.
+    /**
+     * @brief Route web commands and uploads, or serve web files with compression when available.
+     */
     void commonFileServer(Request &req, Response &res) {
       if (hwm->network->media == CABLE_MEDIA) hwm->network->stopAllUDP();   // because of limited IP sockets in ethernet
       if (webAppService != nullptr) webAppService->reportActivity();
@@ -2550,12 +2809,15 @@ void setup() {
       res.end();
     }
 
-    // Read an uploaded filename and route the content to an update installer or file storage.
-    // Route .tgz to archive extraction/check-binary, .bin.gz directly to the
-    // firmware installer, and other filenames to file storage.
-    // This already runs in the web task, so installers are called directly.
-    // A separate GUI task keeps progress visible during the blocking transfer.
-    // The request stream remains owned by the web server.
+    /**
+     * @brief Read an uploaded filename and route the content to an update installer or file storage.
+     *
+     * Route .tgz to archive extraction/check-binary, .bin.gz directly to the
+     * firmware installer, and other filenames to file storage.
+     * This already runs in the web task, so installers are called directly.
+     * A separate GUI task keeps progress visible during the blocking transfer.
+     * The request stream remains owned by the web server.
+     */
     bool httpUpload(Request &req, Response &res) {
       // aWOT 3.x: headers accessibles via req.get(...) seulement si app.header(...) a été déclaré
       String ct = String(req.get("Content-Type"));  // ex: multipart/form-data; boundary=----WebKitFormBoundary...
@@ -2655,7 +2917,9 @@ void setup() {
       UPLOAD_DEST_FSFILE,
     } UploadDest;
 
-    // Choose archive installation, firmware flashing or file storage from the filename.
+    /**
+     * @brief Choose archive installation, firmware flashing or file storage from the filename.
+     */
     UploadDest decideDestination(const String &filename) {
       if (filename.endsWith(".tgz")) return UPLOAD_DEST_TGZUPDATE;
       if (filename.endsWith(".bin.gz")) return UPLOAD_DEST_FWUPDATE;
@@ -2663,7 +2927,9 @@ void setup() {
     }
 
 
-    // Read an upload header line, stopping at a newline, length limit or timeout.
+    /**
+     * @brief Read an upload header line, stopping at a newline, length limit or timeout.
+     */
     bool readLine(Request &req, String &out, uint32_t timeoutMs = 5000, size_t maxLen = 1024) {
       out = "";
       uint32_t t0 = millis();
@@ -2681,7 +2947,9 @@ void setup() {
       return out.length() > 0;
     }
 
-    // Read the multipart separator from the upload's Content-Type header.
+    /**
+     * @brief Read the multipart separator from the upload's Content-Type header.
+     */
     bool extractBoundary(const String &contentType, String &boundaryOut) {
       boundaryOut = "";
       int idx = contentType.indexOf("boundary=");
@@ -2694,7 +2962,9 @@ void setup() {
       return boundaryOut.length() > 0;
     }
 
-    // Extract the uploaded filename and remove any client-side folder path.
+    /**
+     * @brief Extract the uploaded filename and remove any client-side folder path.
+     */
     String extractFilenameFromContentDisposition(const String &cd) {
       int f = cd.indexOf("filename=");
       if (f < 0) return "";
@@ -2716,7 +2986,9 @@ void setup() {
     }
 
 
-    // Send a file using transfer sizes suited to Wi-Fi or Ethernet, then close it.
+    /**
+     * @brief Send a file using transfer sizes suited to Wi-Fi or Ethernet, then close it.
+     */
     void sendFileInChunks(File* file, Response* res) {
       size_t chunkedDataSize = 64; // for ethernet: 64 is the good value, 128/256/512 = throw ERR_CONNECTION_REFUSED, file.size() = throw DECODE_ERROR
 
@@ -2744,19 +3016,27 @@ void setup() {
       file->close();
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     void render(Menu const& menu) const {}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     void render_menu_item(MenuItem const& menu_item) const {}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     void render_back_menu_item(BackMenuItem const& menu_item) const {}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     void render_numeric_menu_item(NumericMenuItem const& menu_item) const {}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     void render_menu(Menu const& menu) const {}
 
+    /** @brief Refresh the current menu icons and label. */
     void menuSystemFullRefresh(){
       //DEBUG_PRINT("\nmenuSystemFullRefresh");
       setRootMenuItems(&ms);
       menuTopText = *lang.getString(" "); // empty message
     }
 
-    // Prepare the selected menu item's label and the neighboring icons.
+    /**
+     * @brief Prepare the selected menu item's label and the neighboring icons.
+     */
     void setRootMenuItems(MenuSystem* m){
       //ms.get_current_menu()->get_current_component(
       Menu const* menu = m->get_current_menu();
@@ -2830,7 +3110,9 @@ void setup() {
       }
     }
 
-    // Prepare the bank name and neighboring bank icons for the selection menu.
+    /**
+     * @brief Prepare the bank name and neighboring bank icons for the selection menu.
+     */
     void setBankMenuItems(){
       Menu const* menu = bankMenu->get_current_menu();
       uint8_t numItem = menu->get_num_components();
@@ -2874,6 +3156,7 @@ void setup() {
       menuItems[2].color = GUI::menuInactiveIconColor;
     }
 
+    /** @brief Refresh the bank-choice icons and label. */
     void menuSwitchBankFullRefresh(){
       //DEBUG_PRINT("\nmenuSystemFullRefresh");
       setBankMenuItems();
@@ -2882,7 +3165,9 @@ void setup() {
       menuTopText = *lang.getString(" "); // empty message
     }
 
-    // Toggle directly between two banks, or open the menu when there are more.
+    /**
+     * @brief Toggle directly between two banks, or open the menu when there are more.
+     */
     void switchBank(){
       // if we have one bank or two we shift directly
       if (banks.size() == 2) screen.state = (screen.state + 1) % banks.size(); // <=2
@@ -2891,16 +3176,15 @@ void setup() {
       //else banks are empty, we do nothing
     }
 
-    ///////////////////////////////////////////////////////////////////////
-
-    //  APPLICATION & WORKFLOW MANAGEMENT METHODS
-
-    ///////////////////////////////////////////////////////////////////////
-    // Move strip focus, update the header and redraw when the visible layout changes.
-    // Wrap selection from last to first and vice versa. Remove focus from the
-    // old strip, then focus the target so it can request its current settings.
-    // Rebuild for a new window, a full-size target or zoom mode; otherwise the
-    // existing widgets can show the newly selected strip.
+    /** @brief Move strip focus with wraparound and rebuild when the visible layout changes.
+     *
+     * APPLICATION & WORKFLOW MANAGEMENT METHODS
+     * Move strip focus, update the header and redraw when the visible layout changes.
+     * Wrap selection from last to first and vice versa. Remove focus from the
+     * old strip, then focus the target so it can request its current settings.
+     * Rebuild for a new window, a full-size target or zoom mode; otherwise the
+     * existing widgets can show the newly selected strip.
+     */
     bool stripScroll(uint8_t direction) {
 
       if (screen.state >= banks.size()) return false;
@@ -2997,7 +3281,9 @@ void setup() {
 
       DEBUG_PRINT("\nbank->stripIndex:%i changedwindow:%i",bank->stripIndex, changedWindow);*/
 
-    // Send the action to the selected strip.
+    /**
+     * @brief Send the action to the selected strip.
+     */
     bool stripAction(uint8_t trigger) {
       if (screen.state >= banks.size()) return false;
       IntervalBank* bank = banks[screen.state];
@@ -3008,7 +3294,9 @@ void setup() {
       return false;
     }
 
-    // Send an increase or decrease request to the selected strip.
+    /**
+     * @brief Send an increase or decrease request to the selected strip.
+     */
     void stripChangeValue(uint8_t direction, unsigned long time, uint8_t trigger){
 
       if (screen.state >= banks.size()) return;
@@ -3024,12 +3312,17 @@ void setup() {
 
     }
 
-    // Placeholder for strip hold-entry handling; currently only logs the event.
+    /** @brief Hold-entry hook; currently only emits a debug message.
+     *
+     * Placeholder for strip hold-entry handling; currently only logs the event.
+     */
     void stripEnterHold(uint8_t direction, unsigned long time, uint8_t trigger){
       DEBUG_WARN("\n\n\n                 ENTER HOLD STRIP              \n\n\n");
     }
 
-    // Notify the selected strip that the held button was released.
+    /**
+     * @brief Notify the selected strip that the held button was released.
+     */
     void stripReleaseHold(uint8_t direction, unsigned long time, uint8_t trigger){
       DEBUG_WARN("\n\n\n                 RELEASE HOLD STRIP              \n\n\n");   
       IntervalBank* bank = banks[screen.state];
@@ -3041,7 +3334,9 @@ void setup() {
 
 
 
-    // Apply strip ordering received from the browser and recover an invalid selection.
+    /**
+     * @brief Apply strip ordering received from the browser and recover an invalid selection.
+     */
     bool updatePositions(IntervalBank* bank, JsonArray positions){
       bool success = false;
       //"positions":[{"x":0,"y":0,"id":0},{"x":0,"y":1,"id":1},{"x":0,"y":2,"id":2}]}}
@@ -3066,13 +3361,15 @@ void setup() {
       return success;
     }
 
-    // Schedule a restart through the utility-screen workflow.
+    /**
+     * @brief Schedule a restart through the utility-screen workflow.
+     */
     void restart(){
       screen.id = SCREEN_UTILS;
       screen.state = STATE_UTILS_RESTART_DEVICE;
     }
 
-    /////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////
 
     #define BAD_BANK_MSG "Bad bank"
     #define BAD_STRIP_MSG "Bad strip"
@@ -3083,7 +3380,9 @@ void setup() {
     #define RET_COMMANDERROR        "commandError"
     #define RET_POPUP               "commandPopup"
 
-    // Send a log message to the browser console.
+    /**
+     * @brief Send a log message to the browser console.
+     */
     void log(const char* originator, const char* message) {
         const char* logLinePattern = "{\"logWebConsole\":{\"originator\":\"%s\",\"message\":\"%s\"}}";
 
@@ -3100,17 +3399,21 @@ void setup() {
     }
 
 
+    /** @brief Return the current network description as JSON. */
     String getConnectivityState(){
       return hwm->network->serialize();
     }
 
-    // Process a browser command and build its reply; pass unknown commands to the user callback.
-    // retrieve reads configuration; bank/strip edits generally change memory
-    // and mark the browser's save button. System settings and interface settings
-    // have their own immediate-save paths. Explicit save writes profile banks
-    // and settings; flash schedules the online update through the screen workflow.
-    // Unknown commands go to userParseJsonInputCallback. Replies use a callback
-    // name as the JSON key so the browser knows what to refresh.
+    /** @brief Handle a browser command and return the callback/data JSON reply.
+     *
+     * Process a browser command and build its reply; pass unknown commands to the user callback.
+     * retrieve reads configuration; bank/strip edits generally change memory
+     * and mark the browser's save button. System settings and interface settings
+     * have their own immediate-save paths. Explicit save writes profile banks
+     * and settings; flash schedules the online update through the screen workflow.
+     * Unknown commands go to userParseJsonInputCallback. Replies use a callback
+     * name as the JSON key so the browser knows what to refresh.
+     */
     String parseJsonInput(String input){
 
       JsonDocument jsonInput;
@@ -3289,7 +3592,7 @@ void setup() {
           Strip* strip = bank->getStrip(id);
 
           if (strip != nullptr){
-            ///WARNING THIS IS THE DESTINATION POSITION!!!!!!
+            //WARNING THIS IS THE DESTINATION POSITION!!!!!!
             strip->x = jsonInput["param"]["x2"];
             strip->y = jsonInput["param"]["y2"];
             updatePositions(bank,jsonInput["param"][C_POSITIONS]);
@@ -3501,7 +3804,9 @@ void setup() {
 
     }
     
-    // Prepare updated banks and strip choices for the browser.
+    /**
+     * @brief Prepare updated banks and strip choices for the browser.
+     */
     void refreshBanksResponse(){
       JsonDocument doc;
 
@@ -3522,6 +3827,7 @@ void setup() {
     }
 
 
+    /** @brief Write text to a LittleFS file and close it. */
     bool writeStringtoFile(const String &filename, String& entries) {
       File file = LittleFS.open(filename, "w");
       if (!file) return false;
@@ -3530,7 +3836,9 @@ void setup() {
       return true;
     }
 
-    // Scan nearby Wi-Fi networks and broadcast up to ten network names.
+    /**
+     * @brief Scan nearby Wi-Fi networks and broadcast up to ten network names.
+     */
     void scanNetworksTask(void * parameter) {
       #define MAX_NUMBER_OF_NETWORK_TO_REPORT 10
       //DynamicJsonDocument doc(60+50*MAX_NUMBER_OF_NETWORK_TO_REPORT);
@@ -3569,7 +3877,10 @@ void setup() {
     }
 
 
-    // Find a bank by name and optionally return its position; the returned pointer is borrowed.
+    /** @brief Find a borrowed bank by name and optionally return its vector position.
+     *
+     * Find a bank by name and optionally return its position; the returned pointer is borrowed.
+     */
     IntervalBank* getBank(const String& name, uint8_t* index) {
         if (banks.empty()) return nullptr;
 
@@ -3584,7 +3895,9 @@ void setup() {
         return nullptr;
     }
 
-    // Process browser commands from POST data and send their replies as gzip.
+    /**
+     * @brief Process browser commands from POST data and send their replies as gzip.
+     */
     void httpPost(Request &req, Response &res){
 
       //char name[MAX_POST_COMMAND_SIZE]; //
@@ -3734,11 +4047,14 @@ void setup() {
 
     uint32_t minHeapSize,maxHeapSize;
 
-    ///////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////
 
-    // Send updated interface settings together with their configuration choices.
-    // Send settings together with their choices: changing interface settings
-    // can also change the choices available in the browser.
+    /**
+     * @brief Send updated interface settings together with their configuration choices.
+     *
+     * Send settings together with their choices: changing interface settings
+     * can also change the choices available in the browser.
+     */
     void broadcastIFconfig(DeviceInterface* interface){
       //broadCast(concatStrings("{\"deviceCfg\":", interface->serializeConfig(), "}")); // inform web interface
       // when broadcasting the config you also have to broadcast the interface data sets as it is likely to have been updated
@@ -3781,7 +4097,9 @@ void setup() {
     MenuItem* brightness_menu_item;
     MenuItem* fmw_update_menu_item;
 
-    // Rebuild the bank-switch menu from the current bank names.
+    /**
+     * @brief Rebuild the bank-switch menu from the current bank names.
+     */
     void refreshBankMenu(){
       if (bankMenu != nullptr) delete bankMenu;
       bankMenu = new MenuSystem(*this);

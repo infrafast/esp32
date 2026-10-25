@@ -1,3 +1,8 @@
+/**
+ * @file HWComponents.h
+ * @brief Hardware inputs, battery monitoring and network connections.
+ */
+
 #ifndef HWComponents_h
 #define HWComponents_h
 
@@ -25,6 +30,9 @@ using namespace net;
 using WiFiWebSocketClient = WebSocketClient<WiFiClient>;
 using EthernetWebSocketClient = WebSocketClient<EthernetClient>;
 
+/**
+ * @brief Socket event kind and associated text.
+ */
 struct SocketData{
   uint16_t length;
   const char* message="";
@@ -32,7 +40,8 @@ struct SocketData{
   unsigned long receivedAt = 0;
 };
 
-////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////
+/** @brief Return a readable Wi-Fi connection status for diagnostics. */
 const char* wifiStatusToString(wl_status_t status) {
   switch (status) {
     case WL_NO_SHIELD:        return "No shield";
@@ -46,9 +55,9 @@ const char* wifiStatusToString(wl_status_t status) {
     default:                  return "Unknown";
   }
 }
-//////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////
 void onEthernetBonjourServiceFoundCallback(const char* serviceType,
                            MDNSServiceProtocol_t proto,
                            const char* serviceName,
@@ -57,9 +66,9 @@ void onEthernetBonjourServiceFoundCallback(const char* serviceType,
                            const char* txt);
 
 
-////////////////////////////////////////////////////////////////////
-///                MIDI LAYER OBJECTS DECLARATION            ///////
-////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////
+//                MIDI LAYER OBJECTS DECLARATION            ///////
+///////////////////////////////////////////////////////////////////
 #include "interfaces/appleMidiHelpers.h"
 #define MIDI_CHANNEL_OMNI 0
 
@@ -70,38 +79,56 @@ using namespace APPLEMIDI_NAMESPACE;
 
 
 
-////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * @brief Run one reachability check, delete its parameters and end the worker task.
+ */
 void pingTask(void*);
+/**
+ * @brief Run a configured HTTP request under the network mutex.
+ *
+ * Build the API reply from HTTP status/body and invoke the request callback.
+ * The operation runs in a task so callers need not wait in app.refresh().
+ */
 void connectHTTPTask(void*);
-////////////////////////////////////////////////////////////////////////////////////////////
+/**
+ * @brief Hardware component with initialization, periodic refresh and event dispatch.
+ */
 
 class HWComponent: public GenericComponent, public EventDispatcher{
   public:
     uint8_t CSPin;
   
+    /** @brief Return the name used to identify this event source in logs. */
     virtual const char* getDispatcherName() const override{
       return id.c_str();
     }
 
+    /** @brief Initialize HWComponent with the supplied configuration and bindings. */
     HWComponent(uint8_t pin, boolean d=true):GenericComponent(d){
       CSPin = pin;
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void stop(){
       //DEBUG_PRINT("\n%s stop()",id.c_str());
     }
 };
 
+/**
+ * @brief Hardware component exposing a two-state value.
+ */
 class HWComponent2State : public HWComponent{
   public: 
     bool state;
     bool previousState;
 
+    /** @brief Initialize HWComponent2State with the supplied configuration and bindings. */
     HWComponent2State(uint8_t pin, bool s = false, boolean d=false):HWComponent(pin,d){      
       state = s;
       previousState = state;
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     bool refresh(bool force=false){
       refreshed = false;  // reset previous state
       if (previousState != state || force){
@@ -116,15 +143,20 @@ class HWComponent2State : public HWComponent{
 
 };
 
+/**
+ * @brief Drives a digital output pin.
+ */
 class DigitalOut : public HWComponent2State{
   public:
 
+    /** @brief Initialize DigitalOut with the supplied configuration and bindings. */
     DigitalOut(uint8_t p,bool s = HIGH): HWComponent2State(p,s){
       pinMode(CSPin, OUTPUT);
       id = concatStrings("DigitalOut~", p);
       refresh(true);  //force the state
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     bool refresh(bool force=false){
       HWComponent2State::refresh(force);
       if (refreshed){
@@ -133,25 +165,31 @@ class DigitalOut : public HWComponent2State{
       return refreshed;
     }
 
+    /** @brief Prepare this object for use with its current configuration. */
     virtual void init(){
       HWComponent2State::init();
     }
 
 };
 
+/**
+ * @brief Samples an analog input and tracks its measured value.
+ */
 class AnalogIn : public HWComponent{
   private:
-    uint16_t refreshPercentageThreshold = 1;  // if value change of 1% it will be considered as change
+    uint16_t refreshPercentageThreshold = 1;  ///< if value change of 1% it will be considered as change
   
   public:
     uint16_t value=0;
 
+    /** @brief Initialize AnalogIn with the supplied configuration and bindings. */
     AnalogIn(uint8_t p, uint16_t t=0, boolean d=true): HWComponent(p,d){
       refreshPercentageThreshold = t;
       pinMode(CSPin, INPUT);
       id = concatStrings("AnalogIn~", p);
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     bool refresh(bool force=false){
       refreshed = force;
       uint16_t v = analogRead(CSPin);
@@ -175,6 +213,7 @@ class AnalogIn : public HWComponent{
       return refreshed;
     }
 
+    /** @brief Prepare this object for use with its current configuration. */
     virtual void init(){
       HWComponent::init();
       refresh();
@@ -211,6 +250,9 @@ enum BatteryState {
     BAT_DISCHARGING,
 };
 
+/**
+ * @brief Averages battery measurements and reports charge/power status.
+ */
 class BatteryMonitor : public HWComponent {
   // See:
   // https://forum.seeedstudio.com/t/xiao-ble-sense-mbed-2-7-2-battery-charge-and-voltage-monitor-analogread-p0-31-does-not-work/266438
@@ -223,12 +265,14 @@ public:
   float previousVBat = VBAT_MAX;
   BatteryState batteryState = BAT_CHECKING;
 
+  /** @brief Initialize BatteryMonitor with the supplied configuration and bindings. */
   BatteryMonitor(uint8_t p, bool d = true) : HWComponent(p, d) {
     pinMode(CSPin, INPUT);
     id = concatStrings("BatteryMonitor~", p);
     evt.type = EVENT_BATTERY_REFRESHED;
   }
 
+  /** @brief Prepare this object for use with its current configuration. */
   virtual void init() override {
     HWComponent::init();
 
@@ -256,6 +300,7 @@ public:
     fireEvent(evt);
   }
 
+  /** @brief Refresh this component and report whether its displayed state changed. */
   virtual bool refresh(bool force = false) override {
     refreshed = false;
 
@@ -345,12 +390,14 @@ private:
   unsigned long lastReadMillis = 0;
   bool initialized = false;
 
+  /** @brief Convert the measured ADC millivolts to battery voltage. */
   float convertMilliVoltsToVBat(uint32_t milliVolts) {
     float val = 2.0f * milliVolts / 1000.0f;
     val += VBAT_OFFSET;
     return val;
   }
 
+  /** @brief Map the battery voltage to the displayed charge indicator. */
   uint8_t computeIndicator(float voltage) {
     int level = mapFloatToInt(voltage, VBAT_MIN, VBAT_MAX, 0, BAT_MAX_LEVEL - 1);
 
@@ -360,6 +407,7 @@ private:
     return (uint8_t)level;
   }
 
+  /** @brief Choose the battery state from supply and voltage measurements. */
   BatteryState determineBatteryState(float currentVBat, float previousVBat, float threshold) {
     if (currentVBat >= VBAT_USB) {
       return BAT_USB_PLUGGED;
@@ -400,14 +448,23 @@ private:
 #define DCLIC_DETECTION_PUSHDOWNMAXTIME LONG_PUSH_DELAY-1       // pour detecter un double clic, le premier clic doit etre court   200
 
 // Structure pour les événements complexes
+/**
+ * @brief Button gesture, logical button id and associated duration.
+ */
 struct ButtonData {
-  uint8_t id;         // type de clic : SIMPLE, DOUBLE, HOLD...
-  uint8_t buttonId;   // identifiant logique du bouton
+  uint8_t id;         ///< type de clic : SIMPLE, DOUBLE, HOLD...
+  uint8_t buttonId;   ///< identifiant logique du bouton
   unsigned long time; // durée / temps associé
 };
 
+/**
+ * @brief Readable button gesture names for debugging.
+ */
 class ButtonEventNames {    // pour le debug
 public:
+  /**
+   * @brief Return the debug label for a recognized button gesture id.
+   */
   static const char* toString(uint8_t id) {
     switch (id) {
       case 1: return "BUTTON_SIMPLE_CLIC";
@@ -420,10 +477,14 @@ public:
   }
 };
 
+/**
+ * @brief Event carrying button gesture data.
+ */
 class ButtonEvent : public Event {
 public:
 
   #ifdef DEBUG
+  /** @brief Export this object using its JSON representation. */
   const char* serialize() const override {
     snprintf(_buffer, sizeof(_buffer),
              "buttonType=%s(%u), buttonId=%u, time=%lu",
@@ -449,6 +510,13 @@ enum EventID {
   BUTTON_RELEASE_HOLD,
 };
 
+/**
+ * @brief Recognizes clicks, double clicks and holds from a sampled input.
+ *
+ * A shared task samples registered buttons every 5 ms instead of polling from
+ * the main loop. The gesture state machine distinguishes debounce, delayed single
+ * clicks, double clicks, hold entry/repeats and release. Timing values use milliseconds.
+ */
 class Button : public HWComponent2State {
 public:
   ButtonEvent evtBtn;
@@ -463,6 +531,7 @@ public:
 
   ButtonData btData = {};
 
+  /** @brief Initialize Button with the supplied configuration and bindings. */
   Button(uint8_t p,
          int e = LOW,
          boolean d = true,
@@ -475,6 +544,7 @@ public:
     evtBtn.data = &btData;
   }
 
+  /** @brief Prepare this object for use with its current configuration. */
   virtual void init() {
     HWComponent2State::init();
     processRefresh(true);
@@ -482,22 +552,31 @@ public:
     startGlobalRefreshTask();
   }
 
+  /**
+   * @brief Leave normal-loop polling idle; the shared task samples buttons.
+   *
+   * @return Always false in this implementation.
+   */
   bool refresh(bool force = false) {
     (void)force;
     return false;
   }
 
+  /** @brief Stop the active operation or connection. */
   virtual void stop() override {
     unregisterButton();
     stopGlobalRefreshTaskIfUnused();
     HWComponent2State::stop();
   }
 
+  /** @brief Return the logical button identifier used in gesture events. */
   virtual int getID() = 0;
+  /** @brief Assign the logical button identifier used in gesture events. */
   virtual void setID(uint8_t id) = 0;
 
 protected:
 
+  /** @brief Fill and dispatch the gesture event for this logical button. */
   void emitButtonEvent(uint8_t eventId, unsigned long eventTime) {
     btData.id = eventId;
     btData.buttonId = getID();
@@ -524,7 +603,7 @@ private:
 
   unsigned long startPushTime = 0;
   
-  static constexpr uint32_t HOLD_REPEAT_MS = 100;      //throttle the hold event to avoid too much events emission when holding the button. This value is independent of push_reactivity, and should be lower than it to avoid missing events when holding the button for a long time. Adjust according to your needs.
+  static constexpr uint32_t HOLD_REPEAT_MS = 100;      ///< throttle the hold event to avoid too much events emission when holding the button. This value is independent of push_reactivity, and should be lower than it to avoid missing events when holding the button for a long time. Adjust according to your needs.
   unsigned long lastHoldEventTime = 0;
  
   static constexpr uint8_t MAX_BUTTONS = 5;
@@ -541,6 +620,7 @@ private:
 
   bool registered = false;
 
+  /** @brief Add this button to the shared sampling registry if a slot is available. */
   void registerButton() {
     if (registered) return;
 
@@ -553,6 +633,7 @@ private:
     registered = true;
   }
 
+  /** @brief Remove this button from the shared sampling registry. */
   void unregisterButton() {
     if (!registered) return;
 
@@ -570,6 +651,7 @@ private:
     }
   }
 
+  /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
   static void globalRefreshTaskEntry(void* pvParameters) {
     (void)pvParameters;
 
@@ -586,6 +668,7 @@ private:
     }
   }
 
+  /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
   static void startGlobalRefreshTask() {
     if (globalRefreshTaskHandle != nullptr) {
       return;
@@ -607,6 +690,7 @@ private:
     }
   }
 
+  /** @brief Delete the shared sampler when no buttons remain registered. */
   static void stopGlobalRefreshTaskIfUnused() {
     if (registeredButtonCount > 0) return;
 
@@ -616,6 +700,14 @@ private:
     }
   }
 
+  /**
+   * @brief Debounce sampled input and emit click/hold gestures.
+   *
+   * Use separate press/release stability delays. A short release waits through the
+   * double-click gap before emitting a single click; a second short press confirms
+   * a double click. A sustained press emits hold-entry once, repeats hold events
+   * every HOLD_REPEAT_MS, then emits hold-release. Durations are in milliseconds.
+   */
   bool processRefresh(bool force = false) {
     refreshed = force;
 
@@ -746,6 +838,7 @@ private:
     return refreshed;
   }
 
+  /** @brief Read pending input from this transport or hardware source. */
   virtual void read() = 0;
 };
 
@@ -753,8 +846,12 @@ Button* Button::registeredButtons[Button::MAX_BUTTONS] = { nullptr };
 uint8_t Button::registeredButtonCount = 0;
 TaskHandle_t Button::globalRefreshTaskHandle = nullptr;
 
+/**
+ * @brief Reads a button connected to a digital pin.
+ */
 class DigitalButton : public Button {
 public:
+  /** @brief Initialize DigitalButton with the supplied configuration and bindings. */
   DigitalButton(uint8_t p,
                 uint8_t mode = INPUT_PULLUP,
                 int e = LOW,
@@ -768,10 +865,12 @@ public:
     id = concatStrings("DigitalButton~", getID());
   }
 
+  /** @brief Return the logical button identifier used in gesture events. */
   virtual int getID() override {
     return CSPin;
   }
 
+  /** @brief Assign the logical button identifier used in gesture events. */
   void setID(uint8_t id) override {
     CSPin = id;
   }
@@ -779,6 +878,7 @@ public:
 
 private:
 
+  /** @brief Read pending input from this transport or hardware source. */
   virtual void read() override {
     bool input1 = digitalRead(CSPin);
     delay(1);
@@ -790,11 +890,15 @@ private:
   }
 };
 
+/**
+ * @brief Reads a button selected by an analog resistor ladder.
+ */
 class LadderButton : public Button {
 public:
   static uint8_t bCount;
   uint8_t virtualID;
 
+  /** @brief Initialize LadderButton with the supplied configuration and bindings. */
   LadderButton(AnalogIn* i,
                int e = HIGH,
                boolean d = true,
@@ -810,10 +914,12 @@ public:
     bCount++;
   }
 
+  /** @brief Return the logical button identifier used in gesture events. */
   virtual int getID() override {
     return virtualID;
   }
 
+  /** @brief Assign the logical button identifier used in gesture events. */
   void setID(uint8_t id) override {
     virtualID = id;
   }
@@ -826,6 +932,7 @@ private:
     // https://docs.google.com/spreadsheets/d/1G6wTsAxZDnVvzIDBkg5LrhhY1T7q4p_pDSZ6owvBCMA/edit?usp=sharing
     // for 3 button with 1st resistor 47Kohm, other resistance should be: 24k, 68k  
 
+  /** @brief Read a resistor-ladder button using the retained earlier algorithm. */
   virtual void OLDread() {
     float avg = RESOLUTION / float(bCount);
 
@@ -858,6 +965,7 @@ private:
     }
   }
 
+  /** @brief Read pending input from this transport or hardware source. */
   virtual void read() override {
     uint16_t value = analogRead(input->CSPin);
     float avg = RESOLUTION / float(bCount);
@@ -919,6 +1027,9 @@ enum{
 //typedef std::function<void()> StdFunctionCallbackVoid; 
 typedef std::function<void(const char*)> StdFunctionCallbackStringPointer;
 
+/**
+ * @brief Parameters and state used to start an HTTP request asynchronously.
+ */
 struct AsyncHttpClient{  
     IPAddress host;
     uint16_t port;
@@ -1037,6 +1148,9 @@ void connectHTTPTask(void *parameter) {
 String httpTaskResult;
 ByteBuffer readHttpBuffer;
 
+/**
+ * @brief Tracks an allocated UDP transport slot.
+ */
 struct UdpSlot {
   UDP* udp = nullptr;
   int port = -1;
@@ -1044,6 +1158,7 @@ struct UdpSlot {
   uint8_t media = CABLE_MEDIA;
   uint8_t reservations = 0;
 
+  /** @brief Reset this object to its initial state. */
   void reset() {
     udp = nullptr;
     port = -1;
@@ -1053,12 +1168,19 @@ struct UdpSlot {
   }  
 };
 
+/**
+ * @brief Event carrying a socket notification.
+ */
 class SocketEvent : public Event {
 public:
 
+  /**
+   * @brief Initialize SocketEvent and its configured member bindings.
+   */
   SocketEvent(void* data):Event(data){}
 
   #ifdef DEBUG
+  /** @brief Export this object using its JSON representation. */
   const char* serialize() const override {
     if (((SocketData*)data)->length > 0) return ((SocketData*)data)->message;
     else return "";
@@ -1066,6 +1188,9 @@ public:
   #endif
 };
 
+/**
+ * @brief Common connection state and transport resources for networking.
+ */
 class Network : public HWComponent2State{
 
   public:
@@ -1107,42 +1232,63 @@ class Network : public HWComponent2State{
     String SSID="undef",lastConnectedSSID="";
     bool AP = false;
 
+    /** @brief Initialize Network with the supplied configuration and bindings. */
     Network(uint8_t pin, bool debug):HWComponent2State(pin,DISCONNECTED,debug){
       id = concatStrings("Network~", pin);
       networkBusy = xSemaphoreCreateMutex();
       state = DISCONNECTED; previousState = state; // if we set the initial state to the opposite of the state we want to detect it trigger the event DISCONNECT otherwise if previousState = state, it goes straight 
     }
 
+    /** @brief Open the requested UDP slot and associate it with the service. */
     virtual UdpSlot* useUDPslot(int i) = 0;
+    /** @brief Find an available UDP slot for a service. */
     virtual int requestUDPslotID(int port) = 0;
+    /** @brief Create a UDP transport for the selected network media. */
     virtual UDP* newUDP() = 0;
+    /** @brief Stop UDP sockets before changing connections or serving Ethernet traffic. */
     virtual void stopAllUDP() = 0;
+    /** @brief Stop the socket associated with a UDP slot. */
     virtual UdpSlot* stopUDPslot(int i) = 0;
+    /** @brief Release a previously reserved UDP slot. */
     virtual void releaseUDPSlot(int* i)=0;
+    /** @brief Set the connection link state. */
     virtual void setLink(EthernetLinkStatus linkStatus) = 0;    
+    /** @brief Start opening the configured WebSocket connection. */
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path)=0;
+    /** @brief Send text through the current WebSocket connection. */
     virtual void clientSocketSend(const char *message)=0;
+    /** @brief Close the current WebSocket connection. */
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE)=0;
+    /** @brief Report the current WebSocket connection state. */
     virtual WebSocketReadyState clientSocketState()=0;
+    /** @brief Return whether the network link is available. */
     virtual EthernetLinkStatus getLink() = 0;
+    /** @brief Return the connected peer address. */
     virtual String getConnectedDeviceIP() = 0;
+    /** @brief Start a reachability check and report its result through a callback. */
     virtual void asyncPing(TargetEcho* echo, PingCallback callBack)=0;
+    /** @brief Start a connection attempt without waiting in the application loop. */
     virtual bool asyncConnect(AsyncHttpClient *clientParam)=0;
+    /** @brief Describe the W5500 socket allocations for diagnostics. */
     virtual String dumpW5500Sockets()=0;
+    /** @brief Return the address of this network connection. */
     virtual String getIP() = 0;
     
+    /** @brief Prepare this object for use with its current configuration. */
     virtual void init(){
       if (debug) DEBUG_INFO("%s::init()", id.c_str());
       WiFi.setAutoConnect(false); 
       WiFi.setAutoReconnect(false);      
     }
 
+    /** @brief Select the Wi-Fi network name and associated credentials. */
     virtual void setSSID(String ssid, String pwd){
       SSID = ssid;
       wiFiList->addValue(SSID,pwd);         
     }
     
 
+    /** @brief Provide the saved network choices and preferred SSID. */
     virtual void setWiFi(JsonList* list, String wiFiID){
       wiFiList = list;
       wiFiIndex = wiFiList->getIndex(wiFiID);
@@ -1152,6 +1298,7 @@ class Network : public HWComponent2State{
 
 
 
+    /** @brief Set Wi-Fi transmit power. */
     void setWifiPower(){
       //#define WIFI_POWER WIFI_POWER_MINUS_1dBm // Set WiFi RF power output to lowest level      
       //#define WIFI_POWER WIFI_POWER_11dBm // Set WiFi RF power output to middle level
@@ -1163,6 +1310,7 @@ class Network : public HWComponent2State{
 
     uint16_t wiFiTimeout = WIFI_CHECK_TIMEOUT_MIN;
 
+    /** @brief Advance the timeout used by the connection attempt. */
     void shiftConnectTimeout() {
         wiFiTimeout += 3000;
         if (wiFiTimeout > WIFI_CHECK_TIMEOUT_MAX) {
@@ -1170,6 +1318,7 @@ class Network : public HWComponent2State{
         }
     }
 
+    /** @brief Export this object using its JSON representation. */
     String serialize(){
       //DEBUG_PRINT("\nserialize %s=>",id.c_str());
       //DynamicJsonDocument doc(500);   
@@ -1190,12 +1339,14 @@ class Network : public HWComponent2State{
       return data;
     }
 
+    /** @brief Pause or stop Wi-Fi connection attempts. */
     void stopWiFi(){
       //DEBUG_PRINT("\n---------> stopWiFi() : WiFiEnabled = false <------------");
       WiFiEnabled = false;
       disconnectWifi();
     }
 
+    /** @brief Allow Wi-Fi connection attempts to resume. */
     void unpauseWiFi(){
       //DEBUG_PRINT("\n\t\t\t\t---------> unpauseWiFi() : WiFiEnabled = true <------------");
       WiFiEnabled = true ;      
@@ -1207,6 +1358,7 @@ class Network : public HWComponent2State{
     uint8_t wiFiIndex;
     //String oldSSID = "";
 
+    /** @brief Disconnect the current Wi-Fi session. */
     void disconnectWifi(){
       HWComponent2State::stop();
      
@@ -1236,11 +1388,19 @@ class Network : public HWComponent2State{
 
 //constexpr uint16_t kBufferMaxSize{256};  //https://github.com/skaarj1989/mWebSockets/issues/72#issuecomment-2095599695
 
+/**
+ * @brief Chooses and monitors Wi-Fi or Ethernet connectivity.
+ *
+ * Coordinates Ethernet preference and Wi-Fi fallback. Services borrow shared UDP
+ * slots by local port; the four-slot table tracks reservations and recreates
+ * transports when media changes. The AP configuration connection is separate.
+ */
 class WiFiEth : public Network{
   public:
-    EthernetLinkStatus cable = Unknown;//, oldCable = cable;
+    EthernetLinkStatus cable = Unknown;///< , oldCable = cable;
     unsigned long checkEthCableTime=0;
 
+    /** @brief Initialize WiFiEth with the supplied configuration and bindings. */
     WiFiEth(uint8_t pin, uint8_t rstP, bool enableEth = true, bool debug = true): Network(pin, debug){      
       id = concatStrings("WiFiEth~", pin);
       rstPin = rstP;
@@ -1261,6 +1421,7 @@ class WiFiEth : public Network{
 
     }
 
+    /** @brief Release resources held by this object. */
     ~WiFiEth(){
       stopSocketOpenTask();
       if (wsWiFiClient != nullptr){ delete wsWiFiClient; wsWiFiClient = nullptr; }
@@ -1268,6 +1429,7 @@ class WiFiEth : public Network{
       if (instance == this) instance = nullptr;
     }
 
+    /** @brief Prepare this object for use with its current configuration. */
     virtual void init(){
       Network::init();
 
@@ -1313,6 +1475,7 @@ class WiFiEth : public Network{
 
     }    
 
+    /** @brief Clear the Wi-Fi configuration retained by the network stack. */
     void wipeWifiConfig() {
       // Do the same as Erase Flash
       // 1) Couper le Wi-Fi et effacer les creds Arduino dans la NVS
@@ -1324,6 +1487,12 @@ class WiFiEth : public Network{
       WiFi.persistent(false);
     }    
 
+    /**
+     * @brief Pulse the Ethernet reset line, then wait for W5500 startup.
+     *
+     * Drive reset low for 1 ms, release it and wait 200 ms. The board shares reset
+     * with the TFT, so initialization order matters.
+     */
     void reset(){
       digitalWrite(rstPin, LOW);  // Maintenez le W5500 en état de reset
       delay(1);  // Maintenir le RESET bas pendant au moins 500 ns (nous utilisons ici 1 ms pour être sûr)
@@ -1332,18 +1501,9 @@ class WiFiEth : public Network{
     }
 
     #include <utility/w5100.h>
-    /*
-    Bonjour / mDNS	        1 UDP
-    Serveur HTTP	          2 = 1 LISTEN + 1 ESTABLISHED par client
-    WebSocket	              1 TCP
-    Behringer OSC           1 UDP       
-    OSC natif               1 UDP
-    Mixing station websock  1 TCP
-    AppleMIDI               1 UDP
-    Artnet                  1 UDP
-    FTP                     1 TCP
-
-    */
+    /**
+     * @brief Return a readable label for a W5500 socket status register value.
+     */
 
     static const char* socketStatusToString(uint8_t st) {
       switch (st) {
@@ -1366,6 +1526,7 @@ class WiFiEth : public Network{
       }
     }
 
+    /** @brief Describe the W5500 socket allocations for diagnostics. */
     String dumpW5500Sockets() {
 
       char buffer[512];
@@ -1403,12 +1564,14 @@ class WiFiEth : public Network{
     }
 
     #define MAX_UDP_SLOT 4
-    UdpSlot udpSlots[MAX_UDP_SLOT];   // max 4 objets
+    UdpSlot udpSlots[MAX_UDP_SLOT];   ///< max 4 objets
 
+    /** @brief Check that a UDP slot index is within its fixed bounds. */
     bool isValidUDPslotIndex(int i) const {
       return i >= 0 && i < MAX_UDP_SLOT;
     }
 
+    /** @brief Release the transport object held by a UDP slot. */
     void destroyUDPslot(int i) {
       if (!isValidUDPslotIndex(i)) return;
       if (udpSlots[i].udp != nullptr) {
@@ -1418,6 +1581,7 @@ class WiFiEth : public Network{
       udpSlots[i].reset();
     }
 
+    /** @brief Recreate a UDP slot when its transport differs from the selected network media. */
     bool ensureUDPslotMedia(int i) {
       if (!isValidUDPslotIndex(i)) return false;
       UdpSlot& slot = udpSlots[i];
@@ -1445,6 +1609,7 @@ class WiFiEth : public Network{
     }
     
 
+    /** @brief Create a UDP transport for the selected network media. */
     virtual UDP* newUDP(){
       // Créer l'objet UDP du bon type
       if (media == CABLE_MEDIA)
@@ -1453,6 +1618,15 @@ class WiFiEth : public Network{
         return new WiFiUDP;      
     }
 
+    /**
+     * @brief Reserve one of four UDP slots, sharing an existing slot for the same port.
+     *
+     * Validate the port, reuse a matching slot and increment its reservation count,
+     * or create a transport in a free slot. Media changes recreate the transport.
+     * @param port Local UDP port from 1 to 65535.
+     * @return Slot index, or -1 for invalid input, exhaustion or setup failure.
+     * @note Pair each successful reservation with releaseUDPSlot().
+     */
     virtual int requestUDPslotID(int port) {
 
       if (port <= 0 || port > 65535) {
@@ -1497,6 +1671,7 @@ class WiFiEth : public Network{
       return -1;
     }
 
+    /** @brief Open the requested UDP slot and associate it with the service. */
     virtual UdpSlot* useUDPslot(int i) {
 
       if (!isValidUDPslotIndex(i) || udpSlots[i].reservations == 0 || udpSlots[i].port < 0){
@@ -1521,6 +1696,12 @@ class WiFiEth : public Network{
       return &udpSlots[i];
     }
 
+    /**
+     * @brief Release one UDP reservation and invalidate the caller slot id.
+     *
+     * Destroy the transport only when no reservations remain; other services sharing
+     * the local port keep their slot. A pointer to the slot id is required.
+     */
     virtual void releaseUDPSlot(int* i){
       if (i == nullptr) return;
       if (!isValidUDPslotIndex(*i)) {
@@ -1541,6 +1722,7 @@ class WiFiEth : public Network{
       *i = -1;   // invalidate slot ID
     }
 
+    /** @brief Stop the socket associated with a UDP slot. */
     virtual UdpSlot* stopUDPslot(int i){
       
       if (!isValidUDPslotIndex(i)){
@@ -1561,6 +1743,7 @@ class WiFiEth : public Network{
 
     }
 
+    /** @brief Stop UDP sockets before changing connections or serving Ethernet traffic. */
     virtual void stopAllUDP() {
       for (int i = 0; i < MAX_UDP_SLOT; i++) {
         if (udpSlots[i].udp != nullptr && udpSlots[i].reservations > 0){
@@ -1591,6 +1774,7 @@ class WiFiEth : public Network{
     uint16_t pendingPort = 0;    
 
 
+    /** @brief Start opening the configured WebSocket connection. */
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path) {
       DEBUG_INFO("%s::clientSocketOpen(%s,%d,%s)", id.c_str(), host, port, path);
 
@@ -1642,6 +1826,7 @@ class WiFiEth : public Network{
       return true;
     }
 
+    /** @brief Send text through the current WebSocket connection. */
     virtual void clientSocketSend(const char *message){
       if (media == CABLE_MEDIA){
         if (wsEthClient!= nullptr){      
@@ -1659,6 +1844,7 @@ class WiFiEth : public Network{
       }      
     }
 
+    /** @brief Close the current WebSocket connection. */
     virtual void clientSocketClose(WebSocketCloseCode code = WebSocketCloseCode::NORMAL_CLOSURE) {
       DEBUG_INFO("%s::clientSocketClose()", id.c_str());
       const char reason[] = {"application close"};
@@ -1682,6 +1868,7 @@ class WiFiEth : public Network{
     }
     
     
+    /** @brief Report the current WebSocket connection state. */
     virtual WebSocketReadyState clientSocketState() {
       if (socketOpenJobState == SOCKET_JOB_RUNNING) {
         return WebSocketReadyState::CONNECTING;
@@ -1697,6 +1884,7 @@ class WiFiEth : public Network{
     }
 
 
+    /** @brief Select the Wi-Fi network name and associated credentials. */
     virtual void setSSID(String ssid, String pwd){
       Network::setSSID(ssid,pwd);
       //DEBUG_PRINT("\nsetSSID(%s,%s)",ssid,pwd);                 
@@ -1708,15 +1896,18 @@ class WiFiEth : public Network{
       }
     }
 
+    /** @brief Set the connection link state. */
     virtual void setLink(EthernetLinkStatus linkStatus){
       cable = linkStatus;
       checkEthCableTime = millis();
     }
 
+    /** @brief Return whether the network link is available. */
     virtual EthernetLinkStatus getLink(){
       return cable;
     }
 
+    /** @brief Begin a Wi-Fi connection attempt using the selected credentials. */
     void startWifi(String ssid, String pwd){
       /*WiFi.disconnect(true);
       delay(500);
@@ -1734,6 +1925,7 @@ class WiFiEth : public Network{
       //_newWifiAttempt = false;      
     }
 
+    /** @brief Stop the Ethernet connection. */
     void stopEthernet(){
       Network::stop();
       //if (debug) DEBUG_PRINT("\teth CSPin input");
@@ -1743,41 +1935,49 @@ class WiFiEth : public Network{
       digitalWrite(CSPin, LOW);
     }
 
+    /** @brief Return the connected peer address. */
     virtual String getConnectedDeviceIP(){
       return "GW-IP";   
     }
 
+    /** @brief Stop the active operation or connection. */
     virtual void stop(){
       stopWiFi();     
       stopEthernet();
     }
 
-    ///////////////////// Static callback methods /////////////////////////////////////
+    //////////////////// Static callback methods /////////////////////////////////////
 
+    /** @brief Forward a socket error to the active Wi-Fi/Ethernet instance. */
     void static socketClientOnErrorCallbackStatic(WebSocketError error) {
       if (instance) instance->socketClientOnErrorCallback(error);
     }
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     void static socketClientOnCloseStatic(IWebSocket &ws, WebSocketCloseCode code, const char *reason,uint16_t length){
       if (instance) instance->socketClientOnClose(code,reason,length);
     }     
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     void static socketClientOnOpenCallbackStatic(IWebSocket &ws) {
       if (instance) instance->socketClientOnOpenCallback();
     }
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     void static socketClientOnMessageCallbackStatic(IWebSocket &ws, const WebSocketDataType dataType,const char *message, uint16_t length){
       if (instance) instance->socketClientOnMessageCallback(dataType,message,length);               
     }
 
-    ///////////////////// Instance callback methods /////////////////////////////////////
+    //////////////////// Instance callback methods /////////////////////////////////////
 
+    /** @brief Report a WebSocket error through the network socket event. */
     void socketClientOnErrorCallback(WebSocketError error) {
       evtSock.type = EVENT_SOCKET_ERROR;
       socketData.code = (int)error;
       fireEvent(evtSock);
     }
 
+    /** @brief Forward the socket connection or message callback as a network event. */
     void socketClientOnClose(WebSocketCloseCode code, const char *reason,uint16_t length){
       evtSock.type = EVENT_SOCKET_CLOSE;
       socketData.code = (int)code;
@@ -1786,11 +1986,13 @@ class WiFiEth : public Network{
       fireEvent(evtSock);
     }    
 
+    /** @brief Forward the socket connection or message callback as a network event. */
     void socketClientOnOpenCallback() {
       evtSock.type = EVENT_SOCKET_OPEN;
       fireEvent(evtSock);
     }
 
+    /** @brief Forward the socket connection or message callback as a network event. */
     void socketClientOnMessageCallback(const WebSocketDataType dataType,const char *message, uint16_t length){
       switch (dataType) {
         case net::WebSocketDataType::TEXT:{
@@ -1807,7 +2009,8 @@ class WiFiEth : public Network{
       }                     
     }
     
-    /////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////
+    /** @brief Reset socket callback flags before another connection attempt. */
     void resetWSstate(){
       socketOpenJobState = SOCKET_JOB_IDLE;
       socketOpenTaskHandle = nullptr;
@@ -1817,6 +2020,7 @@ class WiFiEth : public Network{
       DEBUG_INFO("WebSocket state reset");
     }
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     void stopSocketOpenTask(){
       if (socketOpenTaskHandle != nullptr && socketOpenTaskHandle != xTaskGetCurrentTaskHandle()) {
         DEBUG_WARN("stopSocketOpenTask() called while task is running, waiting for completion...");        
@@ -1835,6 +2039,14 @@ class WiFiEth : public Network{
     }
 
 
+    /**
+     * @brief Monitor link changes and advance Ethernet/Wi-Fi connection attempts.
+     *
+     * Prefer Ethernet when its cable/link becomes available. Wi-Fi retries use the
+     * saved network list and connection timeouts; changes notify the application
+     * through network events. This is connection orchestration, not device-protocol
+     * processing, which remains in the corresponding interfaces.
+     */
     bool refresh(bool force=false) {
     
       if (millis()-checkEthCableTime > ETH_CABLE_CHECK_FREQUENCY && ethEnabled){   // only if we use the full network stack and not only AP mode
@@ -2040,7 +2252,7 @@ class WiFiEth : public Network{
           DEBUG_INFO("+-------------------+");
           
 
-          ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
+          ///////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
           evtNet.type = EVENT_NETWORK_CONNECTED;
           fireEvent(evtNet);  
 
@@ -2068,7 +2280,7 @@ class WiFiEth : public Network{
             DEBUG_INFO("| ALL NETWORK OBJECTED CLEANED |");
             DEBUG_INFO("+------------------------------+");
 
-            ////////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
+            ///////// ONCE ALL IS CORRECTLY PREPARED, WE FIRE THE EVENT
             evtNet.type = EVENT_NETWORK_DISCONNECTED;
             fireEvent(evtNet);  
 
@@ -2086,6 +2298,7 @@ class WiFiEth : public Network{
       return refreshed;
     }
 
+    /** @brief Return the address of this network connection. */
     String getIP() override{
       if (media == CABLE_MEDIA){
         IP = Ethernet.localIP();      
@@ -2099,12 +2312,14 @@ class WiFiEth : public Network{
       return IP.toString();
     }
 
+    /** @brief Apply the result of an internet reachability check. */
     void onInternetPing(TargetEcho* echo) {
         if (internetCallback !=nullptr) internetCallback(echo);
         //DEBUG_PRINT("\n\n\n\t\t\t * * * * onInternetPing %s latency:%i * * * *",echo->alive?"OK":"fail",echo->latency);        
     }
 
     // Fonction pour démarrer la tâche de ping non bloquante
+    /** @brief Start a reachability check and report its result through a callback. */
     virtual void asyncPing(TargetEcho* echo, PingCallback callBack) {
       PingParameters* params = new PingParameters;
       params->echo = echo;
@@ -2120,6 +2335,7 @@ class WiFiEth : public Network{
       //DEBUG_PRINT("\nasyncPing(%s) task created",echo->host.c_str());
     }
 
+    /** @brief Start a connection attempt without waiting in the application loop. */
     virtual bool asyncConnect(AsyncHttpClient *clientParam){      
       DEBUG_INFO("\t\t~.~.~.~.~.~.~.~.~.~. asyncConnect(%s,%i)",clientParam->host.toString().c_str(),clientParam->port);
       if (clientParam->host[3] == 255){
@@ -2157,6 +2373,7 @@ class WiFiEth : public Network{
       return true;
     }
 
+    /** @brief Schedule an internet reachability check when required. */
     void checkInternet(){
       //DEBUG_PRINT("\n\n\tcheckInternet => ");
       // Utiliser des lambdas pour passer les méthodes membres comme callbacks
@@ -2170,6 +2387,7 @@ class WiFiEth : public Network{
       //else 
     }
 
+    /** @brief Restore the preferred Wi-Fi network from saved settings. */
     void restoreWiFiSSID(){
       // next WiFi attempt will start with the last one that was connected
       //_newWifiAttempt = true; // reset flag for immediate reconnection at the deco.
@@ -2266,6 +2484,7 @@ class WiFiEth : public Network{
     /* 
       THREAD MANAGING SOCKET CONNECTION
     */
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     static void socketOpenTaskEntry(void *param) {
       WiFiEth *self = static_cast<WiFiEth*>(param);
       if (self) {
@@ -2274,6 +2493,7 @@ class WiFiEth : public Network{
       vTaskDelete(nullptr);
     }
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     void socketOpenTask() {
       DEBUG_INFO("%s::socketOpenTask()", id.c_str());
 
@@ -2315,34 +2535,121 @@ class WiFiEth : public Network{
 
 WiFiEth* WiFiEth::instance = nullptr;
 
+/**
+ * @brief Fallback network component when networking is disabled.
+ */
 class  NoNetwork: public Network{
     
   public:
 
+    /** @brief Initialize NoNetwork with the supplied configuration and bindings. */
     NoNetwork(bool debug):Network(0,debug){ 
       id = "NoNetwork~0";
       ethEnabled = false;
       WiFiEnabled = false;
     }
 
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always false.
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     bool refresh(bool force=false) {  
       return false;
     }
 
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual void setLink(EthernetLinkStatus linkStatus){}    
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always false.
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual void clientSocketSend(const char *message){}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){}
+    /**
+     * @brief Report the current WebSocket connection state.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
+    /**
+     * @brief Return whether the network link is available.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual EthernetLinkStatus getLink(){return LinkOFF;}
+    /**
+     * @brief Return the connected peer address.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual String getConnectedDeviceIP(){return "";}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual void asyncPing(TargetEcho* echo, PingCallback callBack){}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always false.
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual bool asyncConnect(AsyncHttpClient *clientParam){return false;}
+    /**
+     * @brief Create a UDP transport for the selected network media.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual UDP* newUDP(){return nullptr;}
+    /**
+     * @brief Describe the W5500 socket allocations for diagnostics.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual String dumpW5500Sockets(){return "";}
+    /**
+     * @brief Stop the socket associated with a UDP slot.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual UdpSlot* stopUDPslot(int i){return nullptr;}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual void stopAllUDP(){}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual void releaseUDPSlot(int* i){}
+    /**
+     * @brief Return the address of this network connection.
+     *
+     * @note Networking is disabled; this implementation supplies a fallback/no-op result.
+     */
     virtual String getIP() override{return "";}
 
 };
@@ -2357,9 +2664,13 @@ https://www.esp32.com/viewtopic.php?t=6292
 */
 
 
+/**
+ * @brief Wi-Fi access point used for device configuration.
+ */
 class AccessPoint : public Network{
   public:
 
+    /** @brief Initialize AccessPoint with the supplied configuration and bindings. */
     AccessPoint(const String* ssid, bool debug):Network(0,debug){ 
       id = "AccessPoint";
       media = WIFI_MEDIA;     
@@ -2368,6 +2679,7 @@ class AccessPoint : public Network{
       AP = true;
     }
 
+    /** @brief Release resources held by this object. */
     ~AccessPoint(){
       //if(debug) DEBUG_PRINT("\n~AccessPoint()");
       WiFi.mode(WIFI_STA);        
@@ -2378,20 +2690,42 @@ class AccessPoint : public Network{
       }
     }
 
+    /** @brief Open the requested UDP slot and associate it with the service. */
     virtual UdpSlot* useUDPslot(int i){return nullptr;}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual int requestUDPslotID(int port){return 0;}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void stopAllUDP(){}
+    /** @brief Stop the socket associated with a UDP slot. */
     virtual UdpSlot* stopUDPslot(int i){return nullptr;}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void releaseUDPSlot(int* i){}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void asyncPing(TargetEcho* echo, PingCallback callBack){}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always false.
+     */
     virtual bool asyncConnect(AsyncHttpClient *clientParam){ return false;}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always false.
+     */
     virtual bool clientSocketOpen(const char *host, uint16_t port, const char *path){return false;}
+    /** @brief Send text through the current WebSocket connection. */
     virtual void clientSocketSend(const char *message){};
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void clientSocketClose(WebSocketCloseCode code=WebSocketCloseCode::NORMAL_CLOSURE){}
+    /** @brief Report the current WebSocket connection state. */
     virtual WebSocketReadyState clientSocketState(){return WebSocketReadyState::CLOSED;}
+    /** @brief Create a UDP transport for the selected network media. */
     virtual UDP* newUDP(){return nullptr;}
+    /** @brief Describe the W5500 socket allocations for diagnostics. */
     virtual String dumpW5500Sockets(){};
 
+    /** @brief Prepare this object for use with its current configuration. */
     virtual void init(){
       #define VISIBLE 0
       #define MAX_AP_CONNECTION 1
@@ -2424,11 +2758,13 @@ class AccessPoint : public Network{
       DEBUG_INFO("AccessPoint.init (%s) %s",SSID.c_str(),IP.toString().c_str());        
     }
 
+    /** @brief Return the address of this network connection. */
     String getIP(){
       IP = WiFi.softAPIP();
       return IP.toString();
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     bool refresh(bool force=false) {      
       // the state is modified by onEvent()
       if (WiFi.softAPgetStationNum()>0){
@@ -2454,6 +2790,7 @@ class AccessPoint : public Network{
       return refreshed;
     }
 
+    /** @brief Return the connected peer address. */
     virtual String getConnectedDeviceIP(){    // see https://www.esp32.com/viewtopic.php?t=6292
         wifi_sta_list_t wifi_sta_list;
         tcpip_adapter_sta_list_t adapter_sta_list;
@@ -2466,9 +2803,12 @@ class AccessPoint : public Network{
         return ip4addr_ntoa(&ip);
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void setLink(EthernetLinkStatus linkStatus){}
+    /** @brief Return whether the network link is available. */
     virtual EthernetLinkStatus getLink(){return LinkOFF;}      // access point has no physicalLink
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void stop(){
       // do stuff to stop AP
       //WiFi.setTxPower(WIFI_POWER_MINUS_1dBm); // power => https://github.com/G6EJD/ESP32-8266-Adjust-WiFi-RF-Power-Output/

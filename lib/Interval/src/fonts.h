@@ -1,3 +1,8 @@
+/**
+ * @file fonts.h
+ * @brief Embedded font data used by the display; excluded from generated class pages.
+ */
+
 // This font is a subset of the full font to reduce array size, ONLY these characters are present:
 // !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
 
@@ -733,7 +738,9 @@
 };*/
 
 
-// array size is 9740
+/**
+ * @brief array size is 9740
+ */
 const byte GeneratedFont[] PROGMEM  = {
   0x00, 0x01, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x80, 0x00, 0x03, 0x00, 0x20, 0x4f, 0x53, 0x2f, 0x32, 
   0xef, 0x4f, 0x5a, 0xaa, 0x00, 0x00, 0x00, 0xac, 0x00, 0x00, 0x00, 0x60, 0x63, 0x6d, 0x61, 0x70, 

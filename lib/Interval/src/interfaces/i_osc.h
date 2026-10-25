@@ -1,3 +1,8 @@
+/**
+ * @file i_osc.h
+ * @brief OSC message buffering and network transport.
+ */
+
 #ifndef I_OSC_h
 #define I_OSC_h
 
@@ -10,6 +15,7 @@
 // Helpers de parsing
 // ============================================================
 
+/** @brief Read the numeric index encoded by two address characters. */
 static bool parse2Digits(const char* p, uint8_t& value) {
   if (p[0] < '0' || p[0] > '9') return false;
   if (p[1] < '0' || p[1] > '9') return false;
@@ -17,10 +23,12 @@ static bool parse2Digits(const char* p, uint8_t& value) {
   return true;
 }
 
+/** @brief Test whether two strings contain identical text. */
 static bool strEquals(const char* a, const char* b) {
   return strcmp(a, b) == 0;
 }
 
+/** @brief Test a string prefix without allocating a temporary String. */
 static bool strStartsWith(const char* s, const char* prefix) {
   return strncmp(s, prefix, strlen(prefix)) == 0;
 }
@@ -30,11 +38,22 @@ static bool strStartsWith(const char* s, const char* prefix) {
 // Helpers de sérialisation OSC
 // ============================================================
 
+/**
+ * @brief Print adapter writing encoded OSC bytes into caller-provided memory.
+ */
 class MemoryPrint : public Print {
 public:
+  /**
+   * @brief Initialize MemoryPrint and its configured member bindings.
+   */
   MemoryPrint(uint8_t* buf, size_t maxLen)
     : _buf(buf), _maxLen(maxLen), _len(0), _overflow(false) {}
 
+  /**
+   * @brief Copy output bytes into the supplied memory without exceeding its capacity.
+   *
+   * @return Number of bytes accepted; overflow() records a capacity shortfall.
+   */
   size_t write(uint8_t b) override {
     if (_len >= _maxLen) {
       _overflow = true;
@@ -44,7 +63,9 @@ public:
     return 1;
   }
 
+  /** @brief Return the number of bytes stored or counted. */
   size_t length() const { return _len; }
+  /** @brief Report whether output exceeded the caller-provided buffer. */
   bool overflow() const { return _overflow; }
 
 private:
@@ -54,36 +75,64 @@ private:
   bool _overflow;
 };
 
+/**
+ * @brief Counts encoded output bytes without storing them.
+ */
 class CountingPrint : public Print {
 public:
+  /**
+   * @brief Initialize CountingPrint and its configured member bindings.
+   */
   CountingPrint() : _len(0) {}
 
+  /**
+   * @brief Count output bytes without allocating or storing a message buffer.
+   */
   size_t write(uint8_t) override {
     ++_len;
     return 1;
   }
 
+  /** @brief Return the number of bytes stored or counted. */
   size_t length() const { return _len; }
 
 private:
   size_t _len;
 };
 
+/**
+ * @brief Owned encoded bytes for one outgoing command in the OSC FIFO.
+ */
 struct OscQueueNode {
   uint8_t* data = nullptr;
   size_t len = 0;
   OscQueueNode* next = nullptr;
 };
 
+/**
+ * @brief Outgoing OSC command FIFO with duplicate suppression and paced removal.
+ */
 class OscMessageQueue {
 public:
+  /**
+   * @brief Initialize OscMessageQueue and its configured member bindings.
+   */
   OscMessageQueue()
     : head(nullptr), tail(nullptr), count(0), lastSendTime(0) {}
 
+  /** @brief Release resources held by this object. */
   ~OscMessageQueue() {
     clear();
   }
 
+  /**
+   * @brief Encode an outgoing OSC command and append it unless already queued.
+   *
+   * Count encoded bytes first, allocate exactly that buffer, then serialize and
+   * verify the byte count. Byte-identical commands already in the queue are rejected.
+   * The queue owns both node and encoded bytes; no peer address is stored per entry.
+   * @return True only when a new command was appended.
+   */
   bool enqueue(OSCMessage& msg) {
     if (msg.hasError()) {
       return false;
@@ -145,6 +194,15 @@ public:
   }
 
   // Déqueue uniquement si delayBetweenTwoSend ms écoulées depuis le dernier envoi
+  /**
+   * @brief Decode and remove the oldest queued command after the send delay.
+   *
+   * Delay is measured since the last successfully dequeued command. The node is
+   * released even if decoding fails, and outMsg is emptied on failure.
+   * @param outMsg Destination message; cleared before loading queued bytes.
+   * @param delayBetweenTwoSend Minimum interval in milliseconds.
+   * @return Whether a due command was decoded successfully.
+   */
   bool dequeue(OSCMessage& outMsg, int delayBetweenTwoSend) {
     if (head == nullptr) {
       return false;
@@ -184,6 +242,9 @@ public:
     return ok;
   }
 
+  /**
+   * @brief Test whether queued output can be sent under the inter-command delay.
+   */
   bool peekIsDue(int delayBetweenTwoSend) const {
     if (head == nullptr) {
       return false;
@@ -193,14 +254,17 @@ public:
     return ((unsigned long)(now - lastSendTime) >= (unsigned long)delayBetweenTwoSend);
   }
 
+  /** @brief Report whether the queue contains no entries. */
   bool isEmpty() const {
     return head == nullptr;
   }
 
+  /** @brief Return the current number of entries. */
   size_t size() const {
     return count;
   }
 
+  /** @brief Release stored entries and reset the container state. */
   void clear() {
     while (head != nullptr) {
       OscQueueNode* node = head;
@@ -224,14 +288,17 @@ private:
 
 #define GROUP_INTERFACE_OSC "OSC"
 
+/**
+ * @brief OSC network transport with message events and presence monitoring.
+ */
 class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
   public:
     //DynamicDataSet dsMacroNames = DynamicDataSet(new DropDownAddress(ADDRESS_MACRONAME),this); 
-    OSCMessage oscIn;   // reception
-    OSCMessage oscOut;  // envoi
+    OSCMessage oscIn;   ///< reception
+    OSCMessage oscOut;  ///< envoi
 
-    OscMessageQueue queue; // envoi compatible avec la latence
+    OscMessageQueue queue; ///< envoi compatible avec la latence
 
     Event evtOSC = Event(&oscIn);
     // from remote UDP
@@ -239,6 +306,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     int UDPPort;
     UDP* udp = nullptr;
 
+    /** @brief Initialize NetworkOSC with the supplied configuration and bindings. */
     NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String echoCommand, bool _configurable=false, String group = GROUP_INTERFACE_OSC):NetworkDevice(name, group ,_OSC_localPort,_OSC_remotePort,echoCommand, _configurable){
       icon = "g";        
 
@@ -251,19 +319,23 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     ~NetworkOSC(){
     }
 
+    /** @brief Start this interface using its current configuration. */
     virtual bool begin(){
       DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
       return true;
     }
 
+    /** @brief End the interface session and release its active connection. */
     virtual bool end(){
       DEBUG_INFO("%s::end() calling stop()",interfaceName.c_str());            
       return stop();
     }
 
+    /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties(JsonArray& properties) override{
       NetworkDevice::serializeProperties(properties);
       
@@ -273,6 +345,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       free(buf);              
     }
 
+    /** @brief Restore one property string and report whether its value changed. */
     virtual bool restoreProperty(const char* property) override{
       
       bool changed = false;
@@ -290,6 +363,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     #define OSC_PING_DELAY 3000
     #define OSC_MESSAGE_PROCESSED_AT_ONCE 3
 
+   /** @brief Perform one service-specific connection and data-processing pass. */
    virtual bool monitorService() override {
       dataProcessed = false;
 
@@ -340,6 +414,12 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }
 
     
+    /**
+     * @brief Queue an OSC command, or transmit it immediately when requested.
+     *
+     * Normal commands use the paced outgoing queue; presence checks can bypass it.
+     * @return Whether queue insertion or immediate transmission succeeded.
+     */
     bool send(OSCMessage& msg, bool immediate = false){
       
       if (immediate) {
@@ -349,6 +429,13 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       }
     }
 
+    /**
+     * @brief Dispatch the current incoming OSC message to registered listeners.
+     *
+     * evtOSC borrows oscIn. Listeners must consume the message during this call or
+     * copy what they need before the next received packet replaces oscIn.
+     * Concrete mixer backends override this method to route protocol addresses.
+     */
     virtual void process(){
       //by default, we simply propagate the data to whoever has register as event listener
       // the event OSC which is throw hold a pointer to the OPSCin data which has just arrived
@@ -357,6 +444,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
     char addr[64];    
     
+    /** @brief Read and decode incoming UDP OSC traffic. */
     int readOSC(){
         UdpSlot* udpSlot = hwm.network->useUDPslot(udpID);   // request UDP slot
         udp = nullptr;
@@ -405,6 +493,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }
 
 
+    /** @brief Record the remote reply used for reachability monitoring. */
     virtual void echo(void* data) override{
       UDPIP = udp->remoteIP();
       UDPPort = udp->remotePort();      
@@ -414,6 +503,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       char oscDump[256];
     #endif
 
+    /** @brief Print message contents for diagnostics. */
     char* dump(OSCMessage &msg, char* buffer, size_t bufferSize) {
       if (bufferSize == 0) return buffer;
       buffer[0] = '\0';
@@ -445,15 +535,22 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       return buffer;
     }
 
+    /** @brief Stop the active operation or connection. */
     virtual bool stop() override{          // disconnect the network for network interface
       DEBUG_INFO("%s::stop()",interfaceName.c_str());
       return handleDisconnectService();
     };  
 
+    /**
+     * @brief Allow this OSC interface to be enabled or disabled by the user.
+     *
+     * @return Always true.
+     */
     virtual bool isSwitchable(){
       return true;
     }    
 
+    /** @brief Start this service on the available network connection. */
     virtual bool handleConnectService() override{
       DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
       // network connection is established so we now try to connect the device to its protocol
@@ -466,6 +563,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       return true;
     }
 
+    /** @brief Close this service and release its transport resources. */
     virtual bool handleDisconnectService() override{
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
       destination.lastPingTx = 0;                                // force immediate ping attempt
@@ -474,6 +572,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       return true;
     }    
   
+    /** @brief Set the interface status to querying the device. */
     void setStateQueryingDevice(){
       //DEBUG_PRINT("\n%s: setStateQueryingDevice()",interfaceName.c_str());
       // network is connected but not the OSC device is not answering
@@ -482,6 +581,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       state.progress = -1;      
     }
 
+    /** @brief Request a presence check for the remote device. */
     virtual bool ping() override {
       OSCMessage msg(destination.echoCommand.c_str());      
       destination.lastPingTx = millis();
@@ -489,6 +589,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     }    
 
 
+    /** @brief Update the quality-of-service indicator used by the display. */
     virtual void determineQoS() override{    
       if (state.code != IF_READY) state.QoSlevel = QoS::UNDETERMINED;
       else
@@ -502,6 +603,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       state.QoSlevel = QoS::CRITICAL;    
     }      
 
+    /** @brief Encode and transmit one OSC message to the configured endpoint. */
     bool _sendOSCMessage(OSCMessage *msg){           
       if (msg == nullptr) {
         DEBUG_ERROR(" **** FAIL (msg null) ****");

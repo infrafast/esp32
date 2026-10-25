@@ -1,3 +1,8 @@
+/**
+ * @file MixerApplication.h
+ * @brief Registers mixer backends and strip types, then starts the application.
+ */
+
 #define USE_NETWORK
 
 #include "Interval.h"
@@ -9,6 +14,7 @@
 MixingStation* msMixer;
 XMSeries* xmMixer;
 
+/** @brief Register application devices and strip types, then initialize the framework. */
 void setup(){
     
     msMixer = new MixingStation();    // a mixer has to be notified when webapp is started so it starts synchronisationo of data
@@ -25,6 +31,7 @@ void setup(){
 
 }
 
+/** @brief Run the application refresh loop. */
 void loop(){
     app.refresh();
 }

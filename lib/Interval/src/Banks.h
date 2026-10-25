@@ -21,7 +21,8 @@
 
 namespace Interval {
   /**
-   * Holds the strips belonging to one bank and owns their lifetime.
+   * @brief Holds the strips belonging to one bank and owns their lifetime.
+   *
    * LAYOUT_DETAILS uses each strip's position and size; LAYOUT_ZOOM shows the
    * focused strip in the main view. BankNavigator provides a compact overview.
    * The bank does not read/write files or manage switching between banks.
@@ -44,17 +45,22 @@ namespace Interval {
       //uint8_t numberOfStrips = 0;
       //uint8_t maxWindow = 0;
   
-      String name;                 // Supplied by the outer profile's bank key.
-      unsigned char icon=' ';      // Single-byte icon code, saved as a number.
+      String name;                 ///< Supplied by the outer profile's bank key.
+      unsigned char icon=' ';      ///< Single-byte icon code, saved as a number.
   
-      // Saved on export, but loading currently always restores LAYOUT_DETAILS.
+      /**
+       * @brief Saved on export, but loading currently always restores LAYOUT_DETAILS.
+       */
       uint8_t layout = LAYOUT_DETAILS;
       
       //LinkedList<Strip*> strips;
-      std::vector<Strip*> strips; // Owns successfully added strips; lookups borrow them.
+      std::vector<Strip*> strips; ///< Owns successfully added strips; lookups borrow them.
   
-      // Build from a bank name and its JSON body. Construction does not expose
-      // deserialize()'s result; callers must not assume every strip was restored.
+      /** @brief Initialize Bank with the supplied configuration and bindings.
+       *
+       * Build from a bank name and its JSON body. Construction does not expose
+       * deserialize()'s result; callers must not assume every strip was restored.
+       */
       Bank(String n, String value/*, StripFactory* sf*/){ 
         name = n;
         //Strip* s = nullptr;
@@ -62,7 +68,9 @@ namespace Interval {
         deserialize(value);
       }
   
-      // Destroy contained strips. Any external pointers to them then become invalid.
+      /**
+       * @brief Destroy contained strips. Any external pointers to them then become invalid.
+       */
       ~Bank() {
         for (auto& s : strips) {
           delete s;
@@ -71,9 +79,12 @@ namespace Interval {
         strips.clear();
       }
   
-      // Let every strip process its data, including hidden strips. Each strip
-      // decides what work it needs. Request a redraw if a visible strip's
-      // interface changed; registered strips are expected to have an interface.
+      /** @brief Update this component and report changes to its consumers.
+       *
+       * Let every strip process its data, including hidden strips. Each strip
+       * decides what work it needs. Request a redraw if a visible strip's
+       * interface changed; registered strips are expected to have an interface.
+       */
       bool update(){
         bool redraw = false;
         for (const auto& strip : strips) {         
@@ -88,7 +99,10 @@ namespace Interval {
         return redraw;
       }
 
-      // Reset focus to id 1; this does not check that a strip with that id exists.
+      /** @brief Prepare this object for use with its current configuration.
+       *
+       * Reset focus to id 1; this does not check that a strip with that id exists.
+       */
       void init(){
         //set stripIndex to the first available strip
         selector = 1;
@@ -108,7 +122,8 @@ namespace Interval {
   
 
       /**
-       * Read one bank body: {"layout":...,"icon":...,"strips":[...]}.
+       * @brief Read one bank body: {"layout":...,"icon":...,"strips":[...]}.
+       *
        * The name comes from the constructor, not from this JSON body.
        *
        * Parse the JSON, restore the icon, then try the first 12 strip entries.
@@ -150,8 +165,11 @@ namespace Interval {
   
       }*/
   
-      // Create the concrete strip from its saved "type". Unknown types return
-      // nullptr; the factory only constructs it, addStrip() restores its settings.
+      /** @brief Construct the saved strip type through the factory.
+       *
+       * Create the concrete strip from its saved "type". Unknown types return
+       * nullptr; the factory only constructs it, addStrip() restores its settings.
+       */
       Strip* buildStrip(JsonObject jsonStrip){      
         String stripID = jsonStrip[C_STRIPTYPE];
         //DEBUG_PRINT("\nbuildStripID: %s",stripID.c_str());
@@ -160,7 +178,8 @@ namespace Interval {
       }
   
       /**
-       * Create and restore one strip, then append it only if restoration succeeds.
+       * @brief Create and restore one strip, then append it only if restoration succeeds.
+       *
        * No capacity or position checks are made here. Returned pointers are
        * borrowed after insertion. Current failure handling has a limitation:
        * a constructed strip that fails restoration is returned but neither
@@ -189,6 +208,7 @@ namespace Interval {
   
       // Find a strip by its exact origin and window, not by a point inside its
       // rectangle. Return the first match, or nullptr; ownership stays here.
+      /** @brief Return a borrowed strip matching its id or exact origin/window. */
       Strip* getStrip(uint8_t x, uint8_t y, uint8_t window){
   
         Strip* strip = nullptr;
@@ -206,8 +226,11 @@ namespace Interval {
         return strip;
       }
   
-      // Find the saved one-based strip id, not the vector offset. The early
-      // size check assumes consecutive ids; gaps can make higher ids unreachable.
+      /** @brief Return a borrowed strip matching its id or exact origin/window.
+       *
+       * Find the saved one-based strip id, not the vector offset. The early
+       * size check assumes consecutive ids; gaps can make higher ids unreachable.
+       */
       Strip* getStrip(uint8_t id){
         //DEBUG_PRINT("\n%s:getStrip(%d)=>",name.c_str(),id); 
         if (id>strips.size()){
@@ -228,8 +251,16 @@ namespace Interval {
         return nullptr;
       }
   
-      // Delete a matching strip and remove its entry. Does not renumber remaining
-      // ids or repair selector; callers must update selection/order when needed.
+      /**
+       * @brief Delete the matching owned strip and remove its vector entry.
+       *
+       * Does not renumber remaining ids or repair selector. Borrowed pointers to the
+       * deleted strip become invalid.
+       * @return Whether the strip pointer was found in this bank.
+       *
+       * Delete a matching strip and remove its entry. Does not renumber remaining
+       * ids or repair selector; callers must update selection/order when needed.
+       */
       bool trash(Strip* s) {
         for (auto it = strips.begin(); it != strips.end(); ++it) {
           if (*it == s) {
@@ -243,7 +274,8 @@ namespace Interval {
       }
   
       /**
-       * Export the bank body with layout, numeric icon and the strips array.
+       * @brief Export the bank body with layout, numeric icon and the strips array.
+       *
        * Example with no strips: {"layout":2,"icon":3,"strips":[]}.
        * The name is the outer key added by ApplicationManager; selector and
        * runtime state are not saved. Each strip exports its own configuration,
@@ -298,7 +330,8 @@ using IntervalBank = Interval::Bank;
 #define CANVA_VS_BANKNAME_SPACE 2
 
 /**
- * Draws a small map of a bank beside its name; borrows the bank pointer.
+ * @brief Draws a small map of a bank beside its name; borrows the bank pointer.
+ *
  * Details mode shows strip geometry across windows; zoom mode shows an ordered
  * row of strips. This overview displays the arrangement, not live strip content.
  */
@@ -307,16 +340,20 @@ class BankNavigator: public Widget{
   public:
     IntervalBank *bank = nullptr;
 
+    /** @brief Initialize BankNavigator with the supplied configuration and bindings. */
     BankNavigator(IntervalBank* b/*, LinkedList<Widget*>* w*/, bool debug = false):bank(b), oldBank(b), Widget(&xPos, &yPos, &fC, &bC, &GUI::fullBrightness, debug){      
       //widgetList = w;      
       if (bank != nullptr) oldSelector = bank->selector - 1; //this is to force first refresh
       id = concatStrings("BankNavigator", xPos, "x", yPos);
     }
 
-    // Rebuild the overview when selection, strip count or name changes.
-    // Current change detection does not compare layout, geometry or colors,
-    // and overwrites the force flag: those changes alone do not force a rebuild.
-    // Keep the previous width when the name shrinks to cover its old screen area.
+    /**
+     * @brief Rebuild the overview when selection, strip count or name changes.
+     *
+     * Current change detection does not compare layout, geometry or colors,
+     * and overwrites the force flag: those changes alone do not force a rebuild.
+     * Keep the previous width when the name shrinks to cover its old screen area.
+     */
     virtual bool refresh(bool force = false) {
       refreshed = force;
       Widget::refresh(force);
@@ -371,15 +408,19 @@ class BankNavigator: public Widget{
       return refreshed;
     }
 
+    /** @brief Return the widget horizontal drawing position. */
     virtual int16_t getX(){
       return xPos;
     }
 
-    // Details: scale x/y and the "width x height" size onto a four-by-four
-    // miniature grid, then offset horizontally by the window number.
-    // Zoom: divide the overview into equal strip slots using one-based ids.
-    // Draw colors with strip/system brightness. Geometry is trusted here;
-    // this drawing step does not validate the saved bank arrangement.
+    /** @brief Draw strip geometry in details mode or equal slots in zoom mode.
+     *
+     * Details: scale x/y and the "width x height" size onto a four-by-four
+     * miniature grid, then offset horizontally by the window number.
+     * Zoom: divide the overview into equal strip slots using one-based ids.
+     * Draw colors with strip/system brightness. Geometry is trusted here;
+     * this drawing step does not validate the saved bank arrangement.
+     */
     void drawStripMap(Canva* canva){
       int index, cellX, cellY, cellWidth, cellHeight;          
 
@@ -425,7 +466,10 @@ class BankNavigator: public Widget{
 
     }
 
-    // Optional selected-id overlay; the current refresh path does not call it.
+    /** @brief Draw an optional selected-strip id over the navigation overview.
+     *
+     * Optional selected-id overlay; the current refresh path does not call it.
+     */
     void drawStripID(Canva* canva){
       String idStr = String(bank->selector);
       Label* uniqueID = new Label(&idStr, Align::Center, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, 2, &GUI::white,&GUI::defaultBcolor);

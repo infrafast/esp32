@@ -1,3 +1,8 @@
+/**
+ * @file Interval.h
+ * @brief Shared framework utilities, events, configuration and application wiring.
+ */
+
 /*
 0.13 - Interval - Footswitch project
 0.14 - Auto update SW from .bin.gz file on LittleFS root
@@ -39,32 +44,62 @@
 #include <new>      // std::nothrow for ValueList node allocation
 #include <stdint.h>
 
-// Owns individually allocated objects so their addresses remain stable until release.
-// T must be default-constructible and expose a mutable reservation counter named count.
-// Matchers identify shared objects; initializers configure newly allocated objects.
+/**
+ * @brief Shares individually allocated values until their final reservation is released.
+ *
+ * Owns individually allocated objects so their addresses remain stable until release.
+ * T must be default-constructible and expose a mutable reservation counter named count.
+ * Matchers identify shared objects; initializers configure newly allocated objects.
+ *
+ * @tparam T Default-constructible value exposing a mutable count reservation field.
+ * Matching reservations return the same object. Individual nodes keep addresses
+ * stable until final release; clear() invalidates all pointers. No locking is provided.
+ */
 template<typename T>
 class ValueList {
 private:
+    /**
+     * @brief Stable storage for one shared value and the next list entry.
+     */
     struct Node {
         T data;
         Node* next;
 
+        /**
+         * @brief Initialize Node and its configured member bindings.
+         */
         Node() : data(), next(nullptr) {}
     };
 
     Node* head;
 
 public:
+    /**
+     * @brief Initialize ValueList and its configured member bindings.
+     */
     ValueList() : head(nullptr) {}
 
+    /** @brief Release resources held by this object. */
     ~ValueList() {
         clear();
     }
 
-    // Avoid accidental copy of the linked list
+    /**
+     * @brief Avoid accidental copy of the linked list
+     */
     ValueList(const ValueList&) = delete;
+    /** @brief Disable assignment to prevent copying owned resources. */
     ValueList& operator=(const ValueList&) = delete;
 
+    /**
+     * @brief Share a matching value or allocate one with its first reservation.
+     *
+     * Nodes are allocated individually so unrelated insertions do not move values.
+     * @param match Predicate identifying an existing value.
+     * @param init Initializer called only for newly allocated storage.
+     * @return Stable borrowed value pointer, or nullptr if node allocation fails.
+     * @note Pair every successful reservation with unreserve().
+     */
     template<typename Matcher, typename Initializer>
     T* reserve(Matcher match, Initializer init) {
         Node* current = head;
@@ -97,6 +132,13 @@ public:
         return &newNode->data;
     }
 
+    /**
+     * @brief Release one reservation and delete its node when the count reaches zero.
+     *
+     * @param ptr Pointer previously returned by this container.
+     * @return True if the pointer was found; false for nullptr or an unknown pointer.
+     * @note The pointer becomes invalid after the final release.
+     */
     bool unreserve(T* ptr) {
         if (ptr == nullptr) {
             return false;
@@ -132,6 +174,7 @@ public:
         return false;
     }
 
+    /** @brief Look up the requested entry without taking ownership. */
     template<typename Matcher>
     T* get(Matcher match) const {
         Node* current = head;
@@ -146,7 +189,9 @@ public:
         return nullptr;
     }
 
-    // Invalidates every pointer returned by this container.
+    /**
+     * @brief Delete all nodes, invalidating every pointer returned by this list.
+     */
     void clear() {
         Node* current = head;
 
@@ -159,7 +204,9 @@ public:
         head = nullptr;
     }
 
-    // Counts distinct objects, not total reservations.
+    /**
+     * @brief Counts distinct objects, not total reservations.
+     */
     uint16_t size() const {
         uint16_t n = 0;
         Node* current = head;
@@ -230,6 +277,9 @@ bool useUSBMidi = false;
 #define WIFI_CHECK_TIMEOUT_MAX  9000
 
 
+/**
+ * @brief Tracks reachability, timing and jitter for a monitored host.
+ */
 class TargetEcho{
   public:
     bool alive = false;
@@ -239,23 +289,33 @@ class TargetEcho{
 
     String echoCommand = "";
 
-    unsigned long lastRxTime ;    // timestamp of last received response, used to calculate latency and jitter
-    unsigned long lastPingTx = 0;   // used to know when we have to send a ping to check if the device is still alive
-    unsigned long lastPingRx = 0;   // used to calculate latency and jitter
+    unsigned long lastRxTime ;    ///< timestamp of last received response, used to calculate latency and jitter
+    unsigned long lastPingTx = 0;   ///< used to know when we have to send a ping to check if the device is still alive
+    unsigned long lastPingRx = 0;   ///< used to calculate latency and jitter
 
     uint16_t latency = 0;      
     uint16_t jitter = 0;
 
+    /**
+     * @brief Initialize TargetEcho and its configured member bindings.
+     */
     TargetEcho(String h):host(h){} 
 };
 
 typedef std::function<void(TargetEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité
 
+/**
+ * @brief Borrowed ping target and completion callback passed to a worker.
+ */
 class PingParameters {
 public:
+  /**
+   * @brief Initialize PingParameters and its configured member bindings.
+   */
   PingParameters(){
     //DEBUG_PRINT("\nPingParameters created");
   }
+  /** @brief Placeholder hook; no active operation in this implementation. */
   ~PingParameters(){
     //DEBUG_PRINT("\nPingParameters deleted");
   }
@@ -275,7 +335,7 @@ typedef void (*VoidDoubleIntCallback)(int,int);
 typedef String (*ReturnStringCallback)();
 typedef std::function<void(TargetEcho*)> StdFunctionCallbackVoidTargetEcho; 
 
-//////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
 /// @brief // Callback to report progress during unpacking
 /// @param percent Completed percent (0.0 - 100.0)
 String updateProgressLabel = "";
@@ -369,6 +429,7 @@ void usbEventCallback(void *arg, esp_event_base_t event_base, int32_t event_id, 
 }
 */
 
+/** @brief Append supplied values to an existing String. */
 template<typename... Args>
 inline void concatString(String& destination, Args&&... args) {
   std::array<String, sizeof...(Args)> parts{String(std::forward<Args>(args))...};
@@ -382,6 +443,7 @@ inline void concatString(String& destination, Args&&... args) {
   }
 }
 
+/** @brief Build a String by appending the supplied values. */
 template<typename... Args>
 inline String concatStrings(Args&&... args) {
   String result;
@@ -396,9 +458,13 @@ inline String concatStrings(Args&&... args) {
 #define PRI_INFO  14 // 8 + 6
 #define PRI_WARNING 12 // 8 + 4
 #define PRI_ERROR 11 // 8 + 3
+/**
+ * @brief Sends log messages over UDP.
+ */
 class LogUDP {
 public:
   // Méthode statique pour envoyer un message à un serveur de journalisation UDP
+  /** @brief Send the supplied diagnostic message to the configured log transport. */
   static void sendLog(const char* message, UDP* udp) {    
     
     return;   
@@ -416,6 +482,9 @@ public:
 };
 
 
+/**
+ * @brief Common initialization and refresh contract for framework components.
+ */
 class GenericComponent{
   protected:
     bool debug = true;      
@@ -424,18 +493,22 @@ class GenericComponent{
     String id="GenericComponent";
     bool refreshed = false; 
 
+    /** @brief Initialize GenericComponent with the supplied configuration and bindings. */
     GenericComponent(bool d=false){
       debug=d;    
     }
 
+    /** @brief Release resources held by this object. */
     virtual ~GenericComponent(){
       if (debug){
         //DEBUG_PRINT("\n~%s()",id.c_str());
       }
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force=false) = 0;  
     
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void init(){
 
     }
@@ -498,29 +571,42 @@ static const char* const EVENT_NAMES[EVENT_COUNT] = {
 };
 #endif
 
+/**
+ * @brief Event type and borrowed payload delivered to listeners.
+ */
 class Event {
 public:
+  /** @brief Release resources held by this object. */
   virtual ~Event() = default;
 
+  /**
+   * @brief Initialize Event and its configured member bindings.
+   */
   Event(void* _data=nullptr):data(_data){};
 
   EventType type;
 
   void* data;
 
+  /** @brief Attach a borrowed event payload without taking ownership. */
   void attachData(void* _data){
     data=_data;
   }
 
   #ifdef DEBUG
+  /** @brief Return the readable event name for debugging. */
   virtual const char* name() const {
     return getEventName(type);
   }
 
+  /**
+   * @brief Optional debug payload description; empty in the base event.
+   */
   virtual const char* serialize() const {
     return "";
   }
 
+  /** @brief Return the debug label for an event type. */
   static const char* getEventName(EventType id) {
     if (id < EVENT_COUNT) {
       return EVENT_NAMES[id];
@@ -530,31 +616,37 @@ public:
   #endif
 
 
+  /** @brief Test whether debug output is enabled for an event type. */
   static bool isEventDumpEnabled(EventType id) {
     if (id >= EVENT_COUNT) return false;
     return (eventDumpMask & (1UL << id)) != 0;
   }
 
+  /** @brief Enable debug dumps for one event type. */
   static void enableEventDump(EventType id) {
     if (id < EVENT_COUNT) {
       eventDumpMask |= (1UL << id);
     }
   }
 
+  /** @brief Disable debug dumps for one event type. */
   static void disableEventDump(EventType id) {
     if (id < EVENT_COUNT) {
       eventDumpMask &= ~(1UL << id);
     }
   }
 
+  /** @brief Replace the bit mask selecting events printed in debug logs. */
   static void setEventDumpMask(uint32_t mask) {
     eventDumpMask = mask;
   }
 
+  /** @brief Return the bit mask selecting events printed in debug logs. */
   static uint32_t getEventDumpMask() {
     return eventDumpMask;
   }
 
+  /** @brief Enable debug dumps for all event types. */
   static void enableAllEventDumps() {
     if (EVENT_COUNT >= 32) {
       eventDumpMask = 0xFFFFFFFFUL;
@@ -563,10 +655,12 @@ public:
     }
   }
 
+  /** @brief Disable debug dumps for all event types. */
   static void disableAllEventDumps() {
     eventDumpMask = 0;
   }
 
+  /** @brief Print message contents for diagnostics. */
   void dump(const char* direction, const char* caller) const {
     if (!isEventDumpEnabled(type)) return;
 
@@ -582,12 +676,18 @@ uint32_t Event::eventDumpMask =
   (EVENT_COUNT >= 32) ? 0xFFFFFFFFUL : ((1UL << EVENT_COUNT) - 1);
 
 
+/**
+ * @brief Receives events through the dispatcher callback bridge.
+ */
 class EventListener {
 public:
+  /** @brief Release resources held by this object. */
   virtual ~EventListener() = default;
 
+  /** @brief Handle relevant incoming events for this component. */
   virtual void onEvent(const Event& evt) = 0;
 
+  /** @brief Apply debug tracing before forwarding an event to the implementation. */
   void _onEvent(const Event& evt) {
 #ifdef DEBUG
     evt.dump("listen", getListenerName());
@@ -595,29 +695,43 @@ public:
     onEvent(evt);
   }
 
+  /** @brief Bridge a context/function callback to the listener instance. */
   static void eventTrampoline(void* context, const Event& evt) {
     if (context) {
       static_cast<EventListener*>(context)->_onEvent(evt);
     }
   }
 
+  /** @brief Return the name used to identify this listener in logs. */
   virtual const char* getListenerName()  = 0;
 };
 
+/**
+ * @brief Delivers events synchronously to a bounded list of borrowed listeners.
+ *
+ * Uses bounded callback slots rather than allocating a new callback on every event.
+ * Listeners and event payloads are borrowed; dispatch is synchronous and does not
+ * extend their lifetime. Pair registration with unregistration before destruction.
+ */
 class EventDispatcher {
 public:
   static constexpr uint8_t DEFAULT_MAX_CALLBACKS = 10;
   static constexpr uint8_t ABSOLUTE_MAX_CALLBACKS = 64;
 
+  /** @brief Return the name used to identify this event source in logs. */
   virtual const char* getDispatcherName() const = 0;
 
   using CallbackFn = void (*)(void*, const Event&);
 
+  /**
+   * @brief Listener context and function used for event delivery.
+   */
   struct HandlerSlot {
     void* context = nullptr;
     CallbackFn fn = nullptr;
   };
 
+  /** @brief Initialize EventDispatcher with the supplied configuration and bindings. */
   EventDispatcher(uint8_t maxCallbacks = DEFAULT_MAX_CALLBACKS) {
     if (maxCallbacks == 0)
       maxCallbacks = DEFAULT_MAX_CALLBACKS;
@@ -629,10 +743,12 @@ public:
     eventHandlers = new HandlerSlot[maxHandlers];
   }
 
+  /** @brief Release resources held by this object. */
   virtual ~EventDispatcher() {
     delete[] eventHandlers;
   }
 
+  /** @brief Subscribe a borrowed listener if capacity allows and it is not already registered. */
   bool registerEventListener(EventListener* listener) {
     if (!listener) return false;
     
@@ -658,6 +774,7 @@ public:
     return false;
   }
 
+  /** @brief Remove the matching listener subscription without deleting the listener. */
   bool unregisterEventListener(EventListener* listener) {
     if (!listener) return false;
 
@@ -672,6 +789,7 @@ public:
     return false;
   }
 
+  /** @brief Count the occupied listener slots. */
   uint8_t countRegisteredListeners() const {
     uint8_t count = 0;
 
@@ -684,6 +802,12 @@ public:
     return count;
   }  
 
+  /**
+   * @brief Deliver an event synchronously to the registered listener callbacks.
+   *
+   * The payload remains borrowed. Listeners should consume it during the call or
+   * copy it if longer retention is needed; dispatch does not transfer ownership.
+   */
   void fireEvent(const Event& evt) {
     #ifdef DEBUG
       evt.dump("🔥fire", getDispatcherName());
@@ -701,7 +825,7 @@ private:
   uint8_t maxHandlers = DEFAULT_MAX_CALLBACKS;
 };
 
-///////////////////// API MANAGEMENT //////////////////////
+//////////////////// API MANAGEMENT //////////////////////
 
 #define API_ORIGIN "origin"
 #define API_STATUS "status"
@@ -710,7 +834,13 @@ private:
 #define API_BODY   "body"
 
 
-////////////////////// UTILITIES ///////////////////////////
+///////////////////// UTILITIES ///////////////////////////
+/**
+ * @brief Append matching filenames from one LittleFS folder to a supplied list.
+ *
+ * Prefix labels when requested and optionally omit extensions; no recursion.
+ * The list is not cleared, so callers choose append or replacement behavior.
+ */
 void populateFileList(String extension, String folder, std::vector<String> *list, String prefix="", bool withExtension=true) {
   //we first clean all items from the list
 
@@ -736,6 +866,13 @@ void populateFileList(String extension, String folder, std::vector<String> *list
   }
 }
 
+/**
+ * @brief Write the raw bytes of a structure to a LittleFS file.
+ *
+ * @tparam T Stored type; its binary representation must remain compatible on reload.
+ * @return Whether exactly sizeof(T) bytes were written.
+ * @note This is binary storage, not JSON and not a versioned migration format.
+ */
 template<typename T>
 bool saveStruct(const char* filename, const T& data){
 
@@ -759,6 +896,13 @@ bool saveStruct(const char* filename, const T& data){
 technique utilisée dans beaucoup de firmware ESP32 qui permet de sauvegarder et charger 
 automatiquement n'importe quelle struct dans SPIFFS/NVS avec une seule fonction template :
 */
+/**
+ * @brief Read a structure from a LittleFS file with an exact size check.
+ *
+ * @tparam T Expected stored type.
+ * @return Whether file size and bytes read both match sizeof(T).
+ * @note Matching size alone does not prove binary-layout compatibility.
+ */
 template<typename T>
 bool loadStruct(const char* filename, T& data){
     File f = LittleFS.open(filename, FILE_READ);
@@ -784,6 +928,7 @@ bool loadStruct(const char* filename, T& data){
     return true;
 }
 
+/** @brief Delete the requested file if it exists. */
 bool checkAndDeleteFile(const char* filename) {
     if (LittleFS.exists(filename)) {
         DEBUG_INFO("Fichier trouvé: %s → suppression...\n", filename);
@@ -801,12 +946,16 @@ bool checkAndDeleteFile(const char* filename) {
     return false;
 }
 
+/**
+ * @brief Filesystem capacity and usage measurements.
+ */
 typedef struct LittleFSInfo{
   size_t total;
   size_t used;
   size_t freeSpace;
 } ;
 
+/** @brief Read filesystem usage into the supplied information structure. */
 void getLittleFSInfo(LittleFSInfo &info) {
   info.total     = LittleFS.totalBytes();
   info.used      = LittleFS.usedBytes();
@@ -815,20 +964,25 @@ void getLittleFSInfo(LittleFSInfo &info) {
 
 
 // Structure pour stocker les données décompressées dans un buffer
+/**
+ * @brief Growable memory buffer exposed through the Arduino Stream API.
+ */
 struct ByteBuffer : public Stream {
   // Attributs
-  uint8_t* buffer = nullptr;  // Pointeur vers le buffer
+  uint8_t* buffer = nullptr;  ///< Pointeur vers le buffer
   size_t size = 0;            // Taille actuelle des données dans le buffer
   size_t capacity = 0;        // Capacité maximale allouée au buffer
-  size_t readIndex = 0;       // Position actuelle de lecture
+  size_t readIndex = 0;       ///< Position actuelle de lecture
 
   // Constructeur
+  /** @brief Initialize ByteBuffer with the supplied configuration and bindings. */
   ByteBuffer(size_t initialCapacity = 64) { // Capacité initiale par défaut
     capacity = initialCapacity;
     buffer = (uint8_t*)malloc(capacity);
   }
 
   // Méthode pour écrire des données dans le buffer
+  /** @brief Accept bytes through the Arduino Print/Stream interface. */
   size_t write(const uint8_t* data, size_t len) override {
     if (size + len > capacity) {
       // Reallocation de mémoire si le buffer est plein
@@ -841,16 +995,21 @@ struct ByteBuffer : public Stream {
   }
 
   // Méthode d'écriture d'un seul octet
+  /** @brief Accept bytes through the Arduino Print/Stream interface. */
   size_t write(uint8_t data) override {
     return write(&data, 1);
   }
 
   // Méthode pour vérifier la disponibilité des données (taille restante non lue)
+  /** @brief Return the number of unread buffered bytes. */
   int available() override {
     return size - readIndex; // Données non lues restantes
   }
 
   // Méthode pour lire un octet
+  /**
+   * @brief Consume one buffered byte, or return -1 when no data remains.
+   */
   int read() override {
     if (readIndex < size) {              // Vérifie s'il reste des données à lire
       return buffer[readIndex++];       // Retourne l'octet et avance l'index
@@ -859,6 +1018,7 @@ struct ByteBuffer : public Stream {
   }
 
   // Méthode pour lire plusieurs octets dans un buffer
+  /** @brief Copy available bytes into the caller buffer and advance the read position. */
   size_t readBytes(char* dest, size_t len) {
     size_t bytesRead = 0;
     while (bytesRead < len && available()) {
@@ -868,6 +1028,7 @@ struct ByteBuffer : public Stream {
   }
 
   // Méthode pour lire sans avancer l'index
+  /** @brief Read the next byte without consuming it. */
   int peek() override {
     if (readIndex < size) {
       return buffer[readIndex]; // Retourne l'octet sans avancer l'index
@@ -876,12 +1037,16 @@ struct ByteBuffer : public Stream {
   }
 
   // Méthode pour vider le buffer
+  /**
+   * @brief Stream compatibility hook; memory writes need no flushing.
+   */
   void flush() override {
     readIndex = 0; // Réinitialise l'index de lecture
     size = 0;      // Réinitialise la taille
     shrink();
   }
 
+  /** @brief Resize the allocation to the current stored data size. */
   void shrink() {
       if (size == 0) {
           capacity = 64; // Reset to initial size
@@ -890,6 +1055,7 @@ struct ByteBuffer : public Stream {
   }  
 
   // Libérer la mémoire allouée
+  /** @brief Release resources held by this object. */
   ~ByteBuffer() {
     if (buffer) {
       free(buffer);
@@ -901,16 +1067,19 @@ struct ByteBuffer : public Stream {
 ByteBuffer* uncompressedByteBuffer;
 
 // Fonction de callback pour écrire les données
+/** @brief Write unpacked data through the configured update stream. */
 bool streamWriterCallback(unsigned char* buff, size_t buffsize) {
   uncompressedByteBuffer->write(buff, buffsize);
   return true; // Retourner true pour indiquer que l'écriture est réussie
 }
 
+/** @brief Report gzip processing progress. */
 void gzCallback(size_t bytes_read, size_t total_bytes){
   //DEBUG_PRINT("\n ungzip %d bytes ",bytes_read);
   yield();
 }
 
+/** @brief Compress text data and save it to the requested file. */
 size_t writeBufferToGzFile(String filename, const char* data){
   //DEBUG_PRINT("\nwriteBufferToGzFile->%s",data);  
   File fout = LittleFS.open(filename, "w");
@@ -929,6 +1098,7 @@ size_t writeBufferToGzFile(String filename, const char* data){
 }
 
 
+/** @brief Compress an in-memory string into a byte buffer. */
 size_t bufferToGz(String* buf, ByteBuffer* dest){
   // using miniz (does not work)
   const char* data = buf->c_str();
@@ -940,10 +1110,12 @@ size_t bufferToGz(String* buf, ByteBuffer* dest){
   return outputSize;
 }
 
+/** @brief Placeholder hook; no active operation in this implementation. */
 void targzNullLoggerCallback(const char* format, ...){}
 
 #define SAFE_SCANF_SPACE '^'
 // Remplace tous les caractères 'from' par 'to' dans la chaîne donnée
+/** @brief Replace matching characters in a String. */
 String replaceAllChars(String str, char from, char to) {
     for (char &c : str) {
         if (c == from) {
@@ -960,6 +1132,7 @@ String replaceAllChars(String str, char from, char to) {
 // - N'écrit pas plus de outMax octets.
 // Retourne true si conversion complète et paire ; false sinon.
 // En cas d'échec, outLen = 0.
+/** @brief Convert hexadecimal text into a bounded byte array. */
 size_t hexStringToBytes(const String& in, uint8_t* out, size_t outMax) {
   if (!out || outMax == 0) return 0;
 
@@ -1011,6 +1184,7 @@ size_t hexStringToBytes(const String& in, uint8_t* out, size_t outMax) {
 
 
 // Fonction pour lire un fichier gz et remplir le buffer de bytes décompressés
+/** @brief Decompress a file into an in-memory buffer. */
 size_t readGzFileToBuffer(String filename, ByteBuffer* _buffer) {
   // Ouvrir le fichier compressé
   uncompressedByteBuffer = _buffer;
@@ -1051,6 +1225,7 @@ size_t readGzFileToBuffer(String filename, ByteBuffer* _buffer) {
   return uncompressedByteBuffer->size;
 }
 
+/** @brief Map a floating-point value between numeric ranges into integer output. */
 int mapFloatToInt(float x, float in_min, float in_max, int out_min, int out_max) {
 
   // Avoid division by zero or degenerate range
@@ -1074,17 +1249,21 @@ int mapFloatToInt(float x, float in_min, float in_max, int out_min, int out_max)
 }
 
 
+/** @brief Convert a value between configured numeric scales. */
 float scaleValue(float input, float in_min, float in_max, float out_min, float out_max) {
     return out_min + ((input - in_min) / (in_max - in_min)) * (out_max - out_min);
 }
 
-// general purpose utility functions
+/**
+ * @brief general purpose utility functions
+ */
 uint8_t countChar(String s, char c){
     uint8_t res = 0;
     for (int i=0;i<s.length();i++) if (s.charAt(i) == c) res++;
     return res;
 }
 
+/** @brief Count matching words in the supplied text. */
 uint8_t countWord(String str, String sub) {
     uint8_t count = 0;
     int index = 0;
@@ -1099,6 +1278,7 @@ uint8_t countWord(String str, String sub) {
     return count;
 }
 
+/** @brief Remove occurrences matching the supplied pattern. */
 String removePattern(const char* input, const char* pattern) {
     char result[strlen(input)]; // Buffer pour stocker la sous-chaîne extraite
     // Utilisation de sscanf pour extraire la partie après "/con/n"
@@ -1110,14 +1290,17 @@ String removePattern(const char* input, const char* pattern) {
 }
 
 
+/** @brief Truncate the numeric value to one decimal place. */
 float truncateToOneDecimal(float num) {
     return ((int)(num * 10.0)) / 10.0;
 }
 
+/** @brief Round a value to the supported half-step resolution. */
 float roundHalf(float nombre) {
     return round(nombre * 2) / 2.0;
 }
 
+/** @brief Apply legacy text replacements used to embed serialized JSON strings. */
 void removeJsonQuote(String* buffer){
   buffer->replace("\"{","{");   
   buffer->replace(":\"{",":{");  
@@ -1129,6 +1312,7 @@ void removeJsonQuote(String* buffer){
   buffer->replace("]\"}","]}");           
 }
 
+/** @brief Choose a JSON allocation budget from the currently available heap. */
 int32_t getMaxAlloc(){
   uint32_t freeHeap = ESP.getMaxAllocHeap();
   int32_t maxDocMemAlloc ; //= freeHeap-50000;
@@ -1137,22 +1321,31 @@ int32_t getMaxAlloc(){
   return maxDocMemAlloc;
 }
 
+/** @brief String key/value pair owned by a JsonList collection. */
 typedef struct  {
   String key;
   String value;
 } KeyValue;
 #define KV_UNIT_SIZE 100 // according to arduinojson assistant its 32
 
+/**
+ * @brief String key/value collection with JSON conversion helpers.
+ */
 class JsonList{
 
   public:
 
+    /**
+     * @brief Initialize JsonList and its configured member bindings.
+     */
     JsonList(){}
 
+    /** @brief Return the current number of entries. */
     int size(){
       return keyValues.size();
     }
 
+    /** @brief Export this object using its JSON representation. */
     void serialize(String* buffer){
       //int32_t docSize = buffer->length() + KV_UNIT_SIZE * keyValues.size();
       //DynamicJsonDocument doc(getMaxAlloc());
@@ -1168,6 +1361,7 @@ class JsonList{
       //DEBUG_PRINT("\n\nSERIALIZE JsonList AFTER\t\t%s",buffer->c_str());
     }
 
+    /** @brief Restore this object from its JSON representation. */
     void deserialize(String kvPair){
       JsonDocument doc;
       DeserializationError error;
@@ -1179,6 +1373,7 @@ class JsonList{
       }  
     }
 
+    /** @brief Look up a string value, using the supplied fallback when missing. */
     virtual const String* getString(const String name, const String defaultValue="") {
       int8_t index;
       index = getIndex(name);
@@ -1194,6 +1389,7 @@ class JsonList{
       }
     };
 
+    /** @brief Assign a configuration value to the requested key. */
     bool setValue(String name, String value) {
       bool ret = false;
       int8_t index;
@@ -1207,6 +1403,7 @@ class JsonList{
       return ret;
     };
 
+    /** @brief Add a key/value entry to the collection. */
     bool addValue(String name, String value) {        
         bool ret = false;
         int8_t index = getIndex(name);
@@ -1224,6 +1421,7 @@ class JsonList{
         return ret;
     };
     
+    /** @brief Remove the matching key/value entry. */
     bool deleteValue(String name){
       int8_t index = getIndex(name);
       //DEBUG_PRINT("\nsize before delete: %i",keyValues.size());
@@ -1235,6 +1433,7 @@ class JsonList{
       }else return false;
     }
 
+    /** @brief Find the position of the requested key in the collection. */
     int16_t getIndex(String name) {
       int16_t i = 0;
         for(; i < keyValues.size(); i++){
@@ -1244,6 +1443,9 @@ class JsonList{
       return -1;
     }    
 
+    /**
+     * @brief Return a borrowed key string for the supplied collection index.
+     */
     String* getName(uint8_t index){
       if (index>keyValues.size()) return &noToken;
       else{
@@ -1255,6 +1457,7 @@ class JsonList{
   protected:  
     LinkedList<KeyValue*> keyValues = LinkedList<KeyValue*>(); 
 
+    /** @brief Update the stored value for the matching key. */
     bool updateValue(uint8_t index, String value){
       KeyValue* kv = keyValues.get(index);
       kv->value = value;
@@ -1262,6 +1465,7 @@ class JsonList{
       return true;
     }
 
+    /** @brief Populate key/value storage from a JSON document. */
     void jsonToKeyValues(JsonDocument* doc){
       JsonObject root = doc->as<JsonObject>();
       for (JsonPair kv : root){
@@ -1273,14 +1477,22 @@ class JsonList{
     String noToken = "";    
 };
 
-///////////////////// JSON SERIALIZATION AND UTILITIES ////////////////////////
+/**
+ * @brief File-backed string key/value collection with plain/gzip JSON loading.
+ *
+ * load() appends parsed entries; clean() deletes them before replacement.
+ */
 
 class JsonListFile : public JsonList{
   public:
       String filename="voidconf.conf";
 
+      /**
+       * @brief Initialize JsonListFile and its configured member bindings.
+       */
       JsonListFile():JsonList(){};
 
+      /** @brief Delete the stored key/value entries. */
       void clean(){
         // We first clean up existing values
         while (keyValues.size()>0){
@@ -1289,6 +1501,13 @@ class JsonListFile : public JsonList{
         }
       }
 
+      /**
+       * @brief Load plain or gzip JSON into this key/value collection.
+       *
+       * A missing file can populate supplied defaults while returning false. Existing
+       * entries are not cleared here; callers replacing content should call clean().
+       * Successful parsing adds key/value strings rather than retaining JSON views.
+       */
       bool load(String f,String defaultValues=""){
         bool success = true;
         
@@ -1339,6 +1558,12 @@ class JsonListFile : public JsonList{
         return success;      
       }
 
+      /**
+       * @brief Serialize the collection and write it to its saved or supplied filename.
+       *
+       * This path writes plain JSON; compressed web-library saving is handled by the
+       * separate gzip helpers.
+       */
       bool save(String f=""){
         bool success = true;
         if (f !="") filename = f;
@@ -1361,16 +1586,25 @@ class JsonListFile : public JsonList{
       }
 };
 
+/**
+ * @brief Configuration collection associated with a saved file.
+ */
 class Config : public JsonListFile{
   public:
+    /**
+     * @brief Initialize Config and its configured member bindings.
+     */
     Config():JsonListFile(){}  
 
+    /** @brief Interpret a stored configuration value as an integer. */
     const int getInt(String name) {
       return getString(name,"0")->toInt();
     };
+    /** @brief Interpret a stored configuration value as a floating-point value. */
     const float getFloat(String name) {
       return getString(name,"0")->toFloat();
     };
+    /** @brief Interpret a stored configuration value as a boolean. */
     const boolean getBool(String name, bool defaultValue=true) {
       return (*getString(name,defaultValue?"true":"false") == "true");
     };
@@ -1380,7 +1614,7 @@ class Config : public JsonListFile{
 Config systemCfg = Config();
 Config userCfg = Config();
 
-///////////////////// SYSTEM PARAMETERS ////////////////////////
+//////////////////// SYSTEM PARAMETERS ////////////////////////
 #define S_PUSHDELAY         "pushDelay"
 #define S_DCLICREACTIVITY   "dClicReactivity"
 #define S_FADERSPEED        "faderSpeed"
@@ -1395,10 +1629,22 @@ Config userCfg = Config();
 #define S_SWUPDATE_PROMPT   "startupUpdate"
 
 
+/**
+ * @brief Loads translated strings and supplies lookup fallbacks.
+ */
 class I18n : public JsonListFile{
   public:
+    /**
+     * @brief Initialize I18n and its configured member bindings.
+     */
     I18n():JsonListFile(){}
 
+    /**
+     * @brief Return a translated string, inserting the key itself when it is missing.
+     *
+     * The current implementation uses the key as fallback and does not apply the
+     * defaultValue argument. Returned strings belong to the translation collection.
+     */
     virtual const String* getString(const String name, const String defaultValue="") {
       int8_t index;
       index = getIndex(String(name));
@@ -1423,8 +1669,10 @@ unsigned long onOffPushedStartTime = 0;
 
 bool pushBuffer = false, clearBuffer = false;
 
+/** @brief Prepare hardware shutdown and put the ESP32 into deep sleep. */
 void goDeepSleep();
 
+/** @brief Run the background operation using the supplied task parameters. */
 void xTaskBackground(void *pvParameters);
 //void xTaskEth(void *pvParameters);
 
@@ -1439,28 +1687,46 @@ void xTaskBackground(void *pvParameters);
 #define MAX_RTP_DIR_ENDPOINTS 3
 #define EP_DISCOVERY_TIME_OUT 6000
 // ====== Liste simple des endpoints découverts ======
+/**
+ * @brief Discovered RTP-MIDI service identity and address.
+ */
 struct RtpmidiEndpoint {
-  char name[64];        // nom d'instance (ex: "Mon MacBook Pro")
+  char name[64];        ///< nom d'instance (ex: "Mon MacBook Pro")
   IPAddress ip;
   uint16_t port;
   uint32_t lastSeenMs;
 };
 
+/**
+ * @brief Stores and updates discovered RTP-MIDI endpoints.
+ */
 class RtpDirectory {
 public:
   RtpmidiEndpoint ep[MAX_RTP_DIR_ENDPOINTS];
   int epCount;
 
 
+  /**
+   * @brief Initialize RtpDirectory and its configured member bindings.
+   */
   RtpDirectory() : epCount(0) {}
 
+  /** @brief Release stored entries and reset the container state. */
   void clear() { epCount = 0; }
 
+  /** @brief Return the number of stored entries. */
   int count() const { return epCount; }
 
+  /** @brief Look up the requested entry without taking ownership. */
   const RtpmidiEndpoint& get(int idx) const { return ep[idx]; }
 
   // Upsert robuste: fusion par nom + règles IP/port
+  /**
+   * @brief Add or refresh an endpoint in the bounded discovery directory.
+   *
+   * Track name, IP, port and last-seen time so repeated announcements update an
+   * existing endpoint rather than adding duplicate choices.
+   */
   void upsertEndpoint(const char* instanceName, const byte ipBytes[4], unsigned short port) {
     if (!ipBytes) return;
 
@@ -1521,6 +1787,7 @@ public:
   }
 
   // Optionnel: petit "nettoyage" des entrées trop vieilles (si tu veux)
+  /** @brief Remove discovered endpoints older than the supplied age limit. */
   void pruneOlderThanMs(unsigned long maxAgeMs) {
     const unsigned long now = millis();
     int w = 0;
@@ -1535,10 +1802,12 @@ public:
 
   private:
 
+  /** @brief Recognize a link-local IPv4 address in the 169.254 range. */
   static bool isLinkLocal169(const IPAddress& ip) {
     return ip[0] == 169 && ip[1] == 254;
   }
 
+  /** @brief Copy an endpoint name into fixed storage with a length limit. */
   static void safeCopyName(char* dst, size_t dstSize, const char* src) {
     if (!dst || dstSize == 0) return;
     if (!src) src = "?";
@@ -1546,7 +1815,9 @@ public:
     dst[dstSize - 1] = '\0';
   }
 
-  // Comparaison "safe" en tenant compte de tailles
+  /**
+   * @brief Comparaison "safe" en tenant compte de tailles
+   */
   static bool sameName(const char* a, const char* b) {
     if (!a || !b) return false;
     // Comparer au plus sur la longueur stockée
@@ -1573,6 +1844,7 @@ enum class QoS : int8_t {
   GOOD
 };
 
+/** @brief Map a quality-of-service level to a display color. */
 uint16_t QoStoColor(QoS qos) {
   switch (qos) {
       case QoS::GOOD:           return TFT_GREEN;    
@@ -1587,6 +1859,9 @@ uint16_t QoStoColor(QoS qos) {
 
 #include "interfaces/i_states.h"
 
+/**
+ * @brief Shared device status, labels and progress values.
+ */
 struct State{ // used by Strip and Interface
   uint8_t code = IF_NOT_READY;
   String label = IF_STATE_NOTIMPLEMENTED;
@@ -1606,7 +1881,7 @@ struct State{ // used by Strip and Interface
 
   QoS QoSlevel = QoS::NOTAPPLICABLE;
 
-  bool changed = false;               // this is used by the strip to determine if they have to refresh
+  bool changed = false;               ///< this is used by the strip to determine if they have to refresh
   bool broadcastState = false;
   bool broadcastConfig = false;
 };
@@ -1614,6 +1889,7 @@ struct State{ // used by Strip and Interface
 #include "GUIManager.h"
 
 TFT_eSPI* GUI::tft = &hwm.tft;
+/** @brief Shared GUI manager with direct widget rendering selected by default. */
 GUIManager gui(false);
 OpenFontRender* Label::ofr = &gui.labelOfr;
 OpenFontRender* Icon::ofr = &gui.iconOfr;
@@ -1622,28 +1898,39 @@ OpenFontRender* Icon::ofr = &gui.iconOfr;
 
 class ApplicationManager;
 
+/**
+ * @brief Application logging entry point.
+ */
 class Log {
   public:
-    // Initialiser la classe avec une instance d'ApplicationManager
+    /**
+     * @brief Initialiser la classe avec une instance d'ApplicationManager
+     */
     static void init(ApplicationManager* manager) {
         am = manager;
     }
 
     // Déposer un message
+    /** @brief Remove the requested entry from the collection. */
     static void drop(const char* originator, const char* message);
 
 private:
-    // Pointeur vers l'instance globale
+    /**
+     * @brief Pointeur vers l'instance globale
+     */
     static ApplicationManager* am;
 };
 
-//--- utilitaires URL -----------------------------------------------------------
+/**
+ * @brief --- utilitaires URL -----------------------------------------------------------
+ */
 struct UrlParts {
   String proto, host, path;
   uint16_t port = 80;
   bool ok = false;
 };
 
+/** @brief Split a URL into host, port and request path. */
 static UrlParts parseUrl(const String& url) {
   UrlParts u;
   int p = url.indexOf("://");
@@ -1669,9 +1956,15 @@ static UrlParts parseUrl(const String& url) {
   return u;
 }
 
+/**
+ * @brief Stream pointer and ownership flag passed to update helpers.
+ */
 struct StreamParams {
   Stream* stream;
   bool ownsStream = false;
+  /**
+   * @brief Initialize StreamParams and its configured member bindings.
+   */
   StreamParams(Stream* s,bool o):stream(s),ownsStream(o){}
 };
 
@@ -1685,6 +1978,7 @@ ApplicationManager* Log::am = nullptr;
 
 #include "APPManager.h"
 
+/** @brief Remove the requested entry from the collection. */
 void Log::drop(const char* originator, const char* message) {
   if (am) {
       am->log(originator, message);
@@ -1693,6 +1987,7 @@ void Log::drop(const char* originator, const char* message) {
 
 ApplicationManager app(&hwm,&gui);
 
+/** @brief Prepare hardware shutdown and put the ESP32 into deep sleep. */
 void goDeepSleep(){
     // SHUTDOWN
   // One thing to keep in mind is that when you disable the power to the sensor by turning off the transistor 
@@ -1719,6 +2014,7 @@ void goDeepSleep(){
   esp_deep_sleep_start();      
 }
 
+/** @brief Run the background operation using the supplied task parameters. */
 void xTaskBackground(void *pvParameters){  
   while (true){
   
@@ -1770,6 +2066,7 @@ void xTaskBackground(void *pvParameters){
   }
 }
 
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void commonFileServerWrapper(Request &req, Response &res) {
   app.commonFileServer(req,res);
 }
@@ -1782,6 +2079,11 @@ static TaskHandle_t    guiRefreshTaskHandle = nullptr;
 
 #define STEP_MS 2
 // ---------- Tâche d’animation ----------
+/**
+ * @brief Animate a temporary progress page while an upload blocks its web task.
+ *
+ * Refresh the GUI until notified to stop, then clear the task handle and exit.
+ */
 void guiRefreshTask(void *param_type) {
   //DEBUG_PRINT("\nstartGUIThread()"); 
    
@@ -1799,6 +2101,12 @@ void guiRefreshTask(void *param_type) {
 }
 
 
+/**
+ * @brief Build and animate a temporary progress page without selecting a new screen.
+ *
+ * Purge current widgets and call buildGUI() directly. screen.id/state remain
+ * unchanged, allowing stopGUIThread() to request their normal reconstruction.
+ */
 void startGUIThread(uint8_t screen, uint8_t state) {
   // 
   gui.purge();
@@ -1818,6 +2126,12 @@ void startGUIThread(uint8_t screen, uint8_t state) {
 }
 
 // ---------- Arrêter l’animation ----------
+/**
+ * @brief Stop temporary progress rendering and invalidate the normal page.
+ *
+ * Notify the GUI task and call triggerRedraw(); briefly wait for task exit
+ * before the regular application loop resumes rendering the selected screen.
+ */
 void stopGUIThread() {
   if (guiRefreshTaskHandle) {
     // Envoie une notification; la tâche se nettoie puis s’auto-supprime
@@ -1834,6 +2148,7 @@ void stopGUIThread() {
 }
 
 
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void scanNetworksTaskWrapper(void * parameter){
   app.scanNetworksTask(parameter);
   // Delete the task itself
@@ -1843,6 +2158,7 @@ void scanNetworksTaskWrapper(void * parameter){
 #include <EthernetICMP.h>  // fixed by  https://github.com/arduino-libraries/Ethernet/pull/107/files
 
 // Choix du socket ICMP (0–7 sur W5x00) + identifiant ICMP
+/** @brief Request a presence check for the remote device. */
 void ping(PingParameters* params) {
 
   // NB: host resolution doesnt work
@@ -1885,6 +2201,9 @@ void ping(PingParameters* params) {
   }
 }
 
+/**
+ * @brief Run one reachability check, delete its parameters and end the worker task.
+ */
 void pingTask(void* params){
   ping(static_cast<PingParameters*>(params));
   // Libérer la mémoire allouée pour les paramètres
@@ -1895,6 +2214,12 @@ void pingTask(void* params){
 
 
 // Prototype pour la tâche de connexion
+/**
+ * @brief Run a configured HTTP request under the network mutex.
+ *
+ * Build the API reply from HTTP status/body and invoke the request callback.
+ * The operation runs in a task so callers need not wait in app.refresh().
+ */
 void connectHTTPTask(void *parameter) {
 
   if (xSemaphoreTake(hwm.network->networkBusy, pdMS_TO_TICKS(500)) == pdTRUE){ 
@@ -1995,13 +2320,15 @@ void connectHTTPTask(void *parameter) {
   vTaskDelay(1);
   vTaskDelete(NULL);
 }
-////////////////////////////////////////////////////////////////////////
-///////////////////////                              ///////////////////
-///////////////////////  FIRMWARE UPDATE FUNCTIONS   ///////////////////
-///////////////////////                              ///////////////////
-////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+//////////////////////                              ///////////////////
+//////////////////////  FIRMWARE UPDATE FUNCTIONS   ///////////////////
+//////////////////////                              ///////////////////
+///////////////////////////////////////////////////////////////////////
 
-// tar --format=ustar --exclude='.DS*' -czvf 0.13.tgz -C ./tgztest .
+/**
+ * @brief Resolve an archive link against the update-listing URL.
+ */
 
 static String makeAbsoluteUrl(const String& baseUrl, const String& href) {
   if (href.startsWith("http://") || href.startsWith("https://")) return href;
@@ -2019,6 +2346,7 @@ static String makeAbsoluteUrl(const String& baseUrl, const String& href) {
 }
 
 //--- parsing HTML très simple: récupère hrefs terminant par .tgz ----------------
+/** @brief Extract update archive links from the server directory listing. */
 static void findFszLinksInHtml(const String& html, std::vector<String>& outLinks) {
   int pos = 0;
   while (true) {
@@ -2044,7 +2372,12 @@ static void findFszLinksInHtml(const String& html, std::vector<String>& outLinks
   }
 }
 
-//--- extrait la version float depuis un nom "0.00.tgz" -------------------------
+/**
+ * @brief Read a numeric version from an archive filename such as 0.24.tgz.
+ *
+ * Require the archive extension and one decimal point with numeric characters.
+ * This parser does not implement semantic versions or Git-describe suffixes.
+ */
 static bool extractFloatVersionFromFilename(const String& filename, double& outVer) {
   if (!filename.endsWith(FW_EXTENSION)) return false;
   // isole le nom de fichier sans chemin
@@ -2071,15 +2404,17 @@ static bool extractFloatVersionFromFilename(const String& filename, double& outV
 }
 
 /**
- * Recherche la version distante maximale au format "float" (ex: 0.00.tgz),
- * compare avec currentVersion ("0.00"), et si >, ouvre le flux HTTP sur ce fichier.
+ * @brief Find the highest numeric archive version newer than the running firmware.
  *
- * @param baseUrl           URL listant les fichiers (index HTML)
- * @param currentVersion    version locale (String, ex "1.25")
- * @param outHttp           HttpClient (amcewen) — retour: flux ouvert sur le fichier si maj
- * @param outRemoteVersion  version distante retenue (String)
- * @param outFileUrl        URL absolue du fichier choisi
- * @return true si une nouvelle version est trouvée ET que le flux fichier est ouvert
+ * Read the server directory listing and select valid numeric .tgz filenames.
+ * Versions are compared as floating-point numbers, not semantic version tuples.
+ * This function returns the selected URL/version; the caller opens the download.
+ * @param baseUrl URL of the HTML archive listing.
+ * @param currentVersion Running firmware version converted to a number.
+ * @param outHttp HTTP client used to fetch the listing; stopped after reading it.
+ * @param outRemoteVersion Selected version text when a newer file is found.
+ * @param outFileUrl Absolute URL of the selected archive.
+ * @return 1 for a newer archive, 0 if none is found, or a negative error code.
  */
 
 int8_t findNewerRemoteFWUpdate(const String& baseUrl,
@@ -2165,6 +2500,7 @@ int8_t findNewerRemoteFWUpdate(const String& baseUrl,
   return 1;
 }
 
+/** @brief Update per-file progress during archive extraction. */
 void fileProgressCallback( uint8_t fileProgress ) {
   /*static int8_t lastProgress = -1;
   size_t totalBytes = LittleFS.totalBytes();
@@ -2208,6 +2544,7 @@ void fileProgressCallback( uint8_t fileProgress ) {
 
 }
 
+/** @brief Update the progress displayed during file transfer or flashing. */
 void updaterProgressCallback( uint8_t progress ){
   static int8_t lastProgress = -1;
   if( lastProgress != progress ) {
@@ -2216,6 +2553,7 @@ void updaterProgressCallback( uint8_t progress ){
   }
 }
 
+/** @brief Report archive extraction progress for the current file. */
 void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpacked){ 
   
   proportionalSize = size;        // doit être prêt AVANT les callbacks progress
@@ -2230,6 +2568,7 @@ void tarStatusProgressCallback(const char* name, size_t size, size_t total_unpac
   else updateProgressLabel = *lang.getString("Data");
 }
 
+/** @brief Create and configure the archive extractor with update progress callbacks. */
 TarGzUnpacker* getTarGzUnpacker(){
   processedSize = 0;
   progressPercentInt = 0;
@@ -2252,14 +2591,23 @@ TarGzUnpacker* getTarGzUnpacker(){
 }
 
 
+/** @brief Tell the browser to pause activity while firmware is being installed. */
 void notifyWebappFlashing(){
   app.broadCast("{\"freeze\":\"Firmware flash\"}",IMMEDIATE);  // inform web interface  IMMEDIATE because we don't queue the message to be send in next loop , we do it immediately.
 }
 
+/** @brief Remove the browser notification used during updates. */
 void removeFreezeNotification(){
   app.broadCast("{\"unfreeze\":\"\"}",IMMEDIATE);  // inform web interface  IMMEDIATE because we don't queue the message to be send in next loop , we do it immediately.
 }
 
+/**
+ * @brief Decompress and flash firmware from the supplied stream.
+ *
+ * Mark flashing in progress, configure progress callbacks and invoke the gzip
+ * updater. Success opens an OK prompt leading to restart; failure shows Abort.
+ * The helper deletes params and deletes its stream only when ownsStream is true.
+ */
 bool installGZBinaryFromStream(StreamParams* params){
   bool success = false;
   app.flashBinaryInprogress = true;
@@ -2291,11 +2639,18 @@ bool installGZBinaryFromStream(StreamParams* params){
   
 }
 
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void installGZBinaryFromStreamTask(void *parameter){
   installGZBinaryFromStream(static_cast<StreamParams*>(parameter));
   vTaskDelete(NULL);
 }
 
+/**
+ * @brief Flash an extracted firmware file when present, otherwise restore the screen.
+ *
+ * Open the compressed firmware, switch to single-file progress and start its
+ * installer task. The installer owns the file stream after successful handoff.
+ */
 void checkAndInstallBinaryFromFile() {
   //DEBUG_PRINT("\nNow checking if a bin need to be installed\n");
   // we have to rename each file from tmp to the root and check if we have a binary in the pack to install
@@ -2333,6 +2688,14 @@ void checkAndInstallBinaryFromFile() {
   app.restoreScreen();
 }
 
+/**
+ * @brief Extract an update package and advance to the firmware-file check.
+ *
+ * Notify the browser, extract archive files, and release the extractor and
+ * parameters. Delete the stream only when params->ownsStream is true. Success
+ * selects CHECK_BINARY; failure opens an error prompt. Clear the download flag
+ * before returning so later update requests can show the appropriate screen.
+ */
 bool expandTGZstreamToFS(StreamParams* params){
   
   app.downloadSreamInprogress = true;
@@ -2372,6 +2735,7 @@ bool expandTGZstreamToFS(StreamParams* params){
   return success;
 }
 
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void expandTGZstreamToFSTask(void* parameter){
   expandTGZstreamToFS(static_cast<StreamParams*>(parameter));
   vTaskDelete(NULL);
@@ -2379,11 +2743,11 @@ void expandTGZstreamToFSTask(void* parameter){
 
 WiFiEvent_t wiFiEvent;
 Event evtWiFi(&wiFiEvent);
-////////////////////////////////////////////////////////////////////////
-///////////////////////                              ///////////////////
-///////////////////////  EVENTS HANDLERS             ///////////////////
-///////////////////////                              ///////////////////
-//////////////////////////////////////////////////////////////////////// 
+///////////////////////////////////////////////////////////////////////
+//////////////////////                              ///////////////////
+//////////////////////  EVENTS HANDLERS             ///////////////////
+//////////////////////                              ///////////////////
+///////////////////////////////////////////////////////////////////////
 
 void OnWiFiEvent(WiFiEvent_t wifiEvent){
   evtWiFi.type = EVENT_NETWORK;
@@ -2394,11 +2758,11 @@ void OnWiFiEvent(WiFiEvent_t wifiEvent){
   }
 }
 
-////////////////////////////////////////////////////////////////////////
-///////////////////////                              ///////////////////
-///////////////////////  NETWORK DISCOVERY SERVICES  ///////////////////
-///////////////////////                              ///////////////////
-//////////////////////////////////////////////////////////////////////// 
+///////////////////////////////////////////////////////////////////////
+//////////////////////                              ///////////////////
+//////////////////////  NETWORK DISCOVERY SERVICES  ///////////////////
+//////////////////////                              ///////////////////
+///////////////////////////////////////////////////////////////////////
 // ============================================================
 // Améliorations callback EthernetBonjour
 // - ignore les callbacks "fin de scan" (serviceName==NULL)
@@ -2464,11 +2828,11 @@ static bool isAppleMidiServiceType(const char* serviceType) {
 
 
 
-//////////////////////////////////////////////////////////////////////////
-///////////////////////                                ///////////////////
-///////////////////////  MENU ACTION ITEMS CALLBACKS   ///////////////////
-///////////////////////                                ///////////////////
-////////////////////////////////////////////////////////////////////////// 
+/////////////////////////////////////////////////////////////////////////
+//////////////////////                                ///////////////////
+//////////////////////  MENU ACTION ITEMS CALLBACKS   ///////////////////
+//////////////////////                                ///////////////////
+/////////////////////////////////////////////////////////////////////////
 
 
 void back_menu_item_selected(MenuComponent* p_menu_component) {
@@ -2477,11 +2841,13 @@ void back_menu_item_selected(MenuComponent* p_menu_component) {
   else app.menuSystemFullRefresh();
 }
 
+/** @brief Shut down interfaces and enter deep sleep. */
 void shutdown_menu_item_selected(MenuComponent* p_menu_component) {
   app.shutdownInterfaces();
   goDeepSleep();
 }
 
+/** @brief Open the brightness adjustment page. */
 void brightness_menu_item_selected(MenuComponent* p_menu_component) {
   /*if (GUI::systemBrightness == 1.0) GUI::systemBrightness = 0.5;
   else GUI::systemBrightness = 1.0;
@@ -2490,14 +2856,17 @@ void brightness_menu_item_selected(MenuComponent* p_menu_component) {
   screen.state = STATE_UTILS_BRIGHTNESS;
 }
 
+/** @brief Open the firmware update prompt without an automatic timeout. */
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component) {
   app.SWupdatePromptScreen(0);
 }
 
+/** @brief Placeholder hook; no active operation in this implementation. */
 void save_profile_item_selected(MenuComponent* p_menu_component) {
   //DEBUG_PRINT("\nsave_profile_item_selected ");
 }
 
+/** @brief Save the opposite screen rotation and update button orientation. */
 void tft_rotation_item_selected(MenuComponent* p_menu_component) {
   hwm.swapButton = true;
   if (hwm.persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES) hwm.persistants.putUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO);
@@ -2506,16 +2875,19 @@ void tft_rotation_item_selected(MenuComponent* p_menu_component) {
   back_menu_item_selected(p_menu_component);
 }
 
+/** @brief Clear system settings and open the reset/sleep message. */
 void reset_item_selected(MenuComponent* p_menu_component){
   app.goToResetScreenAndSleep("CLEAR");
 }
 
+/** @brief Open the device information page. */
 void info_item_selected(MenuComponent* p_menu_component) {  
   //DEBUG_PRINT("\ninfo item selected: id:%i",p_menu_component->get_name());
   screen.id = SCREEN_UTILS;
   screen.state = STATE_UTILS_INFO;
 }
 
+/** @brief Choose the configuration-connection page or show the connected browser session. */
 void handleConfigConnection(){
   //DEBUG_PRINT("\nhandleConfigConnection");
   // socket is opened between footswitch and browser, hence we indicate the connection is made
@@ -2545,10 +2917,12 @@ void handleConfigConnection(){
   }
 }
 
+/** @brief Open browser configuration using the available network connection. */
 void config_menu_item_selected(MenuComponent* p_menu_component){  
   handleConfigConnection();
 }
 
+/** @brief Load the language chosen from the menu. */
 void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
   const char* menuString = p_menu_component->get_name();
   String langName = app.getNameFromString(menuString);
@@ -2566,6 +2940,7 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
   }  
 }
 
+/** @brief Resolve the selected bank name and open that bank screen. */
 void switchToBank_item_selected(MenuComponent* p_menu_component){
   //DEBUG_PRINT("\n%s",p_menu_component->get_name());
   
@@ -2576,6 +2951,7 @@ void switchToBank_item_selected(MenuComponent* p_menu_component){
 
 }
 
+/** @brief Handle entry into a submenu. */
 void menu_selected(MenuComponent* p_menu_component){
   //DEBUG_PRINT("\n\t\t ====> MENU %s SELECTED <====",p_menu_component->get_name());
   
@@ -2593,14 +2969,15 @@ void menu_selected(MenuComponent* p_menu_component){
   }
 }
 
-//////////////////////////////////////////////////////////////
-////                OVERLAYS CALLBACKS                 ///////
-//////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////
+///                OVERLAYS CALLBACKS                 ///////
+/////////////////////////////////////////////////////////////
 
 void voidOverlay(uint8_t id){
 //  DEBUG_PRINT("\nvoidOverlay()");
 }
 
+/** @brief Build the base page or overlay from the supplied page state. */
 void baseOverLayBuilder(uint8_t id){  
   gui.add(new Icon(&hwm.network->networkConnectivityIcon,Align::Left,&GUI::zero, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.networkConnectivityIconColorIdle,&GUI::defaultBcolor));               
   gui.add(new Icon(&app.apIcon,Align::Left,&app.apIconPosX, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.apIconColor,&GUI::defaultBcolor));                  
@@ -2608,6 +2985,7 @@ void baseOverLayBuilder(uint8_t id){
 }
 
 
+/** @brief Build the bank page or overlay from the supplied page state. */
 void bankOverlayBuilder(uint8_t BankIndex){
   
   baseOverLayBuilder(BankIndex);
@@ -2629,9 +3007,9 @@ void bankOverlayBuilder(uint8_t BankIndex){
 
 
 
-//////////////////////////////////////////////////////////////
-////                SCREENBUILDERS CALLBACKS           ///////
-//////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////
+///                SCREENBUILDERS CALLBACKS           ///////
+/////////////////////////////////////////////////////////////
 
 void bankScreenBuilder(uint8_t subScreen){  
   app.userScreenBuilder(SCREEN_BANK,subScreen);
@@ -2684,11 +3062,13 @@ void bankScreenBuilder(uint8_t subScreen){
   //DEBUG_PRINT("\n--------------bankScreenBuilder exit-----------------");
 }
 
+/** @brief Add the common menu title and bottom label widgets. */
 void addTopandBottomMenuLabel(){
   gui.add(new TextArea(&app.menuTopText, TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   gui.add(new Label(&app.menuBottomLabel, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,32, &GUI::defaultFcolor,&GUI::defaultBcolor));
 }
 
+/** @brief Add the common menu presentation widgets. */
 void addMenuWidgets(){
   GUI::cls();
 
@@ -2699,17 +3079,20 @@ void addMenuWidgets(){
   gui.add(new Icon(&app.menuItems[2].icon, Align::Center,&GUI::rightMenuIconXpos, &GUI::menuIconYpos,MENU_ICON_SIZE,&app.menuItems[2].color,&GUI::defaultBcolor));    
 }
 
+/** @brief Select foreground/background colors used by menus. */
 void setMenuColors(){
   GUI::defaultBcolor = GUI::menuBackGroundColor;
   GUI::defaultFcolor = GUI::menuActiveIconColor;  
 }
 
+/** @brief Build the menu page or overlay from the supplied page state. */
 void menuScreenBuilder(uint8_t subScreen){
   setMenuColors();
   addMenuWidgets();
   //LogUDP::sendLog("menuScreenBuilder",hwm.network->udp);
 }
 
+/** @brief Build the bank switch page or overlay from the supplied page state. */
 void bankSwitchScreenBuilder(uint8_t id){
   //DEBUG_PRINT("\nbankSwitchScreenBuilder()");  
   GUI::defaultBcolor = TFT_BGCOLOR;
@@ -2717,6 +3100,7 @@ void bankSwitchScreenBuilder(uint8_t id){
   addMenuWidgets();
 }
 
+/** @brief Build the default wizard page or overlay from the supplied page state. */
 void defaultWizardScreenBuilder(){
     //DEBUG_PRINT("\ndefaultWizardScreenBuilder");
     GUI::cls();
@@ -2725,6 +3109,7 @@ void defaultWizardScreenBuilder(){
     addTopandBottomMenuLabel();
 }
 
+/** @brief Application extension point for the final setup workflow. */
 void defaultWizardStepFlow(){
   //DEBUG_PRINT("\ndefaultWizardStepFlow(%i)");
   if (app.getButtonState(MIDDLEB)){
@@ -2733,6 +3118,7 @@ void defaultWizardStepFlow(){
   } 
 }
 
+/** @brief Render the hardware startup status display. */
 void bootScreen(uint8_t startupState){
   switch(startupState){
     case BATTERY_STARTUP:
@@ -2756,6 +3142,7 @@ void bootScreen(uint8_t startupState){
   }
 }
 
+/** @brief Build the wizard page or overlay from the supplied page state. */
 void wizardScreenBuilder(uint8_t subScreen){
   //DEBUG_PRINT("\nwizardScreenBuilder(%d)",subScreen);
   switch(subScreen){
@@ -2777,6 +3164,7 @@ void wizardScreenBuilder(uint8_t subScreen){
   }
 }
 
+/** @brief Build the bye page or overlay from the supplied page state. */
 void byeScreenBuilder(uint8_t subScreen){
   GUI::defaultBcolor = TFT_BGCOLOR;
   GUI::defaultFcolor = TFT_FCOLOR;
@@ -2786,6 +3174,7 @@ void byeScreenBuilder(uint8_t subScreen){
   gui.add(new Icon(app.byeIcon,Align::Center,&GUI::midScreenHoriz, &GUI::iconMidY,ICON_MAX_SIZE,app.byeIconColor,&GUI::defaultBcolor));                     
 }
 
+/** @brief Build the startup page or overlay from the supplied page state. */
 void startupScreenBuilder(uint8_t id){
   gui.drawJpg(0,0,"/webapp/logo.jpg");
 }
@@ -2796,6 +3185,7 @@ String leftLedColor = "blue";
 String centerLedColor = "blue";
 String rightLedColor = "blue"; 
 
+/** @brief Build the prompt page or overlay from the supplied page state. */
 void promptScreenBuiler(uint8_t id){
   setMenuColors();
   GUI::cls(GUI::menuBackGroundColor);
@@ -2830,6 +3220,7 @@ void promptScreenBuiler(uint8_t id){
 }
 
 
+/** @brief Add the side icons used by menu navigation. */
 void addLeftRightIcons(){
     //DEBUG_PRINT("addLeftRightIcons()");
     GUI::cls(GUI::defaultBcolor);  
@@ -2838,11 +3229,13 @@ void addLeftRightIcons(){
     addTopandBottomMenuLabel();    
 }
 
+/** @brief Prepare the access-point icon and connection instructions. */
 void setAPIconAndText(){
   gui.add(new TextArea(lang.getString("Connect WiFi Access Point "), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
   app.bigLeftIcon = ICON_AP;
 }
 
+/** @brief Build a status display for the configuration connection. */
 void buildNetworkScreen(){
   GUI::cls();
 
@@ -2869,6 +3262,7 @@ void buildNetworkScreen(){
 
 #define PROGRESSBAR_WIDTH 150
 int16_t halfProgressBarpix = TFT_WIDTH/2 - PROGRESSBAR_WIDTH/2;
+/** @brief Build an update-progress display with its icon and labels. */
 void buildIconProgressScreen(){
   gui.add(new Icon(&app.iconProgress, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE/1.3,&app.menuActiveIconColor/*&GUI::blue*/,&GUI::defaultBcolor));
   gui.add(new Label(&updateProgressLabel, Align::Center,&GUI::midScreenHoriz, &GUI::bottomTextY,SIZE_20,64,&GUI::defaultFcolor,&GUI::defaultBcolor));            
@@ -2879,6 +3273,7 @@ int16_t brightYpos = GUI::menuIconYpos*1.2;
 
 String percentString = "%";
 
+/** @brief Build the utils page or overlay from the supplied page state. */
 void utilsScreenBuilder(uint8_t state){
   //DEBUG_PRINT("\nutilsScreenBuilder(%d)",state);
   setMenuColors();  // in case it's called directly from the wizard@startup
@@ -2892,18 +3287,18 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new Icon(&app.brightIcon, Align::Center,&GUI::midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
       gui.add(new NumericLabel(&GUI::systemBrightness, 0, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
     }break;
-    ////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SHOW_PROGRESS_MULTIPLE :{      
       gui.add(new Arc(&overallProgressPercent /*v*/, 0 /*min*/,100 /*max*/, &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::blue, &GUI::transparentColor,30));              
       // this screen is shared with firmware update and binary install and others...
       buildIconProgressScreen();
     }break;
-    ////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SHOW_PROGRESS_SINGLE :{
       // this screen is shared with firmware update and binary install and others...
       buildIconProgressScreen();
     }break;
-    ////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_INFO:{
       //DEBUG_PRINT("\n\nCPU freq:%i",getCpuFrequencyMhz());     
       
@@ -2915,7 +3310,7 @@ void utilsScreenBuilder(uint8_t state){
 
 
     }break;
-    ////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_CONNECTCONFIGMEDIA:
       buildNetworkScreen();
       //DEBUG_PRINT("\nSTATE_UTILS_CONNECTCONFIGMEDIA: %s",app.menuTopText.c_str());
@@ -2949,13 +3344,13 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new Label(&app.utilsBlinkLabel, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,40,32, &GUI::defaultFcolor,&GUI::defaultBcolor));
       gui.add(new Icon(&app.utilsBlinkIcon, Align::Center,&GUI::midScreenHoriz, &GUI::menuIconYpos,MENU_ICON_SIZE,&app.blinkColorBlue,&GUI::defaultBcolor));
     break;
-    ////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////
   }
 }
 
-  //////////////////////////////////////////////////////////////////////
- ////                SERVER SOCKET CALLBACKS                   ///////
-////////////////////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////////////////////
+ ///                SERVER SOCKET CALLBACKS                   ///////
+///////////////////////////////////////////////////////////////////
 
 void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, const char *message, uint16_t length){
   String response;
@@ -2972,6 +3367,7 @@ void socketMessageCallback(IWebSocket &ws, const WebSocketDataType dataType, con
   ws.send(dataType, response.c_str(), response.length());
 }
 
+/** @brief Handle browser WebSocket closure. */
 void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *reason, uint16_t length) {
   DEBUG_INFO("\t!!! socketCloseCallback =>code:%i length:%i\n",code,length);
   //DEBUG_PRINT("\nDump after socketCloseCallback %s",hwm.network->dumpW5500Sockets().c_str());
@@ -2982,6 +3378,7 @@ void socketCloseCallback(IWebSocket &ws, WebSocketCloseCode code, const char *re
 }
 
 
+/** @brief Attach handlers to a newly connected browser WebSocket. */
 void socketConnectionCallback(IWebSocket &ws) {
   DEBUG_INFO("[WSS]\t\tconnected!\n\n");
   app.webAppConnected = true;

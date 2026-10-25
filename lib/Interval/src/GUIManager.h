@@ -1,3 +1,8 @@
+/**
+ * @file GUIManager.h
+ * @brief Builds and refreshes screen widgets using the configured rendering mode.
+ */
+
 #ifndef GUIManager_h
 #define GUIManager_h
 
@@ -17,6 +22,9 @@
 //#define TTF_FONT NotoSans_Bold
 #define TTF_FONT GeneratedFont
 
+/**
+ * @brief Page id, page state and redraw marker sharing one comparison value.
+ */
 union ScreenUnion{
   uint32_t value;
   struct {
@@ -36,8 +44,8 @@ unsigned long roundTrip=0;
 String count="",count2="";
 
 #ifdef USE_DMA
-  uint16_t  dmaBuffer1[16*16]; // Toggle buffer for 16*16 MCU block, 512bytes
-  uint16_t  dmaBuffer2[16*16]; // Toggle buffer for 16*16 MCU block, 512bytes
+  uint16_t  dmaBuffer1[16*16]; ///< Toggle buffer for 16*16 MCU block, 512bytes
+  uint16_t  dmaBuffer2[16*16]; ///< Toggle buffer for 16*16 MCU block, 512bytes
   uint16_t* dmaBufferPtr = dmaBuffer1;
   bool dmaBufferSel = 0;
 #endif
@@ -49,8 +57,10 @@ String count="",count2="";
   return 1;
 }*/
 
-// This next function will be called during decoding of the jpeg file to render each
-// 16x16 or 8x8 image tile (Minimum Coding Unit) to the TFT.
+/**
+ * @brief This next function will be called during decoding of the jpeg file to render each
+ * 16x16 or 8x8 image tile (Minimum Coding Unit) to the TFT.
+ */
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
 {
    // Stop further decoding as image is running off bottom of screen
@@ -79,6 +89,9 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
   return 1;
 }
 
+/**
+ * @brief Pairs a page id with content and overlay construction callbacks.
+ */
 struct screenBuilder{
   uint8_t id;
   GUIBuilderCallBack screenCallback;
@@ -87,6 +100,13 @@ struct screenBuilder{
 
 //EmptyWidget emptyWidget;
 
+/**
+ * @brief Owns displayed widgets and coordinates their rendering and color animations.
+ *
+ * With transparency enabled, widgets compose into a screen-sized buffer. Otherwise
+ * changed sprites are sent directly to the display. Widgets are owned by the screen
+ * list and deleted by purge(); application data bound to them stays borrowed.
+ */
 class GUIManager : public GenericComponent {  
   
   public:
@@ -104,14 +124,17 @@ class GUIManager : public GenericComponent {
 
     uint8_t sinusWave;
 
+    /** @brief Initialize GUIManager with the supplied configuration and bindings. */
     GUIManager(bool t=false,bool debug=false):GenericComponent(debug){
       transparency = t;
       id="GUIManager";      
       TJpgDec.setCallback(tft_output);              
     }   
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual ~GUIManager(){}
 
+    /** @brief Prepare this object for use with its current configuration. */
     virtual void init() {      
       GenericComponent::init();
       
@@ -172,17 +195,28 @@ class GUIManager : public GenericComponent {
 
     }
 
+    /** @brief Draw a JPEG file from LittleFS at the requested position. */
     void drawJpg(int16_t x, int16_t y, String file){
       TJpgDec.drawFsJpg(x, y,file,LittleFS);
       //TJpgDec.drawJpg()
     }
 
+    /** @brief Request clearing the composed screen buffer. */
     void clearScreenBuffer(){
       clearBuffer = true;
       //screenBuffer.fillSprite(TFT_BGCOLOR); 
       DEBUG_INFO("clearScreenBuffer true");
     }
 
+    /**
+     * @brief Refresh widget sprites and compose or send the changed display content.
+     *
+     * In transparency mode, force widget redraws and compose them into screenBuffer;
+     * otherwise send changed sprites directly to the TFT. Rotated sprites use a
+     * temporary bounding-box buffer with centered pivots. Consumed widget sprites
+     * are deleted after transfer. Work is time-sliced using the 50 ms loop budget.
+     * Color animations are updated periodically after widget processing.
+     */
     bool refresh(bool force=false) {  
       
       // when using transparency, sprite need to be fully redrawn, hence we force the refresh
@@ -318,12 +352,15 @@ class GUIManager : public GenericComponent {
       return refreshed;
     }
 
+    /** @brief Convert degrees to radians for rotated sprite placement. */
     float deg2rad(float deg) { return deg * 0.017453292519943295f; }
 
+    /** @brief Scale the current sine-wave phase into the requested color-animation range. */
     uint16_t getSinVal(uint16_t range){
       return sin( (float)sinI * 6.28 / 360.0) * (range/2) + range/2;  
     }
 
+    /** @brief Update the displayed refresh-rate counter over the requested interval. */
     int fps(const uint8_t seconds){
       unsigned long now = millis();
       int fpsVal;
@@ -337,11 +374,18 @@ class GUIManager : public GenericComponent {
       return fpsVal;
     }
 
+    /** @brief Append an entry to this collection. */
     bool add(Widget* w){
       if (screenGUIs.add(w)) return true;
       else return false;
     }
 
+    /**
+     * @brief Delete all current screen widgets before building another page.
+     *
+     * Widget bindings borrow application data, so this deletes presentation objects,
+     * not the strips, interfaces or values they display.
+     */
     void purge(){
       while (screenGUIs.size()>0){
         //DEBUG_PRINT("\nremaining to unstack: %i",gui->screenGUIs.size());
@@ -353,6 +397,7 @@ class GUIManager : public GenericComponent {
       //gui->screenGUIs.clear();      
     }
 
+    /** @brief Remove the matching entry from the registry. */
     void remove(Widget *w){
       for (uint8_t i=0; i<screenGUIs.size();i++){
         if (screenGUIs.get(i) == w){

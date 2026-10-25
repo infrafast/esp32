@@ -1,3 +1,8 @@
+/**
+ * @file i_utils.h
+ * @brief System configuration, network discovery and browser services.
+ */
+
 #ifndef _IUTILS_h
 #define _IUTILS_h  
 
@@ -15,6 +20,9 @@ using namespace net;
 #define GROUP_INTERFACE_UTILS "Utils"
 
 
+/**
+ * @brief Exposes system commands and provider choices to strips and configuration.
+ */
 class SystemInterface: public DeviceInterface, public DataProvider{
     #define SYSTEM_INTERFACE "system"
     public:    
@@ -23,20 +31,26 @@ class SystemInterface: public DeviceInterface, public DataProvider{
           
       DynamicDataSet dsText = DynamicDataSet(new FreeTextAddress(ADDRESS_TEXT, "free text", REGEX_STRING),this);  // create as many parameters as required
 
+      /** @brief Initialize SystemInterface with the supplied configuration and bindings. */
       SystemInterface(bool _configurable = false):DeviceInterface(SYSTEM_INTERFACE,GROUP_INTERFACE_UTILS,_configurable),DataProvider(getProviderNameForData()){
         state.code = IF_READY;     
       }
 
+      /** @brief Start this interface using its current configuration. */
       virtual bool begin(){
         DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
         return true;
       }
 
+      /** @brief End the interface session and release its active connection. */
       virtual bool end(){
         DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
         return true;
       }    
   
+      /**
+       * @brief Internal system interface hook; no separate interface configuration is loaded.
+       */
       virtual void load() override{
         DEBUG_INFO("%s::load() default ignored => 🚫DISABLED", interfaceName.c_str()); 
         // ignore the given parameter. Just enable the interface
@@ -44,17 +58,27 @@ class SystemInterface: public DeviceInterface, public DataProvider{
         hasStrip = true;             // textStrip...
       }
 
+      /**
+       * @brief Internal system interface hook; no separate interface configuration is saved.
+       */
       virtual bool save() override{
         DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str()); 
         return true;
       } 
 
+    /**
+     * @brief Placeholder hook; no active processing in this implementation.
+     *
+     * @return Always false.
+     */
     virtual bool monitor() override{
       return false;
     }
     
+    /** @brief Read pending input from this transport or hardware source. */
     virtual void* read(){return nullptr;}
     
+    /** @brief Run the initialization-specific interface startup path. */
     virtual bool _begin() override{
       DEBUG_INFO("%s::_begin() => registered systemDS",interfaceName.c_str());          
       systemDS.registerDataSetAddress(dsText.address);      // register all ds             
@@ -62,6 +86,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
       return true;
     }
 
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(String addrr){
       if (addrr == ADDRESS_TEXT) return 1;
       else{
@@ -86,6 +111,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
 
     }    
     
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(String addrr, uint16_t index){
       if (addrr == ADDRESS_TEXT){
         textValue = concatStrings("hello", index);
@@ -116,9 +142,14 @@ class SystemInterface: public DeviceInterface, public DataProvider{
     String textValue = "";    
        
     
-}systemInterface(false);      // not exposed
+}
+/** @brief Internal system-command interface, hidden from interface configuration. */
+systemInterface(false);      // not exposed
 
 
+/**
+ * @brief Discovers RTP-MIDI services and updates the shared endpoint directory.
+ */
 class DirectoryInterface: public NetworkDevice{
     #define DIRECTORY_INTERFACE "Directory"
     public:    
@@ -126,23 +157,29 @@ class DirectoryInterface: public NetworkDevice{
       RtpDirectory rtpDir;
       Event evtDir = Event(&rtpDir);
 
+      /** @brief Initialize DirectoryInterface with the supplied configuration and bindings. */
       DirectoryInterface(bool _configurable = false):NetworkDevice(DIRECTORY_INTERFACE,GROUP_INTERFACE_UTILS,APPLE_MIDI_PORT,0,"",_configurable){
         attachDeviceInterface(this);
         unregisterDataSetAddress(&addressIP);              // we un-expose the ping parameter as user should not modify it 
         unregisterDataSetAddress(&addressPort);              // we un-expose the ping parameter as user should not modify it 
       }
 
+      /** @brief Start this interface using its current configuration. */
       virtual bool begin(){
         DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
         return true;
       }
 
+      /** @brief End the interface session and release its active connection. */
       virtual bool end(){
         DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
         return true;
       }      
 
 
+      /**
+       * @brief Apply the internal discovery service startup defaults.
+       */
       virtual void load() override{
         DEBUG_INFO("%s::load() default ignored => ENABLE", interfaceName.c_str()); 
         // ignore the given parameter. 
@@ -150,6 +187,7 @@ class DirectoryInterface: public NetworkDevice{
         hasStrip = false;             
       }
 
+      /** @brief Run the initialization-specific interface startup path. */
       virtual bool _begin() override{     // called by init()
         DEBUG_INFO("%s::_begin() registering serviceFoundWrapper and _instance",interfaceName.c_str());
         instance_ = this;  // enregistrer l’instance active       // we don't do that in the constructor as the instance has multiple heritage, hence we want to be sure the object is fully created
@@ -157,11 +195,15 @@ class DirectoryInterface: public NetworkDevice{
         return true;        
       }
 
+      /**
+       * @brief Internal discovery-service save hook; no file is written here.
+       */
       virtual bool save() override{
         DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str()); 
         return true;
       }           
 
+      /** @brief Perform one service-specific connection and data-processing pass. */
       virtual bool monitorService() override{
         if (hwm.network->media == CABLE_MEDIA){
           EthernetBonjour.run();
@@ -171,6 +213,7 @@ class DirectoryInterface: public NetworkDevice{
         return false;     
       }
      
+      /** @brief Start this service on the available network connection. */
       virtual bool handleConnectService(){
         DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
         String baseName = *systemCfg.getString(S_AP_NAME);
@@ -200,6 +243,7 @@ class DirectoryInterface: public NetworkDevice{
         return true;
       }
 
+      /** @brief Handle relevant incoming events for this component. */
       void onEvent(const Event& evt) override {
         switch(evt.type){
           case EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH:
@@ -208,6 +252,7 @@ class DirectoryInterface: public NetworkDevice{
         }
       }
 
+      /** @brief Request an endpoint discovery pass. */
       void discoveryRequest(){
         DEBUG_INFO("%s::discoveryRequest()",interfaceName.c_str());   
         if (deviceInterface->state.enabled){       
@@ -220,13 +265,21 @@ class DirectoryInterface: public NetworkDevice{
         }
       }      
 
+      /**
+       * @brief Placeholder hook; no active operation in this implementation.
+       *
+       * @return Always true; no device action is performed here.
+       */
       virtual bool ping(){return true;}
+      /** @brief Placeholder hook; no active operation in this implementation. */
       virtual void echo(void* data){}
       
+      /** @brief Update the quality-of-service indicator used by the display. */
       virtual void determineQoS() override{
         this->state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
       }
 
+      /** @brief Close this service and release its transport resources. */
       virtual bool handleDisconnectService() override{
         DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
         if (hwm.network->lastActiveMedia == CABLE_MEDIA){
@@ -247,6 +300,12 @@ class DirectoryInterface: public NetworkDevice{
       
       static DirectoryInterface* instance_;
 
+      /**
+       * @brief Start RTP-MIDI discovery using the active network connection.
+       *
+       * Ethernet discovery uses Bonjour callbacks; Wi-Fi uses an mDNS query worker.
+       * Results update the bounded shared endpoint directory before notifying listeners.
+       */
       void startDiscovery(){
         if (deviceInterface->state.code == IF_NOT_READY){
           epDirectoryNotReady();
@@ -256,6 +315,7 @@ class DirectoryInterface: public NetworkDevice{
       }      
       
       // Méthode statique compatible FreeRTOS
+      /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
       static void wiFiRTPDiscoveryTaskWrapper(void* pvParameters) {        
         instance_->wiFiRTPDiscoveryTask();   // appel méthode réelle
         vTaskDelete(NULL);
@@ -268,16 +328,24 @@ class DirectoryInterface: public NetworkDevice{
       // - ignore les IP 0.0.0.0
       // - laisse upsertEndpoint fusionner correctement
       // ============================================================
+      /** @brief Test whether an address contains only zero bytes. */
       static bool isZeroIP(const byte ip[4]) {
         return ip && ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0;
       }
 
+      /** @brief Recognize the AppleMIDI service name, with an optional trailing dot. */
       static bool isAppleMidiServiceType(const char* serviceType) {
         // Accepte "_apple-midi" ou "_apple-midi." (point final parfois présent)
         if (!serviceType) return false;
         return (strncmp(serviceType, "_apple-midi", 11) == 0);
       }
 
+      /**
+       * @brief Accept valid UDP AppleMIDI discoveries and recognize end-of-scan callbacks.
+       *
+       * Ignore zero addresses and unrelated service types. A missing serviceName means
+       * the scan ended, not a new endpoint; notify consumers through the directory flow.
+       */
       void onEthernetBonjourServiceFoundCallback(const char* serviceType,
                                            MDNSServiceProtocol_t proto,
                                            const char* serviceName,
@@ -308,6 +376,7 @@ class DirectoryInterface: public NetworkDevice{
         rtpDir.upsertEndpoint(serviceName, ipAddr, port);                                            
       }
 
+      /** @brief Notify consumers that endpoint discovery has finished. */
       void epDirectoryUpdated(){
         DEBUG_INFO("[RTP]\t\tScan terminé (timeout).");
         DEBUG_INFO("[RTP]\t\t%d endpoint(s) mémorisé(s):\n", rtpDir.epCount);      
@@ -319,12 +388,14 @@ class DirectoryInterface: public NetworkDevice{
         fireEvent(evtDir);
       }
 
+      /** @brief Notify consumers that endpoint discovery is unavailable. */
       void epDirectoryNotReady(){
         DEBUG_INFO("[RTP]\t\tDirectory not ready");
         evtDir.type = EVENT_DIRECTORY_NOT_READY;
         fireEvent(evtDir);        
       }      
 
+      /** @brief Refresh the endpoint directory and associated interface status. */
       void epDirectoryRefresh(){
         // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
         rtpDir.clear();
@@ -345,6 +416,7 @@ class DirectoryInterface: public NetworkDevice{
         }      
       }
     
+      /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
       void wiFiRTPDiscoveryTask(){
         DEBUG_INFO("[RTP-WiFi]\t\tScan RTP-MIDI lancé...\n");     
         int n = MDNS.queryService(MDNS_ANNOUNCED_APPLEMIDI_SERVICE, "udp"); // -> _apple-midi._udp
@@ -356,7 +428,9 @@ class DirectoryInterface: public NetworkDevice{
         epDirectoryUpdated();
       }    
 
-      // wrapper compatible avec la signature attendue par la lib
+      /**
+       * @brief wrapper compatible avec la signature attendue par la lib
+       */
       static void serviceFoundWrapper(const char* serviceType,
                                            MDNSServiceProtocol_t proto,
                                            const char* serviceName,
@@ -369,10 +443,15 @@ class DirectoryInterface: public NetworkDevice{
       }      
       
 
-}directoryService(true);    // exposed
+}
+/** @brief Shared RTP-MIDI discovery service exposed to configuration. */
+directoryService(true);    // exposed
 DirectoryInterface* DirectoryInterface::instance_ = nullptr;
 
 
+/**
+ * @brief Manages the configuration HTTP and WebSocket services.
+ */
 class WebApplicationService: public NetworkDevice{
   #define WEBAPP_INTERFACE "WebApplication"
   #define WEBAPP_INACTIVITY_TIMEOUT_MS 20000
@@ -386,13 +465,23 @@ class WebApplicationService: public NetworkDevice{
     Application* webServer = nullptr;
     IWebSocketServer* wss = nullptr;
 
+    /**
+     * @brief Initialize WebApplicationService and its configured member bindings.
+     */
     WebApplicationService(bool _configurable = false):NetworkDevice(WEBAPP_INTERFACE,GROUP_INTERFACE_UTILS,80,80,"",_configurable){}
 
+    /** @brief Return the Ethernet connection-budget weight used by this service. */
     virtual uint8_t getServiceWeight(){
       return 0;                               // in reality it consume 3 but we book 8-3 = 5 as SERVICES_WEIGHT_LIMIT so it can always start (priority)
     }
 
 
+    /**
+     * @brief Start with this internal service disabled and hidden from strip creation.
+     *
+     * No separate interface file is loaded here. Opening configuration enables the
+     * service explicitly instead of restoring it as an always-on strip interface.
+     */
     virtual void load() override{
       DEBUG_INFO("%s::load() default ignored => 🚫DISABLED", interfaceName.c_str());
       state.enabled = false;
@@ -400,42 +489,60 @@ class WebApplicationService: public NetworkDevice{
       hasStrip = false;
     }
 
+    /** @brief Start this interface using its current configuration. */
     virtual bool begin(){
       DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
       return true;
     }
 
+    /** @brief End the interface session and release its active connection. */
     virtual bool end(){
       DEBUG_INFO("%s::end() => nothing to do",interfaceName.c_str());         
       return true;
     }
 
+    /** @brief Stop the active operation or connection. */
     virtual bool stop() override{
       DEBUG_INFO("%s::stop()",interfaceName.c_str()); 
       return handleDisconnectService();
     }
 
+    /** @brief Set the interface status to pending. */
     virtual void setStatePending(const char* led = "green medium", const char* details = lang.getString("Scanning network")->c_str()){
       setStateConnected();  // web interface when pending is in fact connected...
     }
 
+    /**
+     * @brief Acknowledge saving without creating an internal-service configuration file.
+     */
     virtual bool save() override{
       DEBUG_INFO("%s::save() IGNORED", interfaceName.c_str());
       return true;
     }
 
+    /** @brief Perform one service-specific connection and data-processing pass. */
     virtual bool monitorService() override{
       monitorInactivityTimeout();
       return handleWeb(); // report if we processed any data
     }
 
+    /** @brief Update the quality-of-service indicator used by the display. */
     virtual void determineQoS() override{
       state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
     }
 
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always true; no device action is performed here.
+     */
     virtual bool ping() override{return true;}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void echo(void* data){}
 
+    /**
+     * @brief Start browser services and publish EVENT_WEBAPP_STARTED on success.
+     */
     virtual bool handleConnectService() override{
       bool started = startWebApp();
       if (started){
@@ -446,6 +553,9 @@ class WebApplicationService: public NetworkDevice{
       return started;
     }
 
+    /**
+     * @brief Stop browser services and publish EVENT_WEBAPP_STOPPED.
+     */
     virtual bool handleDisconnectService() override{
       stopWebApp();
 
@@ -457,6 +567,7 @@ class WebApplicationService: public NetworkDevice{
       return true;
     }
 
+    /** @brief Apply the requested enabled state through the interface lifecycle. */
     virtual void switchDevice(bool _enabled) override{
       if (!_enabled){
         socketConnected = false;
@@ -466,28 +577,40 @@ class WebApplicationService: public NetworkDevice{
       NetworkDevice::switchDevice(_enabled);
     }
 
+    /** @brief Register the HTTP request handler used by the configuration service. */
     void setWebServerHandler(WebServerHandler callback){
       webServerHandler = callback;
     }
 
+    /** @brief Register the WebSocket connection handler used by the configuration service. */
     void setWebSocketHandler(WebSocketHandler callback){
       webSocketHandler = callback;
     }
 
+    /** @brief Record browser activity to postpone the inactivity timeout. */
     void reportActivity(){
       lastActivityMs = millis();
     }
 
+    /** @brief Record a newly connected browser session. */
     void reportSocketConnected(){
       socketConnected = true;
       reportActivity();
     }
 
+    /** @brief Record browser disconnection and update service activity. */
     void reportSocketClosed(){
       socketConnected = false;
       reportActivity();
     }
 
+    /**
+     * @brief Serve pending HTTP clients and poll the browser WebSocket server.
+     *
+     * Choose EthernetClient or WiFiClient from configMedia. Each accepted HTTP client
+     * is processed and closed; WebSocket handling is polled separately.
+     * @return Whether an HTTP client was processed during this pass.
+     */
     bool handleWeb(){
       Network* configMedia = hwm.configMedia;
 
@@ -518,6 +641,7 @@ class WebApplicationService: public NetworkDevice{
 
     }
 
+    /** @brief Start the HTTP server and browser configuration service. */
     bool startWebApp(){
       if (hwm.configMedia == nullptr) return false;
       if (hwm.configMedia->state != CONNECTED) return false;
@@ -541,6 +665,7 @@ class WebApplicationService: public NetworkDevice{
       return true;
     }
 
+    /** @brief Stop browser configuration services. */
     void stopWebApp(){
       shutdownWSS();
       if (webServer != nullptr){
@@ -551,6 +676,7 @@ class WebApplicationService: public NetworkDevice{
       DEBUG_INFO("%s::down",interfaceName.c_str());          
     }
 
+    /** @brief Create or start the WebSocket server for the configuration connection. */
     void setWSServer(){
       if (webServer == nullptr) return;
 
@@ -578,6 +704,7 @@ class WebApplicationService: public NetworkDevice{
     char hdrContentType[120];
     char hdrContentLength[20];
 
+    /** @brief Close and release the configuration WebSocket server. */
     void shutdownWSS(){
       if (wss != nullptr){
         Network* configMedia = hwm.configMedia;
@@ -594,6 +721,12 @@ class WebApplicationService: public NetworkDevice{
       }
     }
 
+    /**
+     * @brief Apply the inactivity timeout to idle browser configuration services.
+     *
+     * Activity reports keep the session alive. This service lifecycle is separate
+     * from the mixer/device transports used by playing strips.
+     */
     void monitorInactivityTimeout(){
       if (lastActivityMs == 0) return;
       if (socketConnected) return;

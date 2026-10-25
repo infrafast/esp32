@@ -1,3 +1,8 @@
+/**
+ * @file main.cpp
+ * @brief Firmware entry point selecting MixerApplication.h.
+ */
+
 /*#include <Arduino.h>
 
 #include "TFT_eSPI.h"

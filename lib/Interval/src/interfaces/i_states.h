@@ -1,3 +1,8 @@
+/**
+ * @file i_states.h
+ * @brief Labels used to describe device-interface states.
+ */
+
 #ifndef IF_STATES
 #define IF_STATES
 

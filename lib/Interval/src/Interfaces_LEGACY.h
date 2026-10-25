@@ -1,3 +1,8 @@
+/**
+ * @file Interfaces_LEGACY.h
+ * @brief Historical interface/capture implementation; excluded from the active reference.
+ */
+
 #ifndef DEVICEINTERFACES_h
 #define DEVICEINTERFACES_h
 
@@ -25,7 +30,7 @@
 #define EXEC_ADDRESS "address"
 #define EXEC_VALUE "value"
 
-///////////////////// DEVICE I/O CAPTURE ////////////////////////
+//////////////////// DEVICE I/O CAPTURE ////////////////////////
 enum{
     NO_CAPTURE,
     CAPTURE_IN,
@@ -34,6 +39,13 @@ enum{
 };
 
 
+/**
+ * @brief Common contract for device configuration, events and lifecycle.
+ *
+ * Configuration and runtime status are separate JSON views. init() loads settings
+ * before startup; update() detects state changes and polls enabled interfaces.
+ * Instances register by name so saved strips can resolve their interface binding.
+ */
 class DeviceInterface{
     public:
         String name="noname";
@@ -41,21 +53,31 @@ class DeviceInterface{
         uint8_t interfaceState = DISCONNECTED, oldInterfaceState = interfaceState ;        
         bool changedState = false;
 
+        /** @brief Initialize DeviceInterface with the supplied configuration and bindings. */
         DeviceInterface(String, uint8_t);
+        /** @brief Release resources held by this interface. */
         ~DeviceInterface();
         
+        /** @brief Export this object using its JSON representation. */
         String serialize();
 
+        /** @brief Process an outgoing command through the legacy interface. */
         bool execute(const JsonObject& data);
+        /** @brief Poll the interface connection and process pending data. */
         bool monitor(JsonObject& data);
 
+        /** @brief Report the legacy interface progress indicator. */
         virtual uint8_t progress()=0;
+        /** @brief Start the configured device connection. */
         virtual void connect()=0;
+        /** @brief Close the configured device connection. */
         virtual void disconnect()=0;           
         
 
     private:
+        /** @brief Encode outgoing data using the legacy interface contract. */
         virtual bool parseOut(const JsonObject& data) = 0;
+        /** @brief Decode incoming data using the legacy interface contract. */
         virtual bool parseIn(JsonObject& data) = 0;  
      
 };
@@ -66,15 +88,22 @@ enum{
     CAPTURE_STOP
 };
 
+/**
+ * @brief Legacy interface capture state and associated file.
+ */
 struct CaptureDescriptor{
     DeviceInterface* interface;
     uint8_t state;
     File file;
 };
 
+/**
+ * @brief Non-owning registry used to locate device interfaces by name.
+ */
 class InterfaceRepository{
   public:
    
+    /** @brief Record data when capture is enabled for the matching legacy interface. */
     void record(const JsonObject& data){
         // first we parse all interfaces to see if we find one that match the name    
         for (const auto& descriptor : descriptors){
@@ -99,6 +128,7 @@ class InterfaceRepository{
         }
     }
 
+    /** @brief Change the legacy capture state for the requested interface. */
     void changeState(String name, uint8_t newState){
         // first we parse all interfaces to see if we find one that match the name    
         for (auto& descriptor : descriptors){
@@ -111,6 +141,7 @@ class InterfaceRepository{
         }        
     }
 
+    /** @brief Find the requested registered object by name. */
     void retrieve(String name){
         // THIS CODE IS CALLED BY THE STRIP ROUTINE THAT REPLAY A MACRO
         for (const auto& descriptor : descriptors){
@@ -120,11 +151,13 @@ class InterfaceRepository{
         }         
     }
 
+    /** @brief Register a legacy interface with capture initially stopped. */
     void registerInterface(DeviceInterface* device){
         CaptureDescriptor cd = {device,CAPTURE_STOP};
         descriptors.push_back(cd);
     }
 
+    /** @brief Remove the matching entry from the registry. */
     void remove(DeviceInterface* device) {
         for (auto it = descriptors.begin(); it != descriptors.end(); ++it) {
             if (it->interface == device) {
@@ -141,14 +174,17 @@ class InterfaceRepository{
 
 InterfaceRepository interfaceRepo;
 
+/** @brief Initialize DeviceInterface with the supplied configuration and bindings. */
 DeviceInterface::DeviceInterface(String _name, uint8_t _mode = NO_CAPTURE):name(_name),recordMode(_mode){
     interfaceRepo.registerInterface(this);
 }
 
+/** @brief Release resources held by this interface. */
 DeviceInterface::~DeviceInterface(){
     interfaceRepo.remove(this);
 }
 
+/** @brief Export this object using its JSON representation. */
 String DeviceInterface::serialize(){
     JsonDocument doc;
     doc[INTERFACE_KEY][INTERFACE_NAME] = name;
@@ -158,6 +194,7 @@ String DeviceInterface::serialize(){
     doc.shrinkToFit();
 }
 
+/** @brief Process an outgoing command through the legacy interface. */
 bool DeviceInterface::execute(const JsonObject& data){
     /*String s;      
     serializeJson(data, s);
@@ -166,6 +203,7 @@ bool DeviceInterface::execute(const JsonObject& data){
     return parseOut(data);
 };
 
+/** @brief Poll the interface connection and process pending data. */
 bool DeviceInterface::monitor(JsonObject& data){
     changedState = false;
     // do we have data ?        
@@ -183,12 +221,15 @@ bool DeviceInterface::monitor(JsonObject& data){
     return changedState;            
 }
 
-///////////////////// DATA STRUCTURES ////////////////////////
+//////////////////// DATA STRUCTURES ////////////////////////
 
 typedef std::function<void(bool, int)> OSCPingCallback;    // ping success true/false, port
 
 class OSCInterface;
 
+/**
+ * @brief Legacy OSC ping task parameters.
+ */
 struct OSCPingParameters {
   String address;
   JsonObject data;
@@ -200,28 +241,36 @@ struct OSCPingParameters {
   OSCInterface* osc;
 };
 
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void OSCpingTask(void* parameter);
 
+/**
+ * @brief Historical OSC transport implementation; not the current NetworkOSC API.
+ */
 class OSCInterface: public DeviceInterface{
     public:
         IPAddress ip;
         int port;
-        uint16_t latency = 49;      // default reasonnable latency
+        uint16_t latency = 49;      ///< default reasonnable latency
         unsigned long RXtimerStart = 0;        
         
         char buffer[64];
 
+        /** @brief Initialize OSCInterface with the supplied configuration and bindings. */
         OSCInterface(String name, uint8_t capture):DeviceInterface(name,capture){
             latency = hwm.network->LANlatency;
         }
 
+        /** @brief Report the legacy interface progress indicator. */
         uint8_t progress(){
             return 100; //%
         }
 
+        /** @brief Placeholder hook; no active operation in this implementation. */
         virtual void init(){
         }
 
+        /** @brief Encode outgoing data using the legacy interface contract. */
         virtual bool parseOut(const JsonObject& command){
             bool success = true;
 
@@ -253,6 +302,7 @@ class OSCInterface: public DeviceInterface{
             return success;
         }
 
+        /** @brief Decode incoming data using the legacy interface contract. */
         virtual bool parseIn(JsonObject& data){
             if (hwm.network->udp == NULL){
                 //OSC_DEBUG_PRINT("\n<<OSCReadIn : null UDP");
@@ -325,15 +375,19 @@ class OSCInterface: public DeviceInterface{
 
         }
         
+        /** @brief Placeholder hook; no active operation in this implementation. */
         virtual void connect(){}
+        /** @brief Placeholder hook; no active operation in this implementation. */
         virtual void disconnect(){}
    
+        /** @brief Set the address and port of the legacy OSC peer. */
         void setClient(const IPAddress defaultIP, const int defaultPort){
             ip = defaultIP;
             port = defaultPort;
             OSC_DEBUG_PRINT("\nOSC.setClient(%s,%d)",ip.toString().c_str(),port);
         }
         
+        /** @brief Transmit the configured OSC message. */
         bool sendOSCMessage(OSCMessage *msg, const IPAddress _ip, const int _port){           
             //OSC_DEBUG_PRINT("\n>>%s(%s,%i) ",msg->getAddress(),_ip.toString().c_str(),_port);
             if (hwm.network->udp == NULL){
@@ -348,21 +402,25 @@ class OSCInterface: public DeviceInterface{
             return true;          
         }
 
+        /** @brief Send an OSC command without a value argument. */
         void SendCmd2OSC(const char* address){
             SendCmd2OSC(address,ip,port);
         }
 
+        /** @brief Send an OSC command without a value argument. */
         void SendCmd2OSC(const char* address, const IPAddress _ip, const int _port){                        
             OSCMessage msg(address);
             sendOSCMessage(&msg,_ip,_port);
         }
 
+        /** @brief Send an OSC command with an integer argument. */
         void SendInt2OSC(const char* address, int val){            
             OSCMessage msg(address);
             msg.add(val);
             if (sendOSCMessage(&msg,ip,port)) OSC_DEBUG_PRINT("%i",val);          
         }
 
+        /** @brief Send an OSC command with a floating-point argument. */
         void SendFloat2OSC(const char* address, float val){    
             OSCMessage msg(address);
             msg.add(val);
@@ -370,6 +428,7 @@ class OSCInterface: public DeviceInterface{
         }        
 
         // Fonction pour démarrer la tâche de ping non bloquante
+        /** @brief Start a reachability check and report its result through a callback. */
         virtual bool asyncPing(OSCPingParameters* params) {
             OSC_DEBUG_PRINT("\nOSCasyncPing %s %s:%d T.O:%d",params->data->expectedStr,params->ip.toString().c_str(),params->port,params->timeOut);
             if (params->isPinging){
@@ -390,10 +449,12 @@ class OSCInterface: public DeviceInterface{
             return true;
         }
 
+        /** @brief Perform a reachability check synchronously. */
         bool blockingPing(String address,JsonObject& data, uint32_t timeOut){
             return blockingPing(ip,port,address,data, timeOut);
         }
 
+        /** @brief Perform a reachability check synchronously. */
         bool blockingPing(IPAddress _ip, int _port, String address, JsonObject& data, uint32_t timeOut = 0){
             //OSC_DEBUG_PRINT("\tblockingPing: %dms", timeOut);
             if (timeOut == 0) timeOut = latency;
@@ -424,6 +485,7 @@ class OSCInterface: public DeviceInterface{
             return false;
         }
 
+        /** @brief Match a string against the supplied pattern. */
         static bool matchPattern(String pattern, const String& input) {
 
             pattern.replace("%02d", "*");
@@ -474,6 +536,7 @@ class OSCInterface: public DeviceInterface{
 };
 
 // Tâche de ping non bloquante
+/** @brief Bridge the callback/task entry to the responsible application or transport instance. */
 void OSCpingTask(void* parameter) {
 
     // Récupérer les paramètres passés à la tâche
