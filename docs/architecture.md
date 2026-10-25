@@ -305,3 +305,17 @@ gerber 2.2.zip : e54ce7f20fed21e5af8e3364e44150f06e8e662e9860993b7cdabde0eb5ed2c
 ```
 
 Before a definitive CAD correction, the most useful evidence would be results from the first two tests, a power/reset/CS startup capture, and schematics/bills of materials for the modules and supply. These would help turn electrical hypotheses into a targeted correction.
+
+## 7. Generated class reference and diagrams
+
+`Doxyfile` scans `src/` and `lib/Interval/src/` to produce an HTML class reference with inheritance and collaboration diagrams rendered by Graphviz. It reuses declarations and Doxygen comments already in the code; no manually maintained UML model or new explanatory document is introduced. Third-party libraries, the alternative test application, legacy interfaces and large font/icon data headers are excluded. Generated pages are disposable reference output, not additional maintained working references.
+
+Diagrams are available on individual class pages, with a class list and hierarchy for navigation. UML boxes show public/protected members with a field limit; graph depth and node limits keep large relationships readable. This is static source analysis: runtime event subscriptions, factory registrations, actual object ownership and active screen changes must still be understood from the code and architectural explanations. The parser does not compile firmware or fully resolve every macro/template and build variant.
+
+For local use, install Doxygen and Graphviz (`dot` must be on PATH), then run `doxygen Doxyfile` from the repository root, or select **Tasks: Run Task → Documentation: generate class diagrams** in VS Code. Open `build/doxygen/html/index.html` in a browser. Regenerate after editing code. The task does not automatically run on every save. Generated output is ignored by Git.
+
+`.github/workflows/documentation.yml` regenerates the reference on relevant pushes to `main`, pull requests, and manual runs. It verifies the HTML class list and the presence of inheritance/collaboration SVGs, then uploads a `class-documentation` artifact retained for 14 days. Download and extract it, then open `index.html`. Parser warnings are uploaded separately. No PlatformIO build or firmware packaging/deployment scripts run.
+
+To enable a permanent website, select **Settings → Pages → Build and deployment → Source → GitHub Actions**, then create the repository Actions variable **DOCS_PUBLISH_PAGES** with value **true** under **Settings → Secrets and variables → Actions → Variables**. Run **Actions → Class documentation → Run workflow** once; subsequent relevant pushes publish automatically. The deployment job exposes the actual website URL. Pages availability depends on repository visibility and account plan. Enabling publication exposes the generated class reference and source listings to the audience allowed by the Pages configuration.
+
+The Doxyfile, Actions workflow and VS Code task are configuration files required by this tooling. Maintained usage explanations remain in this architecture document; generated HTML/SVG output is not committed.

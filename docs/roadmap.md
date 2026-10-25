@@ -330,6 +330,14 @@ Origin: user request, October 24, 2026. Objective: favor the standard C++ `std::
 Acceptance: no behavioral regressions, no dangling references after container changes, measured or reasoned memory benefit, no unjustified runtime allocation in critical paths, all relevant tests passing, and roadmap/architecture documentation updated. Track each batch's remaining scope separately and remove completed batches; remove MEM-03 when the migration and required validation are complete.
 
 
+## Generated class documentation — pending validation
+
+| ID | Work | Status | Acceptance criteria |
+|---|---|---|---|
+| DOC-01 | Validate Doxygen/Graphviz generation and optional web publication | To validate | First Actions run produces browsable HTML and inheritance/collaboration SVGs; inspect representative Strip, Bank and DataProvider pages for useful relationships. For web publication, enable Pages with GitHub Actions, set DOCS_PUBLISH_PAGES=true, then verify the deployed URL and refresh after a source change. |
+
+Origin: user request, October 25, 2026. Existing code declarations/comments are reused; dedicated Doxygen, workflow and VS Code configuration files supply generation and execution without changing firmware or adding a parallel UML model. Remaining validation covers actual rendering and publication; static configuration inspection alone is insufficient.
+
 ## Other features and pending validation
 
 | ID | Work | Status | Acceptance criteria |

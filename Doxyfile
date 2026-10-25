@@ -1,0 +1,44 @@
+# Generated reference only: maintained explanations stay in docs/architecture.md.
+PROJECT_NAME           = "Interval Footswitch"
+PROJECT_BRIEF          = "ESP32 firmware and Interval framework class reference"
+OUTPUT_DIRECTORY       = build/doxygen
+INPUT                  = src lib/Interval/src
+RECURSIVE              = YES
+FILE_PATTERNS          = *.h *.hpp *.cpp
+EXCLUDE                = src/TestApplication.h lib/Interval/src/Interfaces_LEGACY.h lib/Interval/src/fonts.h lib/Interval/src/iconMap.h
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+HIDE_UNDOC_RELATIONS   = NO
+FULL_PATH_NAMES        = YES
+STRIP_FROM_PATH        = .
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+HTML_TIMESTAMP         = NO
+HTML_OUTPUT            = html
+GENERATE_TREEVIEW      = YES
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_LOGFILE           = build/doxygen/warnings.log
+# Parse declarations without invoking the ESP32 compiler or packaging scripts.
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION         = NO
+SEARCH_INCLUDES        = NO
+# Bound per-class diagrams to keep the reference usable.
+HAVE_DOT               = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+UML_LOOK               = YES
+UML_LIMIT_NUM_FIELDS   = 12
+TEMPLATE_RELATIONS     = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+DOT_GRAPH_MAX_NODES    = 40
+MAX_DOT_GRAPH_DEPTH    = 2
+DOT_NUM_THREADS        = 2
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+INCLUDE_GRAPH          = NO
+INCLUDED_BY_GRAPH      = NO

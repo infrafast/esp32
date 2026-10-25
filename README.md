@@ -24,6 +24,8 @@ Web resources are included in `data/webapp/`. Updates package firmware and resou
 | [Roadmap](docs/roadmap.md) | Planned changes, open issues, validation, and request tracking |
 | [Agent instructions](AGENT.md) | Contribution rules and documentation organization |
 
+Class diagrams and a browsable API reference can be generated automatically from the C++ code with Doxygen and Graphviz. See [generation and web publication](docs/architecture.md#7-generated-class-reference-and-diagrams) for VS Code, GitHub Actions artifacts, and optional GitHub Pages setup.
+
 These three documents are the project's only working references. This README remains a user-facing overview.
 
 Documentation subfolders contain only attachments and verification materials, including PCB audit illustrations and measurements. Explanations and tracking are centralized in the documents above. All project documentation is maintained in English.

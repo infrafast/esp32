@@ -1,0 +1,76 @@
+name: Class documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'lib/Interval/src/**'
+      - 'Doxyfile'
+      - '.github/workflows/documentation.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'lib/Interval/src/**'
+      - 'Doxyfile'
+      - '.github/workflows/documentation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: class-documentation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install documentation tools
+        run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
+      - name: Generate class reference and SVG diagrams
+        run: |
+          mkdir -p build/doxygen
+          doxygen Doxyfile
+          test -s build/doxygen/html/index.html
+          test -s build/doxygen/html/annotated.html
+          find build/doxygen/html -name '*inherit_graph.svg' -print -quit | grep -q .
+          find build/doxygen/html -name '*coll_graph.svg' -print -quit | grep -q .
+      - name: Upload browsable reference
+        uses: actions/upload-artifact@v4
+        with:
+          name: class-documentation
+          path: build/doxygen/html
+          retention-days: 14
+      - name: Upload parser warnings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-warnings
+          path: build/doxygen/warnings.log
+          if-no-files-found: ignore
+      # Enable only after selecting GitHub Actions in Settings > Pages.
+      - name: Prepare Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DOCS_PUBLISH_PAGES == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/doxygen/html
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DOCS_PUBLISH_PAGES == 'true'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Publish reference
+        id: deployment
+        uses: actions/deploy-pages@v4
