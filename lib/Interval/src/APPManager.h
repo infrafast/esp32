@@ -86,47 +86,72 @@ bool checkAndDeleteFile(const char* filename) ;
 
 ///////////////////// SCREEN APPLICATION MANAGEMENT ////////////////////////
 
-// id selects the page; state selects its step. On SCREEN_BANK, state is the
-// bank's position in banks; on utility/wizard pages it is a workflow step.
-// Changing these values requests a transition; refresh() builds the new page.
-//main screen (id)
+/**
+ * Screen selection (ScreenUnion is defined in GUIManager.h):
+ * - id chooses the main page, such as banks, menus or utilities.
+ * - state gives that page its context: a bank index or a workflow step.
+ * - focus is also part of change detection. triggerRedraw() changes it to
+ *   rebuild the same page; it is not the selected strip's id.
+ * - reserved has no page-selection role here, but belongs to the compared value.
+ *
+ * A sub-screen is not a separate object or a stack of pages: it is simply a
+ * different state interpreted by the main page's builder and workflow.
+ * For example, SCREEN_UTILS + STATE_UTILS_INFO shows device information;
+ * SCREEN_UTILS + STATE_UTILS_BRIGHTNESS uses the same page family for brightness.
+ * SCREEN_BANK + state 1 instead means the second bank in the banks vector.
+ *
+ * Callers set id/state directly. No screen-change event is required: refresh()
+ * compares the combined value against oldScreen and rebuilds when different.
+ * Multiple changes before that comparison result in the final selection only.
+ */
+// Main pages. Keep their numeric order: persisted screen ids use these values.
 enum{
-  SCREEN_STARTUP,
-  SCREEN_WIZARD,
-  SCREEN_MENU,
-  SCREEN_BANK_SWITCH,
-  SCREEN_PROMPT,
-  SCREEN_UTILS,
-  SCREEN_BYE,
-  SCREEN_BANK,
-  SCREEN_MAX
+  SCREEN_STARTUP,       // Startup logo.
+  SCREEN_WIZARD,        // First-time setup and application-specific setup.
+  SCREEN_MENU,          // Main settings menu; MenuSystem tracks its own selection.
+  SCREEN_BANK_SWITCH,   // Bank-selection menu; separate from the bank being played.
+  SCREEN_PROMPT,        // Message and up to three choices from promptParams.
+  SCREEN_UTILS,         // Information, connectivity, brightness and update workflows.
+  SCREEN_BYE,           // Status/error message or battery display before sleeping.
+  SCREEN_BANK,          // Play controls; state is a zero-based bank index.
+  SCREEN_MAX            // Page count, not a selectable page.
 };
 
-//sub screen (state)
+// Workflow steps. Meaning depends on screen.id; these are not bank indices.
+// Some values are action requests rather than lasting visible pages.
+// Declaring a state here does not by itself provide a builder or handler.
 enum{
+  // Setup: choose language, connect the browser, connect the network, user setup.
   STATE_WIZARD_LANG_STEP1,
   STATE_WIZARD_CONNECT_CONFIG_STEP2,
   STATE_WIZARD_CONNECT_NETWORK_STEP3,
   STATE_WIZARD_USER_STEP4,
+
+  // Utility displays and the stages of opening browser configuration.
   STATE_UTILS_SEARCHING_CONNECTION,
   STATE_UTILS_INFO,
   STATE_UTILS_BRIGHTNESS,
-  STATE_UTILS_CONNECTCONFIGMEDIA,
-  STATE_UTILS_CONNECTWEBAPP,
-  STATE_UTILS_WEBAPPCONNECTED,
-  STATE_UTILS_DOWNLOAD_FROM_URL,
+  STATE_UTILS_CONNECTCONFIGMEDIA,       // Establish a configuration connection.
+  STATE_UTILS_CONNECTWEBAPP,            // Connection available; wait for the browser.
+  STATE_UTILS_WEBAPPCONNECTED,           // Browser session is connected.
+
+  // Update actions and progress screens.
+  STATE_UTILS_DOWNLOAD_FROM_URL,        // Start downloading/extracting the package.
   STATE_UTILS_UPDATEFW_FROM_FILEUPLOAD,
-  STATE_UTILS_DISABLE_SWUPDATE_PROMPT,
-  STATE_UTILS_SHOW_PROGRESS_SINGLE,
-  STATE_UTILS_RESTORE_SCREEN,
-  STATE_UTILS_RESTART_DEVICE,
+  STATE_UTILS_DISABLE_SWUPDATE_PROMPT,  // Save the preference, then restore the page.
+  STATE_UTILS_SHOW_PROGRESS_SINGLE,     // Display one transfer/flash progress value.
+  STATE_UTILS_RESTORE_SCREEN,           // Return to the saved bank or wizard.
+  STATE_UTILS_RESTART_DEVICE,           // Stop interfaces and restart the ESP32.
   STATE_UTILS_SHUTDOWN,
-  STATE_BYE_MODAL_MESSAGE,
-  STATE_BYE_GOSLEEP_MESSAGE,
-  STATE_UTILS_TRIGGER_FWUPDATE_PROMPT,
-  STATE_UTILS_CHECK_BINARY,
+
+  // Both goodbye states use the same visual builder, with different workflows.
+  STATE_BYE_MODAL_MESSAGE,              // Show a message and shut down interfaces.
+  STATE_BYE_GOSLEEP_MESSAGE,            // Wait for the battery display, then sleep.
+
+  STATE_UTILS_TRIGGER_FWUPDATE_PROMPT,  // Prepare the update question.
+  STATE_UTILS_CHECK_BINARY,             // Install extracted firmware if present.
   STATE_UTILS_INSTALLING_BINARY,
-  STATE_UTILS_SHOW_PROGRESS_MULTIPLE,
+  STATE_UTILS_SHOW_PROGRESS_MULTIPLE,   // Display archive/file progress.
   STATE_UTILS_BLINK_ICON_TEXT
 };
 
@@ -1948,7 +1973,12 @@ void setup() {
       updateProgressLabel = *lang.getString("Flashing firmware in progress, do not interrupt!");
     }
 
-    // Build the requested screen and its overlay using the registered screen builders.
+    // Build content and overlay for id, passing state to both callbacks.
+    // Callback argument names may say "id", but they receive the sub-screen state.
+    // This creates widgets only: it does not assign screen.id/state, save the
+    // destination or run the page's workflow. The normal refresh path purges
+    // old widgets first. Upload progress can also call this directly through
+    // startGUIThread(), temporarily showing progress without changing screen.
     void buildGUI(uint8_t id, uint8_t state){
       // then retrive the screen builder and its overlay by ID
       for(int i = 0; i < screenBuilders.size(); i++){
@@ -2065,9 +2095,23 @@ void setup() {
       // MANAGE GUI
       //
       //------------------
-      // Rebuild widgets only when the combined screen selection changes:
-      // purge old widgets, build the new content/overlay and remember the result.
-      // Ordinary displayed-value changes use gui->refresh() without rebuilding.
+      // screen.value and oldScreen.value each cover four bytes (id, state,
+      // focus, reserved). One comparison therefore detects a main-page change,
+      // a new sub-screen/bank, or triggerRedraw() changing focus.
+      // Reassigning the same values does nothing; no transition queue exists.
+      //
+      // Hardware/button events handled earlier in this refresh can change the
+      // selection before this comparison. The workflow switch below runs after
+      // rendering: transitions it requests are normally built on the next pass.
+      //
+      // On change: delete old widgets, build content/overlay, then copy the
+      // resulting selection to oldScreen to acknowledge it. This avoids rebuilding
+      // again next time unless another change occurs. Bank selection is saved
+      // for restoreScreen(); temporary utility/prompt pages are not saved here.
+      //
+      // Without a selection change, gui->refresh(force) still updates existing
+      // widgets. A changing value/icon does not necessarily need a page rebuild.
+      // force requests widget rendering; it does not replace triggerRedraw().
       if (screen.value != oldScreen.value){
         refreshed = true;
         // we changed the screen, therefore we rebuild the screen
@@ -3679,6 +3723,7 @@ void setup() {
 
     String defaultUserConf = "{}";
 
+    // Last acknowledged screen selection; compared with the global screen each refresh.
     ScreenUnion oldScreen;
 
     //LinkedList<String*> countryList = LinkedList<String*>();
