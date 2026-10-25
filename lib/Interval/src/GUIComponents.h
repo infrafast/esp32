@@ -1,3 +1,8 @@
+/**
+ * @file GUIComponents.h
+ * @brief Reusable widgets, colors and drawing helpers for the display.
+ */
+
 #ifndef GUIComponents_h
 #define GUIComponents_h
 
@@ -21,11 +26,13 @@
 #define BIT_DEPTH 8
 
 
+/** @brief Foreground/background palette entry used by strip color ids. */
 typedef struct {
   uint16_t fColor;
   uint16_t bColor;
 } stripColor;
 
+/** @brief Animated base color and borrowed destination for its current value. */
 typedef struct {
   uint16_t baseColor;
   uint16_t* value;
@@ -55,14 +62,16 @@ stripColor colorMap[MAX_COLOR_ID] = {
   {TFT_GREY, TFT_ORANGE},
 };
 
-/////////////////////////////////////// FIXED SIZE 
+////////////////////////////////////// FIXED SIZE
 #define SIZE_10 10
 #define SIZE_14 14
 #define SIZE_16 16
 #define SIZE_18 18
 #define SIZE_20 20
 #define SIZE_26 26
-///////////////////////////////////////
+/**
+ * @brief Shared display resources, colors and coordinate helpers.
+ */
 
 class GUI : public GenericComponent{
 public:
@@ -116,10 +125,10 @@ public:
     #define TFT_WIDTH   320   //GUI::width()
     #define TFT_HEIGHT  240   //GUI::height()
 
-    ///////////////////////////////////////// ICON SIZE AND POSITION  ////////////////////////////
+    //////////////////////////////////////// ICON SIZE AND POSITION  ////////////////////////////
     #define ICON_MAX_SIZE TFT_WIDTH/2
     #define MEDIUM_ICON_SIZE (ICON_MAX_SIZE/1.7)
-    ///////////////////////////////////////// WIDGET SIZE AND POSITION  ////////////////////////////
+    //////////////////////////////////////// WIDGET SIZE AND POSITION  ////////////////////////////
     #define TOP2WIDGET_SIZE (TFT_HEIGHT/7)
     #define WIDGET_BIG_WIDTH TFT_WIDTH/5
     #define WIDGET_SMALL_WIDTH TFT_WIDTH/8-5
@@ -129,7 +138,7 @@ public:
     #define TFT_HTHIRD TFT_WIDTH/3
 
     #define WIDGET_PADDING 4
-    ///////////////////////////////////////// MENU SIZE AND POSITION ///////////////////////////////
+    //////////////////////////////////////// MENU SIZE AND POSITION ///////////////////////////////
     #define MENU_ICON_SIZE TFT_WIDTH/3
     #define MENU_TITLE_SIZE MENU_ICON_SIZE/2
     #define CONFIG_TEXTAREA_MESSAGE_SIZE MENU_TITLE_SIZE/1.8
@@ -166,16 +175,19 @@ public:
     ** Static utilities methods
     ***************************************************************************************/    
     
+    /** @brief Clear the display with the configured background and system brightness. */
     static inline void cls(uint16_t color = GUI::defaultBcolor){
       if (color == TFT_TRANSPARENT) color = GUI::defaultBcolor;
       tft->fillScreen(GUI::luminance(color,GUI::systemBrightness * 255));  
       //DEBUG_PRINT("\nGUI::cls()");
     }
 
+    /** @brief Return the display width for the current rotation. */
     static inline uint16_t width(){
       return tft->width();
     }
 
+    /** @brief Return the display height for the current rotation. */
     static inline uint16_t height(){
       return tft->height();
     }
@@ -184,6 +196,12 @@ public:
     ** Function name:           luminance
     ** Description:             return a 16 bit colour with reduced luminance
     ***************************************************************************************/
+    /**
+     * @brief Scale color-channel intensity and return an RGB565 display color.
+     *
+     * @param color Source color in RGB565 format.
+     * @param luminance Intensity from 0 to 255, distinct from the 0..1 widget brightness.
+     */
     static inline uint16_t luminance(uint16_t color, uint8_t luminance){
       if (color == TFT_BLACK) return TFT_BLACK;
       // Extract rgb colours and stretch range to 0 - 255
@@ -203,6 +221,14 @@ public:
     ** Function name:           luminance
     ** Description:             return a 16 bit colour from an RGB with reduced luminance
     ***************************************************************************************/
+    /**
+     * @brief Scale color-channel intensity and return an RGB565 display color.
+     *
+     * @param red Red channel from 0 to 255.
+     * @param green Green channel from 0 to 255.
+     * @param blue Blue channel from 0 to 255.
+     * @param luminance Intensity from 0 to 255, distinct from the 0..1 widget brightness.
+     */
     static inline uint16_t luminance(uint8_t red, uint8_t green, uint8_t blue, uint8_t luminance){
       uint16_t b = (((uint16_t)blue  * (uint16_t)luminance + 255) >> 8) & 0x00F8;
       uint16_t g = (((uint16_t)green * (uint16_t)luminance + 255) >> 8) & 0x00FC;
@@ -211,9 +237,9 @@ public:
       return (r << 8) | (g << 3) | (b >> 3);
     }
 
-    // #########################################################################
-    // Return a 16 bit rainbow colour
-    // #########################################################################
+    /**
+     * @brief Return a 16 bit rainbow colour
+     */
     static inline uint16_t rainbow(byte value)
     {
       // If 'value' is in the range 0-159 it is converted to a spectrum colour
@@ -266,12 +292,22 @@ public:
       return red << 11 | green << 6 | blue;
     }  
 
+    /**
+     * @brief Initialize GUI and its configured member bindings.
+     */
     GUI(bool d=true):GenericComponent(d){};
 };
 
 // #########################################################################
 // Base class
 // #########################################################################
+/**
+ * @brief Base sprite-backed widget with borrowed drawing values and change tracking.
+ *
+ * Positions, colors and brightness are borrowed pointers. A sprite is created
+ * when drawing is needed; GUIManager normally transfers and deletes it after use.
+ * Derived widgets track their own content in addition to these common inputs.
+ */
 class Widget : public GUI {
 
   public:
@@ -283,6 +319,7 @@ class Widget : public GUI {
     float oldBrightness = -1.0f;
     int16_t angle = 0;
 
+    /** @brief Initialize Widget with the supplied configuration and bindings. */
     Widget(const int16_t* xPos,
            const int16_t* yPos,
            const uint16_t* fC,
@@ -296,17 +333,29 @@ class Widget : public GUI {
       bColor = bC;
     }
 
+    /** @brief Disable copying to preserve resource ownership. */
     Widget(const Widget&) = delete;
+    /** @brief Disable assignment to prevent copying owned resources. */
     Widget& operator=(const Widget&) = delete;
 
+    /** @brief Release resources held by this object. */
     virtual ~Widget() {
       destroySprite();
     }
 
+    /** @brief Bind the widget to a borrowed foreground-color value. */
     void setFcolor(const uint16_t* fC) {
       fColor = fC;
     }
 
+    /**
+     * @brief Detect changes in borrowed position, colors and brightness.
+     *
+     * Reject missing bindings before use. On change, recreate/clear the sprite and
+     * record the new drawing inputs; subclasses add their own content changes.
+     * @param force Request drawing even when the tracked inputs are unchanged.
+     * @return Whether base drawing inputs changed or drawing was forced.
+     */
     virtual bool refresh(bool force = false) {
       if (x == nullptr || y == nullptr || fColor == nullptr || bColor == nullptr || brightness == nullptr) {
         refreshed = false;
@@ -337,11 +386,13 @@ class Widget : public GUI {
       return refreshed;
     }
 
+    /** @brief Allocate or resize the sprite needed for this widget. */
     void createSprite() {
       const uint16_t color = (bColor != nullptr) ? *bColor : GUI::defaultBcolor;
       createSprite(color);
     }
 
+    /** @brief Allocate or resize the sprite needed for this widget. */
     void createSprite(uint16_t color) {
       const uint16_t w = (width == 0) ? 1 : width;
       const uint16_t h = (height == 0) ? 1 : height;
@@ -364,6 +415,7 @@ class Widget : public GUI {
       }
     }
 
+    /** @brief Release the widget sprite and clear its pointer. */
     void destroySprite() {
       if (sprite != nullptr) {
         sprite->deleteSprite();
@@ -374,6 +426,7 @@ class Widget : public GUI {
       spriteHeight = 0;
     }
 
+    /** @brief Choose the sprite background color used by this widget. */
     uint16_t getClearColor() {
       const uint16_t localBColor = (bColor != nullptr) ? *bColor : GUI::defaultBcolor;
       const float localBrightness = (brightness != nullptr) ? *brightness : GUI::fullBrightness;
@@ -384,7 +437,9 @@ class Widget : public GUI {
       return GUI::luminance(localBColor, localBrightness * GUI::systemBrightness * 255);
     }
 
+    /** @brief Return the widget horizontal drawing position. */
     virtual int16_t getX() { return (x != nullptr) ? *x : 0; }
+    /** @brief Return the widget vertical drawing position. */
     virtual int16_t getY() { return (y != nullptr) ? *y : 0; }
 
   protected:
@@ -396,6 +451,7 @@ class Widget : public GUI {
     uint16_t oldWidth = 0, oldHeight = 0;
     uint16_t spriteWidth = 0, spriteHeight = 0;
 
+    /** @brief Fill the widget sprite using its current background settings. */
     void fillSpriteBackground(uint16_t color) {
       if (sprite == nullptr) return;
 
@@ -408,15 +464,20 @@ class Widget : public GUI {
     }
 };
 
+/**
+ * @brief Rectangular drawing area used for frames and composed graphics.
+ */
 class Canva : public Widget{
 
   public:
 
+    /** @brief Initialize Canva with the supplied configuration and bindings. */
     Canva(const int16_t* posX, const int16_t* posY, uint16_t width, uint16_t height, uint8_t _round, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=false):Widget(posX, posY, fC, bC, _brightness,d), round(_round){      
       id = concatStrings("Canva", *posX, "x", *posY);
       this->width = width; this->height = height;
     } 
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force=false){ 
       refreshed = force;
       if(Widget::refresh(force)){     
@@ -447,10 +508,14 @@ class Canva : public Widget{
 
 #define LIMIT_TEXT_RENDERING_LENGTH 99    // on affiche pas plus de 15 caracteres sinon le texte est illisible;
 
+/**
+ * @brief Renders borrowed text into a widget sprite with font and alignment settings.
+ */
 class Font : public Widget {  
   public:    
     uint8_t maxLen = LIMIT_TEXT_RENDERING_LENGTH;
 
+    /** @brief Initialize Font with the supplied configuration and bindings. */
     Font(const String* v, Align a, const int16_t* posX, const int16_t* posY,
          uint16_t s, uint8_t _len = LIMIT_TEXT_RENDERING_LENGTH,
          const uint16_t *fC = &GUI::defaultFcolor,
@@ -461,6 +526,7 @@ class Font : public Widget {
       init(a, posX, posY, s);
     }
 
+    /** @brief Initialize Font with the supplied configuration and bindings. */
     Font(Align a, const int16_t* posX, const int16_t* posY,
          uint16_t s,
          const uint16_t *fC = &GUI::defaultFcolor,
@@ -471,15 +537,19 @@ class Font : public Widget {
       init(a, posX, posY, s);
     }
 
+    /** @brief Disable copying to preserve resource ownership. */
     Font(const Font&) = delete;
+    /** @brief Disable assignment to prevent copying owned resources. */
     Font& operator=(const Font&) = delete;
 
+    /** @brief Prepare this object for use with its current configuration. */
     void init(Align a, const int16_t* posX, const int16_t* posY, uint16_t s) {
       size = s;
       align = a;
       id = concatStrings("Font", *posX, "x", *posY);
     }
 
+    /** @brief Return the widget horizontal drawing position. */
     virtual int16_t getX() override {
       if (x == nullptr) return 0;
       int16_t xAligned = *x;
@@ -488,6 +558,7 @@ class Font : public Widget {
       return xAligned;
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force = false) override { 
       refreshed = force;
 
@@ -546,13 +617,18 @@ class Font : public Widget {
   protected:
     const String *value = nullptr;
     uint16_t size = 0;
+    /** @brief Return the shared font renderer used by this widget. */
     virtual OpenFontRender* getOfr() = 0;
 };
 
+/**
+ * @brief Displays a text label using the shared text renderer.
+ */
 class Label : public Font {
   public:
     static OpenFontRender* ofr;
 
+    /** @brief Initialize Label with the supplied configuration and bindings. */
     Label(const String* v, Align a, const int16_t* posX, const int16_t* posY,
           uint16_t s, uint8_t _len = LIMIT_TEXT_RENDERING_LENGTH,
           const uint16_t *fC = &GUI::defaultFcolor,
@@ -563,13 +639,19 @@ class Label : public Font {
       id = "Label";
     }
 
+    /** @brief Disable copying to preserve resource ownership. */
     Label(const Label&) = delete;
+    /** @brief Disable assignment to prevent copying owned resources. */
     Label& operator=(const Label&) = delete;
 
   protected:
+    /** @brief Return the shared font renderer used by this widget. */
     virtual OpenFontRender* getOfr() override { return ofr; }
 };
 
+/**
+ * @brief Line boundaries computed for wrapped text.
+ */
 struct LineBreakInfo
 {
     int lines;
@@ -577,9 +659,13 @@ struct LineBreakInfo
     int maxWidth;
     int maxHeight;
 
+    /**
+     * @brief Initialize LineBreakInfo and its configured member bindings.
+     */
     LineBreakInfo()
     {}
 
+    /** @brief Initialize LineBreakInfo with the supplied configuration and bindings. */
     LineBreakInfo(int l, std::vector<int> lb, int mw)
     {
         lines = l;
@@ -588,9 +674,13 @@ struct LineBreakInfo
     }
 };
 
+/**
+ * @brief Wraps text across lines within a fixed display width.
+ */
 class TextArea : public Widget{
   public:
 
+    /** @brief Initialize TextArea with the supplied configuration and bindings. */
     TextArea(const String* textvalue, uint16_t w, Align pAlign, Align aAlign, const int16_t* posX, const int16_t* posY, uint8_t fontSize, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool d=false):Widget(posX, posY, fC, bC, _brightness, d){
       areaAlign = aAlign;
       phraseAlign = pAlign;
@@ -599,6 +689,7 @@ class TextArea : public Widget{
       width = w;
     }  
 
+    /** @brief Return the widget horizontal drawing position. */
     virtual int16_t getX(){
       int16_t xAligned = *x;  // align left by default
       if (areaAlign == Align::Center) xAligned = *x - width/2;
@@ -606,6 +697,7 @@ class TextArea : public Widget{
       return xAligned;
     }
   
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force=false){
       refreshed = force;
       Widget::refresh(force);
@@ -676,6 +768,7 @@ class TextArea : public Widget{
       return refreshed;
     }
 
+    /** @brief Compute the horizontal origin for the requested text alignment. */
     virtual int16_t getAlignedX(uint16_t phraseWidth){
       int16_t xAligned = 0;  // align left by default
       if (phraseAlign == Align::Center) xAligned = (width-phraseWidth)/2;
@@ -692,6 +785,7 @@ class TextArea : public Widget{
     const String* oldTextPtr = nullptr;
     uint8_t size;
 
+    /** @brief Split display text into words for line wrapping. */
     std::vector<String> getWords(String text){
 
       std::vector<String> words;
@@ -715,12 +809,19 @@ class TextArea : public Widget{
     }
 
 
+    /** @brief Measure text using the configured font renderer. */
     float getTextWidth(String text){
       Label::ofr->setFontSize(size);
       return Label::ofr->getTextWidth(text.c_str());
       //return text.length()*fontPixelSize;
     }
 
+    /**
+     * @brief Assign a cost to possible text lines before choosing wrapping.
+     *
+     * Measure consecutive word ranges; ranges that exceed the available width are
+     * excluded. These costs feed the minimum-cost line-break calculation.
+     */
     std::vector<std::vector<int>> computeLineCosts(std::vector<String> words, int n, int linePixelWidth, float spacePixelWidth){
       std::vector<std::vector<int>> lineCosts(n+1, std::vector<int>(n+1, INT_MAX));
       for(int y = 1; y <= n; y++){
@@ -743,14 +844,20 @@ class TextArea : public Widget{
       return lineCosts;
     }
 
+    /**
+     * @brief Choose text line breaks using accumulated minimum costs.
+     *
+     * For each word endpoint, compare all feasible preceding line starts. Store the
+     * cheapest predecessor, then walk backwards to reconstruct the selected lines.
+     */
     std::vector<int> computeLineBreakStartIndices(std::vector<std::vector<int>> lineCosts, int n){
       std::vector<int> startIndices(n+1, 0);
       std::vector<int> minCosts(n+1, 0);
       for(int y = 1; y <= n; y++){
           minCosts[y] = INT_MAX;
           for(int x = 1; x <= y; x++){
-              /// if from a previous word to a current word
-              /// the cost is INT_MAX, we skip
+              // if from a previous word to a current word
+              // the cost is INT_MAX, we skip
               if(lineCosts[x][y] == INT_MAX)
                   continue;
 
@@ -764,6 +871,7 @@ class TextArea : public Widget{
     }
 
 
+    /** @brief Build the selected lines and their measured widths for rendering. */
     LineBreakInfo computeLineBreakInfo(String text,int linePixelWidth){
       std::vector<String> words = getWords(text);
       int n = words.size();
@@ -782,7 +890,7 @@ class TextArea : public Widget{
           endPositions[i] = cur;
       }
 
-      /// compute LineBreakInfo
+      // compute LineBreakInfo
       std::vector<int> lineBreaks;
       int curLineWidth = 0, maxLineWidth = 0;
       int charIndex = 0;
@@ -811,12 +919,17 @@ class TextArea : public Widget{
 };
 
 
+/**
+ * @brief Formats a borrowed numeric value as a label.
+ */
 class NumericLabel : public Label{
   public:
+    /** @brief Initialize NumericLabel with the supplied configuration and bindings. */
     NumericLabel(const float* n,uint8_t dec, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, String _unit="", int _alter = 1, bool d=false):number(n), decimal(dec),alter(_alter),unit(_unit), Label(&convertedNumber,  a,  posX, posY, s,12,fC, bC, _brightness, d){      
       id = concatStrings("NumericLabel", *posX, "x", *posY);
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force=false){
       refreshed = force;
       if (*number != oldNumber || force){
@@ -844,16 +957,21 @@ class NumericLabel : public Label{
     int alter = 1;
 };
 
+/**
+ * @brief Displays an icon using the icon font.
+ */
 class Icon : public Font{
   public:
     static OpenFontRender* ofr; 
     
+    /** @brief Initialize Icon with the supplied configuration and bindings. */
     Icon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool d=false):Font(v, a, posX, posY, s,12, fC , bC , _brightness, d){
       id = concatStrings("Icon", *posX, "x", *posY, "~", *v);
       //if (debug) DEBUG_PRINT("\n new %s[%s]",id.c_str(),v->c_str()); // => cause problem as value may not be initialized when call from AnimatedIcon
     };
     
   protected:
+    /** @brief Return the shared font renderer used by this widget. */
     virtual OpenFontRender* getOfr(){return ofr;}
 };
 
@@ -863,8 +981,12 @@ enum{
   ANIMATE_PING_PONG,
 };
 
+/**
+ * @brief Updates icon appearance over time.
+ */
 class AnimatedIcon : public Icon {
 public:
+  /** @brief Initialize AnimatedIcon with the supplied configuration and bindings. */
   AnimatedIcon(const String* frames,
                uint8_t nbFrames,
                Align a,
@@ -901,6 +1023,7 @@ public:
     }
   }
 
+  /** @brief Refresh this component and report whether its displayed state changed. */
   virtual bool refresh(bool force = false) override {
     refreshed = force;
 
@@ -932,6 +1055,7 @@ public:
     return didDraw;
   }
 
+  /** @brief Reset this object to its initial state. */
   void reset() {
     frame = 0;
     inc = 1;
@@ -943,19 +1067,23 @@ public:
     }
   }
 
+  /** @brief Start the configured operation or animation. */
   void start() {
     running = true;
     lastTick = millis();
   }
 
+  /** @brief Stop the active operation or connection. */
   void stop() {
     running = false;
   }
 
+  /** @brief Set the delay between animation frames. */
   void setDelay(uint16_t newDelay) {
     animateDelay = newDelay;
   }
 
+  /** @brief Select the icon frames used by the animation. */
   void setFrames(const String* newFrames, uint8_t nbFrames) {
     iconArray = newFrames;
     numberOfFrames = nbFrames;
@@ -988,6 +1116,7 @@ private:
 
   String currentIcon = "";
 
+  /** @brief Test whether the animation frame delay has elapsed. */
   bool shouldAdvance() {
     if (!running) return false;
     if (animateDelay == 0) return true;
@@ -1000,6 +1129,7 @@ private:
     return false;
   }
 
+  /** @brief Move the animation to its next frame. */
   void advanceFrame() {
     if (numberOfFrames <= 1) {
       frame = 0;
@@ -1039,8 +1169,12 @@ private:
   }
 };
 
+/**
+ * @brief Tracks a numeric value within a range for full or partial redraws.
+ */
 class FromToWidget : public Widget {
   public:
+    /** @brief Initialize FromToWidget with the supplied configuration and bindings. */
     FromToWidget(const float* v, const float mini, const float maxi,
                  const int16_t* posX, const int16_t* posY,
                  const uint16_t* fC, const uint16_t* bC,
@@ -1055,6 +1189,7 @@ class FromToWidget : public Widget {
       maxValue = maxi;
     }
   
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force=false) { 
       // Par défaut, pas de sprite (le widget peut décider dans refreshFrame/refreshContent)
       if (sprite != nullptr) delete sprite;
@@ -1108,8 +1243,15 @@ class FromToWidget : public Widget {
     }
 
   protected:
+    /** @brief Compare displayed values and decide which widget content needs drawing. */
     virtual bool refreshLogic(bool force) = 0;     // doit retourner true si la valeur / affichage a changé
+    /**
+     * @brief Draw value-dependent content using the selected full/partial strategy.
+     *
+     * @param full True for complete content; false for the changed segment only.
+     */
     virtual void refreshContent(bool full) = 0;    // full = redraw complet
+    /** @brief Draw the static part of the widget presentation. */
     virtual void refreshFrame() = 0;
 
     uint16_t to = 0, oldTo = 254;
@@ -1122,8 +1264,12 @@ class FromToWidget : public Widget {
 };
 
 
+/**
+ * @brief Draws an arc representing a value within its configured range.
+ */
 class Arc : public FromToWidget {
   public:
+    /** @brief Initialize Arc with the supplied configuration and bindings. */
     Arc(const float *v, const float mini, const float maxi,
         const int16_t* posX, const int16_t* posY, uint16_t r,
         const uint16_t *fC = &GUI::defaultFcolor,
@@ -1141,13 +1287,20 @@ class Arc : public FromToWidget {
       to   = startAngle + 1;
     }
 
+    /** @brief Return the widget horizontal drawing position. */
     virtual int16_t getX() { return *x - width  / 2; }
+    /** @brief Return the widget vertical drawing position. */
     virtual int16_t getY() { return *y - height / 2; }    
 
   protected:
     uint16_t startAngle, radius;
 
-    // Logic: calcule les angles, choisit full/partial, et appelle refreshContent()
+    /**
+     * @brief Map the value to an arc angle and redraw only when the angle changes.
+     *
+     * A forced refresh draws from startAngle to the new angle. Otherwise from/to
+     * describe the changed angular segment, and refreshContent(false) handles it.
+     */
     virtual bool refreshLogic(bool force) { 
       bool changed = false;
 
@@ -1191,11 +1344,13 @@ class Arc : public FromToWidget {
       return changed || force;
     }
  
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void refreshFrame() {
       // Si tu veux un contour, fond, etc. c’est ici.
       // Laisser vide si l'Arc ne nécessite pas de frame spécifique.
     }
 
+    /** @brief Draw the value-dependent content, using full or partial refresh as requested. */
     void refreshContent(bool full) {
       createSprite();       
           
@@ -1238,10 +1393,14 @@ class Arc : public FromToWidget {
     }
 };
 
+/**
+ * @brief Combines an arc with a numeric value and unit label.
+ */
 class RingMeter : public Arc{
   #define START_ANGLE 30
   public:
     
+    /** @brief Initialize RingMeter with the supplied configuration and bindings. */
     RingMeter(const float *v, float mini, float maxi, uint8_t deci, const int16_t* posX, const int16_t* posY, uint16_t r, const String* u,  const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool d=false):Arc(v,mini, maxi, posX, posY, r, fC, bC, START_ANGLE, _brightness,d){
       unit = u; 
       id = concatStrings("RingMeter", *posX, "x", *posY);
@@ -1250,6 +1409,7 @@ class RingMeter : public Arc{
     }
 
   protected:
+    /** @brief Compare displayed values and decide which widget content needs drawing. */
     virtual bool refreshLogic(bool force){ 
 
       if (Arc::refreshLogic(force)) refreshValueLabel();
@@ -1273,6 +1433,7 @@ class RingMeter : public Arc{
     const String* oldUnitPtr = nullptr;
     uint8_t decimal, clearArea=0;
 
+    /** @brief Draw the static part of the widget presentation. */
     void refreshFrame(){
       //DEBUG_PRINT("\n%s.refreshFrame()",this->id.c_str());
       createSprite();
@@ -1282,6 +1443,7 @@ class RingMeter : public Arc{
       sprite->drawArc(width/2, height/2, tmp, tmp - tmp / 5, startAngle-1, 360-startAngle+1, TFT_NEARLYBLACK, GUI::luminance(widgetInnerColor,*brightness * GUI::systemBrightness * 255));           
     }
 
+    /** @brief Redraw the meter unit label. */
     void refreshUnitLabel(){
       createSprite();
       //DEBUG_PRINT("\n%s.refreshUnitLabel()",this->id.c_str());
@@ -1296,6 +1458,7 @@ class RingMeter : public Arc{
       delete label;         
     }
 
+    /** @brief Redraw the formatted meter value. */
     void refreshValueLabel(){      
       createSprite();
 
@@ -1323,11 +1486,15 @@ class RingMeter : public Arc{
 
 #define TOGGLE_CHAR_MAX_LEN 20
 
+/**
+ * @brief Displays the current state of a borrowed boolean value.
+ */
 class Toggle : public Widget{
   public:
     const bool* revert;
     const String* text;
 
+    /** @brief Initialize Toggle with the supplied configuration and bindings. */
     Toggle(const String* v, const int16_t* posX, const int16_t* posY, uint8_t h, const bool* p, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness, bool d=true):Widget(posX, posY, fC, bC, _brightness,d){
       width = TFT_WIDTH;
       height = h;
@@ -1337,6 +1504,7 @@ class Toggle : public Widget{
       id = "Toggle";
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force=false){
       Widget::refresh(force);
 
@@ -1395,15 +1563,22 @@ class Toggle : public Widget{
 
 };
 
+/**
+ * @brief Placeholder for a level-meter widget.
+ */
 class VuMeter : public Widget{
 // vertical https://github.com/HX2003/color_bar_tft/blob/master/color_bar_tft.ino
 // horizontal https://forum.arduino.cc/t/tft_espi-new-example-for-animated-dials/643382/3
 };
 
 
+/**
+ * @brief Shared geometry for value bars.
+ */
 class Bar : public FromToWidget{
   
   public:
+    /** @brief Initialize Bar with the supplied configuration and bindings. */
     Bar(const float *v, const float min, const float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, uint8_t fOffset=0, uint8_t r=0, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool d=true):FromToWidget(v, min, max, posX, posY, fC, bC,_brightness, d){
       radius = r;
       width = w; height = h;
@@ -1417,6 +1592,7 @@ class Bar : public FromToWidget{
     
   uint8_t frameOffset = 0, radius = 5;
 
+    /** @brief Draw the static part of the widget presentation. */
     virtual void refreshFrame(){
       createSprite(GUI::transparentColor);
       if (frameOffset != 0){
@@ -1425,6 +1601,7 @@ class Bar : public FromToWidget{
       }      
     }  
 
+    /** @brief Compare displayed values and decide which widget content needs drawing. */
     virtual bool refreshLogic(bool force){
       if (from !=oldFrom || to != oldTo){
         refreshContent(false); // partial refresh
@@ -1438,14 +1615,19 @@ class Bar : public FromToWidget{
 };
 
 
+/**
+ * @brief Vertical bar drawing support.
+ */
 class VerticalBar : public Bar{
   public:
 
+    /** @brief Initialize VerticalBar with the supplied configuration and bindings. */
     VerticalBar(const float *v, const float min, const float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h,   uint8_t fOffset=0, uint8_t r=0,const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool d=true):Bar(v, min, max, posX, posY, w, h, fOffset, r, fC, bC, _brightness,d){
       from = height-frameOffset;
       to = 0+frameOffset;
     }      
   
+    /** @brief Draw the value-dependent content, using full or partial refresh as requested. */
     virtual void refreshContent(bool full){
       refreshed = full;
 
@@ -1487,15 +1669,20 @@ class VerticalBar : public Bar{
 
 };
 
+/**
+ * @brief Horizontal bar drawing support.
+ */
 class HorizontalBar : public Bar{
   public:
 
+    /** @brief Initialize HorizontalBar with the supplied configuration and bindings. */
     HorizontalBar(const float *v, const float min, const float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, uint8_t fOffset=0, uint8_t r=0, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness, bool d=true):Bar(v, min, max, posX, posY,w,h, fOffset, r,fC, bC, _brightness,d){
       to = width-frameOffset;
     }
    
   protected:
 
+    /** @brief Draw the value-dependent content, using full or partial refresh as requested. */
     virtual void refreshContent(bool full){
 
       refreshed = full;
@@ -1540,14 +1727,19 @@ class HorizontalBar : public Bar{
 
 };
 
+/**
+ * @brief Horizontal progress indicator bound to a value and range.
+ */
 class ProgressBarH : public HorizontalBar{
 
   public:
 
+    /** @brief Initialize ProgressBarH with the supplied configuration and bindings. */
     ProgressBarH(float* v, float min, float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, uint8_t fOffset, uint8_t r,const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool d=false):HorizontalBar(v, min, max, posX, posY,w, h,fOffset, r,fC,bC,_brightness,d){
       id = concatStrings("ProgressBarH", *posX, "x", *posY);
     }
 
+    /** @brief Compare displayed values and decide which widget content needs drawing. */
     virtual bool refreshLogic(bool force=false){ 
       refreshed = force;
 
@@ -1579,14 +1771,19 @@ class ProgressBarH : public HorizontalBar{
 };
 
 
+/**
+ * @brief Vertical progress indicator bound to a value and range.
+ */
 class ProgressBarV : public VerticalBar{
 
   public:
 
+    /** @brief Initialize ProgressBarV with the supplied configuration and bindings. */
     ProgressBarV(float* v, float min, float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, uint8_t fOffset, uint8_t r,const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool d=false):VerticalBar(v, min, max, posX, posY,w, h,fOffset, r,fC,bC,_brightness,d){
       id = concatStrings("ProgressBarV", *posX, "x", *posY);
     }
 
+    /** @brief Compare displayed values and decide which widget content needs drawing. */
     virtual bool refreshLogic(bool force=false){ 
       refreshed = force;
       if (oldValue != *value){
@@ -1603,14 +1800,19 @@ class ProgressBarV : public VerticalBar{
 
 
 
+/**
+ * @brief Animated horizontal indicator for work in progress.
+ */
 class PendingBar : public HorizontalBar{
 
   public:
+    /** @brief Initialize PendingBar with the supplied configuration and bindings. */
     PendingBar(float* size, float min, float max, const int16_t* posX, const int16_t* posY, uint16_t w, uint16_t h, bool pp = false, uint8_t fOffset = 0, uint8_t r = 0, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, uint16_t _speed = 40, uint8_t step = 2, const float* _brightness = &GUI::fullBrightness,bool d=false) : pingPong(pp), stepDirection(step), speed(_speed), HorizontalBar(size, min, max, posX, posY,w, h,fOffset, r,fC,bC,_brightness,d){
       id = concatStrings("PendingBar", *posX, "x", *posY);
       if (stepDirection > *size) stepDirection = *size;
     }   
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force) override{
       // delay 
       if (millis() - lastRefreshTime < speed && !force) return false;
@@ -1619,6 +1821,7 @@ class PendingBar : public HorizontalBar{
       return refreshed;
     }
 
+    /** @brief Compare displayed values and decide which widget content needs drawing. */
     virtual bool refreshLogic(bool force = false) override{     
 
       // Ensure 'value' is a valid pointer before dereferencing
@@ -1678,10 +1881,17 @@ class PendingBar : public HorizontalBar{
 
 };
 
+/**
+ * @brief Combines child widgets in one display sprite.
+ */
 class CompositeWidget: public Widget{
   public:
+    /**
+     * @brief Initialize CompositeWidget and its configured member bindings.
+     */
     CompositeWidget(const int16_t *x, const int16_t* y, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool debug=false):Widget(x,y,fC,bC,_brightness,debug){}
 
+    /** @brief Release resources held by this object. */
     ~CompositeWidget(){
       while (guiList.size()>0){
         //DEBUG_PRINT("\nremaining to unstack: %i",gui->screenGUIs.size());
@@ -1692,6 +1902,7 @@ class CompositeWidget: public Widget{
       }      
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force=false){
       //push all composite sprite to the main sprite
       //refreshed = force;    
@@ -1712,8 +1923,12 @@ class CompositeWidget: public Widget{
     LinkedList<Widget*> guiList;
 };
 
+/**
+ * @brief Strip header with two labels and two state indicators.
+ */
 class Top2Toggles : public CompositeWidget {
   public:
+    /** @brief Initialize Top2Toggles with the supplied configuration and bindings. */
     Top2Toggles(const String* topLabel, const String* bottomLabel, const bool* topReverse = &GUI::off, const bool* bottomReverse = &GUI::off, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint16_t *fC2 = &GUI::defaultFcolor, const uint16_t *bC2 = &GUI::silver, const float* _brightness = &GUI::fullBrightness,bool debug=false) : CompositeWidget(&GUI::zero,&GUI::zero,fC, bC, _brightness,debug){
       id = "Top2Toggles";
       
@@ -1728,6 +1943,7 @@ class Top2Toggles : public CompositeWidget {
  
     }    
     
+    /** @brief Bind the header to the selected strip labels, toggles and colors. */
     void setPointers(
       const String* topString,
       const String* bottomString,
@@ -1752,8 +1968,12 @@ class Top2Toggles : public CompositeWidget {
 };
 
 
+/**
+ * @brief Strip header combining a state indicator and labels.
+ */
 class Top1Toggle1Label : public CompositeWidget {  
   public:
+    /** @brief Initialize Top1Toggle1Label with the supplied configuration and bindings. */
     Top1Toggle1Label(const String* topS, const String* bottomS, const bool* topReverse = &GUI::off, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor, const uint16_t *fC2 = &GUI::defaultFcolor, const uint16_t *bC2 = &GUI::defaultBcolor, const float* _brightness = &GUI::fullBrightness,bool debug=false) : CompositeWidget(&GUI::zero,&GUI::zero,fC, bC, _brightness,debug){
       id = "Top1Toggle1Label";
 
@@ -1806,14 +2026,21 @@ class Top1Toggle1Label : public CompositeWidget {
 
 };*/
 
+/**
+ * @brief Placeholder for a slider widget.
+ */
 class SliderWidget{
 //https://forum.arduino.cc/t/tft-espi-example-slider-demo-code-need-help-please/1144640/5
 };
 
 
+/**
+ * @brief Status light supporting steady or blinking display states.
+ */
 class Led : public Widget {
 
   public:
+    /** @brief Initialize Led with the supplied configuration and bindings. */
     Led(const int16_t* posX,
         const int16_t* posY,
         uint16_t rad,
@@ -1835,6 +2062,7 @@ class Led : public Widget {
       oldProperties = *properties;
     }
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force = false) {
       refreshed = force;
 
@@ -1865,7 +2093,7 @@ class Led : public Widget {
     const String* properties;
     String oldProperties;
 
-    const bool* enabled = nullptr;   // pointeur externe on/off
+    const bool* enabled = nullptr;   ///< pointeur externe on/off
 
     uint16_t ledBaseColor = TFT_RED;
     uint16_t radius;
@@ -1878,6 +2106,7 @@ class Led : public Widget {
 
     unsigned long lastToggle = 0;
 
+    /** @brief Read the status-light properties used to choose color and blink timing. */
     void parseProperties() {
       String lower = *properties;
       lower.trim();
@@ -1932,6 +2161,7 @@ class Led : public Widget {
       lastToggle = millis();
     }
 
+    /** @brief Update the status-light state from its inputs and timer. */
     bool updateState(bool force) {
       bool changed = false;
       unsigned long now = millis();
@@ -1970,6 +2200,7 @@ class Led : public Widget {
       return changed;
     }
 
+    /** @brief Draw the current status-light appearance into its sprite. */
     void drawLed() {
       createSprite(*bColor);
 
@@ -1991,7 +2222,9 @@ class Led : public Widget {
       }
     }
 
+    /** @brief Return the widget horizontal drawing position. */
     virtual int16_t getX() { return *x - width / 2; }
+    /** @brief Return the widget vertical drawing position. */
     virtual int16_t getY() { return *y - height / 2; }
 };
 
