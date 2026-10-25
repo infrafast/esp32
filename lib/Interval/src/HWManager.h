@@ -1,3 +1,8 @@
+/**
+ * @file HWManager.h
+ * @brief Initializes hardware and manages startup, power and display settings.
+ */
+
 #ifndef HWMManager_h
 #define HWMManager_h
 
@@ -26,7 +31,7 @@
 #endif
 
 
-//////////////////////////////////////////////
+/////////////////////////////////////////////
 #define ANALOGB_PIN       (gpio_num_t)D0 //GPIO_NUM_1  
 #define BATLEVEL_PIN      (gpio_num_t)D1 //GPIO_NUM_2
 #define ONOFF_PIN         (gpio_num_t)D2 //GPIO_NUM_3 
@@ -66,7 +71,9 @@ volatile unsigned int delayTime = 200;
 volatile unsigned int delayRepeatTime = 500;
 unsigned long lastInterrupt;
 
+/** @brief Forward Wi-Fi state changes to the application event system. */
 void OnWiFiEvent(WiFiEvent_t event);
+/** @brief Render the hardware startup status display. */
 void bootScreen(uint8_t);
 
 
@@ -75,6 +82,13 @@ void bootScreen(uint8_t);
 #define INVERTED_SCREEN_NO 1
 #define INVERTED_SCREEN_YES 3
 
+/**
+ * @brief Coordinates hardware initialization, power, buttons and network components.
+ *
+ * Starts the peripheral power rail, initializes components and TFT in the selected
+ * order, mounts LittleFS and chooses the startup USB mode. Power-off prepares pins
+ * and saved settings before deep sleep. Application screens are managed separately.
+ */
 class HardwareManager : public GenericComponent {
 public:
 
@@ -105,8 +119,9 @@ public:
 
     String configURL="0.0.0.0";
 
-    unsigned long bootTime = 0;     // how long it took to boot (means when powerRail is on)
+    unsigned long bootTime = 0;     ///< how long it took to boot (means when powerRail is on)
 
+    /** @brief Initialize HardwareManager with the supplied configuration and bindings. */
     HardwareManager(bool debug=true):GenericComponent(debug){
       id="HardwareManager";
          
@@ -151,6 +166,7 @@ public:
         but who cares?    
     }
     */
+    /** @brief Interpret the startup button press and select the hardware startup mode. */
     void wakeUp(uint16_t pressTime){
       pinMode(BUILTIN_LED, OUTPUT);
       ledcSetup(0, 5000, 8);        // chhanel 0, freq 5000, resolution 8 bit
@@ -217,6 +233,7 @@ public:
       onOff.usesLed = true;      
     }
     
+    /** @brief Apply the saved display rotation and matching button orientation. */
     void setScreenAndButtonRotation(){
       if (persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO) == INVERTED_SCREEN_YES){
         //swap button
@@ -235,6 +252,7 @@ public:
       tft.setRotation(persistants.getUChar(PERSISTANT_TFT_ROTATION,INVERTED_SCREEN_NO));        
     }
 
+    /** @brief Select the USB serial configuration for this startup. */
     void useCDC(){
       // activate the serial communication and deactivate MIDI
       useUSBMidi = false;
@@ -250,6 +268,7 @@ public:
     }
 
 
+    /** @brief Select the USB MIDI configuration for this startup. */
     void useMIDI(){
       useUSBMidi = true;        // used to display appropriate icon for battery charging or cable
 
@@ -286,6 +305,7 @@ public:
       #endif
     }
 
+    /** @brief Initialize the TFT using the board reset, pin and driver settings. */
     void initTFT(){
       tft.init();
       tft.fillScreen(TFT_BLACK);
@@ -293,6 +313,15 @@ public:
       setScreenAndButtonRotation();
     }
 
+    /**
+     * @brief Initialize power, inputs, storage, display and the startup USB mode.
+     *
+     * Read persistent preferences and the startup button first, then enable the
+     * peripheral rail. HW_INIT_TFT_BEFORE_COMPONENTS controls whether the TFT starts
+     * before or after other components, including Ethernet. Mount LittleFS before
+     * application data loads. Debug builds select CDC; production selects CDC or MIDI
+     * from the startup mode. Start background power-button/display handling last.
+     */
     virtual void init() {
       GenericComponent::init();            
       
@@ -375,6 +404,12 @@ public:
       }, RISING);             
     }
 
+    /**
+     * @brief Start configuration access-point mode and select it as configMedia.
+     *
+     * Pause normal Wi-Fi attempts, create the AP only once, then initialize it and
+     * make it the connection used for browser configuration.
+     */
     void startAP(const String* apName){
       // if we arrive here it means all networks have failed. 
       // hance just stop WiFI to avoid its loop taking time
@@ -388,6 +423,7 @@ public:
     }
           
 
+    /** @brief Refresh this component and report whether its displayed state changed. */
     bool refresh(bool force=false) {  
       refreshed = force;     
       for(int i = 0; i < hwComponents.size(); i++){
@@ -399,10 +435,12 @@ public:
       return refreshed;
     }
 
+    /** @brief Return the display object used by the hardware manager. */
     TFT_eSPI* getDisplay(){
       return &tft;
     }
 
+    /** @brief Prepare hardware pins before entering deep sleep. */
     void pinSleep(uint8_t pin, uint8_t mode = OUTPUT){
       pinMode(pin, mode);   // Met la broche en mode entrée pour désactiver tout état précédent
       if (mode == OUTPUT) digitalWrite(pin, LOW);
@@ -418,6 +456,7 @@ public:
     }
 
 
+    /** @brief Switch power to the external hardware rail. */
     void setPowerRail(bool state){
 
       //rtc_gpio_hold_dis((gpio_num_t)TFT_DC);
@@ -454,10 +493,12 @@ public:
       bootTime = millis();
     }
 
+    /** @brief Provide the saved network choices and preferred SSID. */
     void setWiFi(JsonList* wiFiList, String ssid) {      
       if (network != nullptr) network->setWiFi(wiFiList,ssid);
     }
 
+    /** @brief Apply click/hold timing preferences to the hardware buttons. */
     void setButtonReactivity(uint16_t push, uint16_t dClic){
       for (uint8_t b=0;b<MAXB;b++){
         buttons[b]->doubleClickGap = dClic;
