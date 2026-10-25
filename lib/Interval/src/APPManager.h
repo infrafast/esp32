@@ -86,6 +86,9 @@ bool checkAndDeleteFile(const char* filename) ;
 
 ///////////////////// SCREEN APPLICATION MANAGEMENT ////////////////////////
 
+// id selects the page; state selects its step. On SCREEN_BANK, state is the
+// bank's position in banks; on utility/wizard pages it is a workflow step.
+// Changing these values requests a transition; refresh() builds the new page.
 //main screen (id)
 enum{
   SCREEN_STARTUP,
@@ -141,6 +144,8 @@ void voidOverlay(uint8_t id);
 void baseOverLayBuilder(uint8_t id);
 void bankOverlayBuilder(uint8_t id);
 
+// Each page has a content builder and an overlay builder. Most share status
+// icons; banks use a dedicated overlay and the goodbye page has none.
 screenBuilder screens[SCREEN_MAX]={
   {SCREEN_STARTUP,startupScreenBuilder,baseOverLayBuilder},
   {SCREEN_WIZARD,wizardScreenBuilder,baseOverLayBuilder},
@@ -586,6 +591,10 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
 
     // Check once for a newer firmware version and offer the update when enabled.
+    // A successful internet check triggers this once per boot. A newer version
+    // enables the update menu and can open an automatic prompt if allowed.
+    // alreadyChecked is set before the request: reconnecting does not retry a
+    // failed check during the same boot.
     void checkRemoteVersion(){
       static bool alreadyChecked = false;
       //  check is only done once to avoid slowing down workflow when network disconnect and reconnect (when called by ping callback)
@@ -964,6 +973,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       bool wizard = false;
 
+      // Choose startup from the power-on conditions: reset clears settings;
+      // battery-only startup shows its charge then sleeps; missing storage shows
+      // an error; first-time setup opens the wizard; normal startup loads banks.
       switch(hwm->startupState){
         case RESET_STARTUP:
           // put reset code here
@@ -1040,6 +1052,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     // EVENTS HANDLERS
     // *********************************
    // Handle network, button and battery changes, then forward the event to listeners.
+   // Important reactions before forwarding the event to listeners:
+   // - Ethernet inserted during Wi-Fi closes the browser session and stops interfaces.
+   // - A connected network saves the Wi-Fi choice and can serve configuration.
+   // - Connection changes update icons; button events go to gesture handlers.
+   // - Critical battery voltage opens the sleep screen unless USB power is present.
+   // Unhandled events are forwarded too.
    void onEvent(const Event& evt) override {
       switch (evt.type) {
         case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:
@@ -1120,6 +1138,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
 
     // Use power-button gestures to open menus or toggle the selected interface.
+    // Long press toggles the menu. Double press on the bank screen toggles the
+    // selected strip's interface only if allowed; save the choice and mark its
+    // state for notification to the browser.
     void handleOnOffEvent(const Event& event){
       ButtonData* btData = (ButtonData*) event.data;
       switch(btData->id){
@@ -1185,6 +1206,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
     // Offer the firmware update, or show its progress if already running.
+    // Left accepts, middle declines, right disables future automatic prompts.
+    // Timeout takes the middle choice: waiting never accepts an update.
+    // If download/flashing is already running, show its progress instead.
     void SWupdatePromptScreen(uint16_t timeoutMs = 5000){
 
       if (downloadSreamInprogress){
@@ -1794,6 +1818,9 @@ void setup() {
     }
 
     // Return to the saved screen, correcting unavailable bank or wizard selections.
+    // Return to the saved bank or wizard step rather than a temporary menu,
+    // prompt or progress page. Bank selections are saved in refresh(); the
+    // wizard saves its own steps. An unavailable bank falls back to index zero.
     void restoreScreen(){
       //DEBUG_PRINT("\nrestoreScreen():");
       screen.id = hwm->persistants.getUChar(PERSISTANT_SCREEN_ID,SCREEN_BANK);
@@ -1902,6 +1929,8 @@ void setup() {
     }
 
     // Mark the screen as changed so the next refresh rebuilds its widgets.
+    // Changing focus marks the screen as different even when id/state stay the
+    // same, for example after a layout change or an edit from the browser.
     void triggerRedraw(){
       // this forces the GUI to be rebuild at next refresh
       //DEBUG_PRINT("\ntriggerRedraw()");
@@ -1965,6 +1994,9 @@ void setup() {
     }
 
     // Run hardware, interface, bank and display updates, then advance the current screen's workflow.
+    // Update order: hardware, interfaces, queued browser messages, banks,
+    // screen rebuilding/rendering, then the current page's workflow.
+    // A transition requested by that final workflow is rendered on the next pass.
     bool refresh(bool force=false){
 
       yield();
@@ -2033,6 +2065,9 @@ void setup() {
       // MANAGE GUI
       //
       //------------------
+      // Rebuild widgets only when the combined screen selection changes:
+      // purge old widgets, build the new content/overlay and remember the result.
+      // Ordinary displayed-value changes use gui->refresh() without rebuilding.
       if (screen.value != oldScreen.value){
         refreshed = true;
         // we changed the screen, therefore we rebuild the screen
@@ -2058,6 +2093,9 @@ void setup() {
       //
       //------------------
 
+      // Setup flow: language, browser connection, network connection, then the
+      // application's own setup callback. Lost connections return to the
+      // corresponding earlier step so setup can resume.
       switch(screen.id){
         case SCREEN_WIZARD:
           switch (screen.state){
@@ -2124,6 +2162,11 @@ void setup() {
               shutdownInterfaces();
               ESP.restart();
             break;
+            // Online update: open the package URL, require HTTP 200 and hand
+            // the response stream to the archive worker in Interval.h.
+            // Extraction success selects CHECK_BINARY: flash packaged firmware
+            // if present, otherwise restore the screen. Successful flashing
+            // offers a confirmation prompt whose OK action restarts the device.
             case STATE_UTILS_DOWNLOAD_FROM_URL:{
 
               #define NO_ERROR "ok"
@@ -2153,6 +2196,8 @@ void setup() {
 
                       StreamParams* params = new StreamParams(httpStream,true); // the task owns the httpStream and will take care of deleting it after it is used
 
+                      // The worker takes ownership of the stream and parameters
+                      // only after successful creation; failure cleans them here.
                       BaseType_t taskCreated = xTaskCreate(
                         expandTGZstreamToFSTask,         // Tâche à exécuter
                         "expandTGZstreamToFSTask",       // Nom de la tâche
@@ -2188,6 +2233,8 @@ void setup() {
             case STATE_UTILS_SHOW_PROGRESS_SINGLE:
               // do nothing
             break;
+            // Extraction and flashing are separate: a package may update only
+            // web assets, without including a firmware binary.
             case STATE_UTILS_CHECK_BINARY:
               checkAndInstallBinaryFromFile();
             break;
@@ -2460,6 +2507,11 @@ void setup() {
     }
 
     // Read an uploaded filename and route the content to an update installer or file storage.
+    // Route .tgz to archive extraction/check-binary, .bin.gz directly to the
+    // firmware installer, and other filenames to file storage.
+    // This already runs in the web task, so installers are called directly.
+    // A separate GUI task keeps progress visible during the blocking transfer.
+    // The request stream remains owned by the web server.
     bool httpUpload(Request &req, Response &res) {
       // aWOT 3.x: headers accessibles via req.get(...) seulement si app.header(...) a été déclaré
       String ct = String(req.get("Content-Type"));  // ex: multipart/form-data; boundary=----WebKitFormBoundary...
@@ -2801,6 +2853,10 @@ void setup() {
 
     ///////////////////////////////////////////////////////////////////////
     // Move strip focus, update the header and redraw when the visible layout changes.
+    // Wrap selection from last to first and vice versa. Remove focus from the
+    // old strip, then focus the target so it can request its current settings.
+    // Rebuild for a new window, a full-size target or zoom mode; otherwise the
+    // existing widgets can show the newly selected strip.
     bool stripScroll(uint8_t direction) {
 
       if (screen.state >= banks.size()) return false;
@@ -3005,6 +3061,12 @@ void setup() {
     }
 
     // Process a browser command and build its reply; pass unknown commands to the user callback.
+    // retrieve reads configuration; bank/strip edits generally change memory
+    // and mark the browser's save button. System settings and interface settings
+    // have their own immediate-save paths. Explicit save writes profile banks
+    // and settings; flash schedules the online update through the screen workflow.
+    // Unknown commands go to userParseJsonInputCallback. Replies use a callback
+    // name as the JSON key so the browser knows what to refresh.
     String parseJsonInput(String input){
 
       JsonDocument jsonInput;
@@ -3630,6 +3692,8 @@ void setup() {
     ///////////////////////////////////////////////////////////////////////
 
     // Send updated interface settings together with their configuration choices.
+    // Send settings together with their choices: changing interface settings
+    // can also change the choices available in the browser.
     void broadcastIFconfig(DeviceInterface* interface){
       //broadCast(concatStrings("{\"deviceCfg\":", interface->serializeConfig(), "}")); // inform web interface
       // when broadcasting the config you also have to broadcast the interface data sets as it is likely to have been updated
