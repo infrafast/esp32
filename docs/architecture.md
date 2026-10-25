@@ -60,6 +60,8 @@ The TFT and W5500 reset line is shared. The development initialization-order cha
 - `MixingStation : MixerDevice<NetworkSocket>`;
 - `XMSeries : MixerDevice<NetworkOSC>`.
 
+The template selects the transport at compile time; virtual `MixerBase` methods select the concrete command implementation at runtime. The two inherited parents represent separate responsibilities within one backend object. Beginner-oriented walkthroughs, including a channel-5/bus-2 request and constructor forwarding, are attached to the declarations in `src/mixers/mixer.h`, `m_xmseries.h` and `m_mstation.h`.
+
 The `MixerDevice` constructor explicitly associates its `DeviceInterface*` with its `MixerBase*`. `MixerBase::fromDeviceInterface()` resolves this association. Avoid conversions that assume every interface is a particular concrete mixer.
 
 ### Strip factory and behavior composition
@@ -67,6 +69,8 @@ The `MixerDevice` constructor explicitly associates its `DeviceInterface*` with 
 `StripSkeleton` describes a type, group, constructor, and property addresses. Its constructor registers it in `stripFactory`. The factory reconstructs instances from their identifier; this identifier is therefore part of the persistent format.
 
 `Strip` provides events, rendering, and common behavior. `OneSelectStrip` and `TwoSelectStrip` add dataset-driven selections. `StripMixerMixin<BaseStripT>` composes a visual strip with mixer logic.
+
+The send hierarchy is `Input2MixbusStrip` → `SendStrip` → `StripMixerMixin<TwoSelectStrip>`. The mixin inherits the selected UI base and the non-visual `StripMixer` helper. It does not inherit a concrete mixer; it borrows access to one through `MixerBase`. Choose `OneSelectStrip` for one selection and `TwoSelectStrip` for two. See the class comments in `src/mixers/s_mixer.h` for the extension steps, refresh hooks and existing initialization/lifetime limitations.
 
 In `s_mixer.h`, visibility triggers value requests and focus triggers configuration requests. Periodic refreshes use `STRIP_REFRESH_VISIBLE` and check the `IF_READY` state. An interface may be assigned after construction or replaced: the mixer binding must be resolved again if it changes.
 

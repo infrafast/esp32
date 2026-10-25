@@ -1,6 +1,18 @@
 /**
  * @file s_mixer.h
- * @brief Mixer strip bindings and channel/send controls.
+ * @brief Build mixer controls by combining reusable strip UI with mixer access.
+ *
+ * There are two related but separate families: mixers talk to remote devices
+ * (see mixer.h), while strips show and edit their values. A strip refers to a
+ * configured mixer; it does not inherit from XMSeries or MixingStation.
+ *
+ * For the send control, read the inheritance from the finished control back:
+ * Input2MixbusStrip adds send commands; SendStrip adds shared send/bus values;
+ * StripMixerMixin<TwoSelectStrip> joins the two-selection UI with StripMixer.
+ * TwoSelectStrip itself extends OneSelectStrip, which extends Strip. The
+ * StripMixer branch only adds access to MixerBase, so there is one Strip base.
+ * inputGainStrip instead uses StripMixerMixin<OneSelectStrip> for one channel.
+ * Its device-write hook is still empty: it is not a complete backend example.
  */
 
 #ifndef _S_MIXER_h
@@ -12,7 +24,17 @@
 // STRIPS TO IMPLEMENT: SEE https://github.com/onyx-and-iris/xair-api-python
 
 /**
- * @brief Resolves a strip interface to the common mixer API.
+ * @brief Finds the mixer selected in a strip's configuration.
+ *
+ * This small helper handles mixer access, without being another visual Strip.
+ * baseStrip is a borrowed pointer to the UI part of the same control; mixer is
+ * a borrowed pointer to the configured backend's MixerBase part. Neither is
+ * owned here. getMixer() uses the binding registry instead of assuming that a
+ * DeviceInterface* points to a particular concrete mixer.
+ *
+ * Resolve the binding after interface assignment, before using mixer hooks.
+ * Re-resolve after replacing an interface. The focus/visibility helpers assume
+ * boundInterface is valid; they do not themselves call getMixer().
  */
 class StripMixer{
   public:
@@ -76,15 +98,41 @@ class StripMixer{
 /**
  * @brief Adds mixer focus, visibility and refresh handling to a strip base.
  *
- * @tparam BaseStripT Visual strip base, such as OneSelectStrip or TwoSelectStrip.
- * Routes focus to configuration requests and visibility to value requests while
- * using MixerBase instead of casting to a particular mixer backend.
+ * @tparam BaseStripT A Strip-derived UI class providing the overridden hooks,
+ * such as OneSelectStrip or TwoSelectStrip.
+ *
+ * A "mixin" adds a reusable piece of behavior to another class. Here the template
+ * chooses which strip UI to extend: one dropdown for a channel, or two dropdowns
+ * for a channel and a bus. Both get the same mixer lookup and refresh behavior,
+ * without copying it into two separate base classes. This is ordinary multiple
+ * inheritance; the template argument is a UI base, not the final derived class.
+ *
+ * For a send control, inherit StripMixerMixin<TwoSelectStrip> (as SendStrip does),
+ * pass the skeleton and UI arguments to its constructor, then implement
+ * getConfig(), getValues() and the relevant button callbacks in the derived
+ * control. Call mixer methods through MixerBase, not a concrete backend cast.
+ * Register the strip skeleton and selection addresses as in MixerApplication.h.
+ *
+ * For example, select channel 5 and bus 2: focus requests their names and mute
+ * states via getConfig(); becoming visible requests the send level via
+ * getValues(). A button callback writes through mixer->setCHBUSlevel(5, 2, level).
+ * Virtual hooks choose Input2MixbusStrip's implementation even though this
+ * shared class handles focus and visibility.
+ *
+ * The template only wires these hooks together. It does not choose a mixer,
+ * bind shared values, or supply missing device commands. init() attempts mixer
+ * lookup but currently returns true even if no binding exists; derived controls
+ * must respect the existing initialization and pointer-lifetime constraints.
  */
 template <typename BaseStripT>
 class StripMixerMixin : public BaseStripT, public StripMixer {
 public:
   /**
-   * @brief Initialize StripMixerMixin and its configured member bindings.
+   * @brief Construct the chosen UI base and let the helper refer to its Strip part.
+   *
+   * Args... forwards optional UI arguments, such as debug, to BaseStripT.
+   * static_cast<Strip*>(this) follows the known UI inheritance path; it does
+   * not cast a configured interface to a guessed mixer backend.
    */
   template <typename... Args>
   StripMixerMixin(StripSkeleton* s, Args&&... args)
@@ -146,7 +194,16 @@ public:
 
 
 /**
- * @brief Binds two selections to shared send-level and mute values.
+ * @brief Add shared send and bus values to the two-selection mixer UI.
+ *
+ * select1ID is the one-based channel and select2ID the one-based bus. With
+ * channel 5 and bus 2, reserve(5, 2) gives the send level/mute and reserve(2)
+ * gives the bus mute. Another strip selecting the same send gets the same
+ * object, so both displays read the backend's latest value without copying it.
+ * Input2MixbusStrip supplies the requests and button commands on top of this.
+ * @note This class is not a complete ownership example: reservation pointers
+ * are not initialized here and its destructor does not release reservations.
+ * See the existing lifecycle issues in docs/roadmap.md before reusing it.
  */
 class SendStrip : public StripMixerMixin<TwoSelectStrip> {
   public:
@@ -210,7 +267,13 @@ class SendStrip : public StripMixerMixin<TwoSelectStrip> {
 
 #define STRIP_INPUT2MIXBUS "input2mixbus"
 /**
- * @brief Controls one input channel send to one mix bus.
+ * @brief Control how much of one input channel is sent to one mix bus.
+ *
+ * This is the concrete send control: the parents provide UI, mixer lookup and
+ * shared storage; this class decides which names, levels and mutes to request
+ * and which commands a button sends. The same control works with either mixer
+ * backend because all calls go through MixerBase. Incoming backend messages
+ * update the reserved shared values that the widgets read.
  */
 class Input2MixbusStrip : public SendStrip{
   public:

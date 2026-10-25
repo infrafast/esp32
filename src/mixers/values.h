@@ -1,6 +1,24 @@
 /**
  * @file values.h
  * @brief Shared mixer values with one-key or two-key reservations.
+ *
+ * A mixer owns these lists; strips borrow entries. A send needs two keys
+ * (channel, bus), while a bus mute needs one. Reserving the same keys returns
+ * the same object, allowing backend replies to update several strips at once.
+ * The wrappers reuse Interval's generic ValueList<T>: T selects the stored
+ * record type, while these classes supply mixer-specific key matching.
+ * Unlike StripMixerMixin, this use of templates shares storage management,
+ * not UI behavior. OneIndexValueList/TwoIndexValueList contain that storage.
+ *
+ * @code{.cpp}
+ * TwoIndexValueList sends;
+ * TwoIndexValue* first = sends.reserve(5, 2);
+ * TwoIndexValue* second = sends.reserve(5, 2); // same object
+ * first->value = 0.5f;                       // second sees 0.5f too
+ * sends.unreserve(first);
+ * sends.unreserve(second);                  // last user: object is deleted
+ * @endcode
+ * Do not delete borrowed entries or keep using them after the final release.
  */
 
 #ifndef _VALUES_h

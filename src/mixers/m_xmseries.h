@@ -110,7 +110,24 @@ enum{
 };
 
 /**
- * @brief Behringer X32/X-Air backend using the OSC transport.
+ * @brief Translate common mixer commands into Behringer X32/X-Air OSC messages.
+ *
+ * Inheritance has three layers: XMSeries adds the device's address patterns and
+ * discovery; MixerDevice<NetworkOSC> adds shared mixer synchronization;
+ * NetworkOSC adds OSC messaging over the network. MixerDevice also inherits
+ * MixerBase, the command contract seen by strips. NetworkOSC reaches
+ * DeviceInterface through NetworkDevice, the connection view used by the app.
+ *
+ * For example, a strip asks requestCHBUSlevel(5, 2) through MixerBase. This
+ * backend formats the selected protocol's OSC address and sends the request.
+ * process() decodes the reply and calls the common handleChBusMixLevel(), which
+ * updates the shared value read by every strip targeting that send.
+ *
+ * Create XMSeries in application setup (see MixerApplication.h), then select
+ * that interface for a mixer strip. Do not create MixerDevice directly: the
+ * concrete backend provides its missing protocol operations. Model profiles
+ * supply counts and OSC patterns; /xremote is refreshed every nine seconds to
+ * keep device updates active. postSync() currently adds no extra subscription.
  */
 class XMSeries: public MixerDevice<NetworkOSC>{
   public:

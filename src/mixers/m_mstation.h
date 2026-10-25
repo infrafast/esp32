@@ -72,7 +72,13 @@ const char* MStypeToString(uint8_t type) {
 
 
 /**
- * @brief Mixing Station mixer-model capabilities and address mapping.
+ * @brief Add Mixing Station address offsets to the common mixer element counts.
+ *
+ * BaseMixerDefinition says how many inputs, buses and other elements exist.
+ * This derived data structure also says where each group starts in Mixing
+ * Station's combined channel list. For example, a bus's global channel index
+ * uses busOffset, while a send's bus index is relative to the send list.
+ * This is data inheritance, separate from the backend's behavior hierarchy.
  */
 struct MSmixerDefinition : public BaseMixerDefinition{
   char model[64] = {};
@@ -125,7 +131,26 @@ char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize
 
 #define INTERFACE_MIXINGSTATION "MixingStation"
 /**
- * @brief Mixer backend using the Mixing Station WebSocket API.
+ * @brief Translate common mixer commands into Mixing Station WebSocket JSON.
+ *
+ * MixingStation adds API paths, message routing and model-specific offsets.
+ * Its parent MixerDevice<NetworkSocket> shares mixer names, synchronization and
+ * refresh logic. That parent inherits both NetworkSocket (the connection and
+ * message transport) and MixerBase (the mixer commands used by strips).
+ * NetworkSocket reaches DeviceInterface through NetworkDevice. These are two
+ * views of one backend object, linked by MixerDevice's binding registry.
+ *
+ * Create MixingStation in application setup (see MixerApplication.h), then
+ * assign that interface to a mixer strip. The strip can stay unchanged when
+ * switching to XMSeries because it only calls MixerBase's commands.
+ *
+ * For example, requestCHBUSlevel(5, 2) converts the one-based selections to
+ * Mixing Station indices and subscribes to the send path in normalized format.
+ * Routed replies update the common shared values read by strips. A request
+ * here may establish a subscription, rather than just fetch a single reply.
+ * Model offsets keep device-specific addressing inside this backend; do not
+ * apply them in a generic strip. Existing setters and lifecycle code have their
+ * own limitations; inheritance alone does not guarantee every operation works.
  */
 class MixingStation:  public MixerDevice<NetworkSocket>{
   public:

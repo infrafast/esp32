@@ -1,6 +1,12 @@
 /**
  * @file mixer.h
  * @brief Common mixer operations, identity and name synchronization.
+ *
+ * Read the mixer hierarchy as three jobs: MixerBase says what a strip can ask
+ * for, NetworkOSC/NetworkSocket carry messages, and XMSeries/MixingStation
+ * translate those requests into the remote device's protocol. MixerDevice
+ * joins the first two jobs and shares name synchronization between backends.
+ * See s_mixer.h for the separate hierarchy that builds the on-screen controls.
  */
 
 // without callback
@@ -226,7 +232,21 @@ enum{
 
 
 /**
- * @brief Transport-independent mixer operations and shared values used by strips.
+ * @brief The common set of mixer commands that every backend must provide.
+ *
+ * A strip holds a MixerBase* and calls, for example, requestCHBUSlevel(5, 2).
+ * Virtual methods let the actual backend choose how to ask for channel 5's
+ * send to bus 2. The strip does not need to know about OSC or WebSockets.
+ * Methods ending in = 0 are requirements for concrete backends, not working
+ * commands in this base class. Shared values and name datasets live here so
+ * every backend presents the same data to strips.
+ *
+ * This is a different role from DeviceInterface: that class represents the
+ * configured connection; this class represents the mixer features it offers.
+ * Binding links those two views of the same concrete object. Use
+ * fromDeviceInterface() to find the mixer view; it can return nullptr.
+ * @note The binding registry does not own objects or remove destroyed entries.
+ * Current mixer instances are intended to live for the application lifetime.
  */
 class MixerBase {
 public:
@@ -346,9 +366,27 @@ public:
 /**
  * @brief Combines the mixer contract with a concrete network transport.
  *
- * @tparam NetworkBase Transport implementing the NetworkDevice contract.
- * Combines backend-independent mixer operations with OSC or WebSocket transport.
+ * @tparam NetworkBase Transport derived from NetworkDevice, such as NetworkOSC
+ * or NetworkSocket; it must provide the lifecycle and messaging members used here.
+ *
+ * A template is a class recipe: MixerDevice<NetworkOSC> builds the OSC version,
+ * while MixerDevice<NetworkSocket> builds the WebSocket version. Each inherits
+ * its chosen transport AND MixerBase. Both parents are parts of one mixer object;
+ * no extra transport object needs to be created by the caller.
+ *
+ * For example, XMSeries inherits MixerDevice<NetworkOSC> and implements the
+ * mixer commands with OSC addresses. MixingStation makes the same choice with
+ * NetworkSocket and implements JSON requests instead. This keeps connection
+ * handling in the transport and shares name loading, model changes and visible
+ * strip refresh here, rather than copying them into each backend.
+ *
+ * The transport choice is fixed when compiling. Virtual mixer methods still
+ * select the concrete backend at runtime through a MixerBase*. This template
+ * does not implement the device protocol by itself; it remains abstract.
+ *
  * Name datasets are synchronized before the backend enters its live state.
+ * The constructor registers the DeviceInterface/MixerBase association so strips
+ * can reach this contract from their configured interface.
  */
 template <typename NetworkBase>
 class MixerDevice : public NetworkBase, public MixerBase {
@@ -371,7 +409,15 @@ public:
     unsigned long lastVisibleStripRefreshAt = 0;
       
     
-    /** @brief Initialize MixerDevice with the supplied configuration and bindings. */
+    /**
+     * @brief Pass connection settings to the chosen transport and create name datasets.
+     *
+     * Args... accepts the arguments required by NetworkBase's constructor;
+     * std::forward passes them on without changing their value/reference form.
+     * Thus each backend can use its own transport settings without another copy
+     * of this constructor. In template methods, this-> also makes inherited
+     * transport members visible to the compiler.
+     */
     template<typename... Args>
     MixerDevice(Args&&... args)      
         : NetworkBase(std::forward<Args>(args)...){
