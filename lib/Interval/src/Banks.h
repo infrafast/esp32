@@ -1,6 +1,16 @@
 #ifndef BANKSDEF_h
 #define BANKSDEF_h
 
+/**
+ * @file Banks.h
+ * @brief Groups strips into named banks and draws their navigation overview.
+ *
+ * A bank is a page of controls, for example the strips used during one song.
+ * It has a name, an icon, a display layout and a selected strip.
+ * Saving turns its settings and strips into JSON; loading rebuilds the strips
+ * through their registered types. ApplicationManager handles the profile file
+ * and stores each bank under its name.
+ */
 #include "Interval.h"
 
 #define C_CURRENTLAYOUT     "layout"
@@ -10,26 +20,41 @@
 
 
 namespace Interval {
+  /**
+   * Holds the strips belonging to one bank and owns their lifetime.
+   * LAYOUT_DETAILS uses each strip's position and size; LAYOUT_ZOOM shows the
+   * focused strip in the main view. BankNavigator provides a compact overview.
+   * The bank does not read/write files or manage switching between banks.
+   */
   class Bank{  
+    // Navigation is designed for three windows and four strips per window.
+    // BANK_MAX_STRIPS is 12 and limits entries read by deserialize(), not the
+    // vector capacity: direct addStrip() calls do not enforce this limit.
+    // Strip geometry uses four grid divisions per axis, not four total cells.
     #define BANK_MAXWINDOW 3
     #define STRIP_PER_WINDOW 4
     #define BANK_MAX_STRIPS BANK_MAXWINDOW*STRIP_PER_WINDOW
   
     public:
+      // One-based strip id (Strip::index), not a zero-based vector position.
+      // Navigation expects consecutive ids; init() selects id 1.
       uint8_t selector=1; 
       //uint8_t oldSelector=0;
    
       //uint8_t numberOfStrips = 0;
       //uint8_t maxWindow = 0;
   
-      String name;
-      unsigned char icon=' ';
+      String name;                 // Supplied by the outer profile's bank key.
+      unsigned char icon=' ';      // Single-byte icon code, saved as a number.
   
+      // Saved on export, but loading currently always restores LAYOUT_DETAILS.
       uint8_t layout = LAYOUT_DETAILS;
       
       //LinkedList<Strip*> strips;
-      std::vector<Strip*> strips; // Vecteur de strips
+      std::vector<Strip*> strips; // Owns successfully added strips; lookups borrow them.
   
+      // Build from a bank name and its JSON body. Construction does not expose
+      // deserialize()'s result; callers must not assume every strip was restored.
       Bank(String n, String value/*, StripFactory* sf*/){ 
         name = n;
         //Strip* s = nullptr;
@@ -37,6 +62,7 @@ namespace Interval {
         deserialize(value);
       }
   
+      // Destroy contained strips. Any external pointers to them then become invalid.
       ~Bank() {
         for (auto& s : strips) {
           delete s;
@@ -45,6 +71,9 @@ namespace Interval {
         strips.clear();
       }
   
+      // Let every strip process its data, including hidden strips. Each strip
+      // decides what work it needs. Request a redraw if a visible strip's
+      // interface changed; registered strips are expected to have an interface.
       bool update(){
         bool redraw = false;
         for (const auto& strip : strips) {         
@@ -59,6 +88,7 @@ namespace Interval {
         return redraw;
       }
 
+      // Reset focus to id 1; this does not check that a strip with that id exists.
       void init(){
         //set stripIndex to the first available strip
         selector = 1;
@@ -77,6 +107,21 @@ namespace Interval {
       }*/
   
 
+      /**
+       * Read one bank body: {"layout":...,"icon":...,"strips":[...]}.
+       * The name comes from the constructor, not from this JSON body.
+       *
+       * Parse the JSON, restore the icon, then try the first 12 strip entries.
+       * Each strip's type chooses its factory; its own deserialize() restores
+       * the interface, position, size, color, icon and type-specific properties.
+       * Required strip types/interfaces must already be registered.
+       *
+       * Current limits: saved layout is ignored, focus resets to 1, and this
+       * appends to existing strips rather than replacing them. A parse error
+       * returns false; otherwise true does not guarantee all strips loaded.
+       * Invalid/unknown entries do not roll back strips already added. No bank
+       * validation here checks overlapping geometry, unique ids or valid windows.
+       */
       bool deserialize(String value){
         bool success = false;
         //DynamicJsonDocument bank(JSON_BANK_SIZE);
@@ -105,6 +150,8 @@ namespace Interval {
   
       }*/
   
+      // Create the concrete strip from its saved "type". Unknown types return
+      // nullptr; the factory only constructs it, addStrip() restores its settings.
       Strip* buildStrip(JsonObject jsonStrip){      
         String stripID = jsonStrip[C_STRIPTYPE];
         //DEBUG_PRINT("\nbuildStripID: %s",stripID.c_str());
@@ -112,6 +159,13 @@ namespace Interval {
         return strip;
       }
   
+      /**
+       * Create and restore one strip, then append it only if restoration succeeds.
+       * No capacity or position checks are made here. Returned pointers are
+       * borrowed after insertion. Current failure handling has a limitation:
+       * a constructed strip that fails restoration is returned but neither
+       * inserted nor deleted, so a non-null result does not prove insertion.
+       */
       Strip* addStrip(JsonObject jsonStrip){
         String jsonStripString;                           
         serializeJson(jsonStrip, jsonStripString);
@@ -133,6 +187,8 @@ namespace Interval {
         }
       }*/
   
+      // Find a strip by its exact origin and window, not by a point inside its
+      // rectangle. Return the first match, or nullptr; ownership stays here.
       Strip* getStrip(uint8_t x, uint8_t y, uint8_t window){
   
         Strip* strip = nullptr;
@@ -150,6 +206,8 @@ namespace Interval {
         return strip;
       }
   
+      // Find the saved one-based strip id, not the vector offset. The early
+      // size check assumes consecutive ids; gaps can make higher ids unreachable.
       Strip* getStrip(uint8_t id){
         //DEBUG_PRINT("\n%s:getStrip(%d)=>",name.c_str(),id); 
         if (id>strips.size()){
@@ -170,18 +228,33 @@ namespace Interval {
         return nullptr;
       }
   
+      // Delete a matching strip and remove its entry. Does not renumber remaining
+      // ids or repair selector; callers must update selection/order when needed.
       bool trash(Strip* s) {
         for (auto it = strips.begin(); it != strips.end(); ++it) {
           if (*it == s) {
-            delete *it;           // détruire l’objet pointé
-            *it = nullptr;        // sécuriser le pointeur dans le vecteur
-            strips.erase(it);     // retirer l’entrée du vecteur
+            delete *it;           // Destroy the owned strip.
+            *it = nullptr;        // Clear the entry before removal.
+            strips.erase(it);     // Remove the vector entry.
             return true;
           }
         }
         return false;
       }
   
+      /**
+       * Export the bank body with layout, numeric icon and the strips array.
+       * Example with no strips: {"layout":2,"icon":3,"strips":[]}.
+       * The name is the outer key added by ApplicationManager; selector and
+       * runtime state are not saved. Each strip exports its own configuration,
+       * including position {x,y,id,win}, type, interface and properties.
+       *
+       * Strip::serialize() returns JSON text. Entries are first added as strings;
+       * removeJsonQuote() then removes wrappers/escapes to embed their objects.
+       * This is legacy text replacement, not structural JSON composition:
+       * arbitrary quotes/backslashes in values may not survive a round trip.
+       * Reloading also resets layout/focus as described in deserialize().
+       */
       String serialize(){
         //DynamicJsonDocument doc(JSON_STRIP_TEMPLATE_SIZE*BANK_MAX_STRIPS);   
         JsonDocument doc;
@@ -224,6 +297,11 @@ using IntervalBank = Interval::Bank;
 #define CELL_HEIGHT (NAV_HEIGHT / STRIP_PER_WINDOW)
 #define CANVA_VS_BANKNAME_SPACE 2
 
+/**
+ * Draws a small map of a bank beside its name; borrows the bank pointer.
+ * Details mode shows strip geometry across windows; zoom mode shows an ordered
+ * row of strips. This overview displays the arrangement, not live strip content.
+ */
 class BankNavigator: public Widget{
   //#define BANK_NAME_SIZE TFT_WIDTH/15
   public:
@@ -235,6 +313,10 @@ class BankNavigator: public Widget{
       id = concatStrings("BankNavigator", xPos, "x", yPos);
     }
 
+    // Rebuild the overview when selection, strip count or name changes.
+    // Current change detection does not compare layout, geometry or colors,
+    // and overwrites the force flag: those changes alone do not force a rebuild.
+    // Keep the previous width when the name shrinks to cover its old screen area.
     virtual bool refresh(bool force = false) {
       refreshed = force;
       Widget::refresh(force);
@@ -293,6 +375,11 @@ class BankNavigator: public Widget{
       return xPos;
     }
 
+    // Details: scale x/y and the "width x height" size onto a four-by-four
+    // miniature grid, then offset horizontally by the window number.
+    // Zoom: divide the overview into equal strip slots using one-based ids.
+    // Draw colors with strip/system brightness. Geometry is trusted here;
+    // this drawing step does not validate the saved bank arrangement.
     void drawStripMap(Canva* canva){
       int index, cellX, cellY, cellWidth, cellHeight;          
 
@@ -338,6 +425,7 @@ class BankNavigator: public Widget{
 
     }
 
+    // Optional selected-id overlay; the current refresh path does not call it.
     void drawStripID(Canva* canva){
       String idStr = String(bank->selector);
       Label* uniqueID = new Label(&idStr, Align::Center, &GUI::zero, &GUI::zero, OVERLAY_ICON_SIZE * 2, 2, &GUI::white,&GUI::defaultBcolor);
