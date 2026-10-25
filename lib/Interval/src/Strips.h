@@ -1,6 +1,15 @@
 #ifndef STRIPSDEF_h
 #define STRIPSDEF_h
 
+/**
+ * @file Strips.h
+ * @brief Defines the controls placed inside a bank.
+ *
+ * A strip combines a device action, saved settings and a visual representation.
+ * For example, it can control a channel level or send a MIDI message.
+ * Skeletons describe the available strip types; the factory creates them when
+ * loading a bank. Concrete strips provide the device-specific actions and widgets.
+ */
 #include "Interval.h"
 #include "GUIComponents.h"
 #include <vector>
@@ -40,35 +49,49 @@ typedef Strip* (*StripBuilderCallback)(/*String values*/);
 
 #define MAXNUMBER_OF_SKELPROPERTY 10
 
+/**
+ * Description of a strip type for the factory and configuration UI.
+ * Its name is the persistent "type" key, its group identifies compatible
+ * interfaces, and its ordered addresses describe configurable properties.
+ * It describes a type, not an individual strip placed in a bank.
+ */
 class StripSkeleton: public SerializableParameters{
   public:
     unsigned char icon;
     StripBuilderCallback constructor;
     //JsonObject variable;
-    using SerializableParameters::serialize;  // 🔴 réexpose String serialize()
+    using SerializableParameters::serialize;  // Keep the inherited String serialize() overload available.
 
     StripSkeleton(String id, String g, StripBuilderCallback b, unsigned char i='!');
 
-    // 🚩 Redéfinition : on enrichit simplement le JsonObject
+    // Extend the common editor description with an icon.
     void serialize(JsonObject& json) override {
-        // Appelle la version de base
+        // Export the common fields first.
         SerializableParameters::serialize(json);
-        // Ajoute la donnée spécifique
+        // Add strip-specific metadata.
         json[C_ICON] = icon;
     }
 
 };
 
 
+/**
+ * Finds a registered type and calls its constructor callback.
+ * Borrows skeleton pointers; callers own the strips returned by build().
+ * Construction and loading settings are separate: Bank::addStrip() does both.
+ * Keys must stay stable so saved banks can still reconstruct their strips.
+ */
 class StripFactory{
   public:
     std::vector<StripSkeleton*> stripSkeletonRepo;
 
+    // Register a type without checking duplicate names. Lookups use the first match.
     bool add(StripSkeleton* ss){
       stripSkeletonRepo.push_back(ss);
       return true;
     }
 
+    // Remove the first entry with the same name; does not delete the skeleton.
     void remove(StripSkeleton* ss) {
       for (auto it = stripSkeletonRepo.begin(); it != stripSkeletonRepo.end(); ++it) {
         if ((*it)->name == ss->name) {
@@ -94,6 +117,7 @@ class StripFactory{
       return stringDef;
     }
 
+    // Export type descriptions as JSON strings for the web configuration.
     void serialize(JsonArray* jsonSkeletons){
       for (uint8_t i=0;i<stripSkeletonRepo.size();i++){
         StripSkeleton* skeleton = stripSkeletonRepo[i];
@@ -114,6 +138,8 @@ class StripFactory{
     }
 }stripFactory;
 
+// Register on construction. The icon argument is currently not assigned to
+// the icon member here; registration itself does not initialize that field.
 StripSkeleton::StripSkeleton(String id, String g, StripBuilderCallback c, unsigned char i):SerializableParameters(id,g, &dataRepo),constructor(c){
   stripFactory.add(this);
 }
@@ -135,6 +161,10 @@ float bez1D_d(float t, float a1, float a2) {
 }
 
 // Solve for y given x on cubic-bezier(x1,y1,x2,y2) (CSS-like)
+// Convert elapsed progress x into eased progress y. A Bezier curve is defined
+// by a parameter t, so first solve x(t)=x with up to six Newton iterations,
+// then ten bisection refinements. Evaluate y(t) and clamp the result to 0..1.
+// Intended for easing curves whose x coordinates give a monotonic time axis.
 float bezYforX(float x, float x1, float y1, float x2, float y2) {
   x = clamp01(x);
 
@@ -173,6 +203,13 @@ float bezYforX(float x, float x1, float y1, float x2, float y2) {
 
 float oneHundedFloat = 100.0;
 
+/**
+ * Base behavior shared by strips: interface events, button value changes,
+ * configuration loading/saving and widget placement.
+ * A bank owns the strip; the strip borrows its skeleton and device interface.
+ * Widgets added to gui are managed by the GUI. Their pointers into strip values,
+ * labels and colors require the strip and its backing data to remain alive.
+ */
 class Strip: public EventListener{  
   #define JSON_STRIP_PROPERTY_SIZE 100
   #define  JSON_STRIP_TEMPLATE_SIZE 300
@@ -191,6 +228,8 @@ class Strip: public EventListener{
     bool* toggle2 =  &GUI::on;      // mute off
     
     float innerValue = 0.5f;  // default value that need to be overriden by derived strip
+    // Defaults to local storage; derived strips may bind shared device data.
+    // This pointer and the toggle pointers do not transfer ownership.
     float* value = &innerValue; 
     
     
@@ -204,10 +243,13 @@ class Strip: public EventListener{
     String interfaceName = "interfaceName"; //
     DeviceInterface* interface = nullptr;
 
+    // Visible means included in the displayed bank view; focused means selected.
+    // Several strips may be visible in details mode, but selection is separate.
     bool visible = false;
     bool focused = false;
 
-    // logical position
+    // Logical placement: x/y on the four-by-four grid, zero-based window,
+    // and one-based strip id used by bank selection (not a vector offset).
     uint8_t x, y, win, index;
     
     // top left corner position on TFT screen
@@ -225,29 +267,31 @@ class Strip: public EventListener{
       //*value = (valueMax-valueMin)/2;
       //id = skeleton->stripID;      
       
-      cfg.clickStepRatio = 0.03f;     // (en % de l’amplitude totale), seulement utile en simple clic
+      cfg.clickStepRatio = 0.03f;     // Fraction of the full range used for a click.
       
-      cfg.durationMs = 3000;          // temps pour aller de value → valueMin ou valueMax en HOLD
-      cfg.steps = 0;                  // pas de quantification, permet de faire un effet cranté ou bien limiter la quantité de ddonnée envoyée.
+      cfg.durationMs = 3000;          // Hold duration from the captured value to either limit.
+      cfg.steps = 0;                  // No time steps; enable them for stepped movement.
 
       
-      //cfg.type = EasingType::LINEAR;  // Progression constante. Idéal pour valeurs techniques (fréquence, gain fin, ratio).      
-      //cfg.type = EasingType::EASE;    // Accélère légèrement puis ralentit doucement.Très bon compromis pour paramètres généraux.      
-      //cfg.type = EasingType::EASE_IN; //Démarre doucement, accélère progressivement. Bien pour réglages “sensibles” au début (ex: volume bas).     
-      cfg.type = EasingType::EASE_IN_OUT; // Démarre doucement → accélère → ralentit vers la fin. Le plus “premium” visuellement.
+      //cfg.type = EasingType::LINEAR;  // Constant progress.      
+      //cfg.type = EasingType::EASE;    // Gentle acceleration and deceleration.      
+      //cfg.type = EasingType::EASE_IN; // Start slowly, then accelerate.     
+      cfg.type = EasingType::EASE_IN_OUT; // Start slowly, accelerate, then slow down near the limit.
       
-      //cfg.type = EasingType::CUBIC; //Permet des comportements plus dynamiques. 🔥 Version “Punchy rapide”. Accélération forte puis ralentissement marqué.    
+      //cfg.type = EasingType::CUBIC; // Custom curve with a fast initial response.    
       //cfg.x1 = 0.15f; cfg.y1 = 0.90f;
       //cfg.x2 = 0.20f; cfg.y2 = 1.00f;
             
-      //cfg.type = EasingType::CUBIC;  // + STEPS Simule un comportement proche d’un encodeur cranté.
+      //cfg.type = EasingType::CUBIC;  // Combine a custom curve with stepped progress.
       //cfg.x1 = 0.25f; cfg.y1 = 0.10f;
       //cfg.x2 = 0.25f; cfg.y2 = 1.00f;
-      //cfg.steps = 20;   // 20 paliers sur toute la course
+      //cfg.steps = 20;   // Twenty time steps over the movement.
       
 
     }    
 
+    // Detach from the current interface. Derived classes release any additional
+    // subscriptions or shared-value reservations they created.
     virtual ~Strip(){
       if (interface != nullptr){
         /*interface->stripCount -= 1;
@@ -261,6 +305,9 @@ class Strip: public EventListener{
     // -------------------------------------------------------------------------- 
 
 
+    // Only interface-message events are decoded here. Copy their JSON payload,
+    // use its first element as the action code (-1 when absent), then let the
+    // concrete strip interpret it. The base processAction() does nothing.
     virtual void onEvent(const Event& evt) override{
 
       if (evt.type != EVENT_INTERFACE_MESSAGE || evt.data == nullptr) return;
@@ -287,6 +334,14 @@ class Strip: public EventListener{
       CUBIC
     };
 
+    /**
+     * Controls how button presses change values.
+     * Short presses move by clickStepRatio of the full value range.
+     * Holds move from the captured start to the chosen limit over durationMs.
+     * steps quantizes time progress before easing; throttleMs limits update rate,
+     * while minDeltaToApply suppresses small hold changes in value units.
+     * The Strip constructor overrides defaults to 3%, 3000 ms and no steps.
+     */
     struct EasingConfig {
       EasingType type = EasingType::EASE_IN_OUT;
 
@@ -312,8 +367,8 @@ class Strip: public EventListener{
 
     EasingConfig cfg;
 
-    // HOLD state (remplace holdStart + time logic)
-    // état HOLD
+    // State captured for the current hold.
+    // Reset when the button is released.
     bool holdArmed = false;
     int8_t holdDir = 0;
     float holdStartValue = 0.0f;
@@ -322,6 +377,8 @@ class Strip: public EventListener{
     unsigned long lastHoldUpdate = 0; // for throttle
 
 
+    // Clamp progress to 0..1, optionally divide time into steps, then apply the
+    // selected curve. Quantized time does not imply equally spaced output values.
     float applyEasing(float p, const EasingConfig& c) {
       p = clamp01(p);
 
@@ -340,6 +397,8 @@ class Strip: public EventListener{
       }
     }
 
+    // Calculate a value from elapsed milliseconds without changing hold state.
+    // The active hold path below performs the same interpolation with throttling.
     float computeHoldValue(unsigned long timeMs, float start, float target, const EasingConfig& c) {
       if (c.durationMs == 0) return target;
       float p = (float)timeMs / (float)c.durationMs;
@@ -347,6 +406,8 @@ class Strip: public EventListener{
       return start + (target - start) * e;
     }
 
+    // Permit the first hold update immediately, then at most one per throttle
+    // interval. This reduces repeated value writes and device traffic.
     bool throttleHold(){
       if (cfg.throttleMs == 0) return true;
       unsigned long now = millis();
@@ -357,10 +418,20 @@ class Strip: public EventListener{
       return false;
     }
 
+    /**
+     * Change a value and return the absolute amount changed (zero if unchanged).
+     * A click adds/subtracts a fixed fraction of the range and clamps at limits.
+     * A hold captures its starting value/time once, or again on direction change.
+     * After debounce, elapsed wall-clock time drives easing toward min/max;
+     * skipped/throttled calls therefore do not slow down the intended movement.
+     * This updates memory only. Concrete callbacks must send device commands.
+     * Call onButtonReleased() to avoid reusing the previous hold's start.
+     * The pointer must be valid and valueMin/valueMax must describe its units.
+     */
     float applyProgressive(float* fVal, int8_t dir, uint8_t trigger){
       if (dir != 1 && dir != -1) return 0.0f;
 
-      // CLIC (ou autre) => pas fixe
+      // Non-hold triggers use a fixed increment.
       if (trigger != BUTTON_HOLD){
         float amp = (valueMax - valueMin);
         if (amp <= 0.0f) return 0.0f;
@@ -376,27 +447,27 @@ class Strip: public EventListener{
         if (delta == 0.0f) return 0.0f;
 
         *fVal = newValue;
-        return fabsf(delta); // delta positif comme ton code
+        return fabsf(delta); // Return the magnitude in either direction.
       }
 
-      // HOLD : on arme au début (ou si changement de sens)
+      // Capture the start on the first hold call or a direction change.
       unsigned long now = millis();
       if (!holdArmed || holdDir != dir){
         holdArmed = true;
         holdDir = dir;
         holdStartValue = *fVal;
         holdStartMillis = now;
-        lastHoldUpdate = 0; // update immédiat
+        lastHoldUpdate = 0; // Allow the first eligible update immediately.
       }
 
-      // anti “rebonds” : si tu veux ignorer les tout premiers ms
+      // Ignore the initial debounce interval.
       if ((now - holdStartMillis) < DEBOUCE_TIME) {
         return 0.0f;
       }
 
       if (!throttleHold()) return 0.0f;
 
-      // elapsed = temps réel écoulé depuis début du HOLD
+      // Use actual elapsed time since this hold started.
       unsigned long elapsed = now - holdStartMillis;
 
       float target = (dir > 0) ? valueMax : valueMin;
@@ -419,12 +490,15 @@ class Strip: public EventListener{
       return fabsf(delta);
     }
 
+    // End the hold so the next press captures a fresh start value and timestamp.
     void onButtonReleased(){
         holdArmed = false;
         holdDir = 0;
         lastHoldUpdate = 0;
     }
 
+    // Default callbacks change the bound value; the time argument is not used.
+    // Hold timing comes from millis(), independently of button-event timestamps.
     virtual float increaseCallback(unsigned long time, uint8_t trigger){
       return applyProgressive(value, +1, trigger);
     }
@@ -437,6 +511,9 @@ class Strip: public EventListener{
       return skeleton->parameterAddresses.size();      
     }
 
+    // Extension points: implement the main action, property format and labels.
+    // hasFocus() requests selection/configuration data; hasVisibility() requests
+    // displayed values even when a strip is visible without being selected.
     virtual bool actionCallback(uint8_t trigger)=0;
     virtual void serializeProperties()=0;
     virtual void deserializeProperty(String s)=0;        
@@ -452,15 +529,19 @@ class Strip: public EventListener{
     // basedon its internal state, it will set the redraw flag 
     //virtual void update() = 0;  
       
-    // this code is requesting the strip to update its state (values, etc...) using data from the interface
-    // process() is called from main app on all strip: the strip decide then if he has to do the query (for instance if it is focused) as       
-    // some strip may do some backgroud tasks (like playing sample or executing a macro), other will only do this if they have focus         
+    // Bank::update() invokes this hook for every strip.
+    // Current base implementation is a no-op after the interface check.
+    // It is non-virtual: Bank::update() calling through Strip* does not dispatch
+    // a derived method of the same name. Event callbacks handle incoming data.
     void process(){ 
       if (!interface) return;
       //if (interface->available() > 0) update();
     }
 
 
+    // Selection raises brightness, marks visibility and calls hasFocus().
+    // Losing focus dims the strip but does not clear visible: another strip can
+    // remain displayed beside the selected one in details mode.
     void focus(bool f=true){
       //DEBUG_PRINT("\nStrip(%d)",index);
       if (f){
@@ -479,11 +560,22 @@ class Strip: public EventListener{
       }
     }
 
+    // Set the bound value to half the range width. This is only a midpoint when
+    // valueMin is zero; concrete strips may override initialization.
     virtual bool init(){
       *value = (valueMax-valueMin)/2;               
       return true;
     }
 
+    /**
+     * Restore a strip after its concrete type has been created by the factory.
+     * Resolve the saved interface name, subscribe to its events, then call init()
+     * before restoring type, position, shape, color, icon and property strings.
+     * Each property is delegated to deserializeProperty() in saved order.
+     * Unknown interface or malformed JSON returns false; color ids are bounded,
+     * but geometry and property validity are not fully checked here.
+     * Reloading an existing strip does not detach its previous interface first.
+     */
     bool deserialize(String values){
 
       uint8_t n = getNumberOfProperties();
@@ -499,8 +591,8 @@ class Strip: public EventListener{
       interface = interfaceRepo.retrieve(interfaceName);
       if (interface == nullptr) return false; // if it has no interface, no need to continue
 
-      //interface->stripCount++;              // et signale qu'il utilise l'interface
-      interface->registerEventListener(this); // cela permettra d'annuler le comptage des strips ci dessus
+      //interface->stripCount++;              // Previously tracked interface usage.
+      interface->registerEventListener(this); // Receive interface events until destruction.
       init();
 
       type = jsonStrip[C_STRIPTYPE].as<String>();
@@ -525,6 +617,13 @@ class Strip: public EventListener{
       return true;
     };
 
+    /**
+     * Save configuration as JSON text: type, color, icon, size, interface,
+     * position {x,y,id,win}, and properties supplied by serializeProperties().
+     * Live device values, focus and brightness are not persisted here.
+     * properties is a temporary view into this local document; derived methods
+     * must populate it during this call, not retain it for later use.
+     */
     String serialize(){
       
       JsonDocument doc;
@@ -548,6 +647,15 @@ class Strip: public EventListener{
       return data;
     }
 
+    /**
+     * Build the strip's widgets for the current bank view.
+     * Mark visible, remove focus and request fresh display values, then check the
+     * interface/position/shape. Ready or disabled interfaces show normal controls;
+     * enabled interfaces that are not ready show connection/sync status instead.
+     * hasVisibility() runs before the null-interface check, so implementations
+     * must tolerate missing bindings. Only x/y origins and known shapes are
+     * checked here; overlap and full rectangle bounds are not validated.
+     */
     virtual void pushToGUI(uint8_t layout){
       
       visible = true;
@@ -592,6 +700,10 @@ class Strip: public EventListener{
 
     }
 
+    // Translate the logical shape/origin into pixel bounds and widget anchors.
+    // Zoom and 4x4 use the full control area; other shapes use the grid position.
+    // Vertical/flat shapes have extra text offsets. Window selection happens
+    // outside this method; win is not converted into a pixel offset here.
     bool determineTopLeft(uint8_t layout){      
 
       //DEBUG_PRINT("\nstrip[%d] %s topLeft=",index,type.c_str());
@@ -643,8 +755,10 @@ class Strip: public EventListener{
 
     #define SIMPLE_TEXT_MAX_LEN 20
     #define MIN_SIMPLETEXT_SIZE 40
+    // Fit a centered status label using an estimated character width. Vertical
+    // strips rotate it 90 degrees; shape-specific limits shorten long labels.
     void pushSimpleText(uint8_t layout, const String* textOriginal) {
-      // texte limité par SIMPLE_TEXT_MAX_LEN
+      // Label length is limited below according to its shape.
       int16_t angle = 0;
       uint8_t maxLen = 28;
 
@@ -660,12 +774,12 @@ class Strip: public EventListener{
       #define FONT_SIZE_RATIO 1.5
       int fontSize = areaH * FONT_SIZE_RATIO ;  // affect the maximum size of font possible, which is the widget height
 
-      // Réduire la taille jusqu'à tenir, ou jusqu'à MIN
+      // Reduce the font until estimated text fits or the minimum is reached.
       while (fontSize > MIN_SIMPLETEXT_SIZE) {
         float charWidth = 0.4f * fontSize;
         float estimatedWidth = charWidth * len;
 
-        if (estimatedWidth <= areaW) break;  // ça rentre, on s'arrête
+        if (estimatedWidth <= areaW) break;  // The estimated width fits.
         fontSize -= 2;                    
       }
 
@@ -681,6 +795,8 @@ class Strip: public EventListener{
     }
 
 
+    // Select a status presentation matching the strip shape: full details in
+    // zoom/4x4, or a compact label, activity LED and device icon in smaller shapes.
     virtual void composeInterfaceState(uint8_t layout){
       if (!interface) return;
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
@@ -747,6 +863,8 @@ class Strip: public EventListener{
       pushSmallLedandIcon();
     }     
 
+    // Bind widgets directly to the interface status and strip brightness so
+    // their displayed values can change without rebuilding the strip.
     void pushSmallLedandIcon(){
       if (!interface) return;
       gui.add(new Led(&IFledX, &IFledY, SIZE_10, &interface->state.led,&brightness));      
@@ -754,6 +872,8 @@ class Strip: public EventListener{
       gui.add(new Icon(interface->getIcon(),Align::Right,&IFiconX, &IFiconY,SIZE_26,&GUI::gold,&GUI::transparentColor,&brightness));    
     }
 
+    // Reusable value displays for concrete strips. Widgets borrow value/range,
+    // color and coordinate storage; some helpers also adjust the stored anchors.
     /////////////////////////////// common widgets library
     void push4x4hBar(){      
       h = WIDGET4X4H/3;   // height of the bar is 3 time less big than the full height of the cell
@@ -796,6 +916,9 @@ class Strip: public EventListener{
       drawWidgetsFrames(layout);
     } 
 
+    // Intended to distinguish normal/offline frames. Current guard is inverted:
+    // valid interfaces return immediately, while nullptr reaches a dereference.
+    // This comment documents existing behavior; it does not fix the guard.
     void drawWidgetsFrames(uint8_t layout){
 
       if (interface != nullptr) return;
@@ -812,6 +935,8 @@ class Strip: public EventListener{
       else if (size == SHAPE4X1) gui.add(new Canva(&topLeftX, &topLeftY, WIDGET4X1W, WIDGET4X1H,4, &frameColor, &GUI::transparentColor,&brightness));      
     }
 
+    // Borrowed JSON view used only while serializing/restoring properties.
+    // skeleton must outlive this strip; value bounds use the bound value's units.
     JsonArray properties;
     StripSkeleton* skeleton;
     //LinkedList<Widget*> widgetHandles = LinkedList<Widget*>();
@@ -835,6 +960,14 @@ class Strip: public EventListener{
 };
 
 #define PROPERTY_BUF_CHAR_MAX 128  // to restore and serialize address string value
+/**
+ * Base for a strip with one configured selection, using skeleton address 0.
+ * With a %d pattern, store a one-based id and look up its label at id-1 in the
+ * chosen interface's dataset. With a text pattern, keep the extracted text locally.
+ * Example: /ch/name/%d with id 3 resolves dataset element 2 for the channel label.
+ * Dataset label pointers are borrowed and depend on the provider's lifetime.
+ * Current formatting/parsing does not fully enforce buffer sizes or id bounds.
+ */
 class OneSelectStrip : public Strip{
 
   public: 
@@ -855,7 +988,7 @@ class OneSelectStrip : public Strip{
         free(buf);
       }else{
         buf = (char*)malloc((select1PropertyAddress.length()+PROPERTY_BUF_CHAR_MAX)*sizeof(char*));
-        snprintf(buf, sizeof(buf), select1PropertyAddress.c_str(), select1ContentPtr->c_str());    // secured size sprintf
+        snprintf(buf, sizeof(buf), select1PropertyAddress.c_str(), select1ContentPtr->c_str());    // Current sizeof(buf) is the pointer size, not the allocated buffer size.
         properties.add(String(buf));
         free(buf);        
       }
@@ -892,6 +1025,13 @@ class OneSelectStrip : public Strip{
 };
 
 
+/**
+ * Adds a second selection using skeleton address 1, for example a channel/bus pair.
+ * Save selection 1 first, then selection 2. On load, offer each property to both
+ * patterns, so each selection consumes its matching address. Labels show the
+ * first selection at the top and the second at the bottom.
+ * Uses the same borrowed-pointer and parsing constraints as OneSelectStrip.
+ */
 class TwoSelectStrip: public OneSelectStrip{
   public:
     TwoSelectStrip(StripSkeleton* s,bool debug=false):OneSelectStrip(s,debug){
