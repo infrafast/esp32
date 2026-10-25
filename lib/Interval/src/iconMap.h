@@ -1,3 +1,8 @@
+/**
+ * @file iconMap.h
+ * @brief Icon codes used by the display and configuration interface.
+ */
+
 #ifndef _ICON_MAP_H
 #define _ICON_MAP_H
 
