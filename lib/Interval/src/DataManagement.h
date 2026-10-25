@@ -20,17 +20,23 @@
  * DataRepository helps consumers find it. This keeps UI code reusable when the
  * device or data source changes.
  */
-///////////////////////////// DATA MANAGEMENT ///////////////////////////// 
+//////////////////////////// DATA MANAGEMENT /////////////////////////////
 /**
- * Supplies address-specific values from application-owned storage on demand.
+ * @brief Supplies address-specific values from application-owned storage on demand.
+ *
  * Implementations define bounds/fallback behavior and String-pointer validity.
  * dataProviderName is the provider key used by dataset consumers.
  */
 class DataProvider{
   public :
     String dataProviderName;
+    /**
+     * @brief Initialize DataProvider and its configured member bindings.
+     */
     DataProvider(String pName):dataProviderName(pName){};
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(String addrr) = 0;
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(String addrr, uint16_t index) = 0;
   protected:
     String voidStatic="voidStatic";
@@ -65,7 +71,8 @@ enum {
 #define KEY_PROPERTIES    "properties"
 
 /**
- * Describes a field's lookup/format pattern and web editor type.
+ * @brief Describes a field's lookup/format pattern and web editor type.
+ *
  * rules is a borrowed JSON view rebound during serialization; do not use it after
  * its destination document expires. Descriptors do not own datasets.
  */
@@ -75,10 +82,15 @@ class Address {
     String object;
     JsonArray rules;    
 
+    /**
+     * @brief Initialize Address and its configured member bindings.
+     */
     Address(String p, String o):pattern(p),object(o){}
   
+    /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties() = 0;      
 
+    /** @brief Export this object using its JSON representation. */
     String serialize(){      
       JsonDocument doc;
       serializeTo(doc, doc.as<JsonObject>());
@@ -88,6 +100,7 @@ class Address {
       return data;
     }
 
+    /** @brief Append the field description to the supplied JSON destination. */
     void serializeTo(JsonDocument& doc, JsonObject parent){
       //DEBUG_PRINT("\n%s.serialize() => ",pattern.c_str());
       rules = parent[pattern].to<JsonArray>();
@@ -96,6 +109,7 @@ class Address {
       doc.shrinkToFit();
     }
 
+    /** @brief Append the field description to the supplied JSON destination. */
     void serializeTo(JsonArray properties){
       JsonObject entry = properties.createNestedObject();
       rules = entry[pattern].to<JsonArray>();
@@ -106,16 +120,21 @@ class Address {
 };
 
 /**
- * Dropdown descriptor; choices come from a matching provider/pattern dataset.
+ * @brief Dropdown descriptor; choices come from a matching provider/pattern dataset.
  */
 class DropDownAddress: public Address{
   public:
+    /**
+     * @brief Initialize DropDownAddress and its configured member bindings.
+     */
     DropDownAddress(String p):Address(p,INPUTSELECT){}
+    /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties(){}; // No extra dropdown metadata.
 };
 
 /**
- * Free-text metadata: display label and validation identifier (for example "ip").
+ * @brief Free-text metadata: display label and validation identifier (for example "ip").
+ *
  * Validation is not executed here. hide is stored but currently not serialized.
  */
 class FreeTextAddress: public Address{
@@ -124,8 +143,12 @@ class FreeTextAddress: public Address{
     String regex = "";
     bool hide = false;
 
+    /**
+     * @brief Initialize FreeTextAddress and its configured member bindings.
+     */
     FreeTextAddress(String p, String _fName, String _regex):friendlyName(_fName), regex(_regex), Address(p,INPUTTEXT){}
 
+    /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties(){
       rules[(int)ADDRESS_FRIENDLYNAME] = friendlyName;      
       rules[(int)ADDRESS_REGEX] = regex;      
@@ -141,7 +164,8 @@ String errorDatasetOOR = "outOfRange";
 class DataRepository;
 
 /**
- * Abstract named value view, registered in targetRepo or dataRepo by default.
+ * @brief Abstract named value view, registered in targetRepo or dataRepo by default.
+ *
  * Borrows its Address and repository; destruction unregisters the view only.
  * Subclasses define value storage and pointer validity. The destructor is not
  * virtual, so deletion of derived objects through DataSet* is not generally safe.
@@ -152,27 +176,56 @@ class DataSet{
     Address* address = nullptr;
     DataRepository* repo = nullptr;
 
+    /**
+     * @brief Register this dataset in the supplied repository, or dataRepo by default.
+     *
+     * The address/repository pointers are borrowed. Destruction unregisters this
+     * dataset; the registry does not own or delete it.
+     */
     DataSet(Address* adress, const String& name, DataRepository* targetRepo = nullptr);
+    /** @brief Release resources held by this object. */
     ~DataSet(); 
 
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize() = 0;
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t i) = 0;
+    /** @brief Export this object using its JSON representation. */
     virtual JsonObject serialize(JsonObject o);
+    /**
+     * @brief Export an address and its current values using the legacy wire format.
+     *
+     * A positive size creates a values array. Zero reads getValuePtr(0) as a scalar,
+     * so an empty list is not represented as [] here. A null descriptor emits nothing.
+     */
     virtual void serializeContent(JsonObject o);
 };
 
 /**
- * Address-only entry for configuration fields without selectable choices.
+ * @brief Address-only entry for configuration fields without selectable choices.
+ *
  * Overrides content serialization to omit values, despite reporting size zero.
  * Does not store the interface's actual configured value.
  */
 class ConfigDataSet : public DataSet{
   public:
+    /**
+     * @brief Initialize ConfigDataSet and its configured member bindings.
+     */
     ConfigDataSet(Address* addr, const String& name, DataRepository* targetRepo = nullptr)
       : DataSet(addr, name, targetRepo) {}
 
+    /**
+     * @brief Return zero because this entry describes an address without a choice list.
+     */
     virtual uint16_t getSize() { return 0; }
+    /**
+     * @brief Return an empty placeholder; no configuration value is stored here.
+     */
     virtual const String* getValuePtr(uint16_t) { return &emptyString; }
+    /**
+     * @brief Export only the address, deliberately omitting a values field.
+     */
     virtual void serializeContent(JsonObject o) {
       if (address == nullptr) return;
       o["address"] = address->pattern;
@@ -180,19 +233,35 @@ class ConfigDataSet : public DataSet{
 };
 
 /**
- * Non-owning dataset registry keyed by provider name and address pattern.
+ * @brief Non-owning dataset registry keyed by provider name and address pattern.
+ *
  * Serializes entries grouped by provider; does not delete entries or enforce
  * unique keys. Lookup returns the first match. Entries must remain valid in use.
  */
 class DataRepository{
   public:
+    /**
+     * @brief Initialize DataRepository and its configured member bindings.
+     */
     DataRepository(){}
 
+    /**
+     * @brief Locate a borrowed dataset by position or by provider/address pattern.
+     *
+     * Name-based lookup returns the first match. This registry does not enforce
+     * unique keys; callers must supply valid indices and live descriptors.
+     */
     DataSet* getDataSet(int i){
       if (i<size()) return dataSets[i];
       else return nullptr;
     }
 
+    /**
+     * @brief Locate a borrowed dataset by position or by provider/address pattern.
+     *
+     * Name-based lookup returns the first match. This registry does not enforce
+     * unique keys; callers must supply valid indices and live descriptors.
+     */
     DataSet* getDataSet(String provider, String address){
       for (uint8_t i=0;i<dataSets.size();i++){
         DataSet* ds = dataSets[i];        
@@ -203,10 +272,18 @@ class DataRepository{
       return nullptr;
     }
 
+    /** @brief Register a borrowed dataset pointer. */
     bool addDataSet(DataSet*);
+    /** @brief Remove a dataset pointer without deleting the dataset. */
     void removeDataSet(DataSet*);
   
 
+    /**
+     * @brief Group dataset contents under their provider names in the supplied object.
+     *
+     * Each provider contains an array of address/value entries; this avoids repeating
+     * the provider name inside every entry. Dataset storage is not copied into a cache.
+     */
     void serialize(JsonObject jsonByProvider) {
       for (uint8_t i = 0; i < dataSets.size(); i++) {
         DataSet* ds = dataSets[i];
@@ -224,6 +301,7 @@ class DataRepository{
       }
     }
 
+    /** @brief Return the current number of entries. */
     int size(){
       return dataSets.size();
     }
@@ -231,14 +309,21 @@ class DataRepository{
   private:
     std::vector<DataSet*> dataSets;
 
-}dataRepo,    // used by skeletons, Shortcuts
-IFdataRepo; // used by Interfaces
+}dataRepo,    ///< used by skeletons, Shortcuts
+IFdataRepo; ///< used by Interfaces
 
+/**
+ * @brief Register this dataset in the supplied repository, or dataRepo by default.
+ *
+ * The address/repository pointers are borrowed. Destruction unregisters this
+ * dataset; the registry does not own or delete it.
+ */
 DataSet::DataSet(Address* addr, const String& _name, DataRepository* targetRepo): address(addr), name(_name) {
     repo = targetRepo ? targetRepo : &dataRepo;
     repo->addDataSet(this);
 };
 
+/** @brief Release resources held by this object. */
 DataSet::~DataSet() {
   if (repo){
     repo->removeDataSet(this);
@@ -246,6 +331,12 @@ DataSet::~DataSet() {
 };
 
 
+/**
+ * @brief Export an address and its current values using the legacy wire format.
+ *
+ * A positive size creates a values array. Zero reads getValuePtr(0) as a scalar,
+ * so an empty list is not represented as [] here. A null descriptor emits nothing.
+ */
 void DataSet:: serializeContent(JsonObject o) {
   if (address == nullptr) return;
 
@@ -267,6 +358,7 @@ void DataSet:: serializeContent(JsonObject o) {
 }
 
 
+/** @brief Export this object using its JSON representation. */
 JsonObject DataSet:: serialize(JsonObject o) {
   o["provider"] = name;
   serializeContent(o);
@@ -275,7 +367,8 @@ JsonObject DataSet:: serialize(JsonObject o) {
 
 
 /**
- * Non-owning adapter exposing one provider address as a DataSet.
+ * @brief Non-owning adapter exposing one provider address as a DataSet.
+ *
  * Reads are forwarded without caching. Construction requires a non-null provider;
  * reads also require a valid descriptor. Later null guards do not make a null
  * provider safe at construction. Returned strings still belong to the provider.
@@ -284,15 +377,21 @@ class DynamicDataSet : public DataSet{
   public:
     DataProvider* dataProvider;    
 
+    /**
+     * @brief Initialize DynamicDataSet and its configured member bindings.
+     */
     DynamicDataSet(Address* addr, DataProvider* dp, DataRepository* targetRepo = nullptr)
       : dataProvider(dp),
         DataSet(addr, dp->dataProviderName, targetRepo) {}
 
-    // Ensure dataProvider is valid before accessing it
+    /**
+     * @brief Ensure dataProvider is valid before accessing it
+     */
     virtual uint16_t getSize() {
         return (dataProvider) ? dataProvider->getSize(address->pattern) : 0;
     }
 
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t i) {
         //DEBUG_PRINT("\tgetValuePtr(%d) provider: ",i);
         if (dataProvider == nullptr){
@@ -307,6 +406,7 @@ class DynamicDataSet : public DataSet{
 };
 
 
+/** @brief Register a borrowed dataset pointer. */
 bool DataRepository::addDataSet(DataSet* ds){
   dataSets.push_back(ds);
   /*String object = ds->object;
@@ -314,6 +414,7 @@ bool DataRepository::addDataSet(DataSet* ds){
   return true;
 }
 
+/** @brief Remove a dataset pointer without deleting the dataset. */
 void DataRepository::removeDataSet(DataSet* ds) {
   for (auto it = dataSets.begin(); it != dataSets.end(); ++it) {
     if (*it == ds) {  
@@ -326,7 +427,8 @@ void DataRepository::removeDataSet(DataSet* ds) {
 class SerializableParameters;
 
 /**
- * Collects borrowed SerializableParameters pointers for web editor templates.
+ * @brief Collects borrowed SerializableParameters pointers for web editor templates.
+ *
  * Serialization appends each template as a JSON string, not as a nested object.
  * No removal API exists: entries must remain alive while this registry is read.
  */
@@ -334,7 +436,13 @@ class JsonTemplateRepository{
   public:
     std::vector<SerializableParameters*> jsonTemplateRepo;
 
+    /**
+     * @brief Append each registered editor template as a JSON string.
+     *
+     * The input array belongs to the caller; registered template pointers are borrowed.
+     */
     void serialize(JsonArray* jsonTPLArray);
+    /** @brief Append an entry to this collection. */
     bool add(SerializableParameters* sd);
 
 }jsonInputRepo;
@@ -343,7 +451,8 @@ class JsonTemplateRepository{
 #define DATASET_PROPERTIES "properties"
 
 /**
- * Publishes an object's ordered field descriptors and registers its web template.
+ * @brief Publishes an object's ordered field descriptors and registers its web template.
+ *
  * Borrows descriptors and repo. Optional auto-registration creates address-only
  * ConfigDataSets; these entries are tracked and deleted on unregister/destruction,
  * but descriptors are never deleted. Current deletion through DataSet* retains
@@ -356,6 +465,7 @@ class SerializableParameters {
     String name;
     String group;
 
+    /** @brief Initialize SerializableParameters with the supplied configuration and bindings. */
     SerializableParameters(const String& n, const String& g, DataRepository* r, bool autoRegisterConfigDataSets = false)
       : name(n),
         group(g),
@@ -364,6 +474,12 @@ class SerializableParameters {
           jsonInputRepo.add(this);          
         }
 
+    /**
+     * @brief Delete automatically created configuration entries, leaving descriptors borrowed.
+     *
+     * @note Current deletion uses DataSet*, whose destructor is non-virtual.
+     * The template pointer also remains registered in jsonInputRepo after destruction.
+     */
     virtual ~SerializableParameters() {
       for (DataSet* ds : ownedDataSets) {
         delete ds;
@@ -371,6 +487,12 @@ class SerializableParameters {
       ownedDataSets.clear();
     }
 
+    /**
+     * @brief Add a borrowed descriptor to the ordered editor template.
+     *
+     * If automatic configuration datasets are enabled, create and track an address-only
+     * ConfigDataSet as well. Descriptor order matters for strip selection properties.
+     */
     bool registerDataSetAddress(Address* address){
       parameterAddresses.push_back(address);
       if (registerConfigDataSets) {
@@ -379,6 +501,7 @@ class SerializableParameters {
       return true;
     }
 
+    /** @brief Remove the descriptor and its automatically created configuration dataset. */
     bool unregisterDataSetAddress(Address* address) {
 
       if (!address) {
@@ -414,6 +537,7 @@ class SerializableParameters {
     
 
 
+    /** @brief Return a borrowed parameter descriptor, or nullptr for an invalid index. */
     Address* getDataSetAddress(size_t index) const {
       if (index >= parameterAddresses.size()){
         return nullptr;
@@ -421,6 +545,7 @@ class SerializableParameters {
       return parameterAddresses[index];
     }
 
+    /** @brief Export this object using its JSON representation. */
     String serialize(){
       JsonDocument jsonDoc;
       JsonObject root = jsonDoc.to<JsonObject>();
@@ -431,7 +556,9 @@ class SerializableParameters {
       return data;
     }
 
-    // Derived classes may extend this editor template.
+    /**
+     * @brief Derived classes may extend this editor template.
+     */
     virtual void serialize(JsonObject& json) {
         json[name] = group;
 
@@ -443,6 +570,7 @@ class SerializableParameters {
         }
     }
     
+    /** @brief Return a borrowed choice label for the requested index. */
     const String* getValuePtr(String provider, String address, uint8_t index){
       const String *retVal = &emptyString;
 
@@ -464,10 +592,15 @@ class SerializableParameters {
     bool registerConfigDataSets = false;
 
     protected:
-      char* buf;    //used for serialization
+      char* buf;    ///< used for serialization
 
 };
 
+/**
+ * @brief Append each registered editor template as a JSON string.
+ *
+ * The input array belongs to the caller; registered template pointers are borrowed.
+ */
 void JsonTemplateRepository::serialize(JsonArray* jsonTPLArray){
       for (uint8_t i=0;i<jsonTemplateRepo.size();i++){
         SerializableParameters* jsonTPL = jsonTemplateRepo[i];
@@ -475,23 +608,32 @@ void JsonTemplateRepository::serialize(JsonArray* jsonTPLArray){
       }
     };
 
+/** @brief Append an entry to this collection. */
 bool JsonTemplateRepository::add(SerializableParameters* sd){
       jsonTemplateRepo.push_back(sd);
       return true;
     };
 
 /**
- * File-backed choice dataset using JsonListFile storage.
+ * @brief File-backed choice dataset using JsonListFile storage.
+ *
  * reload() clears entries and loads WEBAPP_PATH/filename.gz, adding a fallback
  * entry on failure. Exposes entry names rather than their associated payloads.
  * Treat borrowed name pointers as invalid after reload or storage mutation.
  */
 class WebLibrary : public DataSet, public JsonListFile{
   public:
+    /** @brief Initialize WebLibrary with the supplied configuration and bindings. */
     WebLibrary(String _filename, Address* _address, String _provider): filename(_filename), DataSet(_address, _provider){ 
       reload();      
     }      
 
+    /**
+     * @brief Replace library choices by loading WEBAPP_PATH/filename.gz.
+     *
+     * Clear old entries first. On load failure, add a fallback name/error entry.
+     * Borrowed entry-name pointers must not be retained across this replacement.
+     */
     bool reload(){      
       clean();      
       String fullFilePathName = concatStrings(WEBAPP_PATH,"/",filename,".gz");
@@ -500,11 +642,13 @@ class WebLibrary : public DataSet, public JsonListFile{
       return success;
     }
 
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t index){           
       if (index>getSize()-1) return &errorDatasetOOR;
       return getName(index);    
     }  
 
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(){
       return size();                //number of pair k/v loaded from the file
     }
