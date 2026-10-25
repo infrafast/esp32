@@ -66,9 +66,15 @@ jobs:
       # Enable only after selecting GitHub Actions in Settings > Pages.
       - name: Prepare Pages artifact
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DOCS_PUBLISH_PAGES == 'true'
-        uses: actions/upload-pages-artifact@v3
+        run: tar --dereference --hard-dereference --directory build/doxygen/html -cf "$RUNNER_TEMP/artifact.tar" .
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DOCS_PUBLISH_PAGES == 'true'
+        uses: actions/upload-artifact@v6
         with:
-          path: build/doxygen/html
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DOCS_PUBLISH_PAGES == 'true'
