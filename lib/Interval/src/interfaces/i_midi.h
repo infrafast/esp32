@@ -1,3 +1,8 @@
+/**
+ * @file i_midi.h
+ * @brief MIDI transports over Bluetooth, USB, serial and AppleMIDI.
+ */
+
 #ifndef I_MIDI_h
 #define I_MIDI_h
 
@@ -30,6 +35,9 @@ enum{
   //...
 };
 
+/**
+ * @brief MIDI event fields delivered to interface consumers.
+ */
 struct MidiData{
   uint8_t type = MIDI_CC;
   byte channel = 0;
@@ -40,20 +48,37 @@ struct MidiData{
 };
 
 #ifndef PROD
+  /**
+   * @brief Fallback USB MIDI API used by builds without the native implementation.
+   */
   class USBMIDISimul{
     public:
+      /**
+       * @brief Initialize USBMIDISimul and its configured member bindings.
+       */
       USBMIDISimul(){}
+      /** @brief Send a MIDI note-on message through this transport. */
       void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendNoteOn(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
+      /** @brief Send a MIDI note-off message through this transport. */
       void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendNoteOff(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
+      /** @brief Send a MIDI program-change message through this transport. */
       void sendProgramChange(DataByte inProgramNumber,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendProgramChange(%d,%d)\t",inProgramNumber,inChannel);}
+      /** @brief Send a MIDI control-change message through this transport. */
       void sendControlChange(DataByte inControlNumber,DataByte inControlValue,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendControlChange(%d,%d,%d)\t",inControlNumber,inControlValue,inChannel);}
+      /** @brief Send a MIDI system-exclusive message through this transport. */
       bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries=false){
         DEBUG_INFO("\tUSBMIDI::sendSysEx(%u,[", inLength);
         for (unsigned i=0;i<inLength;i++) DEBUG_INFO("%02X", inArray[i]);
         DEBUG_INFO("],%d)\t", inArrayContainsBoundaries ? 1 : 0);
         return true;
       }
+      /** @brief Register the callback used by the wrapped MIDI/session API. */
       void setHandleSystemExclusive(SystemExclusiveCallback fptr) { DEBUG_INFO("\tUSBMIDI::setHandleSystemExclusive(f*)\t");}
+      /**
+       * @brief Placeholder hook; no active operation in this implementation.
+       *
+       * @return Always false.
+       */
       bool read(){return false;}
   }usbMIDI;
 #else
@@ -64,11 +89,17 @@ struct MidiData{
 #endif
 
 
+/**
+ * @brief Base MIDI interface with message events and queued payload copies.
+ */
 class MIDIInterface: public DeviceInterface{
   #define GROUP_INTERFACE_MIDI "MIDI"
   public:
 
     #define MAX_SYSEX_SIZE 256
+    /**
+     * @brief Stored copy of a MIDI message for deferred processing.
+     */
     struct MidiDataCopy{
       uint8_t type = MIDI_CC;
       byte channel = 0;
@@ -80,26 +111,33 @@ class MIDIInterface: public DeviceInterface{
 
     bool dataAvailable = false;
 
+    /** @brief Initialize MIDIInterface with the supplied configuration and bindings. */
     MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
       message.attachData(&midiDataCopy); // this interface is sending midi data directly to the strip so we attach the midiDataCopy to the message event, this way we can reuse the same event for all kind of midi messages and just check the content of the midiDataCopy to know what to do with it in the strip (for example if it is a note on or a sysex)  
     }     
 
+    /** @brief Send a MIDI system-exclusive message through this transport. */
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) = 0;
+    /** @brief Send a MIDI note-on message through this transport. */
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
+    /** @brief Send a MIDI note-off message through this transport. */
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) = 0;
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     static void handleSysexStatic(byte* data, unsigned length) {
       if (baseInstancePtr) {
           baseInstancePtr->handleSysex(data,length);
       }
     }
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     static void handleChangeControlStatic(byte channel, byte number, byte value){
         if (baseInstancePtr) {
             baseInstancePtr->handleChangeControl(channel,number,value);
         }      
     }
 
+    /** @brief Poll the interface connection and process pending data. */
     virtual bool monitor() override{  
       if (dataAvailable){
         fireEvent(message);     // will be processed by strip that are registered to this interface event
@@ -109,6 +147,7 @@ class MIDIInterface: public DeviceInterface{
       return false; // no data processed
     }
 
+    /** @brief Copy or dispatch a received control-change message. */
     virtual void handleChangeControl(byte channel, byte number, byte value){
       DEBUG_INFO("handleChangeControl channel:%i, number:%i value:%i",channel,number,value);
 
@@ -122,6 +161,7 @@ class MIDIInterface: public DeviceInterface{
 
     }
 
+    /** @brief Copy or dispatch a received SysEx message for strip consumers. */
     virtual void handleSysex(byte* sysexdata, unsigned length){
       DEBUG_INFO("handleSysex: %c, %i bytes: ",getSysExStatus(sysexdata, length),length);
 
@@ -150,6 +190,7 @@ class MIDIInterface: public DeviceInterface{
     } 
 
 
+    /** @brief Interpret the received SysEx message status. */
     char getSysExStatus(const byte* data, uint16_t length){
       if (!data || length==0) return 'E';
       if (data[0]==0xF0 && data[length-1]==0xF7) return 'F';
@@ -158,6 +199,7 @@ class MIDIInterface: public DeviceInterface{
       return 'M';
     }    
 
+    /** @brief Prepare this object for use with its current configuration. */
     void init(){
       baseInstancePtr = this;
       //set the interface data pointer to the midi data structure
@@ -169,31 +211,40 @@ class MIDIInterface: public DeviceInterface{
 
 
 #define BLE_CONNECTION_NAME INTERVAL_MANUFACTURER
+/** @brief Instantiate the Bluetooth MIDI transport used by BLEMIDIInterface. */
 BLEMIDI_CREATE_INSTANCE(BLE_CONNECTION_NAME, bleMIDI);
 
 #define BLEMIDI_INTERFACE "BLEMIDI"
+/**
+ * @brief Bluetooth Low Energy MIDI transport.
+ */
 class BLEMIDIInterface: public MIDIInterface{
 
   public:  
 
+    /** @brief Initialize BLEMIDIInterface with the supplied configuration and bindings. */
     BLEMIDIInterface(bool _configurable):MIDIInterface(BLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_BLEMIDI;
     }
 
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(String addrr){
       return 0;
     }
     
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(String addrr, uint16_t index){
       return &emptyString;
     }
 
+    /** @brief Poll the interface connection and process pending data. */
     virtual bool monitor() override{           
       if (state.label == IF_STATE_CONNECTED) 
         bleMIDI.read(); // maybe remove the if as read() may calls the connect and disconnect callbacks ? (as appleMidi)
       return MIDIInterface::monitor();
     }
 
+    /** @brief Start this interface using its current configuration. */
     virtual bool begin(){
       DEBUG_INFO("%s::begin()",interfaceName.c_str());          
       MIDIInterface::init();  
@@ -207,7 +258,7 @@ class BLEMIDIInterface: public MIDIInterface{
       // workaround: remove the 2 lines below once stop is implemeted correctly. This workaround force to set the interface to enable
       state.switchable = false;  // we cant desactivate the interface  until the stop() is properly implemented
       state.enabled = true;  
-      /////////////////////////
+      ////////////////////////
 
       if (!hasBegun){
         if (state.enabled){
@@ -225,12 +276,14 @@ class BLEMIDIInterface: public MIDIInterface{
       return true;
     }
 
+    /** @brief End the interface session and release its active connection. */
     virtual bool end() override{
       DEBUG_INFO("%s::end()",interfaceName.c_str());          
       //setStateRestart();  // as we cant really stop the BLE MIDI, we just set the state to not ready and ask the user to connect the BLE MIDI to make it work again, this is not ideal but at least it avoid having a wrong state until the next connection attempt
       return true;
     }
 
+    /** @brief Stop the active operation or connection. */
     virtual bool stop() override{
       DEBUG_INFO("%s::stop()",interfaceName.c_str());          
       auto transport = bleMIDI.getTransport();  // ✅ On récupère le transport BLE
@@ -250,11 +303,13 @@ class BLEMIDIInterface: public MIDIInterface{
       return false;    
     }     
 
+    /** @brief React to transport/session connection and update interface status. */
     void handleConnected() {
       DEBUG_INFO("%s::handleConnected()",interfaceName.c_str());          
       setStateReady();
     }    
 
+    /** @brief React to transport/session loss and update interface status. */
     void handleDisconnected() {
       DEBUG_INFO("%s::handleDisconnected()",interfaceName.c_str());          
       if (state.enabled) setStatePending();
@@ -262,26 +317,31 @@ class BLEMIDIInterface: public MIDIInterface{
     }
 
 
+    /** @brief Set the interface status to ready. */
     void setStateReady(){            
       DeviceInterface::setStateReady("blue",lang.getString("paired")->c_str());
     }
 
+    /** @brief Set the interface status to pending. */
     void setStatePending(){
       DeviceInterface::setStatePending("blue medium",concatStrings(*lang.getString("Connect Blutooth"), " ", BLE_CONNECTION_NAME).c_str());
     } 
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     static void handleConnectedStatic() {
         if (bleInstancePtr) {
             bleInstancePtr->handleConnected();
         }
     }
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     static void handleDisconnectedStatic() {
         if (bleInstancePtr) {
             bleInstancePtr->handleDisconnected();
         }
     } 
 
+    /** @brief Send a MIDI system-exclusive message through this transport. */
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
       DEBUG_INFO("BLEMIDIInterface::sendSysex(%i) ",inLength);
       if (state.code == IF_READY) bleMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);      
@@ -289,6 +349,7 @@ class BLEMIDIInterface: public MIDIInterface{
       return true; 
     }
 
+    /** @brief Send a MIDI note-on message through this transport. */
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
       DEBUG_INFO("\nBLEMIDIInterface::sendNoteOn(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
       if (state.code == IF_READY) bleMIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);      
@@ -296,6 +357,7 @@ class BLEMIDIInterface: public MIDIInterface{
       return true; 
     }
 
+    /** @brief Send a MIDI note-off message through this transport. */
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
       DEBUG_INFO("\tnBLEMIDIInterface::sendNoteOff(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
       if (state.code == IF_READY) bleMIDI.sendNoteOff(inNoteNumber,inVelocity,inChannel);      
@@ -310,14 +372,19 @@ class BLEMIDIInterface: public MIDIInterface{
 
 #define USBMIDI_INTERFACE "USBMIDI"
 
+/**
+ * @brief USB MIDI transport selected by the firmware build.
+ */
 class USBMIDIInterface: public MIDIInterface{
 
   public:  
 
+    /** @brief Initialize USBMIDIInterface with the supplied configuration and bindings. */
     USBMIDIInterface(bool _configurable):MIDIInterface(USBMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_USBMIDI;  
     }
 
+    /** @brief Poll the interface connection and process pending data. */
     virtual bool monitor() override{
       
       if (useUSBMidi){  // only if USB is active
@@ -341,6 +408,7 @@ class USBMIDIInterface: public MIDIInterface{
 
     }
 
+    /** @brief Set the interface status to restart required. */
     void setStateRestart(){
       DEBUG_INFO("%s::setStateRestart()",interfaceName.c_str());
       state.code = IF_NOT_READY;
@@ -351,6 +419,7 @@ class USBMIDIInterface: public MIDIInterface{
       state.progress = -1;
     }
 
+    /** @brief Start this interface using its current configuration. */
     virtual bool begin() override{
       DEBUG_INFO("%s::begin()",interfaceName.c_str());
       MIDIInterface::init();
@@ -365,22 +434,26 @@ class USBMIDIInterface: public MIDIInterface{
       return true;
     }
 
+    /** @brief End the interface session and release its active connection. */
     virtual bool end() override{
       DEBUG_INFO("%s::end()",interfaceName.c_str());
       //setStateRestart();  // as we cant really stop the USB MIDI, we just set the state to not ready and ask the user to plugin the USB MIDI to make it work again, this is not ideal but at least it avoid having a wrong state until the next connection attempt
       return true;
     }
 
+    /** @brief Send a MIDI note-on message through this transport. */
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){      
       usbMIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);
       return true;
     }  
 
+    /** @brief Send a MIDI note-off message through this transport. */
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
       usbMIDI.sendNoteOff(inNoteNumber,inVelocity,inChannel);
       return true;
     }
 
+    /** @brief Send a MIDI system-exclusive message through this transport. */
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){    
       DEBUG_INFO("USBMIDI::sendSysex(%i) ",inLength);      
       usbMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);
@@ -394,31 +467,53 @@ class USBMIDIInterface: public MIDIInterface{
 
 
 #define DINMIDI_INTERFACE "DINMIDI"
+/**
+ * @brief Serial MIDI transport for the physical MIDI connection.
+ */
 class DINMIDIInterface: public MIDIInterface{
   #define CONFIG_DIN "voidUSBparam"
   public:
+    /** @brief Initialize DINMIDIInterface with the supplied configuration and bindings. */
     DINMIDIInterface(bool _configurable):MIDIInterface(DINMIDI_INTERFACE,GROUP_INTERFACE_MIDI,_configurable){
       icon = ICON_DINMIDI;
       state.switchable = false;
     }
 
+    /** @brief Start this interface using its current configuration. */
     virtual bool begin(){     // called by init()
       setStateNotImplemented();
       return true;
     };        
 
+    /** @brief End the interface session and release its active connection. */
     virtual bool end() override{
       DEBUG_INFO("%s::end()",interfaceName.c_str());          
       //setStateRestart();  // as we cant really stop the DIN MIDI, we just set the state to not ready and ask the user to connect the DIN MIDI to make it work again, this is not ideal but at least it avoid having a wrong state until the next connection attempt
       return true;
     };
 
+    /** @brief Poll the interface connection and process pending data. */
     virtual bool monitor() override{
       return MIDIInterface::monitor();      
     }
 
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always false.
+     */
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override {return false;}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always false.
+     */
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) override {return false;}
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always false.
+     */
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel) override {return false;}    
 
 };
@@ -431,6 +526,9 @@ enum{
 #define APPLEMIDI_INTERFACE "AppleMIDI"
 #define APPLEMIDI_SESSIONS_NUMBER   MAX_RTP_DIR_ENDPOINTS+1     // the dropdown will contains as many sessions as there are RTP endpoints + 1 for "passive"
 
+/**
+ * @brief Label and value of an AppleMIDI session-mode choice.
+ */
 struct SessionOptions{
   
   int count = 0;
@@ -438,23 +536,32 @@ struct SessionOptions{
 
 #define ADDRESS_APPLEMIDISESSION   "/session/%s"
 #define PASSIVE_SESSION_NAME "passive"
+/**
+ * @brief Dataset of AppleMIDI session configuration choices.
+ */
 class AppleMidiSessionType : public DataSet{
   
   public:
     uint16_t count = 0;
-    String name[APPLEMIDI_SESSIONS_NUMBER+2]; //+2 because of the saved session than comes in addition and the "passive" entry
+    String name[APPLEMIDI_SESSIONS_NUMBER+2]; ///< +2 because of the saved session than comes in addition and the "passive" entry
 
+    /**
+     * @brief Initialize AppleMidiSessionType and its configured member bindings.
+     */
     AppleMidiSessionType(Address* _address): DataSet(_address, APPLEMIDI_INTERFACE, &IFdataRepo){}
     
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t index){
       if (index>getSize()-1) return &errorDatasetOOR;
       return &name[index];    
     }  
 
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(){
       return count;
     }
 
+    /** @brief Add a choice only when it is not already present. */
     bool addIfNotExists(const String& value) {
 
       // Vérifier si déjà présent
@@ -479,6 +586,9 @@ class AppleMidiSessionType : public DataSet{
 };
 
 
+/**
+ * @brief RTP-MIDI transport with discovery, invitations and session monitoring.
+ */
 class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
   #define CONFIG_APPLE "voidAppleMidiParam"
   #define SESSION_DESC_LENGHT 128
@@ -490,12 +600,12 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     Event evt;
 
     AppleMidiSessionType dsAppleMidiSessions = AppleMidiSessionType(new DropDownAddress(ADDRESS_APPLEMIDISESSION));
-    RtpDirectory* rtpDirectory = nullptr;     // directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
+    RtpDirectory* rtpDirectory = nullptr;     ///< directory of rtp end point populated by the application that we will expose to the user via configuration drop down so he can pick up one
     
     State savedState;
 
     String midiSessionName = PASSIVE_SESSION_NAME;
-    int sessionType = APPLEMIDI_PASSIVE; // 0:passive, 1:active
+    int sessionType = APPLEMIDI_PASSIVE; ///< 0:passive, 1:active
 
     int rtpPort = 5004;;
     
@@ -507,6 +617,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     } */   
 
 
+    /** @brief Initialize AppleMIDIInterface with the supplied configuration and bindings. */
     AppleMIDIInterface(bool _configurable): MIDIInterface(APPLEMIDI_INTERFACE,GROUP_INTERFACE_MIDI, _configurable){
       icon = ICON_APPLEMIDI;
       attachDeviceInterface(this);
@@ -519,9 +630,11 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     ~AppleMIDIInterface(){
     }    
 
+    /** @brief Start this interface using its current configuration. */
     virtual bool begin() override{      
       DEBUG_INFO("AppleMIDIInterface::begin() => self registering to network event + basePtr affectation");
       MIDIInterface::init();
@@ -531,11 +644,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       return true;      
     }
 
+    /** @brief Stop the active operation or connection. */
     virtual bool stop() override{          // disconnect the network for network interface
       DEBUG_INFO("%s::stop()",interfaceName.c_str());
       return handleDisconnectService();
     };   
 
+    /** @brief End the interface session and release its active connection. */
     virtual bool end() override{
       DEBUG_INFO("AppleMIDIInterface::end()");
       //switchDevice(DEVICE_OFF);     // disable the device completely
@@ -543,6 +658,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       return true;
     }    
 
+    /** @brief Ask the discovery service to refresh available MIDI endpoints. */
     void requestDirectoryRefresh(){
       if (state.enabled == false) return;
       // trigger application manager to call discovery.discoveryRequest()
@@ -558,11 +674,13 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       fireEvent(evt);            
     }
 
+    /** @brief Refresh the configuration choices or status exposed to consumers. */
     virtual void handleRequestRefreshState(){    
       DEBUG_INFO("%s::handleRequestRefreshState()",interfaceName.c_str());  
       requestDirectoryRefresh();
     }
 
+    /** @brief Handle relevant incoming events for this component. */
     void onEvent(const Event& evt) override {
       // recive the event propagated from Appmanager
       switch(evt.type){
@@ -577,7 +695,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
         case EVENT_DIRECTORY_NOT_READY:
           setSetDirectoryServiceDown();
         break;
-        ///////////////// from NetworkDevice => is needed because it will not be done via NetworkDevice
+        //////////////// from NetworkDevice => is needed because it will not be done via NetworkDevice
         case EVENT_NETWORK_DISCONNECTED:
           disable();
           break;
@@ -593,6 +711,12 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       }     
     }
 
+    /**
+     * @brief Combine session modes with currently discovered MIDI endpoints.
+     *
+     * The resulting dataset supplies the browser session choices. Discovery refresh
+     * can change these choices without changing the saved session configuration.
+     */
     void populateSessionOptions(){
       dsAppleMidiSessions.count = 0;
       dsAppleMidiSessions.name[dsAppleMidiSessions.count++] = PASSIVE_SESSION_NAME;   // first entry is always "passive"
@@ -616,6 +740,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
     }
 
+    /** @brief Build the displayed session choice from the saved address and mode. */
     String forgeSessionOptionFromProperties(){      
       // create the string that appears on the drop down from current properties
       // /sessions/session name (192.168.0.1:5004)
@@ -625,6 +750,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       else return concatStrings(midiSessionName, " (", destination.ip.toString(), ":", rtpPort, ")");  
     }
 
+    /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties(JsonArray& properties) override{   
       
       String sessionOptions = "";
@@ -658,6 +784,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       retour true
       Sinon, on applique le parsing normal "name (ip:port)".      
     */
+    /** @brief Decode a session choice into connection parameters. */
     bool parseSession(const char* input,
                       char* sessionOptions,
                       size_t sessionDescriptorSize,
@@ -733,6 +860,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
 
+    /** @brief React to changed connection settings, including reconnection when required. */
     virtual void handlePropertyChange(){
       DEBUG_INFO("%s::handlePropertyChange()",interfaceName.c_str());
       handleDisconnectService();  
@@ -740,6 +868,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
 
+    /** @brief Restore one property string and report whether its value changed. */
     virtual bool restoreProperty(const char* property) override{
 
       char sessionOptions[SESSION_DESC_LENGHT];
@@ -782,6 +911,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       return changed;
     }      
 
+    /** @brief Poll the interface connection and process pending data. */
     virtual bool monitor() override{
       dataProcessed = MIDIInterface::monitor();      
       dataProcessed |= monitorNetwork();      
@@ -789,6 +919,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
 
     #define MIDI_MONITORING_DELAY 15000   // should be bigger than the timeout of invite()
+    /** @brief Perform one service-specific connection and data-processing pass. */
     virtual bool monitorService() override{
       MidiClient* appleMidiClient = hwm.network->appleMidiClient;  
       
@@ -810,6 +941,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
     
     // Méthode de l'instance réellement appelée
+    /** @brief React to transport/session connection and update interface status. */
     void handleConnected(const ssrc_t& ssrc, const char* name) {
       DEBUG_INFO("appleMidi session #%i %s connected\n", ssrc, name);
       midiSessionName = String(name);
@@ -818,6 +950,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       // sendRealTime
     }    
 
+    /** @brief React to transport/session loss and update interface status. */
     void handleDisconnected(const ssrc_t& ssrc) {
       DEBUG_INFO("appleMidi session #%i disconnected\n", ssrc);
       if (state.enabled == false) setStateDisabled();
@@ -825,6 +958,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       lastInvite = 0;    // we reset the timer that controls the periodicity of the invites because in case of disconnection, we want to trigger a new session (invite or passive immediately to reconnect as soon as possible)
     }
 
+    /** @brief Send a MIDI system-exclusive message through this transport. */
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries) override{                  
       if (state.code == IF_READY) hwm.network->appleMidiClient->sendSysEx(inLength,inArray,inArrayContainsBoundaries);
       else return false;
@@ -832,12 +966,14 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     }
     
 
+    /** @brief Send a MIDI note-on message through this transport. */
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
       if (state.code == IF_READY) hwm.network->appleMidiClient->sendNoteOn(inNoteNumber,inVelocity, inChannel);
       else return false;
       return true;              
     };
 
+    /** @brief Send a MIDI note-off message through this transport. */
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){     
       if (state.code == IF_READY) hwm.network->appleMidiClient->sendNoteOff(inNoteNumber,inVelocity, inChannel);
       else return false;
@@ -846,24 +982,28 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     };
 
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     static void handleConnectedStatic(const ssrc_t& ssrc, const char* name) {
         if (appleInstancePtr) {
             appleInstancePtr->handleConnected(ssrc, name);
         }
     }
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     static void handleDisconnectedStatic(const ssrc_t& ssrc) {
         if (appleInstancePtr) {
             appleInstancePtr->handleDisconnected(ssrc);
         }
     }
 
+    /** @brief Bridge the callback/task entry to the responsible application or transport instance. */
     static void OnAppleMidiExceptionStatic(const ssrc_t& ssrc, const Exception& e, const int32_t value ){
         if (appleInstancePtr) {
             appleInstancePtr->OnAppleMidiException(ssrc,e,value);
         }      
     }    
 
+    /** @brief Handle an AppleMIDI error and reflect it in the interface status. */
     void OnAppleMidiException(const ssrc_t& ssrc, const Exception& e, const int32_t value ) {
       switch (e){
         case APPLEMIDI_NAMESPACE::Exception::BufferFullException:
@@ -913,10 +1053,12 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       //handleDisconnected(); is then called by the library
     }    
 
+    /** @brief Apply the requested enabled state through the interface lifecycle. */
     virtual void switchDevice(bool _enabled) override{
       switchNetworkService(_enabled);
     }   
 
+    /** @brief Set the interface status to passive MIDI session. */
     void setStatePassiveSession(){
       DEBUG_INFO("AppleMIDIInterface::setStatePassiveSession");      
       //"details": "footswitch (192.168.0.56/5004) ready to be invited",
@@ -942,6 +1084,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       );
     }
 
+    /** @brief Set the interface status to refreshing discovery. */
     void setStateRefreshing(){
       DEBUG_INFO("%s::setStateRefreshing()",interfaceName.c_str()); 
       state.details = "Getting things up to date...";   // retour semantique for the user, without changing the interface state
@@ -951,6 +1094,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       state.broadcastState = true; // no interface change but inform the webapp to force displaying the state details altought the code itself didn't change
     }
 
+    /** @brief Set the interface status to active MIDI session. */
     void setStateActiveSession(){
       DEBUG_INFO("%s::setStateActiveSession() to %s:%d",destination.host.c_str(),interfaceName.c_str(), rtpPort);  
 
@@ -972,12 +1116,14 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       );
     }
 
+    /** @brief Set the interface status to ready. */
     virtual void setStateReady(){
       DeviceInterface::setStateReady();
       state.details = concatStrings((midiSessionName)," ",*lang.getString("connected"));
       // + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");     
     }     
 
+    /** @brief Set the interface status to disconnected. */
     void setStateDisconnected() override{
       DeviceInterface::setStateDisconnected();       
       state.subState = destination.host;      
@@ -992,16 +1138,24 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       }
     }    
 
+    /** @brief Remember the current session state for a later restore. */
     void saveState(){
       savedState = state;            
       DEBUG_INFO("%s:saveState() : code:%d/%s/%s",interfaceName.c_str(),savedState.code,savedState.label.c_str(),state.details.substring(0,30).c_str());      
     }
 
+    /** @brief Restore the previously saved session state. */
     void recallState(){      
       state = savedState;
       DEBUG_INFO("%s:recallState() : code:%d/%s/%s",interfaceName.c_str(),state.code,state.label.c_str(),state.details.substring(0,30).c_str());      
     }
 
+    /**
+     * @brief Start an AppleMIDI session using the active UDP transport.
+     *
+     * Use the saved session mode/address and the network media to choose the concrete
+     * session wrapper; the common MidiClient API keeps callers transport-independent.
+     */
     void startSession(){      
       state.progress = -1;        // hide the progress bar      
       //populateSessionOptions();   // refresh the session descriptors in case the rtp directory has changed
@@ -1010,6 +1164,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       else setStatePassiveSession();
     }
 
+    /** @brief Start this service on the available network connection. */
     virtual bool handleConnectService() override{
       DEBUG_INFO("%s::handleConnectService()",name.c_str());
       // we connect the midi client to its callback
@@ -1036,6 +1191,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       return true;
     }
 
+    /** @brief Close this service and release its transport resources. */
     virtual bool handleDisconnectService() override{      
       DEBUG_INFO("%s::handleDisconnectService()",name.c_str());
       if (state.enabled == false) setStateDisabled();
