@@ -49,6 +49,16 @@ Read before making changes:
 - Emphasize rationale and maintenance-relevant details, such as ownership, units, protocol behavior, timing constraints, and trade-offs, when applicable.
 - Keep comments accurate when changing code. Prefer clear names and simple structure over compensating for unclear code with excessive comments. Code comments complement, but do not replace, the required updates to the project reference documents.
 
+
+## Doxygen comments and generated diagrams
+
+- Use Doxygen-compatible comments for file, class, and function/API documentation added or revised in project-owned C++ code: `/** ... */` or `///`, with a concise `@brief`. Use `@file` for file headers and `///<` for trailing member documentation when appropriate. Ordinary implementation notes may remain `//` comments.
+- Keep the language simple, practical and concise. Explain purpose first and include a concrete use example when useful. Give more detail for domain behavior and non-obvious algorithms: persistence formats and limits, updates, screen/subscreen selection, state-change detection, important events and ownership. Add `@param`, `@return`, `@note` or `@warning` only when they explain meaningful contracts; avoid boilerplate tags.
+- Keep documentation attached to the correct declaration and synchronized with signatures and behavior. Do not claim that all existing comments have been converted to Doxygen unless the requested scope has actually been checked. Do not convert unrelated files without a request.
+- Reuse `Doxyfile`, `.github/workflows/documentation.yml` and the existing VS Code task. Keep input paths, exclusions and workflow path filters current when changing source layout. See [generated reference operation](docs/architecture.md#7-generated-class-reference-and-diagrams).
+- Do not edit or commit generated HTML/SVG files under `build/doxygen/`, or introduce a parallel manually maintained class model. Generated references are disposable outputs and do not replace the authorized working documents.
+- For changes affecting documentation generation, run Doxygen with Graphviz when available and inspect representative class pages/diagrams and warnings. Otherwise state the limitation and retain pending validation in the roadmap; do not equate configuration checks or static diagrams with a successful firmware build or runtime validation.
+
 ## Reuse-first design and framework boundaries
 
 - Before implementing any change or new feature, inspect the existing capabilities, APIs, classes, and extension points. Apply this order: (1) reuse or compose existing behavior where sufficient; (2) improve or extend an existing abstraction when it falls short; (3) create a new abstraction only when neither option is suitable.
