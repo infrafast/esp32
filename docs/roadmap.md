@@ -147,6 +147,34 @@ Each ID is an actionable request: for example, **implement BUG-WEB-01**. Existin
 - **Requested change:** Make the existing owning base-pointer contract safe and audit related ownership without deleting borrowed Address objects.
 - **Acceptance:** Destroy each owned dataset through its actual ownership path; derived cleanup and repository removal each run once, without undefined behavior.
 
+#### BUG-DATA-03 — Make DataProvider polymorphic destruction safe
+
+- **Status:** To do. **Priority:** P2.
+- **Evidence:** [lib/Interval/src/DataManagement.h](../lib/Interval/src/DataManagement.h) — DataProvider declares virtual methods but no virtual destructor; deleting a derived provider through DataProvider* would be undefined behavior. Such deletion has not been demonstrated in active callers.
+- **Requested change:** Add a virtual default destructor and audit the actual creation/deletion paths without transferring ownership to DynamicDataSet.
+- **Acceptance:** Derived providers can be destroyed through their documented owning path with exactly one derived/base cleanup; dev/prod builds remain compatible.
+
+#### BUG-DATA-04 — Enforce DynamicDataSet provider lifetime
+
+- **Status:** To do. **Priority:** P2.
+- **Evidence:** [lib/Interval/src/DataManagement.h](../lib/Interval/src/DataManagement.h) — DynamicDataSet retains a non-owning DataProvider*; null checks do not protect against a destroyed provider. The constructor also dereferences dp to derive the dataset name without validating it.
+- **Requested change:** Specify and enforce provider-before-dataset lifetime or explicit deregistration/invalidation within the existing classes; ensure constructor prerequisites are checked or made impossible to violate. Avoid adding shared ownership unless a real caller requires it.
+- **Acceptance:** Create/destroy providers and associated datasets in supported orders, then serialize or query the repository: no use-after-free, invalid constructor dereference or stale registration; ownership remains unambiguous.
+
+#### BUG-DATA-05 — Guard repository lookups and dataset access
+
+- **Status:** To do. **Priority:** P2.
+- **Evidence:** [lib/Interval/src/DataManagement.h](../lib/Interval/src/DataManagement.h) — DataRepository::getDataSet(int) permits negative indices, lookups dereference ds->address without checking, DynamicDataSet::getSize() dereferences address, and SerializableParameters::getValuePtr() assumes repo is valid.
+- **Requested change:** Validate indices and nullable objects at access boundaries, or formally enforce non-null construction invariants; preserve existing lookup behavior for valid registrations.
+- **Acceptance:** Negative/out-of-range lookup, missing address/repository, and unavailable provider fail safely without invalid memory accesses; normal dataset serialization still works.
+
+#### BUG-DATA-06 — Use size-safe iteration for growing registries
+
+- **Status:** To do. **Priority:** P2.
+- **Evidence:** [lib/Interval/src/DataManagement.h](../lib/Interval/src/DataManagement.h) — DataRepository lookup/serialization and JsonTemplateRepository serialization use uint8_t counters while traversing std::vector-backed registries. With more than 255 entries, the counter may wrap and fail to terminate.
+- **Requested change:** Use size_t or the container's size type for all vector iterations; check index conversions at interfaces that genuinely require narrower types.
+- **Acceptance:** Synthetic registries containing 0, 255, 256 and more entries are traversed exactly once per entry, with no wraparound or hanging.
+
 ### Webapp / firmware HTTP server
 
 #### BUG-WEB-01 — Match the HTTP file-buffer allocator and deallocator
@@ -257,6 +285,18 @@ These are optimization or design assessments, not demonstrated memory savings or
 - **Status:** To assess.
 - **Observation:** [lib/Interval/src/DataManagement.h:302](https://github.com/infrafast/esp32/blob/679bafe8a8461f34d67096db16b2685835ae7c67/lib/Interval/src/DataManagement.h#L302) — Numerous datasets receive new Address objects while others borrow global addresses; ownership is not explicit. Many are startup-lifetime allocations, not proven recurring leaks.
 - **Scope and acceptance:** Document owned versus borrowed descriptors in existing classes, avoid duplicate descriptors and consider member/static storage where appropriate; enable teardown only with a valid ownership model and virtual destruction where needed.
+
+#### IMP-DATA-02 — Reduce DataProvider API String copies
+
+- **Status:** To assess.
+- **Observation:** [lib/Interval/src/DataManagement.h](../lib/Interval/src/DataManagement.h) — DataProvider::getSize/getValuePtr and DataRepository::getDataSet accept String arguments by value, potentially copying address/provider strings on repeated lookups.
+- **Scope and acceptance:** Inventory overrides and callers, then consider const String& inputs consistently where it reduces heap churn without changing the public data contract. Measure allocation count/latency for repeated GUI/strip lookups and compile dev/prod.
+
+#### IMP-DATA-03 — Clarify empty datasets and returned-pointer stability
+
+- **Status:** To assess.
+- **Observation:** [lib/Interval/src/DataManagement.h](../lib/Interval/src/DataManagement.h) — DataSet::serializeContent() treats getSize()==0 as a request for getValuePtr(0) and serializes a scalar, conflating an empty list with a scalar dataset. getValuePtr returns a borrowed const String* whose validity during mutation/reallocation is not specified.
+- **Scope and acceptance:** Inventory existing WebApp, ConfigDataSet, synchronized-mixer and strip consumers before changing JSON shape. Document or minimally refine scalar/collection semantics and pointer validity, including std::vector reallocation and concurrent refresh; preserve existing persisted/wire formats or provide explicit compatibility tests. Validate zero/one/multiple entries and mutation during consumption.
 
 ### Webapp / firmware responses
 
