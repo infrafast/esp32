@@ -16,7 +16,6 @@ GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
 SOURCE_BROWSER         = YES
 INLINE_SOURCES         = NO
-HTML_TIMESTAMP         = NO
 HTML_OUTPUT            = html
 GENERATE_TREEVIEW      = YES
 QUIET                  = YES

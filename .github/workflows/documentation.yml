@@ -27,26 +27,38 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install documentation tools
         run: sudo apt-get update && sudo apt-get install -y doxygen graphviz
       - name: Generate class reference and SVG diagrams
         run: |
           mkdir -p build/doxygen
           doxygen Doxyfile
-          test -s build/doxygen/html/index.html
-          test -s build/doxygen/html/annotated.html
-          find build/doxygen/html -name '*inherit_graph.svg' -print -quit | grep -q .
-          find build/doxygen/html -name '*coll_graph.svg' -print -quit | grep -q .
+      - name: Verify HTML and SVG output
+        shell: python
+        run: |
+          from pathlib import Path
+          root = Path("build/doxygen/html")
+          for name in ("index.html", "annotated.html"):
+              path = root / name
+              if not path.is_file() or path.stat().st_size == 0:
+                  raise SystemExit(f"Missing or empty HTML output: {path}")
+          # Doxygen may escape underscores in graph file names.
+          for kind in ("inherit", "coll"):
+              graphs = [p for p in root.glob(f"*{kind}*graph.svg") if p.stat().st_size]
+              if not graphs:
+                  raise SystemExit(f"No {kind} SVG diagrams found in {root}")
+              print(f"{kind}: {len(graphs)} diagrams; example: {graphs[0].name}")
       - name: Upload browsable reference
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v6
         with:
           name: class-documentation
           path: build/doxygen/html
           retention-days: 14
       - name: Upload parser warnings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: documentation-warnings
           path: build/doxygen/warnings.log
