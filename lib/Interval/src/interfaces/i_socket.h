@@ -1,3 +1,8 @@
+/**
+ * @file i_socket.h
+ * @brief WebSocket transport and queued socket events.
+ */
+
 #ifndef _I_SOCKET_h
 #define _I_SOCKET_h
 
@@ -5,6 +10,9 @@
 
 
 #define INTERFACE_SOCKET "NetworkSocket"
+/**
+ * @brief WebSocket device transport with queued connection/message events.
+ */
 class NetworkSocket: public NetworkDevice{
   public:
   
@@ -16,6 +24,9 @@ class NetworkSocket: public NetworkDevice{
   #define SOCKET_TX_QUEUE_SIZE 12
   #define SOCKET_TX_MESSAGE_SENT_AT_ONCE 8
 
+  /**
+   * @brief Owned socket-event text retained for deferred processing.
+   */
   struct SocketDataCopy {
     uint16_t length;
     char message[MAX_SOCKET_MESSAGE_LEN];
@@ -37,12 +48,17 @@ class NetworkSocket: public NetworkDevice{
 
   Event evtSock = Event(nullptr);
 
+    /**
+     * @brief Initialize NetworkSocket and its configured member bindings.
+     */
     NetworkSocket(String name=INTERFACE_SOCKET, String group=GROUP_INTERFACE_UTILS,String echoCommand="",int localP=8887,int remoteP=8888, bool exposed=false):NetworkDevice(name,group,localP,remoteP,echoCommand, exposed){
       //destination.host = "192.168.99.99"; 
     }
 
+    /** @brief Dispatch a received WebSocket message to the appropriate backend handler. */
     virtual void route(const char *message,uint16_t length) = 0;
 
+    /** @brief Perform one service-specific connection and data-processing pass. */
     virtual bool monitorService() override{   
 
       dataProcessed = false;
@@ -82,8 +98,10 @@ class NetworkSocket: public NetworkDevice{
       return dataProcessed;
     }  
 
+    /** @brief Start device-specific setup after the socket connection opens. */
     void virtual onSocketConnected() = 0; //called when socket connection has been established
 
+    /** @brief Handle relevant incoming events for this component. */
     void onEvent(const Event& evt) override {
       NetworkDevice::onEvent(evt);
       destination.lastRxTime = millis();   // do not query device immediately, let time for the state to stabilize
@@ -123,6 +141,7 @@ class NetworkSocket: public NetworkDevice{
       }
     }    
 
+    /** @brief Start this service on the available network connection. */
     virtual bool handleConnectService(){
       DEBUG_INFO("%s::handleConnectService()",interfaceName.c_str());
       if (hwm.network->clientSocketState() == WebSocketReadyState::OPEN){
@@ -133,6 +152,7 @@ class NetworkSocket: public NetworkDevice{
       }
     }
 
+    /** @brief Close this service and release its transport resources. */
     virtual bool handleDisconnectService(){
       DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
       destination.lastPingTx = millis();                                // do not make an immediate pulse check to avoid monitor() looping on connect/disconnect
@@ -142,6 +162,7 @@ class NetworkSocket: public NetworkDevice{
     }    
 
   protected:
+    /** @brief Copy an outgoing WebSocket message into the transmit queue. */
     bool enqueueSocketMessageTx(const char* message) {
       if (message == nullptr) return false;
 
@@ -183,6 +204,7 @@ class NetworkSocket: public NetworkDevice{
       return true;
     }
 
+    /** @brief Remove the next outgoing WebSocket message from its queue. */
     SocketDataCopy* dequeueSocketMessageTx() {
       if (queueCountTx == 0) return nullptr;
 
@@ -193,6 +215,7 @@ class NetworkSocket: public NetworkDevice{
       return out;
     }
 
+    /** @brief Send the queued WebSocket messages. */
     uint8_t flushSocketMessageTx() {
       if (hwm.network->clientSocketState() != WebSocketReadyState::OPEN) return 0;
       if (queueCountTx == 0) return 0;
@@ -221,6 +244,7 @@ class NetworkSocket: public NetworkDevice{
       return sent;
     }
 
+    /** @brief Discard queued outgoing WebSocket messages. */
     void clearSocketMessageTx() {
       queueHeadTx = 0;
       queueTailTx = 0;
@@ -228,6 +252,7 @@ class NetworkSocket: public NetworkDevice{
       lastSocketTxTime = 0;
     }
 
+    /** @brief Copy an incoming WebSocket event for deferred processing. */
     bool enqueueSocketMessageRx(const SocketData* data) {
     if (data == nullptr || data->message == nullptr) return false;
 
@@ -255,6 +280,7 @@ class NetworkSocket: public NetworkDevice{
     return true;
   }
 
+  /** @brief Remove the next queued incoming WebSocket event. */
   SocketDataCopy* dequeueSocketMessageRx() {
     if (queueCountRx == 0) {
       dataAvailable = false;
