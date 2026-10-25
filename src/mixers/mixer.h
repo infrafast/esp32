@@ -1,3 +1,8 @@
+/**
+ * @file mixer.h
+ * @brief Common mixer operations, identity and name synchronization.
+ */
+
 // without callback
 
 #ifndef MixerInterface_h
@@ -16,31 +21,53 @@
 
 class DataSetSynced;
 
+/**
+ * @brief Walks mixer name datasets and tracks metadata synchronization progress.
+ */
 class Synchronizer{
   public:
 
+    /**
+     * @brief Initialize Synchronizer and its configured member bindings.
+     */
     Synchronizer(){}   
 
     bool synced = false;
     bool syncRequestLocker = false;
     unsigned long lockStartTime = 0;    
 
-    uint16_t totalToSync = 0;   // sum of items to be synced
+    uint16_t totalToSync = 0;   ///< sum of items to be synced
     uint16_t syncedSoFar = 0;
-    uint8_t  dsIndex = 0;       // which dataset we are currently synchronizing
+    uint8_t  dsIndex = 0;       ///< which dataset we are currently synchronizing
 
+    /**
+     * @brief Restart synchronization of every registered name dataset.
+     *
+     * Restore placeholder names, clear the request lock and recount items to load.
+     */
     void reset();
+    /**
+     * @brief Advance metadata synchronization and report percentage completion.
+     *
+     * Only one dataset request is outstanding while locked; unlock after the reply
+     * or the one-second retry timeout. Skip names whose unsynchronized marker is
+     * gone, advance the dataset cursor, and combine progress across all datasets.
+     * @return Progress from 0 to 100; no datasets means synchronization is complete.
+     */
     int8_t update(/*uint16_t latency*/);
 
+    /** @brief Append an entry to this collection. */
     void add(DataSetSynced* ds){
        datasets.push_back(ds);
     }
 
+    /** @brief Pause further metadata requests until the reply or retry timeout. */
     void lockSyncRequest() {
       syncRequestLocker = true;
       lockStartTime = millis();
     }    
 
+    /** @brief Return the dataset awaiting synchronization, unless requests are locked. */
     DataSetSynced* getCurrent(){
       if (syncRequestLocker) return nullptr;    // we are locked so we do not provide the data set
       if (dsIndex >= datasets.size()) return nullptr;
@@ -55,6 +82,12 @@ class Synchronizer{
 
 #define UNSYNC_PATTERN "~"
 #define MAX_SYNC_DS_SIZE 48
+/**
+ * @brief Stores mixer names and exposes updates to configuration consumers.
+ *
+ * Stores at most 48 names. A leading ~ marks a placeholder awaiting synchronization;
+ * set() replaces it with a received/default name and publishes changed labels.
+ */
 class DataSetSynced : public DataSet {
   public:
     String names[MAX_SYNC_DS_SIZE];
@@ -64,26 +97,33 @@ class DataSetSynced : public DataSet {
     uint16_t size = 0;
     uint16_t maxSize = 0;
 
+    /** @brief Initialize DataSetSynced with the supplied configuration and bindings. */
     DataSetSynced(Address* adress, String name, String defVal, uint8_t _maxSize, Synchronizer* synchronizer)
       : DataSet(adress, name, &dataRepo), defaultName(defVal), maxSize(_maxSize) {
       init(maxSize);                  // one data by default
       synchronizer->add(this);  // self registration
     }
 
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize() override {
       return size;
     }
 
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t i) override {
       if (i < size) return &names[i];
       return &errorDatasetOOR;
     }
 
+    /**
+     * @brief Set the dataset size, capped at 48 entries, and restore placeholder names.
+     */
     void init(uint16_t newSize) {
       size = (newSize > MAX_SYNC_DS_SIZE) ? MAX_SYNC_DS_SIZE : newSize;
       clearValues();
     }
 
+    /** @brief Restore unsynchronized placeholder names and reset the dataset cursor. */
     void clearValues() {
       for (uint16_t i = 0; i < size; ++i) {
         names[i] = concatStrings(UNSYNC_PATTERN, defaultName, i + 1);
@@ -91,6 +131,12 @@ class DataSetSynced : public DataSet {
       syncStep = 0;
     }
 
+    /**
+     * @brief Store a synchronized name and notify the browser only when it changes.
+     *
+     * Indices are zero-based internally. Empty names receive the default label;
+     * outgoing address patterns use index+1 for the one-based device/UI address.
+     */
     void set(uint16_t index, const String& value) {
       if (index >= size) return;
 
@@ -118,11 +164,15 @@ class DataSetSynced : public DataSet {
     }
 };
 
+/**
+ * @brief Detected mixer name, model and network address.
+ */
 struct MixerIdentity {
     String name;
     String model;
     IPAddress ip;
 
+    /** @brief Compare the mixer identity fields. */
     bool equals(const MixerIdentity& other) const {
         return name == other.name &&
                model == other.model &&
@@ -130,6 +180,9 @@ struct MixerIdentity {
     }
 };
 
+/**
+ * @brief Common mixer capabilities and supported element counts.
+ */
 struct BaseMixerDefinition{
   uint8_t channelCount = 18;
   uint8_t busCount = 4 ;
@@ -150,35 +203,51 @@ struct BaseMixerDefinition{
 #define ADDRESS_MAIN_NAME "/mainname/%d"
 #define ADDRESS_DCA_NAME "/dcaname/%d"
 
+/** @brief Describe the mixer-name dropdown address used by strips and datasets. */
 inline DropDownAddress addressCHname(ADDRESS_CH_NAME);
+/** @brief Describe the mixer-name dropdown address used by strips and datasets. */
 inline DropDownAddress addressBUSname(ADDRESS_BUS_NAME);
+/** @brief Describe the mixer-name dropdown address used by strips and datasets. */
 inline DropDownAddress addressFXname(ADDRESS_FX_NAME);
+/** @brief Describe the mixer-name dropdown address used by strips and datasets. */
 inline DropDownAddress addressAUXname(ADDRESS_AUX_NAME);
+/** @brief Describe the mixer-name dropdown address used by strips and datasets. */
 inline DropDownAddress addressMAINname(ADDRESS_MAIN_NAME);
+/** @brief Describe the mixer-name dropdown address used by strips and datasets. */
 inline DropDownAddress addressDCAname(ADDRESS_DCA_NAME);
 
 
-// strip action / event
+/**
+ * @brief strip action / event
+ */
 enum{
   STRIP_REFRESH_VISIBLE
 };
 
 
+/**
+ * @brief Transport-independent mixer operations and shared values used by strips.
+ */
 class MixerBase {
 public:
+    /**
+     * @brief Association between a device interface and its mixer contract.
+     */
     struct Binding {
       DeviceInterface* device = nullptr;
       MixerBase* mixer = nullptr;
     };
 
-    /*
-    values shared between strips and mixers
-    */
+    /**
+     * @brief values shared between strips and mixers
+     */
     TwoIndexValueList allInput2MixbusValues;
     OneIndexValueList allBusMixValues;
     OneIndexValueList allChMainValues;  
 
-    // properties that are synced
+    /**
+     * @brief properties that are synced
+     */
     DataSetSynced* inputNamesDS = nullptr;
     DataSetSynced* mixbusNamesDS = nullptr;
     DataSetSynced* auxNamesDS = nullptr;
@@ -186,41 +255,59 @@ public:
     DataSetSynced* mainNamesDS = nullptr;
     DataSetSynced* dcaNamesDS = nullptr;
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual ~MixerBase() {}
 
-    // event system to decouple mixer implementation from strip management
-    JsonDocument payload;                     // data from the mixer
+    /**
+     * @brief event system to decouple mixer implementation from strip management
+     */
+    JsonDocument payload;                     ///< data from the mixer
 
-    // define if the mixer sends an echo after it receives a command, by default, it is the case
+    /**
+     * @brief define if the mixer sends an echo after it receives a command, by default, it is the case
+     */
     bool echoing = true;
 
-    //// pure virtual utilities ////
+    /// pure virtual utilities ////
     virtual bool restoreMixerProfile() = 0;
+    /** @brief Load mixer capabilities from the saved model definition. */
     virtual bool deserializeMixerDefinitionFromFile(const char* filename) = 0;    
 
-    //// pure virtual mixer methods called by the strips ////
-    // GETTERS
+    /** @brief Request one name using a zero-based synchronized-dataset index.
+     *
+     * / pure virtual mixer methods called by the strips ////
+     * GETTERS
+     */
     virtual void requestDSname(DataSetSynced*, uint8_t) = 0;          // used by datasync
     
-    // the following two one is the exception
+    /**
+     * @brief the following two one is the exception
+     */
     void requestCHname(uint8_t chIndex){
       requestDSname(inputNamesDS, chIndex-1);  // only -1 for requestDSname which is generic and expect index starting at 0
     }
 
+    /** @brief Request the name of a one-based bus id. */
     void requestBUSname(uint8_t busIndex){
       requestDSname(mixbusNamesDS, busIndex-1);  // only -1 for requestDSname which is generic and expect index starting at 0
     };
 
 
+    /** @brief Request the mute state of an input send to a bus. */
     virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) = 0;
+    /** @brief Request the mute state of a bus. */
     virtual void requestBUSmute(uint8_t busIndex) = 0;
+    /** @brief Request the level of an input send to a bus. */
     virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) = 0;
     // SETTERS
+    /** @brief Set the level of an input send to a bus using the backend value scale. */
     virtual void setCHBUSlevel(int chIndex, int busIndex, float level) = 0;
+    /** @brief Set the mute state of an input send to a bus. */
     virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) = 0;
 
-    ////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////
 
+    /** @brief Find the common mixer API bound to an interface, or nullptr if absent. */
     static MixerBase* fromDeviceInterface(DeviceInterface* interface){
       if (interface == nullptr) return nullptr;
       for (const Binding& binding : getBindings()){
@@ -230,6 +317,7 @@ public:
     }
 
   protected:
+    /** @brief Register the association between the transport interface and mixer API. */
     static void bindDeviceInterface(DeviceInterface* interface, MixerBase* mixer){
       if (interface == nullptr || mixer == nullptr) return;
 
@@ -247,6 +335,7 @@ public:
     }
 
   private:
+    /** @brief Return the shared registry linking device interfaces to mixer contracts. */
     static std::vector<Binding>& getBindings(){
       static std::vector<Binding> bindings;
       return bindings;
@@ -254,15 +343,24 @@ public:
 };
 
 
+/**
+ * @brief Combines the mixer contract with a concrete network transport.
+ *
+ * @tparam NetworkBase Transport implementing the NetworkDevice contract.
+ * Combines backend-independent mixer operations with OSC or WebSocket transport.
+ * Name datasets are synchronized before the backend enters its live state.
+ */
 template <typename NetworkBase>
 class MixerDevice : public NetworkBase, public MixerBase {
 public:
 
     // mixer definition
     MixerIdentity mixerID;
-    BaseMixerDefinition* mixerDef;  // implemented by derived class
+    BaseMixerDefinition* mixerDef;  ///< implemented by derived class
 
-    // this classes does all the work
+    /**
+     * @brief this classes does all the work
+     */
     Synchronizer synchronizer;
 
     WebApplicationService* webAppService;
@@ -273,6 +371,7 @@ public:
     unsigned long lastVisibleStripRefreshAt = 0;
       
     
+    /** @brief Initialize MixerDevice with the supplied configuration and bindings. */
     template<typename... Args>
     MixerDevice(Args&&... args)      
         : NetworkBase(std::forward<Args>(args)...){
@@ -301,16 +400,19 @@ public:
 
     }
     
+    /** @brief Return the provider key used to resolve configuration choices. */
     virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
 
-    ////////////////////////////////////////////////////// the setters always echo the command so other strips update themseleves using events
+    ///////////////////////////////////////////////////// the setters always echo the command so other strips update themseleves using events
     /*virtual void setCHBUSlevel(int chIndex, int busIndex, float level) = 0;
     virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) = 0;*/
-    //////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////
    
+    /** @brief Start backend-specific mixer identification and setup. */
     virtual void beginMixer() = 0;   // 
 
     //
+    /** @brief Start this interface using its current configuration. */
     bool begin() override {
       // NOTE:
       // In this template hierarchy, NetworkBase can be an abstract transport
@@ -337,7 +439,7 @@ public:
     };
 
     ////////////////////////////////// EVENT TRANSMISSION TO STRIPS SO THEY CAN UPDATE THEMSELVES ///////////////////
-    /*void fireChBusMixLevel(int ch, int bus, float level) {
+    / *void fireChBusMixLevel(int ch, int bus, float level) {
       payload[0] = STRIP_CH_BUS_MIX_LEVEL;
       payload[1] = ch;
       payload[2] = bus;
@@ -360,28 +462,32 @@ public:
       this->fireEvent(this->message);
     }*/
 
-    /////////////////////////////////////////////////////////////////////////////
-    ///////////////////////////// incoming data handlers ////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    //////////////////////////// incoming data handlers ////////////////////////
     // called by the mixers when data arrive and generically modify the values //
-    /////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    /** @brief Apply a received input-to-bus level to the shared value for that key pair. */
     void handleChBusMixLevel(int ch, int bus, float level) {
       TwoIndexValue* chBus = allInput2MixbusValues.get(ch,bus);       // retrieve the value based on the ch+bus key tupple
       if (chBus != nullptr) chBus->value = level;
       DEBUG_INFO("%s->handleChBusMixLevel(%i,%i,%.2f)",this->interfaceName.c_str(),ch,bus,level);      
     }       
 
+    /** @brief Apply a received channel-to-bus mute value to shared state. */
     void handleChBusMute(int ch, int bus, int on){
       TwoIndexValue* chBus = allInput2MixbusValues.get(ch,bus);
       if (chBus != nullptr) chBus->toggle = on;
       DEBUG_INFO("%s->handleChBusMute(%i,%i,%i)",this->interfaceName.c_str(),ch,bus,on);      
     }
 
+    /** @brief Apply a received bus mute value to shared state. */
     void  handleBusMute(int bus, int on){
       OneIndexValue* chBus = allBusMixValues.get(bus);
       if (chBus != nullptr) chBus->toggle = on;
       DEBUG_INFO("%s->handleBusMute(%i,%i)",this->interfaceName.c_str(),bus,on);      
     }
 
+    /** @brief Apply a received channel-to-main mute value to shared state. */
     void  handleChMainMute(int ch, int on){
       OneIndexValue* chMain = allChMainValues.get(ch);
       if (chMain != nullptr) chMain->toggle = on;
@@ -389,31 +495,42 @@ public:
     }
 
 
-    ///////////// helpers to build command path from id on template /////////////
+    //////////// helpers to build command path from id on template /////////////
     //construit la chaîne en remplaçant les placeholders %d et %s
+    /** @brief Format a protocol path containing one numeric index. */
     void buildPath1Int(char* destination, size_t bufferSize, int index, const char* pattern) {
         snprintf(destination, bufferSize, pattern, index);
     }   
     
+    /** @brief Format a protocol path containing two numeric indices. */
     void buildPath2Int(char* destination, size_t bufferSize, int index1, int index2, const char* pattern) {
         snprintf(destination, bufferSize, pattern, index1, index2);
     }      
 
 
-    //////////////////////////////////
+    /////////////////////////////////
+    /** @brief Ask visible strips to refresh values through the common mixer event. */
     void fireVisibleStripRefreshEvent() {
       payload[0] = STRIP_REFRESH_VISIBLE;
       this->fireEvent(this->message);
     }
 
       
-    /////////////////////////////////
+    ////////////////////////////////
 
+    /** @brief Perform backend subscriptions/setup after name synchronization completes. */
     virtual void postSync() = 0;
 
+    /**
+     * @brief Coordinate transport polling, mixer-name synchronization and strip refresh.
+     *
+     * When synchronization is active, request the current missing name and lock
+     * further requests until a response or timeout. Once complete, enter the live
+     * state and run backend postSync(). Periodic events ask visible strips for values.
+     */
     virtual bool monitor() override{                 
       
-      /////////// GESTION DE LA PROGRESSION DE SYNCHRO
+      ////////// GESTION DE LA PROGRESSION DE SYNCHRO
       if (this->state.label == IF_STATE_DATASYNCING) {
         // call synchronizer update to return global progress and sets all sync index        
         this->state.progress = synchronizer.update(/*this->destination.latency*/);    // wait latency between two request to avoid doubling them
@@ -448,6 +565,7 @@ public:
     }  
 
 
+    /** @brief Apply detected mixer identity and refresh model-dependent information. */
     void setMixer(String& name, String&model, IPAddress& ip) {
       //DEBUG_INFO("%s:setMixer(%s,%s,%s)",this->interfaceName.c_str(),name.c_str(),model.c_str(),ip.toString().c_str());
 
@@ -480,6 +598,7 @@ public:
 
     }
 
+    /** @brief Select model capabilities for the detected mixer. */
     void setModel(const char* model){
       DEBUG_INFO("%s:setModel(%s)",this->interfaceName.c_str(),model);
       if (mixerID.model != model){
@@ -496,6 +615,7 @@ public:
       }
     }
 
+    /** @brief Size and initialize name datasets from the active mixer definition. */
     void initDatasets(){      
       DEBUG_INFO("%s:initDatasets()",this->interfaceName.c_str());
       
@@ -511,6 +631,7 @@ public:
       synchronizer.reset();
     }   
 
+    /** @brief Apply a newly detected mixer identity. */
     void newMixer(const MixerIdentity& newMixer){
       DEBUG_INFO("%s:newMixer()🎛",this->interfaceName.c_str());            
       setModel(newMixer.model.c_str());
@@ -518,6 +639,7 @@ public:
       this->state.broadcastConfig = true;   // inform web app about the chnage of mixer
     }
 
+    /** @brief Set the interface status to waiting for mixer metadata. */
     void setStatePendingDataSync(){
       NetworkBase::setStateConnected();
       DEBUG_INFO("%s:setStatePendingDataSync()🔄",this->interfaceName.c_str());      
@@ -526,6 +648,7 @@ public:
       this->state.led = "green fast";      
     }
 
+    /** @brief Build the user-visible mixer description. */
     void setMixerDetails(){
       String mixerIP_Port;
 
@@ -535,6 +658,7 @@ public:
       this->state.details = concatStrings(mixerID.name," ",mixerID.model," ",mixerIP_Port);
     }
 
+    /** @brief Set the interface status to live. */
     void setStateLive(){
       this->setStateConnected();
       DEBUG_INFO("%s:setStateLive()🟢",this->interfaceName.c_str());
@@ -542,6 +666,7 @@ public:
       setMixerDetails();      
     }    
 
+    /** @brief Set the interface status to disabled. */
     virtual void setStateDisabled() override{
       NetworkBase::setStateDisabled();
       this->state.label = "Offline";
@@ -552,6 +677,11 @@ public:
 
 };
 
+/**
+ * @brief Restart synchronization of every registered name dataset.
+ *
+ * Restore placeholder names, clear the request lock and recount items to load.
+ */
 inline void Synchronizer::reset(){
   DEBUG_INFO("Synchronizer:reset()");      
   // resetting all sync counters
@@ -568,6 +698,14 @@ inline void Synchronizer::reset(){
 }
     
 
+/**
+ * @brief Advance metadata synchronization and report percentage completion.
+ *
+ * Only one dataset request is outstanding while locked; unlock after the reply
+ * or the one-second retry timeout. Skip names whose unsynchronized marker is
+ * gone, advance the dataset cursor, and combine progress across all datasets.
+ * @return Progress from 0 to 100; no datasets means synchronization is complete.
+ */
 inline int8_t Synchronizer::update(/*uint16_t latency*/){  
   #define SYNC_LOCK_TIMEOUT 1000      // une seconde laisse le temps au data de se flusher et se resynchro
   //if (latency<20) latency = 20;   // minimum latency of 20ms to avoid too much request / flood
