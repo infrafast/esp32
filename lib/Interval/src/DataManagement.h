@@ -3,7 +3,53 @@
 
 
 
+/**
+ * @file DataManagement.h
+ * @brief Parameter descriptions and named value access shared by configuration UI.
+ *
+ * Address describes a field's pattern and editor. DataSet exposes values under a
+ * provider name and pattern. DataRepository resolves that pair without knowing
+ * the storage or device backend. SerializableParameters publishes field templates;
+ * JsonTemplateRepository collects them for the web UI. Templates describe what can
+ * be configured, while datasets supply choices. Device I/O and applying selected
+ * values remain responsibilities of the consuming interface/strip.
+ *
+ * DynamicDataSet forwards reads to a DataProvider using its address pattern.
+ * This exposes existing application strings without duplicating their storage.
+ * A DataSet subclass may instead manage storage directly; providers are optional.
+ *
+ * Concrete project examples:
+ * - Mixer DataSetSynced instances publish channel/bus names in dataRepo. Strip
+ *   skeletons describe dropdowns; OneSelectStrip looks up the selected label using
+ *   the interface's provider name, address pattern and zero-based dataset index.
+ *   The caller converts configured one-based channel numbers to dataset indices.
+ * - Network interfaces register addressIP/addressPort. FreeTextAddress describes
+ *   their label and validation identifier; ConfigDataSet exposes an address-only
+ *   entry in IFdataRepo, without a list of choices or the actual configured value.
+ * - WebLibrary loads a compressed JSON library under WEBAPP_PATH and exposes its
+ *   entry names through the same dataset lookup and serialization contract.
+ *
+ * Illustrative provider-backed usage inside an application scope:
+ *   // MyProvider implements getSize(pattern) and getValuePtr(pattern, index).
+ *   MyProvider provider("MyDevice");
+ *   DropDownAddress choices("/choice/%d");
+ *   DynamicDataSet view(&choices, &provider);
+ *   DataSet* ds = dataRepo.getDataSet("MyDevice", "/choice/%d");
+ *   const String* label = ds ? ds->getValuePtr(0) : nullptr;
+ *   // Consume label before provider storage is invalidated.
+ *   // Declaration order keeps provider/descriptor alive until view is destroyed.
+ *
+ * Repositories borrow their entries; datasets register on construction and
+ * unregister on destruction. Descriptor/provider pointers are borrowed too.
+ * Returned String pointers are read-only views whose validity depends on concrete
+ * storage and mutation. There is no locking or snapshot mechanism here.
+ */
 ///////////////////////////// DATA MANAGEMENT ///////////////////////////// 
+/**
+ * Supplies address-specific values from application-owned storage on demand.
+ * Implementations define bounds/fallback behavior and String-pointer validity.
+ * dataProviderName is the provider key used by dataset consumers.
+ */
 class DataProvider{
   public :
     String dataProviderName;
@@ -42,6 +88,11 @@ enum {
 
 #define KEY_PROPERTIES    "properties"
 
+/**
+ * Describes a field's lookup/format pattern and web editor type.
+ * rules is a borrowed JSON view rebound during serialization; do not use it after
+ * its destination document expires. Descriptors do not own datasets.
+ */
 class Address {
   public:
     String pattern;
@@ -78,12 +129,19 @@ class Address {
 
 };
 
+/**
+ * Dropdown descriptor; choices come from a matching provider/pattern dataset.
+ */
 class DropDownAddress: public Address{
   public:
     DropDownAddress(String p):Address(p,INPUTSELECT){}
-    virtual void serializeProperties(){}; // nothin more than what the base does
+    virtual void serializeProperties(){}; // No extra dropdown metadata.
 };
 
+/**
+ * Free-text metadata: display label and validation identifier (for example "ip").
+ * Validation is not executed here. hide is stored but currently not serialized.
+ */
 class FreeTextAddress: public Address{
   public:
     String friendlyName = "";
@@ -106,6 +164,12 @@ String errorDatasetOOR = "outOfRange";
 
 class DataRepository;
 
+/**
+ * Abstract named value view, registered in targetRepo or dataRepo by default.
+ * Borrows its Address and repository; destruction unregisters the view only.
+ * Subclasses define value storage and pointer validity. The destructor is not
+ * virtual, so deletion of derived objects through DataSet* is not generally safe.
+ */
 class DataSet{
   public:
     String name ="";
@@ -121,6 +185,11 @@ class DataSet{
     virtual void serializeContent(JsonObject o);
 };
 
+/**
+ * Address-only entry for configuration fields without selectable choices.
+ * Overrides content serialization to omit values, despite reporting size zero.
+ * Does not store the interface's actual configured value.
+ */
 class ConfigDataSet : public DataSet{
   public:
     ConfigDataSet(Address* addr, const String& name, DataRepository* targetRepo = nullptr)
@@ -134,6 +203,11 @@ class ConfigDataSet : public DataSet{
     }
 };
 
+/**
+ * Non-owning dataset registry keyed by provider name and address pattern.
+ * Serializes entries grouped by provider; does not delete entries or enforce
+ * unique keys. Lookup returns the first match. Entries must remain valid in use.
+ */
 class DataRepository{
   public:
     DataRepository(){}
@@ -170,7 +244,7 @@ class DataRepository{
         }
 
         JsonObject o = arr.createNestedObject();
-        ds->serializeContent(o);   // ✅ factorisation propre
+        ds->serializeContent(o);   // Serialize content without repeating the provider key.
       }
     }
 
@@ -201,6 +275,8 @@ void DataSet:: serializeContent(JsonObject o) {
 
   o["address"] = address->pattern;
 
+  // Legacy format: positive size emits an array; zero reads index 0 as a scalar.
+  // An empty collection is therefore not represented by [] here.
   uint16_t n = getSize();
   if (n > 0) {
     JsonArray values = o.createNestedArray("values");
@@ -222,6 +298,12 @@ JsonObject DataSet:: serialize(JsonObject o) {
 }
 
 
+/**
+ * Non-owning adapter exposing one provider address as a DataSet.
+ * Reads are forwarded without caching. Construction requires a non-null provider;
+ * reads also require a valid descriptor. Later null guards do not make a null
+ * provider safe at construction. Returned strings still belong to the provider.
+ */
 class DynamicDataSet : public DataSet{
   public:
     DataProvider* dataProvider;    
@@ -267,6 +349,11 @@ void DataRepository::removeDataSet(DataSet* ds) {
 
 class SerializableParameters;
 
+/**
+ * Collects borrowed SerializableParameters pointers for web editor templates.
+ * Serialization appends each template as a JSON string, not as a nested object.
+ * No removal API exists: entries must remain alive while this registry is read.
+ */
 class JsonTemplateRepository{
   public:
     std::vector<SerializableParameters*> jsonTemplateRepo;
@@ -279,6 +366,15 @@ class JsonTemplateRepository{
 
 #define DATASET_PROPERTIES "properties"
 
+/**
+ * Publishes an object's ordered field descriptors and registers its web template.
+ * Borrows descriptors and repo. Optional auto-registration creates address-only
+ * ConfigDataSets; these entries are tracked and deleted on unregister/destruction,
+ * but descriptors are never deleted. Current deletion through DataSet* retains
+ * the non-virtual-destructor limitation described above.
+ * Destruction does not unregister the template from jsonInputRepo. Consumers must
+ * not access that entry afterwards. serialize() exports metadata, not live values.
+ */
 class SerializableParameters {
   public:
     String name;
@@ -313,7 +409,7 @@ class SerializableParameters {
         return false;
       }
 
-      // 1️⃣ suppression dans parameterAddresses
+      // Remove the borrowed descriptor from the ordered template.
       for (auto it = parameterAddresses.begin(); it != parameterAddresses.end(); ++it) {
         if (*it == address) {
           parameterAddresses.erase(it);
@@ -321,13 +417,13 @@ class SerializableParameters {
         }
       }
 
-      // 2️⃣ suppression du ConfigDataSet associé
+      // Remove the matching automatically created configuration entry.
       if (registerConfigDataSets) {
         for (auto it = ownedDataSets.begin(); it != ownedDataSets.end(); ++it) {
 
           DataSet* ds = *it;
 
-          // on suppose que ConfigDataSet possède getAddress()
+          // Match by descriptor identity.
           if (ds && ds->address == address) {
 
             delete ds;
@@ -359,7 +455,7 @@ class SerializableParameters {
       return data;
     }
 
-    // 🚩 Méthode virtuelle : chaque classe dérivée enrichit ici le JSON
+    // Derived classes may extend this editor template.
     virtual void serialize(JsonObject& json) {
         json[name] = group;
 
@@ -408,6 +504,12 @@ bool JsonTemplateRepository::add(SerializableParameters* sd){
       return true;
     };
 
+/**
+ * File-backed choice dataset using JsonListFile storage.
+ * reload() clears entries and loads WEBAPP_PATH/filename.gz, adding a fallback
+ * entry on failure. Exposes entry names rather than their associated payloads.
+ * Treat borrowed name pointers as invalid after reload or storage mutation.
+ */
 class WebLibrary : public DataSet, public JsonListFile{
   public:
     WebLibrary(String _filename, Address* _address, String _provider): filename(_filename), DataSet(_address, _provider){ 
