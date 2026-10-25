@@ -1,3 +1,8 @@
+/**
+ * @file s_mixer.h
+ * @brief Mixer strip bindings and channel/send controls.
+ */
+
 #ifndef _S_MIXER_h
 #define _S_MIXER_h
 
@@ -6,20 +11,29 @@
 
 // STRIPS TO IMPLEMENT: SEE https://github.com/onyx-and-iris/xair-api-python
 
+/**
+ * @brief Resolves a strip interface to the common mixer API.
+ */
 class StripMixer{
   public:
     
+    /**
+     * @brief Initialize StripMixer and its configured member bindings.
+     */
     StripMixer(Strip* strip):baseStrip(strip){}
 
   protected:
-    Strip* baseStrip = nullptr;   // need a reference to the base class to access mixer methods & properties
+    Strip* baseStrip = nullptr;   ///< need a reference to the base class to access mixer methods & properties
     MixerBase* mixer = nullptr;
 
     DeviceInterface* boundInterface = nullptr;
 
-    /*
-      preserve the MixerBase abstraction and template-based MixerDevice<...> implementations, and safely resolve the concrete mixer instance used by a strip.
-    */
+    /**
+     * @brief Resolve the current strip interface through the shared mixer binding registry.
+     *
+     * Cache the association only while the interface pointer is unchanged. This
+     * supports assignment after construction without casting to a concrete backend.
+     */
     MixerBase* getMixer(){
       if (baseStrip == nullptr || baseStrip->interface == nullptr){
         mixer = nullptr;
@@ -39,39 +53,57 @@ class StripMixer{
       return mixer;
     }
 
+    /** @brief Request mixer configuration when the bound interface is ready. */
     void gotFocus(){
       if (boundInterface->state.code == IF_READY) getConfig();  // we get config when getting the focus to be sure to have the latest data from the interface, in case some change were made while not having the focus, this is important for instance for the color of the strip which may change based on the state of the interface (like for instance for a channel that is red when it is clipping) and we want to be sure to reflect this in the GUI as soon as possible when getting the focus, even if it is not visible yet (for instance in details layout where a strip can get the focus without being visible)
     }
     
+    /** @brief Request mixer values when the bound interface is ready. */
     void becameVisible(){
       if (boundInterface->state.code == IF_READY) getValues();  // we get values when getting visible to be sure to have the latest data from the interface, in case some change were made while not visible, this is important for instance for the color of the strip which may change based on the state of the interface (like for instance for a channel that is red when it is clipping) and we want to be sure to reflect this in the GUI as soon as possible when the strip is visible, even if it does not have the focus yet (for instance in details layout where a strip can be visible without having the focus) 
     }    
 
   protected:
     
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void getConfig(){}
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void getValues(){}
 
 };
 
 
+/**
+ * @brief Adds mixer focus, visibility and refresh handling to a strip base.
+ *
+ * @tparam BaseStripT Visual strip base, such as OneSelectStrip or TwoSelectStrip.
+ * Routes focus to configuration requests and visibility to value requests while
+ * using MixerBase instead of casting to a particular mixer backend.
+ */
 template <typename BaseStripT>
 class StripMixerMixin : public BaseStripT, public StripMixer {
 public:
+  /**
+   * @brief Initialize StripMixerMixin and its configured member bindings.
+   */
   template <typename... Args>
   StripMixerMixin(StripSkeleton* s, Args&&... args)
     : BaseStripT(s, std::forward<Args>(args)...),
       StripMixer(static_cast<Strip*>(this)) {}
 
+  /** @brief Request configuration on selection. */
   virtual void hasFocus() override {
     StripMixer::gotFocus();
   }
 
+  /** @brief Request current values when the strip becomes visible. */
   virtual void hasVisibility() override {
     StripMixer::becameVisible();
   }
 
-  // called when deserializing a Strip
+  /**
+   * @brief called when deserializing a Strip
+   */
   virtual bool init() override {
  
     MixerBase* activeMixer = getMixer();   
@@ -86,6 +118,12 @@ public:
     as long as it follows the same interface, and we can also have specific implementations for specific mixers 
    if we want to take advantage of some specific features of these mixers
   */
+  /**
+   * @brief Refresh visible mixer strips when the mixer requests periodic polling.
+   *
+   * Ignore hidden/unbound strips. When ready, retrieve live values for visible
+   * strips and configuration as well for the focused strip.
+   */
   virtual void processAction(int action,JsonDocument& data) override{  
 
     if (baseStrip == nullptr || !baseStrip->visible || boundInterface == nullptr) return;
@@ -107,18 +145,34 @@ public:
 
 
 
+/**
+ * @brief Binds two selections to shared send-level and mute values.
+ */
 class SendStrip : public StripMixerMixin<TwoSelectStrip> {
   public:
 
     TwoIndexValue* sendReturnValues;
     OneIndexValue* busValues;
 
+    /**
+     * @brief Initialize SendStrip and its configured member bindings.
+     */
     SendStrip(StripSkeleton* s, bool debug = false) : StripMixerMixin<TwoSelectStrip>(s, debug){      
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     ~SendStrip(){      
     };
  
+    /**
+     * @brief Restore channel/bus selections and rebind shared send and bus values.
+     *
+     * Release the previous reservations before reserving the selected key pair and
+     * bus. Bind the strip value and toggles to these shared objects so other strips
+     * using the same keys see the same state.
+     * @note Current code assumes valid mixer/reservation pointers and does not make
+     * all failure and destruction paths safe; callers must respect existing limits.
+     */
     virtual void deserializeProperty(String property) override{
       TwoSelectStrip::deserializeProperty(property);
       
@@ -134,6 +188,7 @@ class SendStrip : public StripMixerMixin<TwoSelectStrip> {
 
     }
 
+    /** @brief Add this strip's widgets for the selected bank layout. */
     virtual void composeWidgets(uint8_t layout) override{      
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         push4x4hBar();
@@ -154,13 +209,18 @@ class SendStrip : public StripMixerMixin<TwoSelectStrip> {
 };
 
 #define STRIP_INPUT2MIXBUS "input2mixbus"
+/**
+ * @brief Controls one input channel send to one mix bus.
+ */
 class Input2MixbusStrip : public SendStrip{
   public:
 
+    /** @brief Initialize Input2MixbusStrip with the supplied configuration and bindings. */
     Input2MixbusStrip(StripSkeleton* s,bool debug=false):SendStrip(s,debug){      
       unitString = "dB";
     }
 
+    /** @brief Request the configuration needed by the selected mixer strip. */
     virtual void getConfig() override{
       DEBUG_INFO("getConfig %s",type.c_str());      
 
@@ -174,12 +234,18 @@ class Input2MixbusStrip : public SendStrip{
       
     }
 
+    /** @brief Request the live values needed by the visible mixer strip. */
     virtual void getValues() override{
       mixer->requestCHBUSlevel(select1ID, select2ID);  // select1ID = chID, select2ID = busID
     }
 
 
 
+    /**
+     * @brief Compute a decreased send level and write it through the mixer contract.
+     *
+     * Use the same click/hold curve as increasing, with the opposite target limit.
+     */
     virtual float decreaseCallback(unsigned long time,uint8_t trigger) override{
       float newVal = *value;
       float delta = applyProgressive(&newVal, -1, trigger);
@@ -187,6 +253,12 @@ class Input2MixbusStrip : public SendStrip{
       return delta;
     }      
 
+    /**
+     * @brief Compute an increased send level and write it through the mixer contract.
+     *
+     * Work on a temporary value; issue a device write only when progressive button
+     * handling produces a nonzero change. Shared device state is updated by the backend.
+     */
     virtual float increaseCallback(unsigned long time, uint8_t trigger) override{
       float newVal = *value;
       float delta = applyProgressive(&newVal, +1, trigger);
@@ -194,6 +266,9 @@ class Input2MixbusStrip : public SendStrip{
       return delta;            
     }
 
+    /**
+     * @brief Toggle the selected input-to-bus mute through the mixer contract.
+     */
     virtual bool actionCallback(uint8_t trigger) override{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       //mute/unmute
@@ -204,6 +279,7 @@ class Input2MixbusStrip : public SendStrip{
 };
 
 StripSkeleton* stripInput2mixbusSkel;
+/** @brief Create the concrete strip associated with this registered type. */
 Strip* sendStripConstructorCallback(){
   //DEBUG_PRINT("\n\tinput2mixbusStripConstructorCallback()");
   return new Input2MixbusStrip(stripInput2mixbusSkel);
@@ -211,10 +287,14 @@ Strip* sendStripConstructorCallback(){
 
 #define INPUGAINDB_MIN  -12
 #define INPUGAINDB_MAX  60
+/**
+ * @brief Input-gain strip skeleton; device write behavior remains incomplete.
+ */
 class inputGainStrip : public StripMixerMixin<OneSelectStrip> {
   #define STRIP_INPUTGAIN "inputGain"
 
   public:
+    /** @brief Initialize inputGainStrip with the supplied configuration and bindings. */
     inputGainStrip(StripSkeleton* s, bool debug = false)
         : StripMixerMixin<OneSelectStrip>(s, debug) {
         valueMin = INPUGAINDB_MIN;
@@ -223,8 +303,10 @@ class inputGainStrip : public StripMixerMixin<OneSelectStrip> {
         unitString = "dB";
       }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     ~inputGainStrip(){};
 
+    /** @brief Add this strip's widgets for the selected bank layout. */
     virtual void composeWidgets(uint8_t layout) override{      
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         push4x4hBar();
@@ -241,18 +323,21 @@ class inputGainStrip : public StripMixerMixin<OneSelectStrip> {
 
     }
 
+    /** @brief Increase the selected value in response to the supplied button gesture. */
     virtual float increaseCallback(unsigned long time,uint8_t trigger) override{
       float delta = Strip::increaseCallback(time,trigger);
       if (delta != 0.0) setInputGain();
       return delta;
     }
 
+    /** @brief Decrease the selected value in response to the supplied button gesture. */
     virtual float decreaseCallback(unsigned long time,uint8_t trigger) override{
       float delta = Strip::decreaseCallback(time,trigger);
       if (delta != 0.0) setInputGain();
       return delta;
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     void setInputGain(){
       /*char formattedCommandString[50];
       String addressTemplate = mixerServer->mixerInterface->addresses[ADDR_CHGAIN];
@@ -268,6 +353,11 @@ class inputGainStrip : public StripMixerMixin<OneSelectStrip> {
       mixerServer->mixerInterface->execute(command.as<JsonObject>());  */
     }
 
+    /**
+     * @brief Placeholder hook; no active operation in this implementation.
+     *
+     * @return Always true; no device action is performed here.
+     */
     virtual bool actionCallback(uint8_t trigger) override{
       // trigger = HOLD, SIMPLE_CLIC, DOUBLE_CLIC, LONG_CLIC
       /*char addr[100];
@@ -289,6 +379,7 @@ class inputGainStrip : public StripMixerMixin<OneSelectStrip> {
 };
 
 StripSkeleton* stripInputGainSkel;
+/** @brief Create the concrete strip associated with this registered type. */
 Strip* gain2chStripConstructorCallback(){
   //DEBUG_PRINT("\n\tgain2chStripConstructorCallback()");
   return new inputGainStrip(stripInputGainSkel);
