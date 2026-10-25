@@ -1,3 +1,8 @@
+/**
+ * @file s_midi.h
+ * @brief MIDI choices and strips for note and SysEx actions.
+ */
+
 #ifndef MIDISTRIPS_h
 #define MIDISTRIPS_h
 
@@ -7,22 +12,31 @@
 
 StripSkeleton *midiNoteSkel, *sysexSkel;
 
-    ///////////////////////////////////////////////////////////////
-    //////////////////                        /////////////////////
-    //////////////////    DATASETS           //////////////////////
-    //////////////////                       //////////////////////    
-    ///////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////
+    /////////////////                        /////////////////////
+    /////////////////    DATASETS           //////////////////////
+    /////////////////                       //////////////////////
+    //////////////////////////////////////////////////////////////
 
 #define ADDRESS_SYSEX "/sysex/%s"
 #define SYSEXLIB_FILENAME "sysexlib.json"
 
+/**
+ * @brief File-backed choices for configured SysEx messages.
+ */
 class SysexLib : public  WebLibrary{
   public:
+    /**
+     * @brief Initialize SysexLib and its configured member bindings.
+     */
     SysexLib(Address* _address): WebLibrary(SYSEXLIB_FILENAME, _address, GROUP_INTERFACE_MIDI){}
 };
 
 SysexLib* dsSysexMessages;
 
+/**
+ * @brief Dataset of the sixteen MIDI channel labels.
+ */
 class MidiChannels : public DataSet{
   #define ADDRESS_MIDICHANNEL   "/channel/%d"
   #define MIDI_CHANNEL_NUMBER   16
@@ -31,33 +45,50 @@ class MidiChannels : public DataSet{
     String channelNames[MIDI_CHANNEL_NUMBER] = {"channel1","channel2","channel3","channel4","channel5","channel6","channel7","channel8","channel9","channel10","channel11","channel12","channel13","channel14","channel15","channel16"};
 
 
+    /**
+     * @brief Initialize MidiChannels and its configured member bindings.
+     */
     MidiChannels(Address* _address): DataSet(_address, GROUP_INTERFACE_MIDI){}
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t index){
       if (index>getSize()-1) return &errorDatasetOOR;
       return &channelNames[index];    //local javascript function 
     }  
 
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(){
       return MIDI_CHANNEL_NUMBER;
     }
 
-}dsMidiChannels(new DropDownAddress(ADDRESS_MIDICHANNEL));
+}
+/** @brief Shared sixteen-channel MIDI dropdown dataset. */
+dsMidiChannels(new DropDownAddress(ADDRESS_MIDICHANNEL));
 
 #define ADDRESS_MIDIVALUE2     "/value2/%s"
 #define ADDRESS_MIDIVALUE1     "/value1/%s"
+/**
+ * @brief Dataset of selectable MIDI values.
+ */
 class MidiValue : public DataSet{
   public:
     String value="0123";
+    /**
+     * @brief Initialize MidiValue and its configured member bindings.
+     */
     MidiValue(Address* adress, String name): DataSet(adress, name){}
     
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t index){
       return &value;     
     }  
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(){
       return 1;
     }    
 }
+/** @brief Shared note-value field descriptor and its fallback dataset value. */
 dsMidiValue1(new FreeTextAddress(ADDRESS_MIDIVALUE1,"note", REGEX_0to126),GROUP_INTERFACE_MIDI),
+/** @brief Shared velocity field descriptor and its fallback dataset value. */
 dsMidiValue2(new FreeTextAddress(ADDRESS_MIDIVALUE2,"velocity", REGEX_0to126),GROUP_INTERFACE_MIDI);
 
 
@@ -72,39 +103,55 @@ String midiMessages[MIDI_NOTE_SIZE] = {
   "On",
 };  
 
+/**
+ * @brief Dataset of note-on/note-off action choices.
+ */
 class MidiNotes : public DataSet{
   #define ADDRESS_MIDINOTE   "/note/%s"
   public:    
      
+    /**
+     * @brief Initialize MidiNotes and its configured member bindings.
+     */
     MidiNotes(Address* adress, String name): DataSet(adress, name){}
 
+    /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t index){
       if (index>getSize()-1) return &errorDatasetOOR;
       return &midiMessages[index];    
     }  
 
+    /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(){
       return MIDI_NOTE_SIZE;
     }  
 
-}dsNotesOnOff(new DropDownAddress(ADDRESS_MIDINOTE),GROUP_INTERFACE_MIDI);
+}
+/** @brief Shared dataset containing the Off and On MIDI action choices. */
+dsNotesOnOff(new DropDownAddress(ADDRESS_MIDINOTE),GROUP_INTERFACE_MIDI);
 
 
-    ///////////////////////////////////////////////////////////////
-    //////////////////                        /////////////////////
-    //////////////////    STRIP DEF          //////////////////////
-    //////////////////                       //////////////////////    
-    ///////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////
+    /////////////////                        /////////////////////
+    /////////////////    STRIP DEF          //////////////////////
+    /////////////////                       //////////////////////
+    //////////////////////////////////////////////////////////////
 
 
+/**
+ * @brief MIDI strip with channel selection and one configured value.
+ */
 class OneValueMidiStrip : public OneSelectStrip{
   public:
+    /** @brief Initialize OneValueMidiStrip with the supplied configuration and bindings. */
     OneValueMidiStrip(StripSkeleton* s,bool debug=false):OneSelectStrip(s,debug){
       select1PropertyAddress = ADDRESS_MIDICHANNEL;    
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     ~OneValueMidiStrip(){};
     
+    /** @brief Append this type's property strings to the active JSON properties array. */
     void serializeProperties(){
       OneSelectStrip::serializeProperties();
 
@@ -117,6 +164,7 @@ class OneValueMidiStrip : public OneSelectStrip{
     }
 
 
+    /** @brief Restore a type-specific setting from its saved property string. */
     virtual void deserializeProperty(String property)  {  
       // channel = "/midi/channel/%d"  => select1PropertyAddress => select1id
       OneSelectStrip::deserializeProperty(property);
@@ -134,12 +182,19 @@ class OneValueMidiStrip : public OneSelectStrip{
 
 };
 
+/**
+ * @brief Adds a second configured MIDI value.
+ */
 class TwoValuesMidiStrip: public OneValueMidiStrip{
   public:
 
+    /**
+     * @brief Initialize TwoValuesMidiStrip and its configured member bindings.
+     */
     TwoValuesMidiStrip(StripSkeleton* s,bool debug=false):OneValueMidiStrip(s,debug){}
 
 
+    /** @brief Append this type's property strings to the active JSON properties array. */
     void serializeProperties(){
       OneValueMidiStrip::serializeProperties();
       // "/midi/value2/127"     => DSmidiValue.address.pattern
@@ -150,6 +205,7 @@ class TwoValuesMidiStrip: public OneValueMidiStrip{
     }
 
 
+    /** @brief Restore a type-specific setting from its saved property string. */
     virtual void deserializeProperty(String property)  {  
       // "/midi/value1/127"  
       OneValueMidiStrip::deserializeProperty(property);
@@ -168,16 +224,23 @@ class TwoValuesMidiStrip: public OneValueMidiStrip{
 };
 
 
+/**
+ * @brief Sends MIDI note actions using configured channel, note and velocity.
+ */
 class MidiNoteStrip: public TwoValuesMidiStrip{
 
   #define STRIP_MIDINOTE "Note"
   public:
     String note = midiMessages[MIDI_NOTEON];      
 
+    /**
+     * @brief Initialize MidiNoteStrip and its configured member bindings.
+     */
     MidiNoteStrip(StripSkeleton* s,bool debug=false):TwoValuesMidiStrip(s,debug){}
 
     #define NOTE_VALUE_LENGTH 4
 
+    /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties(){
       TwoValuesMidiStrip::serializeProperties();
 
@@ -189,6 +252,7 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
 
     }
 
+    /** @brief Restore a type-specific setting from its saved property string. */
     virtual void deserializeProperty(String property)  {  
       TwoValuesMidiStrip::deserializeProperty(property);
 
@@ -203,6 +267,7 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
     }
 
 
+    /** @brief Add this strip's widgets for the selected bank layout. */
     virtual void composeWidgets(uint8_t layout) override{      
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         push4x4hBar();
@@ -217,6 +282,7 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       }     
     } 
 
+    /** @brief Handle relevant incoming events for this strip. */
     void onEvent(const Event& evt) override {
       switch (evt.type) {
         /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
@@ -224,15 +290,20 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
       }
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void hasFocus() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void hasVisibility() override{
       // request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
     }
 
 
+    /**
+     * @brief Send the configured MIDI note action on the selected channel.
+     */
     virtual bool actionCallback(uint8_t trigger){
       bool success = false;
 
@@ -253,20 +324,29 @@ class MidiNoteStrip: public TwoValuesMidiStrip{
 };
 
 
+/** @brief Create the concrete strip associated with this registered type. */
 Strip* midiNoteStripConstructorCallback(){
   return new MidiNoteStrip(midiNoteSkel);
 }
 
+/**
+ * @brief Sends a configured SysEx library message.
+ */
 class SysexStrip : public Strip{  // should inherit from MidiStrip before so methode like data read castng are common
   #define STRIP_SYSEX "Sysex"
   #define SYSEX_MAX_KEY_LENGTH 64
 
   public:
+    /**
+     * @brief Initialize SysexStrip and its configured member bindings.
+     */
     SysexStrip(StripSkeleton* s,bool debug=false):Strip(s){
     }
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     ~SysexStrip(){};
 
+    /** @brief Add this strip's widgets for the selected bank layout. */
     virtual void composeWidgets(uint8_t layout) override{      
 
       uint16_t h = 28, w = 28;
@@ -289,6 +369,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       //DEBUG_PRINT("\t\tlabelX: %d, labelY: %d",labelX,labelY);      
     }
 
+    /** @brief Handle relevant incoming events for this strip. */
     void onEvent(const Event& evt) override {
       switch (evt.type) {
         /*case EVENT_PLUGGED_ETH_WHILE_WIFI_CONNECTED:          
@@ -296,15 +377,20 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       }
     }    
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void hasFocus() override{ // this code is called by pushToGUI() to send a command that will be executed, 
     //then its outcome will be read at the next process()
     } 
 
+    /** @brief Placeholder hook; no active operation in this implementation. */
     virtual void hasVisibility() override{
       // request value refresh (in case of a change on the mixer that is not reflected in the interface yet)
     }
 
 
+    /**
+     * @brief Send the configured library SysEx message through the selected MIDI interface.
+     */
     virtual bool actionCallback(uint8_t trigger) {
       bool success = false;
 
@@ -346,6 +432,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       return success;
     }
 
+    /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties(){
       char* buf = (char*)malloc((strlen(ADDRESS_SYSEX)+sysexKey.length())*sizeof(char)+1);
       sprintf(buf,ADDRESS_SYSEX,sysexKey);
@@ -354,6 +441,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       free(buf);
     }
 
+    /** @brief Restore a type-specific setting from its saved property string. */
     virtual void deserializeProperty(String property){
       char sysexKeyBuf[SYSEX_MAX_KEY_LENGTH];
       if (sscanf(property.c_str(), ADDRESS_SYSEX, &sysexKeyBuf)){
@@ -363,7 +451,9 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
       }    
     }
 
+    /** @brief Return the borrowed text used for the strip header top line. */
     virtual const String* getTopLabel(){return &type;}
+    /** @brief Return the borrowed text used for the strip header bottom line. */
     virtual const String* getBottomLabel(){return &sysexKey;}      
        
   protected:
@@ -375,6 +465,7 @@ class SysexStrip : public Strip{  // should inherit from MidiStrip before so met
 };
 
 
+/** @brief Create the concrete strip associated with this registered type. */
 Strip* sysexStripConstructorCallback(){
   return new SysexStrip(sysexSkel);
 }
