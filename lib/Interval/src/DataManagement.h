@@ -5,44 +5,20 @@
 
 /**
  * @file DataManagement.h
- * @brief Parameter descriptions and named value access shared by configuration UI.
+ * @brief Makes settings and lists of choices available to the configuration UI.
  *
- * Address describes a field's pattern and editor. DataSet exposes values under a
- * provider name and pattern. DataRepository resolves that pair without knowing
- * the storage or device backend. SerializableParameters publishes field templates;
- * JsonTemplateRepository collects them for the web UI. Templates describe what can
- * be configured, while datasets supply choices. Device I/O and applying selected
- * values remain responsibilities of the consuming interface/strip.
+ * This design lets different parts of the application share data in the same way.
+ * Each setting describes how it should be edited, and each list supplies the
+ * available choices. The UI can use them without knowing where the data comes from.
  *
- * DynamicDataSet forwards reads to a DataProvider using its address pattern.
- * This exposes existing application strings without duplicating their storage.
- * A DataSet subclass may instead manage storage directly; providers are optional.
+ * For example:
+ * - Show mixer channel names in a dropdown and in a strip's label.
+ * - Describe IP address and port fields for network configuration.
+ * - Offer names loaded from a web library as selectable choices.
  *
- * Concrete project examples:
- * - Mixer DataSetSynced instances publish channel/bus names in dataRepo. Strip
- *   skeletons describe dropdowns; OneSelectStrip looks up the selected label using
- *   the interface's provider name, address pattern and zero-based dataset index.
- *   The caller converts configured one-based channel numbers to dataset indices.
- * - Network interfaces register addressIP/addressPort. FreeTextAddress describes
- *   their label and validation identifier; ConfigDataSet exposes an address-only
- *   entry in IFdataRepo, without a list of choices or the actual configured value.
- * - WebLibrary loads a compressed JSON library under WEBAPP_PATH and exposes its
- *   entry names through the same dataset lookup and serialization contract.
- *
- * Illustrative provider-backed usage inside an application scope:
- *   // MyProvider implements getSize(pattern) and getValuePtr(pattern, index).
- *   MyProvider provider("MyDevice");
- *   DropDownAddress choices("/choice/%d");
- *   DynamicDataSet view(&choices, &provider);
- *   DataSet* ds = dataRepo.getDataSet("MyDevice", "/choice/%d");
- *   const String* label = ds ? ds->getValuePtr(0) : nullptr;
- *   // Consume label before provider storage is invalidated.
- *   // Declaration order keeps provider/descriptor alive until view is destroyed.
- *
- * Repositories borrow their entries; datasets register on construction and
- * unregister on destruction. Descriptor/provider pointers are borrowed too.
- * Returned String pointers are read-only views whose validity depends on concrete
- * storage and mutation. There is no locking or snapshot mechanism here.
+ * DataProvider supplies the data, DataSet makes it available under a name, and
+ * DataRepository helps consumers find it. This keeps UI code reusable when the
+ * device or data source changes.
  */
 ///////////////////////////// DATA MANAGEMENT ///////////////////////////// 
 /**
