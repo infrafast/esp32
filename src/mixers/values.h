@@ -1,3 +1,8 @@
+/**
+ * @file values.h
+ * @brief Shared mixer values with one-key or two-key reservations.
+ */
+
 #ifndef _VALUES_h
 #define _VALUES_h
 
@@ -32,62 +37,70 @@ sends.unreserve(s2);                       // deleted here
 */
 
 
+/**
+ * @brief Shared mixer value, toggle and reservation count for one key.
+ */
 struct OneIndexValue {
-    float value;        // usually level
-    bool toggle;        // usually on/off or mute
+    float value;        ///< usually level
+    bool toggle;        ///< usually on/off or mute
 
-    uint8_t i1;         // index 1 = usually channel #
-    uint8_t count;      // reservation count
+    uint8_t i1;         ///< index 1 = usually channel #
+    uint8_t count;      ///< reservation count
 
+    /**
+     * @brief Initialize OneIndexValue and its configured member bindings.
+     */
     OneIndexValue()
         : value(0.0f), toggle(false), i1(0), count(0) {}
 };
 
+/**
+ * @brief Shared mixer value identified by a pair of keys.
+ */
 struct TwoIndexValue : public OneIndexValue {
-    uint8_t i2;         // index 2 = usually bus/mix #
+    uint8_t i2;         ///< index 2 = usually bus/mix #
 
+    /**
+     * @brief Initialize TwoIndexValue and its configured member bindings.
+     */
     TwoIndexValue()
         : OneIndexValue(), i2(0) {}
 };
 
 
-/*
-===============================================================================
-Wrapper for values indexed by one index
-===============================================================================
-
-Public API kept close to the original version:
-- reserve(i1)
-- unreserve(ptr)
-- get(i1)
-- clear()
-- size()
-*/
+/**
+ * @brief Wrapper for values indexed by one index
+ *
+ * Public API kept close to the original version:
+ * - reserve(i1)
+ * - unreserve(ptr)
+ * - get(i1)
+ * - clear()
+ * - size()
+ */
 
 class OneIndexValueList {
 private:
     ValueList<OneIndexValue> list;
 
 public:
+    /** @brief Use the default initialization/destruction behavior. */
     OneIndexValueList() = default;
+    /** @brief Release resources held by this object. */
     ~OneIndexValueList() = default;
 
+    /** @brief Disable copying to preserve resource ownership. */
     OneIndexValueList(const OneIndexValueList&) = delete;
+    /** @brief Disable assignment to prevent copying owned resources. */
     OneIndexValueList& operator=(const OneIndexValueList&) = delete;
 
-    /*
-    reserve(i1)
-
-    If an object with index i1 already exists:
-    - increments count
-    - returns pointer to existing object
-
-    Otherwise:
-    - creates a new object
-    - initializes i1
-    - count = 1
-    - returns pointer to it
-    */
+    /**
+     * @brief Reserve the shared value for one key, creating it only if absent.
+     *
+     * @param i1 Mixer key, normally a channel or bus id.
+     * @return Stable borrowed pointer, or nullptr if allocation fails.
+     * @note Pair with unreserve(); the final release deletes the value.
+     */
     OneIndexValue* reserve(uint8_t i1) {
         return list.reserve(
             // matcher
@@ -102,21 +115,21 @@ public:
         );
     }
 
-    /*
-    unreserve(ptr)
-
-    Decrements the reservation count.
-    Deletes the object if count becomes 0.
-    */
+    /**
+     * @brief unreserve(ptr)
+     *
+     * Decrements the reservation count.
+     * Deletes the object if count becomes 0.
+     */
     bool unreserve(OneIndexValue* ptr) {
         return list.unreserve(ptr);
     }
 
-    /*
-    get(i1)
-
-    Returns the pointer to the object matching i1, or nullptr.
-    */
+    /**
+     * @brief get(i1)
+     *
+     * Returns the pointer to the object matching i1, or nullptr.
+     */
     OneIndexValue* get(uint8_t i1) const {
         return list.get(
             [i1](const OneIndexValue& v) {
@@ -125,52 +138,53 @@ public:
         );
     }
 
+    /**
+     * @brief Delete all shared values, invalidating every outstanding pointer.
+     */
     void clear() {
         list.clear();
     }
 
+    /** @brief Return the current number of entries. */
     uint16_t size() const {
         return list.size();
     }
 };
 
-/*
-===============================================================================
-Wrapper for values indexed by two indexes
-===============================================================================
-
-Public API kept close to the original version:
-- reserve(i1, i2)
-- unreserve(ptr)
-- get(i1, i2)
-- clear()
-- size()
-*/
+/**
+ * @brief Wrapper for values indexed by two indexes
+ *
+ * Public API kept close to the original version:
+ * - reserve(i1, i2)
+ * - unreserve(ptr)
+ * - get(i1, i2)
+ * - clear()
+ * - size()
+ */
 
 class TwoIndexValueList {
 private:
     ValueList<TwoIndexValue> list;
 
 public:
+    /** @brief Use the default initialization/destruction behavior. */
     TwoIndexValueList() = default;
+    /** @brief Release resources held by this object. */
     ~TwoIndexValueList() = default;
 
+    /** @brief Disable copying to preserve resource ownership. */
     TwoIndexValueList(const TwoIndexValueList&) = delete;
+    /** @brief Disable assignment to prevent copying owned resources. */
     TwoIndexValueList& operator=(const TwoIndexValueList&) = delete;
 
-    /*
-    reserve(i1, i2)
-
-    If an object with indexes (i1, i2) already exists:
-    - increments count
-    - returns pointer to existing object
-
-    Otherwise:
-    - creates a new object
-    - initializes i1 and i2
-    - count = 1
-    - returns pointer to it
-    */
+    /**
+     * @brief Reserve the shared value for a key pair, creating it only if absent.
+     *
+     * @param i1 First mixer key, normally an input channel.
+     * @param i2 Second mixer key, normally a bus.
+     * @return Stable borrowed pointer, or nullptr if allocation fails.
+     * @note Pair with unreserve(); the final release deletes the value.
+     */
     TwoIndexValue* reserve(uint8_t i1, uint8_t i2) {
         return list.reserve(
             // matcher
@@ -186,21 +200,21 @@ public:
         );
     }
 
-    /*
-    unreserve(ptr)
-
-    Decrements the reservation count.
-    Deletes the object if count becomes 0.
-    */
+    /**
+     * @brief unreserve(ptr)
+     *
+     * Decrements the reservation count.
+     * Deletes the object if count becomes 0.
+     */
     bool unreserve(TwoIndexValue* ptr) {
         return list.unreserve(ptr);
     }
 
-    /*
-    get(i1, i2)
-
-    Returns the pointer to the object matching (i1, i2), or nullptr.
-    */
+    /**
+     * @brief get(i1, i2)
+     *
+     * Returns the pointer to the object matching (i1, i2), or nullptr.
+     */
     TwoIndexValue* get(uint8_t i1, uint8_t i2) {
         return list.get(
             [i1, i2](const TwoIndexValue& v) {
@@ -209,10 +223,14 @@ public:
         );
     }
 
+    /**
+     * @brief Delete all shared values, invalidating every outstanding pointer.
+     */
     void clear() {
         list.clear();
     }
 
+    /** @brief Return the current number of entries. */
     uint16_t size() const {
         return list.size();
     }
