@@ -214,7 +214,7 @@ class StripHeaderWidget: public Top2Toggles{
     }
 
 
-    // Run hardware, interface, bank and display updates, then advance the current screen's workflow.
+    // Refresh the header when the selected strip changes or a redraw is requested.
     virtual bool refresh(bool force=false){
 
       //if (strip == nullptr) return false;
@@ -1964,6 +1964,7 @@ void setup() {
       sendTerminateMessageToWebApp(); // tell the webapp to close
     }
 
+    // Run hardware, interface, bank and display updates, then advance the current screen's workflow.
     bool refresh(bool force=false){
 
       yield();
