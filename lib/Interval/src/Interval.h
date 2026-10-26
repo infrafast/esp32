@@ -30,6 +30,16 @@
 
 #include <Arduino.h>
 
+// Interval owns the build-mode logging policy. Applications only select their
+// entry point; they do not need to inject DEBUG/SerialMon before including the
+// framework. Explicit build flags still take precedence.
+#if !defined(PROD) && !defined(DEBUG)
+  #define DEBUG 1
+#endif
+#if !defined(PROD) && !defined(SerialMon)
+  #define SerialMon Serial
+#endif
+
 #include <LinkedList.h>
 #include <ArduinoJson.h>
 #include <vector>
@@ -1835,6 +1845,73 @@ public:
 
 #include "HWManager.h"
 HardwareManager hwm;
+
+/**
+ * @brief Minimal standalone hardware diagnostic for TFT and W5500 bring-up.
+ *
+ * This deliberately uses the board pin constants directly and does not
+ * duplicate the application component definitions. Ethernet IP acquisition
+ * is observed through the Arduino event callback where available and through
+ * the W5500 library's localIP() state for the Ethernet DHCP path. All
+ * diagnostic output is rendered on the TFT; no serial port is required.
+ */
+class Diagnose {
+public:
+  TFT_eSPI tft;
+
+  void begin() {
+    pinMode(D4, OUTPUT);
+    digitalWrite(D4, HIGH);
+    delay(50);
+
+    tft.init();
+    tft.setRotation(1);
+    tft.fillScreen(TFT_BLUE);
+    tft.setTextColor(TFT_WHITE, TFT_BLUE);
+    tft.setTextSize(2);
+    tft.setCursor(8, 8);
+    tft.println("TFT test");
+
+    WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t) {
+      if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP ||
+          event == ARDUINO_EVENT_ETH_GOT_IP) {
+        showIPAddress(WiFi.localIP(), "WiFi/ETH");
+      }
+    });
+
+    Ethernet.init(D5);
+    tft.setCursor(8, 40);
+    tft.println("Starting Ethernet...");
+
+    static byte mac[] = {0x02, 0x49, 0x4E, 0x54, 0x56, 0x01};
+    Ethernet.begin(mac, 10000, 4000);
+    refreshEthernetIP();
+  }
+
+  void loop() {
+    refreshEthernetIP();
+    yield();
+  }
+
+private:
+  void refreshEthernetIP() {
+    IPAddress ip = Ethernet.localIP();
+    if (ip != IPAddress(0, 0, 0, 0) && ip != displayedIP) {
+      showIPAddress(ip, "Ethernet");
+    }
+  }
+
+  void showIPAddress(const IPAddress& ip, const char* source) {
+    displayedIP = ip;
+    tft.fillRect(0, 72, 320, 32, TFT_BLUE);
+    tft.setCursor(8, 80);
+    tft.print(source);
+    tft.print(": ");
+    tft.println(ip);
+  }
+
+  IPAddress displayedIP;
+};
 
 enum{
   IF_NOT_READY,

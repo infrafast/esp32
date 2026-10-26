@@ -1,54 +1,27 @@
 /**
  * @file main.cpp
- * @brief Firmware entry point selecting MixerApplication.h.
+ * @brief Selects the firmware entry point.
+ *
+ * INTERVAL_APP_ENTRY can be set in build_flags:
+ *   INTERVAL_ENTRY_MIXER (0) = normal MixerApplication (default)
+ *   INTERVAL_ENTRY_DIAGNOSE (1) = DiagnoseApplication
  */
 
-/*#include <Arduino.h>
+#include <Arduino.h>
 
-#include "TFT_eSPI.h"
+#define INTERVAL_ENTRY_MIXER    0
+#define INTERVAL_ENTRY_DIAGNOSE 1
 
-#define POWERRAIL_EN_PIN  (gpio_num_t)D4 //GPIO_NUM_5
-
-class Utility{
-    public:
-        TFT_eSPI tft = TFT_eSPI(); 
-
-        Utility(){
-            powerOn();
-        }
-        
-        void draw(uint16_t color){            
-            tft.fillRect(20,20,200,280,color);
-        }
-
-        void init(){
-            // ******** Clé : rediriger le SPI global vers HSPI ********
-            //SPI.end();                                  // au cas où
-            //SPI.begin(TFT_SCLK, TFT_MISO, TFT_MOSI);    // pour que le SPI globalai les memes broches que le HSPI            
-            //powerOn();
-
-            tft.init(1);     
-            tft.fillScreen(TFT_BLUE);
-            draw(TFT_BLACK);
-        }
-
-        void powerOn(){
-            pinMode(POWERRAIL_EN_PIN, OUTPUT);
-            digitalWrite(POWERRAIL_EN_PIN, 1);  
-        }
-};
-
-Utility utility;
-
-
-#include "TestMIDIHelper.h"*/
-
-
-#if !defined(PROD)
-  // Keep DEBUG local to the application translation unit. This prevents the
-  // third-party AppleMIDI library from enabling its SerialMon-only debug code.
-  #define DEBUG 1
-  #define SerialMon Serial
+#ifndef INTERVAL_APP_ENTRY
+  #define INTERVAL_APP_ENTRY INTERVAL_ENTRY_MIXER
 #endif
 
+#if INTERVAL_APP_ENTRY == INTERVAL_ENTRY_DIAGNOSE
+
+#include "DiagnoseApplication.h"
+
+#else
+
 #include "MixerApplication.h"
+
+#endif

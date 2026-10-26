@@ -12,7 +12,7 @@ Consolidated on October 24, 2026 from the code on `main`, `ANALYSE_REPO.md`, `li
 |---|---|
 | `src/main.cpp` | Selects the active application: `MixerApplication.h` |
 | `src/MixerApplication.h` | Enables networking, creates mixers, declares strips, provides `setup()/loop()` |
-| `src/TestApplication.h` | Alternative test application, not selected |
+| `src/DiagnoseApplication.h` | Minimal TFT/W5500 diagnostic application, selected explicitly |
 | `lib/Interval/src/Interval.h` | Framework integration, utilities, events, configuration, and common resources |
 | `APPManager.h`, `Banks.h` | Application orchestration and bank organization |
 | `HWManager.h`, `HWComponents.h` | Power rail, buttons, battery, network, display, USB modes, and shutdown |
