@@ -312,8 +312,8 @@ public:
      * @brief Initialize power, inputs, storage, display and the startup USB mode.
      *
      * Read persistent preferences and the startup button first, then enable the
-     * peripheral rail. HW_INIT_TFT_BEFORE_COMPONENTS controls whether the TFT starts
-     * before or after other components, including Ethernet. Mount LittleFS before
+     * peripheral rail. The historical order initializes components, including
+     * Ethernet, before the TFT. Mount LittleFS before
      * application data loads. Debug builds select CDC; production selects CDC or MIDI
      * from the startup mode. Start background power-button/display handling last.
      */

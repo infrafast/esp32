@@ -36,14 +36,14 @@ Hardware has its own lifecycle: power rail activation, display and component ini
 
 ### Current TFT / W5500 order
 
-`HW_INIT_TFT_BEFORE_COMPONENTS` accepts 0 or 1 in `HWManager.h`:
+The firmware uses the historical initialization order: the peripheral rail is
+enabled, components are initialized (including Ethernet), and the TFT is then
+initialized. The experimental TFT-first/bootstrap implementation has been
+removed.
 
-- 1: `initTFT()` before component initialization, therefore before networking.
-- 0: components before `initTFT()`, the historical order.
-- `env:dev` explicitly defines 1.
-- `env:prod` does not define this option and currently uses the default value 0.
-
-The TFT and W5500 reset line is shared. The development initialization-order change is a diagnostic variant present in the code, not proof of a hardware fix or production validation.
+The TFT and W5500 reset line remains shared. Hardware startup reliability is
+being investigated separately on PCB revision 2.2; no software initialization
+order change should be assumed to fix that electrical issue.
 
 ## 3. Patterns and contracts
 

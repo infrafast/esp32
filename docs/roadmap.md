@@ -397,7 +397,10 @@ Origin: initial audit dated October 21, 2026, U6 revision dated October 22, exam
 
 ### Protocol and proposals preserved from the audit
 
-The protocol below is preserved as a historical proposal. When comparing PCBs, fix and record `HW_INIT_TFT_BEFORE_COMPONENTS`: TFT-first order is now enabled in dev. Do not combine a hardware change and a firmware change within the same test.
+The protocol below is preserved as a historical proposal. The experimental
+TFT-first initialization has been removed; current firmware uses the
+historical components-before-TFT order. Do not combine a hardware change and
+a firmware change within the same test.
 
 ### Priority tests with a fixed firmware version
 
