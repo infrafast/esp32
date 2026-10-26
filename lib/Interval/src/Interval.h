@@ -247,7 +247,13 @@ bool useUSBMidi = false;
 #ifdef DEBUG  //ets_printf(__VA_ARGS__) //
   #define debugMon Serial  //  
   SemaphoreHandle_t serialMutex = xSemaphoreCreateMutex();
-  #define DEBUG_PRINT(...) if (!useUSBMidi) if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(500))) { debugMon.printf(__VA_ARGS__); debugMon.flush(); xSemaphoreGive(serialMutex);} else (void)0
+  // HWCDC::flush() waits until the USB Serial/JTAG TX ring is empty.  When
+  // no host terminal is attached, the ESP32-S3 can keep that ring pending
+  // indefinitely; calling flush here therefore stalls boot before the
+  // hardware/network initialization.  Writes remain queued and are drained
+  // by the CDC ISR when a terminal connects, so debugging is still available
+  // without making a terminal a boot prerequisite.
+  #define DEBUG_PRINT(...) if (!useUSBMidi) if (xSemaphoreTake(serialMutex, pdMS_TO_TICKS(500))) { debugMon.printf(__VA_ARGS__); xSemaphoreGive(serialMutex);} else (void)0
   
   // Macros publiques
 #define DEBUG_BASE(prefix, fmt, ...) \

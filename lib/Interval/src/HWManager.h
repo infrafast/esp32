@@ -42,14 +42,6 @@
 //                                        D6 =
 #define RST_PIN           (gpio_num_t)D7 //GPIO_NUM_44
 
-#ifndef HW_INIT_TFT_BEFORE_COMPONENTS
-  #define HW_INIT_TFT_BEFORE_COMPONENTS 0
-#endif
-
-#if HW_INIT_TFT_BEFORE_COMPONENTS != 0 && HW_INIT_TFT_BEFORE_COMPONENTS != 1
-  #error "HW_INIT_TFT_BEFORE_COMPONENTS must be 0 or 1"
-#endif
-
 enum{
   LEFTB,
   RIGHTB,
@@ -257,14 +249,17 @@ public:
       // activate the serial communication and deactivate MIDI
       useUSBMidi = false;
       #ifdef DEBUG
-        debugMon.begin(115200);             
+        debugMon.begin(115200);
       #endif
       USB.enableDFU();   // allow the interface to be seen as jtag and upload fw but still do not show the seriall log          
       USB.begin();  // required to make the serial usb line working, but DO NOT PUT USB.begin() when using MIDI          
-      unsigned long start = millis();
-      while ((millis() - start < 1000 && !debugMon)) { // loop to allow user to see the usb logo indicating the device is in serial usb mode 
-        delay(1); // petite pause pour éviter de monopoliser la CPU
-      }                
+      // Give the USB Serial/JTAG host a short opportunity to attach.  This is
+      // deliberately bounded: it is not a boot prerequisite and cannot
+      // recreate the previous indefinite wait caused by Serial.flush().
+      const unsigned long start = millis();
+      while ((millis() - start < 1000) && !debugMon) {
+        delay(1);
+      }
     }
 
 
@@ -333,26 +328,14 @@ public:
       // get the power
       wakeUp(500); // you have to press button for more than 500ms to wake up, otherwise we do not start.    
 
-      // Start only the debug console early enough to capture hardware init.
-      // Full USB/DFU setup remains in useCDC() below.
+      // Start the debug console early enough to capture hardware init.
       #ifdef DEBUG
         debugMon.begin(115200);
-        DEBUG_INFO("Hardware init order: %s", HW_INIT_TFT_BEFORE_COMPONENTS ? "TFT before components" : "components before TFT");
       #endif
 
-      setPowerRail(ON);        
-
-      #if HW_INIT_TFT_BEFORE_COMPONENTS
-        initTFT();
-      #endif
-
-      //init all other devices      
-
+      setPowerRail(ON);
       for(int i = 0; i < hwComponents.size(); i++) hwComponents.get(i)->init();
-
-      #if !HW_INIT_TFT_BEFORE_COMPONENTS
-        initTFT();
-      #endif
+      initTFT();
 
       USB.productName("FOOTSWITCH");
       USB.manufacturerName("Interval");

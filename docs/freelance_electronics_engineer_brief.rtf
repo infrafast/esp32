@@ -1,0 +1,71 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Arial;}}
+\fs32\b Freelance Electronics Engineer – EasyEDA Redesign and Prototype Validation\b0\fs22\par
+\par
+\b Project overview\b0\par
+I am looking for an experienced electronics engineer to redesign and industrialize an existing ESP32-based controller PCB. The current PCB is functional but unreliable, with intermittent Ethernet startup failures, TFT flickering, sensitivity to nearby conductive objects, and suspected ground-return, power, reset, and SPI signal-integrity issues.\par
+\par
+\b Product description\b0\par
+The product is a compact, battery-powered footswitch controller based on an ESP32 module. It includes:\par
+• Three analog footswitch/button inputs using resistor-ladder detection.\par
+• One dedicated digital push button for power-on, shutdown, and startup control.\par
+• A TFT display for user feedback and configuration.\par
+• A W5500 Ethernet interface for wired network connectivity.\par
+• USB connectivity for power, debugging, firmware updates, and configuration.\par
+• Battery-powered operation with a controlled peripheral power rail.\par
+• A shared SPI bus between the TFT display and the W5500 Ethernet controller.\par
+The design must operate reliably from both USB power and battery power.\par
+\par
+\b Current schematic and reference files\b0\par
+Current schematic: [CURRENT SCHEMATIC – EasyEDA/PDF/LINK TO BE PROVIDED]\par
+Additional reference files may include current PCB/Gerbers, EasyEDA project files, ESP32 firmware, the PCB v2.2 audit report, and mechanical drawings. The existing design is the functional and mechanical starting point, but the electrical design may be reorganized where necessary.\par
+\par
+\b Scope of work\b0\par
+1. Recreate and improve the complete design in EasyEDA.\par
+2. Work collaboratively in EasyEDA using shared project access and regular design reviews.\par
+3. Use only standard components available from JLCPCB/LCSC so the PCB and components can be ordered directly through JLCPCB.\par
+4. Review and improve the ground-plane strategy, power distribution, decoupling, return-current paths, reset and enable signals, SPI routing, signal integrity, floating inputs, capacitive coupling, protection, startup sequencing, manufacturability, and assembly reliability.\par
+5. Produce a robust prototype suitable for direct JLCPCB assembly.\par
+\par
+\b Mechanical constraints\b0\par
+The following must remain compatible with the existing product and enclosure:\par
+• PCB outline and dimensions.\par
+• Mounting holes and hole locations.\par
+• Battery position and dimensions.\par
+• USB connector position.\par
+• ESP32 module position.\par
+• W5500 module/socket position.\par
+• TFT connector and other major connector locations.\par
+• Required clearances and enclosure interfaces.\par
+\par
+\b Component cost target\b0\par
+The total component cost must not exceed USD 10 per assembled PCB, excluding PCB fabrication and shipping. Any proposed component that threatens this target must be identified before approval.\par
+\par
+\b Required deliverables\b0\par
+• Complete EasyEDA schematic.\par
+• Complete PCB layout.\par
+• Production-ready Gerber files.\par
+• JLCPCB/LCSC-compatible BOM.\par
+• Pick-and-place/CPL files where applicable.\par
+• Design notes explaining grounding, power, reset, and SPI improvements.\par
+• ERC/DRC-clean project.\par
+• Prototype ordered through JLCPCB.\par
+• Bring-up and validation report.\par
+• Recommendations for any remaining hardware improvements.\par
+\par
+\b Acceptance criteria\b0\par
+The prototype must boot reliably from USB and battery power, start without requiring a connected serial terminal, initialize the ESP32, TFT, and W5500 reliably, show no visible TFT flicker when a hand or conductive object approaches the board, maintain stable 3.3 V and ground references, pass repeated cold-start and power-cycle tests, preserve mechanical compatibility, use only JLCPCB/LCSC-sourced components, and remain within the USD 10 component-cost target.\par
+\par
+\b Payment terms\b0\par
+A reasonable fee will be paid for the engineering work performed, including design and documented effort. Final payment will be released only after the EasyEDA design has been used to order and assemble a prototype that meets the agreed acceptance criteria.\par
+Preferred milestones:\par
+• Initial design and schematic milestone.\par
+• PCB/layout review milestone.\par
+• Prototype-order milestone.\par
+• Final validation and acceptance milestone.\par
+The engineer must identify risks, assumptions, and any acceptance-test limitations before starting.\par
+\par
+\b Required experience\b0\par
+Please provide examples of previous work involving ESP32 or similar microcontrollers, W5500 Ethernet, SPI displays, battery-powered products, mixed-signal or compact embedded PCBs, EasyEDA, JLCPCB production, grounding, and signal-integrity debugging.\par
+Please include your estimated cost, schedule, and proposed workflow.\par
+}
