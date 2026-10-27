@@ -475,6 +475,11 @@ class DirectoryInterface: public NetworkDevice{
       void epDirectoryRefresh(){
         // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
         rtpDir.clear();
+        // A refresh can be requested while Directory is already online. In
+        // that case NetworkDevice::enable() is not involved, so publish the
+        // pending state explicitly before starting the new scan.
+        DeviceInterface::setStatePending();
+        state.broadcastState = true;
         // This flag is cleared by the normal completion callback or by the
         // timeout in monitorService(), so Directory cannot remain pending
         // indefinitely when a discovery backend is silent.
