@@ -213,7 +213,23 @@ class DirectoryInterface: public NetworkDevice{
         DEBUG_INFO("%s::_begin() registering serviceFoundWrapper and _instance",interfaceName.c_str());
         instance_ = this;  // enregistrer l’instance active       // we don't do that in the constructor as the instance has multiple heritage, hence we want to be sure the object is fully created
         EthernetBonjour.setServiceFoundCallback(&DirectoryInterface::serviceFoundWrapper);  
-        return true;        
+
+        // NetworkDevice::_begin() registers this interface as a listener of
+        // hwm.network and then calls DirectoryInterface::begin().  This call
+        // is required because Directory overrides _begin(); without it,
+        // EVENT_NETWORK_CONNECTED never reaches Directory and its disabled
+        // message remains stuck at the boot-time value 0.0.0.0.
+        const bool initialized = NetworkDevice::_begin();
+
+        // If the network was already connected before this interface was
+        // initialized, no connection event will be replayed. Refresh once
+        // here so a subsequent fullConfig response is already correct.
+        if (initialized && !deviceInterface->state.enabled &&
+            hwm.network->state == CONNECTED){
+          refreshDisabledNetworkDetails();
+        }
+
+        return initialized;
       }
 
       /**
