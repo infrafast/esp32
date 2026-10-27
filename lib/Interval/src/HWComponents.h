@@ -1227,7 +1227,16 @@ class Network : public HWComponent2State{
     TargetEcho internet = TargetEcho("8.8.8.8"); 
     uint16_t LANlatency = 38;
 
-    bool ethEnabled = true;
+    bool ethEnabled = true; ///< Ethernet is enabled by configuration.
+    /**
+     * @brief Whether a W5500 was detected during hardware initialization.
+     *
+     * This is deliberately separate from @c ethEnabled: Ethernet can be
+     * enabled in software while the physical controller is absent or
+     * undetectable. GUI and connection-attempt decisions must use this flag
+     * when they depend on actual Ethernet hardware availability.
+     */
+    bool ethHardwareAvailable = false;
     bool WiFiEnabled = true;
     String SSID="undef",lastConnectedSSID="";
     bool AP = false;
@@ -1453,8 +1462,11 @@ class WiFiEth : public Network{
         // test if ethernet module is present and instantiate class accordingly
         Ethernet.begin(ethMac,100,100);
         if (Ethernet.hardwareStatus() == EthernetNoHardware){
+          ethHardwareAvailable = false;
+          networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
           if (debug) DEBUG_WARN("%s !!! THERE IS NO ETHERNET HW !!!",id.c_str());
         }else{
+          ethHardwareAvailable = true;
           if (debug) DEBUG_INFO("%s Using WiFi & Ethernet",id.c_str());
           //EthernetBonjour.setServiceFoundCallback(onEthernetBonjourServiceFoundCallback);         
           setLink(Ethernet.linkStatus());   // check immediately if ethernet is connected so it has priority on WiFI connection    => done in the thread
@@ -2049,7 +2061,8 @@ class WiFiEth : public Network{
      */
     bool refresh(bool force=false) {
     
-      if (millis()-checkEthCableTime > ETH_CABLE_CHECK_FREQUENCY && ethEnabled){   // only if we use the full network stack and not only AP mode
+      if (millis()-checkEthCableTime > ETH_CABLE_CHECK_FREQUENCY &&
+          ethEnabled && ethHardwareAvailable){   // only poll a detected W5500
         setLink(Ethernet.linkStatus());        
       }
       // the loop ensure that we always have one connection at the same time, if wifi is connected, ethernet will not connect and vice versa
@@ -2274,7 +2287,7 @@ class WiFiEth : public Network{
             if (appleMidiClient != nullptr){ appleMidiClient->endSession(); delete appleMidiClient; appleMidiClient = nullptr;}
             
             lastActiveMedia = NO_MEDIA;
-            if (!ethEnabled) networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
+            if (!ethEnabled || !ethHardwareAvailable) networkConnectivityIcon = ICON_WIFI_STRENGTH_3;
             else networkConnectivityIcon = ICON_MIXETHWIFI; 
             DEBUG_INFO("+------------------------------+");           
             DEBUG_INFO("| ALL NETWORK OBJECTED CLEANED |");

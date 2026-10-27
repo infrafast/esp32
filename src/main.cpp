@@ -2,26 +2,16 @@
  * @file main.cpp
  * @brief Selects the firmware entry point.
  *
- * INTERVAL_APP_ENTRY can be set in build_flags:
- *   INTERVAL_ENTRY_MIXER (0) = normal MixerApplication (default)
- *   INTERVAL_ENTRY_DIAGNOSE (1) = DiagnoseApplication
+ * Define INTERVAL_DIAGNOSE in build_flags to run DiagnoseApplication.
+ * If it is not defined, MixerApplication is launched.
  */
 
 #include <Arduino.h>
 
-#define INTERVAL_ENTRY_MIXER    0
-#define INTERVAL_ENTRY_DIAGNOSE 1
+//#define INTERVAL_DIAGNOSE
 
-#ifndef INTERVAL_APP_ENTRY
-  #define INTERVAL_APP_ENTRY INTERVAL_ENTRY_MIXER
-#endif
-
-#if INTERVAL_APP_ENTRY == INTERVAL_ENTRY_DIAGNOSE
-
-#include "DiagnoseApplication.h"
-
+#if defined(INTERVAL_DIAGNOSE)
+    #include "DiagnoseApplication.h"
 #else
-
-#include "MixerApplication.h"
-
+    #include "MixerApplication.h"
 #endif

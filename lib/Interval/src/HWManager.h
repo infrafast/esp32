@@ -69,7 +69,11 @@ void OnWiFiEvent(WiFiEvent_t event);
 void bootScreen(uint8_t);
 
 
-#define SHUTDOWN_PUSH_DELAY 1500    // how long to press the button to switchoff
+constexpr uint32_t SHUTDOWN_PUSH_DELAY = 1500;
+constexpr uint32_t NORMAL_STARTUP_PRESS_MS = 2000;
+constexpr uint32_t RESET_DELAY_MS = 10000;
+constexpr uint32_t RESET_GRACE_PERIOD_MS = RESET_DELAY_MS / 3;
+constexpr uint32_t BUTTON_DEBOUNCE_MS = 20;
 
 #define INVERTED_SCREEN_NO 1
 #define INVERTED_SCREEN_YES 3
@@ -158,15 +162,41 @@ public:
         but who cares?    
     }
     */
-    /** @brief Interpret the startup button press and select the hardware startup mode. */
+    /**
+     * @brief Interpret the startup button press and select the hardware mode.
+     *
+     * The selected value is stored in @c startupState and consumed later by
+     * the hardware/application initialization path:
+     *
+     * - @c SYSTEM_OFF: no startup request; the device returns to deep sleep.
+     * - @c BATTERY_STARTUP: show the battery level, then return to sleep.
+     * - @c NORMAL_STARTUP: continue with the normal application startup.
+     * - @c SYSTEM_RESTART: internal one-shot flag used after a software restart
+     *   to bypass the physical startup-button requirement.
+     * - @c RESTART_REQUEST_AS_SUB_CDC: internal hand-off flag.  It is written
+     *   before rebooting after the CDC-selection hold window.  It means
+     *   "the next boot must enter CDC", not "CDC is active now".  On the next
+     *   boot it is converted to @c USB_CDC_AND_FWUPDATE_STARTUP and then
+     *   cleared.  This two-step state is needed because the requested mode
+     *   must survive the ESP restart while the current boot is still ending.
+     * - @c USB_CDC_AND_FWUPDATE_STARTUP: operational state for the boot that
+     *   actually starts the USB CDC/firmware-update path.  It is the result of
+     *   consuming @c RESTART_REQUEST_AS_SUB_CDC, not a second button gesture.
+     * - @c RESET_STARTUP: enter the reset/restore startup flow.
+     * - @c NO_FS_STARTUP: report that LittleFS could not be mounted.
+     *
+     * @note In DEV/DEBUG builds this method still detects the selected state,
+     * but @c HardwareManager::init() later forces USB CDC for diagnostics.
+     * Therefore states such as @c BATTERY_STARTUP and @c RESET_STARTUP may be
+     * bypassed after this method returns.  PROD preserves the selected state.
+     *
+     * @param pressTime Minimum press duration required for normal startup.
+     */
     void wakeUp(uint16_t pressTime){
       pinMode(BUILTIN_LED, OUTPUT);
       ledcSetup(0, 5000, 8);        // chhanel 0, freq 5000, resolution 8 bit
       ledcAttachPin(BUILTIN_LED, 0);   
       ledcWrite(0,255);
-
-      #define RESET_DELAY 10000
-      #define RESET_GRACE_PERIOD RESET_DELAY/3
 
       startupState = persistants.getUChar(PERSISTANT_STARTUP,SYSTEM_OFF);
 
@@ -182,13 +212,16 @@ public:
       // SYSTEM_OFF 
       else if (onOff.state == ON_OFF_TRIGGER){
         // else a button has to be pressed to startup
-        #define DEBOUCE_TIME 20
-        delay(DEBOUCE_TIME);        
+        delay(BUTTON_DEBOUNCE_MS);
         while(onOff.state == ON_OFF_TRIGGER && startupState == SYSTEM_OFF) {          
           bool released = onOff.refresh();
           if (released){
-            if (onOff.pushedTime>RESET_GRACE_PERIOD ){ 
-              //startupState = USB_CDC_AND_FWUPDATE_STARTUP; 
+            // The action for a normal, short or CDC startup is committed when
+            // the button is released.  A hold longer than the CDC window is
+            // handled below, while the button is still pressed.
+            if (onOff.pushedTime>RESET_GRACE_PERIOD_MS ){ 
+              // A release between the grace threshold and the reset threshold
+              // requests a reboot into the USB CDC/firmware-update startup.
               persistants.putUChar(PERSISTANT_STARTUP,RESTART_REQUEST_AS_SUB_CDC);
               delay(11);
               // put the code here that would deactivate the USBMIDI and reset the USB interface to jtag
@@ -196,23 +229,32 @@ public:
               // tud_disconnect() / reconnect // doesnt work
               ESP.restart();
             }else if (onOff.pushedTime>pressTime ){ 
+              // The configured normal-start threshold has been exceeded.
               startupState = NORMAL_STARTUP;
               //if (debug) DEBUG_PRINT("\nnormal press");
             }else{
+              // A short press only requests a battery display before sleep.
               startupState = BATTERY_STARTUP;
               //if (debug) DEBUG_PRINT("\nshort press ");
             }
           }else{
-            if (onOff.pushedTime>RESET_DELAY){
+            if (onOff.pushedTime>RESET_DELAY_MS){
+              // Ten seconds of continuous hold enters reset startup
+              // immediately.  Breaking here is intentional: waiting for a
+              // release would route the same press through the CDC branch.
               startupState = RESET_STARTUP;
-            }else if (onOff.pushedTime>RESET_GRACE_PERIOD){
+              break;
+            }else if (onOff.pushedTime>RESET_GRACE_PERIOD_MS){
+              // Between the CDC grace threshold and ten seconds, flash the
+              // LED to indicate that releasing now will request CDC startup.
 
               if (toggle == 0) toggle = 255; 
               else toggle = 0;
               ledcWrite(0,toggle);              
-              delay(map(RESET_DELAY-onOff.pushedTime,0,RESET_DELAY-RESET_GRACE_PERIOD,0,200));
+              delay(map(RESET_DELAY_MS-onOff.pushedTime,0,RESET_DELAY_MS-RESET_GRACE_PERIOD_MS,0,200));
 
-            }else if (onOff.pushedTime<RESET_GRACE_PERIOD && onOff.pushedTime>pressTime){
+            }else if (onOff.pushedTime<RESET_GRACE_PERIOD_MS && onOff.pushedTime>pressTime){
+              // The normal startup window is acknowledged by a steady LED.
               ledcWrite(0,0); //led on
             }
           }
@@ -326,7 +368,7 @@ public:
       onOff.init();    
       powerRail.init();        
       // get the power
-      wakeUp(500); // you have to press button for more than 500ms to wake up, otherwise we do not start.    
+      wakeUp(NORMAL_STARTUP_PRESS_MS);
 
       // Start the debug console early enough to capture hardware init.
       #ifdef DEBUG
@@ -348,12 +390,17 @@ public:
       bootScreen(startupState); 
 
       #ifdef DEBUG
-        // if we are in debug mode, we use the usb as a serial interface in all case, no matter the user boot up by long press or not
+        // Development builds always expose CDC for diagnostics, regardless
+        // of the startup-button duration selected above.
+        // Consequently, modes such as BATTERY_STARTUP and RESET_STARTUP are
+        // bypassed after this point in DEV; production keeps the state chosen
+        // by the startup button and selects CDC or MIDI accordingly.
         //serialMutex = xSemaphoreCreateMutex();             
         startupState = USB_CDC_AND_FWUPDATE_STARTUP;
         useCDC();
       #else
-        // in prod, the usage of the CDC (to update firmware) or MIDI depends on the startup state that was determined by the on/ff press duration at boot
+        // Production builds preserve the startup mode selected by the button:
+        // CDC for firmware-update startup, MIDI otherwise.
         if (startupState == USB_CDC_AND_FWUPDATE_STARTUP){
           useCDC();
         }else{        

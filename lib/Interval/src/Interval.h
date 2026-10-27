@@ -1849,8 +1849,8 @@ HardwareManager hwm;
 /**
  * @brief Minimal standalone hardware diagnostic for TFT and W5500 bring-up.
  *
- * This deliberately uses the board pin constants directly and does not
- * duplicate the application component definitions. Ethernet IP acquisition
+ * This uses the hardware-manager power and Ethernet pin definitions instead
+ * of duplicating the board mapping. Ethernet IP acquisition
  * is observed through the Arduino event callback where available and through
  * the W5500 library's localIP() state for the Ethernet DHCP path. All
  * diagnostic output is rendered on the TFT; no serial port is required.
@@ -1860,17 +1860,23 @@ public:
   TFT_eSPI tft;
 
   void begin() {
-    pinMode(D4, OUTPUT);
-    digitalWrite(D4, HIGH);
+    hwm.setPowerRail(ON);
     delay(50);
 
+    pinMode(ANALOGB_PIN, INPUT);
+    pinMode(ONOFF_PIN, INPUT_PULLUP);
+    pinMode(BATLEVEL_PIN, INPUT);
+
     tft.init();
-    tft.setRotation(1);
+    loadDisplayRotation();
+    tft.setRotation(displayRotated ? 3 : 1);
     tft.fillScreen(TFT_BLUE);
+    drawCornerMarkers();
     tft.setTextColor(TFT_WHITE, TFT_BLUE);
     tft.setTextSize(2);
     tft.setCursor(8, 8);
     tft.println("TFT test");
+    drawColorTestBars();
 
     WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t) {
       if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP ||
@@ -1879,52 +1885,367 @@ public:
       }
     });
 
-    Ethernet.init(D5);
+    Ethernet.init(ETH_CS_PIN);
     tft.setCursor(8, 40);
     tft.println("Starting Ethernet...");
+    drawStorageTests();
+    // Render this after the static screen setup, using the rotated display
+    // dimensions.  TFT_HEIGHT is the panel's compile-time native height and
+    // may not match the visible height after setRotation().
+    readStartupBatteryVoltage();
+    // The battery status uses the bottom strip; restore the corner markers
+    // after that background rectangle has been drawn.
+    drawCornerMarkers();
 
     static byte mac[] = {0x02, 0x49, 0x4E, 0x54, 0x56, 0x01};
-    Ethernet.begin(mac, 10000, 4000);
-    refreshEthernetIP();
+    ethernetMac = mac;
+    xTaskCreatePinnedToCore(ethernetBeginTask, "diagnose_eth", 4096, this,
+                            1, &ethernetTaskHandle, 0);
   }
 
   void loop() {
-    refreshEthernetIP();
+    updateDisplayRotationButton();
+    updateButtonIndicators();
+    if (ethernetFinished) {
+      refreshEthernetIP();
+    } else {
+      updateWaitingAnimation();
+    }
     yield();
   }
 
 private:
+  void updateDisplayRotationButton() {
+    const bool pressed = digitalRead(ONOFF_PIN) == ON_OFF_TRIGGER;
+    const unsigned long now = millis();
+    if (!pressed) {
+      rotationPressStartedAt = 0;
+      rotationPressHandled = false;
+      return;
+    }
+    if (rotationPressStartedAt == 0) {
+      rotationPressStartedAt = now;
+      return;
+    }
+    if (!rotationPressHandled && now - rotationPressStartedAt >= 2000UL) {
+      rotationPressHandled = true;
+      displayRotated = !displayRotated;
+      saveDisplayRotation();
+      tft.setRotation(displayRotated ? 3 : 1);
+      redrawDiagnosticScreen();
+    }
+  }
+
+  void loadDisplayRotation() {
+    Preferences preferences;
+    // Dedicated NVS namespace for the diagnostic UI, separate from the
+    // temporary persistence test namespace and the rest of Interval.
+    if (preferences.begin("diag_ui", true)) {
+      displayRotated = preferences.getBool("rotation180", false);
+      preferences.end();
+    }
+  }
+
+  void saveDisplayRotation() {
+    Preferences preferences;
+    if (preferences.begin("diag_ui", false)) {
+      preferences.putBool("rotation180", displayRotated);
+      preferences.end();
+    }
+  }
+
+  void redrawDiagnosticScreen() {
+    tft.fillScreen(TFT_BLUE);
+    drawCornerMarkers();
+    tft.setTextColor(TFT_WHITE, TFT_BLUE);
+    tft.setTextSize(2);
+    tft.setCursor(8, 8);
+    tft.println("TFT test");
+    drawColorTestBars();
+    tft.setCursor(8, 40);
+    tft.println("Starting Ethernet...");
+    drawStorageTests();
+    readStartupBatteryVoltage();
+    drawCornerMarkers();
+  }
+
+  void drawCornerMarkers() {
+    constexpr int16_t markerSize = 12;
+    const int16_t right = tft.width() - 1;
+    const int16_t bottom = tft.height() - 1;
+
+    tft.drawFastHLine(0, 0, markerSize, TFT_WHITE);
+    tft.drawFastVLine(0, 0, markerSize, TFT_WHITE);
+    tft.drawFastHLine(right - markerSize + 1, 0, markerSize, TFT_WHITE);
+    tft.drawFastVLine(right, 0, markerSize, TFT_WHITE);
+    tft.drawFastHLine(0, bottom, markerSize, TFT_WHITE);
+    tft.drawFastVLine(0, bottom - markerSize + 1, markerSize, TFT_WHITE);
+    tft.drawFastHLine(right - markerSize + 1, bottom, markerSize, TFT_WHITE);
+    tft.drawFastVLine(right, bottom - markerSize + 1, markerSize, TFT_WHITE);
+  }
+
+  void drawStorageTests() {
+    const bool fsOk = runLittleFSTest();
+    size_t nvsFreeEntries = 0;
+    const bool nvsOk = runNVSTest(nvsFreeEntries);
+    const uint32_t freeRam = ESP.getFreeHeap();
+    const bool ramOk = freeRam > 16384;
+
+    // Keep the result compact and below the Ethernet status line.  The IP
+    // area starts at y=92, so these lines remain visible when it appears.
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE, TFT_BLUE);
+    tft.setCursor(8, 64);
+    tft.printf("FS:%s %u/%uK   NVS:%s %u free",
+               fsOk ? "OK" : "ERR",
+               static_cast<unsigned>(LittleFS.usedBytes() / 1024U),
+               static_cast<unsigned>(LittleFS.totalBytes() / 1024U),
+               nvsOk ? "OK" : "ERR",
+               static_cast<unsigned>(nvsFreeEntries));
+    tft.setCursor(8, 76);
+    tft.printf("RAM:%s %uK free", ramOk ? "OK" : "LOW",
+               static_cast<unsigned>(freeRam / 1024U));
+    tft.setTextSize(2);
+  }
+
+  bool runLittleFSTest() {
+    static constexpr const char* path = "/.diagnose_fs.tmp";
+    bool ok = LittleFS.begin(false);
+    if (ok) {
+      File file = LittleFS.open(path, FILE_WRITE);
+      if (!file) {
+        ok = false;
+      } else {
+        const char marker[] = "interval-fs-test";
+        ok = file.write(reinterpret_cast<const uint8_t*>(marker), sizeof(marker) - 1) == sizeof(marker) - 1;
+        file.close();
+      }
+      if (ok) {
+        File file = LittleFS.open(path, FILE_READ);
+        char buffer[sizeof("interval-fs-test")] = {};
+        ok = file && file.readBytes(buffer, sizeof(buffer) - 1) == sizeof(buffer) - 1 &&
+             strcmp(buffer, "interval-fs-test") == 0;
+        if (file) {
+          file.close();
+        }
+      }
+      LittleFS.remove(path);
+    }
+    return ok;
+  }
+
+  bool runNVSTest(size_t& freeEntries) {
+    freeEntries = 0;
+    Preferences preferences;
+    if (!preferences.begin("diagnose", false)) {
+      return false;
+    }
+    freeEntries = preferences.freeEntries();
+    static constexpr uint32_t marker = 0xD1A6A05E;
+    const bool written = preferences.putUInt("marker", marker) == sizeof(marker);
+    const bool verified = written && preferences.getUInt("marker", 0) == marker;
+    preferences.remove("marker");
+    preferences.end();
+    return verified;
+  }
+
+  // Three compact RGB gradients placed beside the TFT title.  They provide a
+  // quick visual check of the red, green and blue channels without changing
+  // the rest of the diagnostic layout.
+  void drawColorTestBars() {
+    constexpr int16_t y = 8;
+    constexpr int16_t height = 16;
+    const int16_t x = 112;
+    const int16_t available = tft.width() - x;
+    if (available <= 0) {
+      return;
+    }
+
+    const int16_t barWidth = available / 3;
+    for (uint8_t bar = 0; bar < 3; ++bar) {
+      const int16_t startX = x + bar * barWidth;
+      const int16_t width = (bar == 2) ? (tft.width() - startX) : barWidth;
+      for (int16_t column = 0; column < width; ++column) {
+        const uint8_t level = (width > 1)
+                                  ? static_cast<uint8_t>((column * 255) / (width - 1))
+                                  : 255;
+        uint16_t color = TFT_BLACK;
+        if (bar == 0) {
+          color = tft.color565(level, 0, 0);
+        } else if (bar == 1) {
+          color = tft.color565(0, level, 0);
+        } else {
+          color = tft.color565(0, 0, level);
+        }
+        tft.drawFastVLine(startX + column, y, height, color);
+      }
+    }
+  }
+
+  static void ethernetBeginTask(void* context) {
+    Diagnose* self = static_cast<Diagnose*>(context);
+    Ethernet.begin(self->ethernetMac, 10000, 4000);
+    self->ethernetFinished = true;
+    self->ethernetTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+  }
+
   void refreshEthernetIP() {
     IPAddress ip = Ethernet.localIP();
-    if (ip != IPAddress(0, 0, 0, 0) && ip != displayedIP) {
+    if (ip == IPAddress(0, 0, 0, 0)) {
+      updateWaitingAnimation();
+      return;
+    }
+    if (ip != displayedIP) {
       showIPAddress(ip, "Ethernet");
     }
   }
 
+  void updateWaitingAnimation() {
+    const unsigned long now = millis();
+    if (now - lastAnimationAt < 120) {
+      return;
+    }
+    lastAnimationAt = now;
+
+    static const char* const spinner[] = {"|", "/", "-", "\\"};
+    // Same text size as "Starting Ethernet...", immediately after it.
+    tft.fillRect(270, 40, 24, 20, TFT_BLUE);
+    tft.setCursor(270, 40);
+    tft.setTextColor(TFT_WHITE, TFT_BLUE);
+    tft.print(spinner[animationFrame++ & 3U]);
+  }
+
   void showIPAddress(const IPAddress& ip, const char* source) {
     displayedIP = ip;
-    tft.fillRect(0, 72, 320, 32, TFT_BLUE);
-    tft.setCursor(8, 80);
+    tft.fillRect(0, 88, TFT_WIDTH, 28, TFT_BLUE);
+    tft.setCursor(8, 92);
     tft.print(source);
     tft.print(": ");
     tft.println(ip);
   }
 
+  void readStartupBatteryVoltage() {
+    uint32_t sumMilliVolts = 0;
+    uint32_t minimumMilliVolts = UINT32_MAX;
+    uint32_t maximumMilliVolts = 0;
+    constexpr uint8_t samples = 5;
+    for (uint8_t i = 0; i < samples; ++i) {
+      const uint32_t sample = analogReadMilliVolts(BATLEVEL_PIN);
+      sumMilliVolts += sample;
+      minimumMilliVolts = min(minimumMilliVolts, sample);
+      maximumMilliVolts = max(maximumMilliVolts, sample);
+      delay(2);
+    }
+
+    char voltage[20];
+    const float spread = (maximumMilliVolts - minimumMilliVolts) / 1000.0f;
+    const float measuredVoltage = (2.0f * (sumMilliVolts / float(samples))) / 1000.0f;
+    const bool batteryPresent = measuredVoltage >= 2.5f && measuredVoltage <= 4.6f && spread < 0.25f;
+
+    if (batteryPresent) {
+      startupBatteryVoltage = measuredVoltage;
+      snprintf(voltage, sizeof(voltage), "Bat: %.2f", startupBatteryVoltage);
+    } else {
+      snprintf(voltage, sizeof(voltage), "Bat: N/A");
+    }
+    const int16_t y = (tft.height() > 24) ? (tft.height() - 24) : 0;
+    tft.fillRect(0, y, tft.width(), 24, TFT_BLUE);
+    tft.setCursor(8, y);
+    tft.setTextColor(TFT_WHITE, TFT_BLUE);
+    tft.print(voltage);
+  }
+
+  void updateButtonIndicators() {
+    const unsigned long now = millis();
+    if (now - lastButtonUpdateAt < 50) {
+      return;
+    }
+    lastButtonUpdateAt = now;
+
+    const uint16_t value = analogRead(ANALOGB_PIN);
+    const bool left = value < 683;
+    const bool middle = value >= 683 && value < 2048;
+    const bool right = value >= 2048 && value < 3413;
+    const bool on = digitalRead(ONOFF_PIN) == ON_OFF_TRIGGER;
+
+    drawButtonState(20, 125, "L", left);
+    drawButtonState(125, 125, "C", middle);
+    drawButtonState(230, 125, "R", right);
+    drawLadderValue(value);
+    drawGPIOStatus();
+
+    // Render the power button like the three ladder buttons: green when
+    // active, red when released, with the state text inside the box.
+    drawButtonState(125, 175, on ? "ON" : "OFF", on);
+  }
+
+  void drawLadderValue(uint16_t value) {
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE, TFT_BLUE);
+    tft.fillRect(20, 158, 70, 10, TFT_BLUE);
+    tft.fillRect(125, 158, 70, 10, TFT_BLUE);
+    tft.fillRect(230, 158, 70, 10, TFT_BLUE);
+    tft.setCursor(24, 159);
+    tft.printf("%u", static_cast<unsigned>(value));
+    tft.setCursor(129, 159);
+    tft.printf("%u", static_cast<unsigned>(value));
+    tft.setCursor(234, 159);
+    tft.printf("%u", static_cast<unsigned>(value));
+    tft.setTextSize(2);
+  }
+
+  void drawGPIOStatus() {
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_WHITE, TFT_BLUE);
+    // Share the bottom status line with the battery value.  The previous
+    // y=200 position was hidden by the ON/OFF button frame.
+    tft.fillRect(130, 216, tft.width() - 138, 16, TFT_BLUE);
+    tft.setCursor(130, 220);
+    tft.printf("D0:%d D1:%d D2:%d D4:%d D5:%d D7:%d",
+               digitalRead(ANALOGB_PIN), digitalRead(BATLEVEL_PIN),
+               digitalRead(ONOFF_PIN), digitalRead(POWERRAIL_EN_PIN),
+               digitalRead(ETH_CS_PIN), digitalRead(RST_PIN));
+    tft.setTextSize(2);
+  }
+
+  void drawButtonState(int16_t x, int16_t y, const char* label, bool pressed) {
+    tft.fillRect(x, y, 70, 32, pressed ? TFT_GREEN : TFT_RED);
+    tft.drawRect(x, y, 70, 32, TFT_WHITE);
+    tft.setCursor(x + 29, y + 8);
+    tft.setTextColor(pressed ? TFT_BLACK : TFT_WHITE,
+                     pressed ? TFT_GREEN : TFT_RED);
+    tft.print(label);
+    tft.setTextColor(TFT_WHITE, TFT_BLUE);
+  }
+
   IPAddress displayedIP;
+  float startupBatteryVoltage = 0.0f;
+  byte* ethernetMac = nullptr;
+  volatile bool ethernetFinished = false;
+  TaskHandle_t ethernetTaskHandle = nullptr;
+  unsigned long lastAnimationAt = 0;
+  uint8_t animationFrame = 0;
+  unsigned long lastButtonUpdateAt = 0;
+  unsigned long rotationPressStartedAt = 0;
+  bool rotationPressHandled = false;
+  bool displayRotated = false;
 };
 
-enum{
-  IF_NOT_READY,
-  IF_READY
+/** @brief Readiness state used by interfaces and background services. */
+enum {
+  IF_NOT_READY, ///< The interface is not ready to exchange application data.
+  IF_READY      ///< The interface is initialized and may exchange data.
 };
 
+/** @brief Qualitative network/service quality reported by monitoring code. */
 enum class QoS : int8_t {
-  NOTAPPLICABLE = -1,
-  UNDETERMINED,  
-  CRITICAL,
-  POOR,
-  MEDIUM,
-  GOOD
+  NOTAPPLICABLE = -1, ///< Quality does not apply to this service or state.
+  UNDETERMINED,       ///< Quality has not been measured yet.
+  CRITICAL,           ///< Service is unusable or critically degraded.
+  POOR,               ///< Service works but is significantly degraded.
+  MEDIUM,             ///< Service is usable with moderate degradation.
+  GOOD                ///< Service is operating within acceptable limits.
 };
 
 /** @brief Map a quality-of-service level to a display color. */
@@ -3326,8 +3647,9 @@ void buildNetworkScreen(){
   app.configIconGlowingRedColor.value = &app.bigLeftIconColor;  
   //gui.add(new AnimatedIcon(app.iconRolling,2,Align::Center,&midScreenHoriz, &app.midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));              
   #ifdef USE_NETWORK
-    if (!hwm.network->ethEnabled){
-      //if ethernet bank is absent, we only offer to connect the AP
+    if (!hwm.network->ethEnabled || !hwm.network->ethHardwareAvailable){
+      // If Ethernet is disabled or the W5500 was not detected, expose only
+      // the Wi-Fi/AP configuration path.
       setAPIconAndText();                    
     }else{
       gui.add(new TextArea(lang.getString("Connect"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));

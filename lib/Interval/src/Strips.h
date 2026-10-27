@@ -519,7 +519,7 @@ class Strip: public EventListener{
       }
 
       // Ignore the initial debounce interval.
-      if ((now - holdStartMillis) < DEBOUCE_TIME) {
+      if ((now - holdStartMillis) < BUTTON_DEBOUNCE_MS) {
         return 0.0f;
       }
 
