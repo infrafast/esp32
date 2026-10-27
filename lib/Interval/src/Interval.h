@@ -3741,7 +3741,12 @@ void utilsScreenBuilder(uint8_t state){
       app.bigLeftIcon = ICON_LAPTOP;
       app.bigRightIcon = ICON_FOOTSWITCH;
     break;
-    case STATE_UTILS_WEBAPPCONNECTED:         
+    case STATE_UTILS_WEBAPPCONNECTED:
+      // This page replaces the menu item title with the connection status.
+      // Clear the previous item label before addLeftRightIcons() adds the
+      // common top/bottom menu widgets; otherwise CONFIGURATION remains
+      // visible around the shorter "Connected" label.
+      app.menuBottomLabel = "";
       addLeftRightIcons();
       app.iconPending[0] = ICON_LEFTDOT;
       app.iconPending[1] = ICON_RIGHTDOT;      
