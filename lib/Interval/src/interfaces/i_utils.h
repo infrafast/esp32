@@ -205,6 +205,16 @@ class DirectoryInterface: public NetworkDevice{
 
       /** @brief Perform one service-specific connection and data-processing pass. */
       virtual bool monitorService() override{
+        // Discovery normally completes through a Bonjour callback or the
+        // Wi-Fi worker task. The timeout is a safety net when a backend fails
+        // to emit its completion callback.
+        if (discoveryInProgress &&
+            millis() - discoveryStartedAt >= EP_DISCOVERY_TIME_OUT) {
+          DEBUG_WARN("%s: discovery timeout after %lu ms",
+                     interfaceName.c_str(),
+                     static_cast<unsigned long>(millis() - discoveryStartedAt));
+          epDirectoryUpdated();
+        }
         if (hwm.network->media == CABLE_MEDIA){
           EthernetBonjour.run();
         }else if (hwm.network->media == WIFI_MEDIA){
@@ -300,6 +310,11 @@ class DirectoryInterface: public NetworkDevice{
       
       static DirectoryInterface* instance_;
 
+      /** @brief True while a discovery pass is waiting for completion. */
+      bool discoveryInProgress = false;
+      /** @brief Start time used by the non-blocking discovery timeout guard. */
+      unsigned long discoveryStartedAt = 0;
+
       /**
        * @brief Start RTP-MIDI discovery using the active network connection.
        *
@@ -378,6 +393,12 @@ class DirectoryInterface: public NetworkDevice{
 
       /** @brief Notify consumers that endpoint discovery has finished. */
       void epDirectoryUpdated(){
+        // Normal callbacks and the timeout converge here. Ignore a late
+        // callback after timeout finalization to avoid duplicate broadcasts.
+        if (!discoveryInProgress) {
+          return;
+        }
+        discoveryInProgress = false;
         DEBUG_INFO("[RTP]\t\tScan terminé (timeout).");
         DEBUG_INFO("[RTP]\t\t%d endpoint(s) mémorisé(s):\n", rtpDir.epCount);      
         for (int i = 0; i < rtpDir.epCount; i++) {
@@ -386,11 +407,11 @@ class DirectoryInterface: public NetworkDevice{
         // NetworkDevice::enable() marks Directory as pending while discovery
         // runs.  The completion callback must close that transition itself;
         // otherwise the web GUI remains stuck on "Scanning network" forever.
-        const char* details = rtpDir.epCount == 0
-          ? lang.getString("No endpoints detected")->c_str()
-          : systemCfg.getString(S_AP_NAME)->c_str();
+        String endpointDetails = rtpDir.epCount == 0
+          ? *lang.getString("No endpoints detected")
+          : concatStrings(String(rtpDir.epCount), " endpoint(s)");
         DeviceInterface::setStateReady(
-          "green", lang.getString("online")->c_str(), "", details);
+          "green", lang.getString("online")->c_str(), "", endpointDetails.c_str());
         state.broadcastState = true;
         state.broadcastConfig = true;
 
@@ -401,6 +422,7 @@ class DirectoryInterface: public NetworkDevice{
 
       /** @brief Notify consumers that endpoint discovery is unavailable. */
       void epDirectoryNotReady(){
+        discoveryInProgress = false;
         DEBUG_INFO("[RTP]\t\tDirectory not ready");
         DeviceInterface::setStateReady(
           "green", lang.getString("online")->c_str(), "",
@@ -414,6 +436,11 @@ class DirectoryInterface: public NetworkDevice{
       void epDirectoryRefresh(){
         // SCAN FOR APPLE MIDI SESSION ON THE NETWORK
         rtpDir.clear();
+        // This flag is cleared by the normal completion callback or by the
+        // timeout in monitorService(), so Directory cannot remain pending
+        // indefinitely when a discovery backend is silent.
+        discoveryInProgress = true;
+        discoveryStartedAt = millis();
         if (hwm.network->media == CABLE_MEDIA){
           // Découvre le type de service "_apple-midi" en UDP ethernet = non bloquant
           EthernetBonjour.startDiscoveringService("_apple-midi", MDNSServiceUDP, EP_DISCOVERY_TIME_OUT); // :contentReference[oaicite:3]{index=3} 
