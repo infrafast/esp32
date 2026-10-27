@@ -2000,8 +2000,21 @@ void setup() {
       JsonDocument doc;
       String tempJsonString="";
 
-      doc["langs"][0] = "francais";
-      doc["langs"][1] = "english";       // change to "dir *.lang"
+      // Keep the web language selector in sync with the language files actually
+      // installed in LittleFS.  The previous implementation hard-coded only
+      // French and English, so the other valid firmware languages could never
+      // be advertised to the web GUI even when their .lang files were present.
+      std::vector<String> availableLanguages;
+      populateFileList("lang", "/", &availableLanguages, "", false);
+      JsonArray languages = doc.createNestedArray("langs");
+      for (const String& languageFile : availableLanguages) {
+        String language = languageFile;
+        // Web assets use lowercase basenames (francais.json, deutsch.json,
+        // ...), while firmware .lang files are conventionally uppercase.
+        if (language.startsWith("/")) language.remove(0, 1);
+        language.toLowerCase();
+        languages.add(language);
+      }
       doc["maxPOSTsize"] = MAX_POST_COMMAND_SIZE;
       doc["safeScanfSpace"] = String(SAFE_SCANF_SPACE);
       doc["sysexLibFile"] = SYSEXLIB_FILENAME;
