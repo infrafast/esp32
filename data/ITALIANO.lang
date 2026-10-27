@@ -3,5 +3,19 @@
 "LANGUAGE":"LINGUA",
 "QUIT":"ESENTATO",
 "No endpoints detected":"Nessun endpoint rilevato",
-"Device is discoverable on the network":"Il footswitch è rilevabile sulla rete"
+"Device is discoverable on the network":"Il footswitch è rilevabile sulla rete",
+"hint.interface":"Fornisce questo servizio di interfaccia.",
+"hint.system":"Fornisce le impostazioni interne del sistema e i servizi del firmware.",
+"hint.directory":"Trasmette il nome del footswitch sulla rete e rileva gli endpoint RTP-MIDI.",
+"hint.directory.scanning":"Trasmette il nome del footswitch e cerca endpoint RTP-MIDI sulla rete...",
+"hint.directory.no_endpoints":"Nessun dispositivo rilevato.",
+"hint.directory.discovered":"Dispositivi rilevati:",
+"hint.webapplication":"Ospita l'interfaccia di configurazione web e serve l'applicazione di controllo.",
+"hint.usbmidi":"Invia e riceve messaggi MIDI tramite la connessione USB.",
+"hint.blemidi":"Invia e riceve messaggi MIDI tramite Bluetooth Low Energy.",
+"hint.dinmidi":"Riservato a una connessione DIN-MIDI fisica; non disponibile sull'hardware attuale.",
+"hint.applemidi":"Invia e riceve messaggi MIDI tramite RTP-MIDI sulla rete.",
+"hint.sysosc":"Invia e riceve messaggi Open Sound Control tramite UDP.",
+"hint.artnet":"Invia dati DMX tramite Art-Net a nodi di illuminazione compatibili.",
+"hint.threepindmx":"Riservato all'interfaccia DMX fisica a 3 pin."
 }

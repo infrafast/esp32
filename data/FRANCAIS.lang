@@ -24,5 +24,19 @@
 "PluginUSB":"Connectez le cable USB de votre dispositif MIDI",
 "restartUSB":"Redemarrez pour activer USB MIDI",
 "No endpoints detected":"Aucun endpoint détecté",
-"Device is discoverable on the network":"Le footswitch est détectable sur le réseau"
+"Device is discoverable on the network":"Le footswitch est détectable sur le réseau",
+"hint.interface":"Fournit ce service d'interface.",
+"hint.system":"Fournit les réglages système internes et les services du micrologiciel.",
+"hint.directory":"Diffuse le nom du footswitch sur le réseau et découvre les endpoints RTP-MIDI.",
+"hint.directory.scanning":"Diffuse le nom du footswitch et recherche des endpoints RTP-MIDI sur le réseau...",
+"hint.directory.no_endpoints":"Aucun appareil détecté.",
+"hint.directory.discovered":"Appareil(s) détecté(s) :",
+"hint.webapplication":"Héberge l'interface de configuration web et sert l'application de contrôle.",
+"hint.usbmidi":"Envoie et reçoit des messages MIDI via la connexion USB.",
+"hint.blemidi":"Envoie et reçoit des messages MIDI via Bluetooth Low Energy.",
+"hint.dinmidi":"Réservé à une connexion DIN-MIDI physique, indisponible sur le matériel actuel.",
+"hint.applemidi":"Envoie et reçoit des messages MIDI via RTP-MIDI sur le réseau.",
+"hint.sysosc":"Envoie et reçoit des messages Open Sound Control via UDP.",
+"hint.artnet":"Envoie des données DMX via Art-Net vers des nœuds d'éclairage compatibles.",
+"hint.threepindmx":"Réservé à l'interface DMX physique à 3 broches."
 }
