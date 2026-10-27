@@ -249,6 +249,10 @@ class DirectoryInterface: public NetworkDevice{
         //discoveryRequest();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
 
         DeviceInterface::setStateReady("green",lang.getString("online")->c_str(),"",systemCfg.getString(S_AP_NAME)->c_str());
+        // Direct deviceEnable(true) calls do not pass through
+        // discoveryRequest(). Start discovery here so Enable and Refresh
+        // follow the same workflow.
+        startDiscovery();
 
         return true;
       }
@@ -271,7 +275,6 @@ class DirectoryInterface: public NetworkDevice{
         }else{
           // if interface is not up and running, we try to bring it up
           switchNetworkService(true);
-          startDiscovery();
         }
       }      
 
@@ -334,7 +337,10 @@ class DirectoryInterface: public NetworkDevice{
        * Results update the bounded shared endpoint directory before notifying listeners.
        */
       void startDiscovery(){
-        if (deviceInterface->state.code == IF_NOT_READY){
+        // IF_NOT_READY also represents the intentional pending state used
+        // during a scan. The network manager is authoritative for readiness.
+        if (hwm.network->state != CONNECTED ||
+            (hwm.network->media != CABLE_MEDIA && hwm.network->media != WIFI_MEDIA)){
           epDirectoryNotReady();
         }else{
           epDirectoryRefresh();
