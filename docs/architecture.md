@@ -51,6 +51,14 @@ order change should be assumed to fix that electrical issue.
 
 `DeviceInterface` combines `SerializableParameters`, `EventDispatcher`, and `EventListener`. Its instances register in `interfaceRepo`. The contract includes `begin()`, `end()`, `monitor()`, property serialization/restoration, and state transitions. The `_begin()` and `update()` functions implement part of the common lifecycle: preserve their behavior when overriding them.
 
+#### State transition and state projection rule
+
+Interface workflows own business transitions. Methods such as `enable()`, `disable()`, connection/disconnection handlers, discovery methods, and event handlers decide whether a service starts, stops, reserves/releases capacity, or changes network ownership. They then call `setStateXXX()` to publish the resulting state through the framework.
+
+`setStateXXX()` methods are state-projection helpers: they update the framework-visible fields (`code`, `label`, `subState`, `details`, `progress`, `led`, and broadcast flags) used by the GUI, serializers, QoS handling, and message system. They must not themselves start or stop services, perform discovery, reserve resources, or otherwise initiate business transitions. Keeping side effects in workflow methods prevents a GUI/state refresh from unexpectedly changing runtime behavior.
+
+When extending an interface, follow this order: perform or decide the business transition in the workflow, then call exactly the state helper that describes its result. If a state helper appears to need side effects, move those side effects back to the owning workflow instead of adding lifecycle behavior to `setStateXXX()`.
+
 `NetworkDevice` adds networking, ports, connection events, and presence monitoring. Concrete transports include `NetworkOSC` and `NetworkSocket`. States include ready, disconnected, pending, error, disabled, offline, and syncing; use the existing mechanisms rather than a parallel boolean.
 
 ### Mixer abstraction and template composition

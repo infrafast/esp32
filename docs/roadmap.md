@@ -34,6 +34,14 @@ Each ID is an actionable request: for example, **implement BUG-WEB-01**. Existin
 
 ### Interfaces / lifecycle
 
+#### IMP-IF-BLE-01 — Provide a real BLEMIDI start/stop lifecycle
+
+- **Status:** To assess.
+- **Observation:** `BLEMIDIInterface` currently forces `state.enabled = true` and `state.switchable = false` because the selected `lathoub/Arduino-BLE-MIDI` ESP32 backend does not implement a real shutdown. The transport exposes `begin()`/`end()`, but `BLEMIDI_ESP32::end()` only prints a message; the NimBLE backend's `end()` is empty as well. The classic ESP32 disconnect callback also restarts advertising. See the [upstream ESP32 backend](https://github.com/lathoub/Arduino-BLE-MIDI/blob/master/src/hardware/BLEMIDI_ESP32.h), [NimBLE backend](https://github.com/lathoub/Arduino-BLE-MIDI/blob/master/src/hardware/BLEMIDI_ESP32_NimBLE.h), and [transport wrapper](https://github.com/lathoub/Arduino-BLE-MIDI/blob/master/src/BLEMIDI_Transport.h).
+- **Rationale:** Exposing the generic enable switch today would claim that BLE is disabled while the BLE server/advertising and global ESP32 Bluetooth resources could remain active. A generic `BLEDevice::deinit()` is global to the BLE stack and must not be introduced without checking coexistence with other Bluetooth users (including `BluetoothSerial`) and the Arduino ESP32 core lifecycle.
+- **Requested change:** Assess and implement a backend-aware, idempotent BLEMIDI teardown/restart path, including advertising/server/resource ownership and callback safety. Only then restore `state.switchable = true` and normal enable/disable workflow behavior.
+- **Acceptance:** Enabling starts one BLE-MIDI instance; disabling stops advertising and releases or explicitly retains documented resources; re-enabling works repeatedly on the XIAO ESP32-S3; callbacks cannot target a stopped instance; no other Bluetooth service is disrupted.
+
 #### BUG-IF-02 — Unregister destroyed network services
 
 - **Status:** To do. **Priority:** P2.

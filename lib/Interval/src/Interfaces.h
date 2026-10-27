@@ -21,6 +21,20 @@
  * Configuration and runtime status are separate JSON views. init() loads settings
  * before startup; update() detects state changes and polls enabled interfaces.
  * Instances register by name so saved strips can resolve their interface binding.
+ *
+ * State-transition rule:
+ * - workflow methods (enable/disable, connect/disconnect, discovery, and event
+ *   handlers) decide when a business transition occurs;
+ * - setStateXXX() methods only project the already-decided result into the
+ *   framework state consumed by the GUI, serializers, QoS logic, and message
+ *   broadcasts.
+ *
+ * A setStateXXX() method must not start or stop a service, reserve capacity,
+ * change network ownership, or otherwise create a business transition. Keep
+ * those side effects in the owning workflow method, then call the appropriate
+ * setStateXXX() method to describe the resulting state. This separation keeps
+ * state reporting deterministic and prevents GUI updates from triggering
+ * hidden lifecycle changes.
  */
 class DeviceInterface  : public SerializableParameters, public EventDispatcher, public EventListener{
   #define INTERFACE_STATE       "state"
