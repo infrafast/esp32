@@ -92,5 +92,12 @@
 "Bad strip":"Strip incorrect",
 "Delete strip":"Supprimer le strip",
 "ready":"prêt",
-"disconnected":"déconnecté"
+"disconnected":"déconnecté",
+"RESET":"RÉINITIALISER",
+"INFO":"INFOS",
+"CONFIGURATION":"CONFIGURATION",
+"SAVE":"SAUVEGARDER",
+"ROTATE":"PIVOTER",
+"OFF":"ARRÊT",
+"FIRMWARE":"MICROLOGICIEL"
 }

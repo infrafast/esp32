@@ -161,6 +161,35 @@ Production TinyUSB MIDI has a header-name collision on case-insensitive filesyst
 
 Framework constants specify `infrafast.fr`, `/fwupdate/`, `/webapp`, and the `.tgz` extension. Do not infer HTTP/TLS behavior from these names alone.
 
+### Internationalization (i18n)
+
+The firmware and web application use separate but coordinated catalogues:
+
+- `data/*.lang` are the firmware/TFT catalogues loaded by `I18n`.
+- `/Volumes/web/demo/<language>.json` are the editable web catalogues.
+- `/Volumes/web/demo/<language>-user.json` contains optional user overrides; an
+  empty `{}` catalogue is valid when no overrides exist.
+- `data/webapp/*.json.gz` are generated deployment assets and must be rebuilt
+  from the editable web sources, never edited directly.
+
+The English catalogue has a deliberate compact representation: when an English
+translation is identical to its key, the entry may be omitted. `I18n::getString`
+and the web translator both fall back to the key itself, so adding redundant
+`"KEY":"KEY"` entries increases storage without changing behavior. English
+entries whose value differs from the key must remain present.
+
+Every non-English catalogue must explicitly contain every key used by the
+firmware or the active web application, with a real translation. New keys must
+be added to all supported non-English languages and to the English source only
+when the value is not exactly the key. Do not hard-code user-visible labels in
+the TFT menu or web UI: use the existing lookup path and add the corresponding
+catalogue entries.
+
+When changing i18n, validate JSON syntax, verify firmware key coverage across
+all `.lang` files, verify active web-key coverage across all language JSON
+files, and regenerate/test the compressed assets. Missing optional `*-user.json`
+files must not prevent loading the base language catalogue.
+
 High-impact areas are `Interval.h`, `src/mixers/`, `platformio.ini`, and preparation scripts: check their cross-cutting effects before changes.
 
 ## 6. PCB 2.0 / 2.2 hardware audit — historical reference

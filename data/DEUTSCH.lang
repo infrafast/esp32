@@ -77,5 +77,12 @@
 "Bad bank":"Fehlerhafte Bank",
 "Bad strip":"Fehlerhafter Strip",
 "Delete strip":"Strip löschen",
-"ready":"bereit"
+"ready":"bereit",
+"RESET":"ZURÜCKSETZEN",
+"INFO":"INFO",
+"CONFIGURATION":"KONFIGURATION",
+"SAVE":"SPEICHERN",
+"ROTATE":"DREHEN",
+"OFF":"AUS",
+"FIRMWARE":"FIRMWARE"
 }
