@@ -276,6 +276,18 @@ class DirectoryInterface: public NetworkDevice{
       }      
 
       /**
+       * @brief Refresh Directory discovery from the generic web configuration action.
+       *
+       * Directory is intentionally disabled when idle, but the web "refresh"
+       * action is also the explicit user request to enable it and scan for
+       * endpoints.  Connecting this hook keeps the generic framework action
+       * useful without changing refresh behavior for other interfaces.
+       */
+      void handleRequestRefreshState() override {
+        discoveryRequest();
+      }
+
+      /**
        * @brief Placeholder hook; no active operation in this implementation.
        *
        * @return Always true; no device action is performed here.
