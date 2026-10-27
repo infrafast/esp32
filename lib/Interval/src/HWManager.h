@@ -27,7 +27,14 @@
 
 #include <USB.h>
 #ifdef PROD
+  // ESP32TinyUSB gates MIDIusb on ESP-IDF configuration macros. Include the
+  // selected board sdkconfig before its header so the XIAO ESP32-S3 TinyUSB
+  // MIDI class is visible when compiling the production environment.
+  #include <sdkconfig.h>
+  #include <tusb.h>
+  #define INTERVAL_USE_NATIVE_TINYUSB_MIDI 1
   #include <midiusb.h>     // TinyUSB hardware transport (production only)
+  #undef INTERVAL_USE_NATIVE_TINYUSB_MIDI
 #endif
 
 
@@ -69,11 +76,30 @@ void OnWiFiEvent(WiFiEvent_t event);
 void bootScreen(uint8_t);
 
 
+// Runtime shutdown: holding the power button this long requests normal
+// shutdown while the application is already running.
 constexpr uint32_t SHUTDOWN_PUSH_DELAY = 1500;
-constexpr uint32_t NORMAL_STARTUP_PRESS_MS = 2000;
-constexpr uint32_t RESET_DELAY_MS = 10000;
+// The duration is measured from the debounced press transition in
+// Button::processRefresh(). Keep the normal-start threshold short enough for
+// a practical press while leaving the longer CDC/reset windows unchanged.
+// A shorter press is interpreted as BATTERY_STARTUP.
+constexpr uint32_t NORMAL_STARTUP_PRESS_MS = 500;
+// Time spent showing the battery screen before entering deep sleep. This is
+// deliberately independent from the battery sampling/filtering cadence.
+constexpr uint32_t BATTERY_STARTUP_SCREEN_MS = 5000;
+// Time spent showing the reset/restore screen before entering deep sleep.
+constexpr uint32_t RESET_STARTUP_SCREEN_MS = 5000;
+// Holding beyond this grace window and then releasing requests a reboot into
+// the USB CDC/firmware-update startup mode.
+constexpr uint32_t RESET_DELAY_MS = 8000;
+// Derived threshold separating the CDC request window from the immediate
+// reset window. The button must be released before RESET_DELAY_MS to request
+// CDC; holding until RESET_DELAY_MS triggers reset immediately.
 constexpr uint32_t RESET_GRACE_PERIOD_MS = RESET_DELAY_MS / 3;
-constexpr uint32_t BUTTON_DEBOUNCE_MS = 20;
+// Initial debounce delay used before the startup button sampling loop begins.
+// Extra settling time applied only before the startup-button decision loop.
+// Generic press/release debounce timings live in HWComponents::Button.
+constexpr uint32_t STARTUP_BUTTON_DEBOUNCE_MS = 20;
 
 #define INVERTED_SCREEN_NO 1
 #define INVERTED_SCREEN_YES 3
@@ -212,14 +238,15 @@ public:
       // SYSTEM_OFF 
       else if (onOff.state == ON_OFF_TRIGGER){
         // else a button has to be pressed to startup
-        delay(BUTTON_DEBOUNCE_MS);
-        while(onOff.state == ON_OFF_TRIGGER && startupState == SYSTEM_OFF) {          
-          bool released = onOff.refresh();
+        delay(STARTUP_BUTTON_DEBOUNCE_MS);
+        while(startupState == SYSTEM_OFF) {
+          unsigned long releasedDuration = 0;
+          const bool released = onOff.consumeRelease(releasedDuration);
           if (released){
             // The action for a normal, short or CDC startup is committed when
             // the button is released.  A hold longer than the CDC window is
             // handled below, while the button is still pressed.
-            if (onOff.pushedTime>RESET_GRACE_PERIOD_MS ){ 
+            if (releasedDuration>RESET_GRACE_PERIOD_MS ){ 
               // A release between the grace threshold and the reset threshold
               // requests a reboot into the USB CDC/firmware-update startup.
               persistants.putUChar(PERSISTANT_STARTUP,RESTART_REQUEST_AS_SUB_CDC);
@@ -228,7 +255,7 @@ public:
               // Serial.begin(115200); doesnt work
               // tud_disconnect() / reconnect // doesnt work
               ESP.restart();
-            }else if (onOff.pushedTime>pressTime ){ 
+            }else if (releasedDuration>pressTime ){ 
               // The configured normal-start threshold has been exceeded.
               startupState = NORMAL_STARTUP;
               //if (debug) DEBUG_PRINT("\nnormal press");
@@ -237,6 +264,12 @@ public:
               startupState = BATTERY_STARTUP;
               //if (debug) DEBUG_PRINT("\nshort press ");
             }
+            break;
+          }else if (onOff.state != ON_OFF_TRIGGER) {
+            // The sampler has observed the release, but the latched event has
+            // not reached this context yet. Give it one short scheduling slot
+            // instead of leaving startup with SYSTEM_OFF.
+            delay(1);
           }else{
             if (onOff.pushedTime>RESET_DELAY_MS){
               // Ten seconds of continuous hold enters reset startup
@@ -265,6 +298,26 @@ public:
       }
       ledcWrite(0,255);   //led off
       onOff.usesLed = true;      
+    }
+
+    /**
+     * @brief Stop all button LED activity before entering deep sleep.
+     *
+     * Button sampling runs on a separate FreeRTOS task and normally uses LEDC
+     * channel 0 to show press progress. During shutdown that task must no longer
+     * be allowed to change the LED brightness. The XIAO status LED is active-low,
+     * therefore a duty cycle of 255 and a HIGH GPIO level both mean "off".
+     */
+    void stopStatusLed(){
+      onOff.usesLed = false;
+      for (uint8_t i = 0; i < MAXB; ++i){
+        if (buttons[i] != nullptr) buttons[i]->usesLed = false;
+      }
+
+      ledcWrite(0, 255);
+      ledcDetachPin(BUILTIN_LED);
+      pinMode(BUILTIN_LED, OUTPUT);
+      digitalWrite(BUILTIN_LED, HIGH);
     }
     
     /** @brief Apply the saved display rotation and matching button orientation. */

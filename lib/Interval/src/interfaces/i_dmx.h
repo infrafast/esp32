@@ -45,6 +45,8 @@ class ArtnetDMXInterface: public DMXInterface, public NetWorkService {
       state.switchable = false;
     }
 
+    virtual String getDefaultHint() const override { return *lang.getString("hint.artnet"); }
+
     /** @brief Start this interface using its current configuration. */
     virtual bool begin(){
       DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
@@ -97,6 +99,8 @@ class ThreePinDMXInterface: public DMXInterface{
       icon = "a";
       state.switchable = false;
     }
+
+    virtual String getDefaultHint() const override { return *lang.getString("hint.threepindmx"); }
 
     /** @brief Start this interface using its current configuration. */
     virtual bool begin(){

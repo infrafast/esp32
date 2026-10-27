@@ -443,6 +443,10 @@ private:
 #define DEFAULT_PUSH_DELAY 500
 #define DEFAULT_DCLIC_DELAY 250
 
+// Generic debounce interval shared by button-related strip logic. The
+// startup workflow has its own explicitly named delay in HWManager.h.
+constexpr uint32_t BUTTON_DEBOUNCE_MS = 20;
+
 
 
 #define DCLIC_DETECTION_PUSHDOWNMAXTIME LONG_PUSH_DELAY-1       // pour detecter un double clic, le premier clic doit etre court   200
@@ -523,7 +527,16 @@ public:
 
   unsigned long pushedTime = 0;
 
-  bool usesLed = true;
+  // Latched release information consumed by startup workflows such as
+  // HardwareManager::wakeUp(). The shared button task may process the release
+  // between two calls made by the application, so the transition and its
+  // duration must survive until the consumer explicitly acknowledges it.
+  volatile bool releasePending = false;
+  volatile unsigned long releasedDuration = 0;
+
+  // Accessed by the button sampling task and by the shutdown workflow.
+  // Volatile makes the shutdown request visible across ESP32 cores.
+  volatile bool usesLed = true;
   uint16_t push_reactivity = DEFAULT_PUSH_DELAY;
 
   uint16_t maxClickDuration = 180;
@@ -560,6 +573,25 @@ public:
   bool refresh(bool force = false) {
     (void)force;
     return false;
+  }
+
+  /**
+   * @brief Consume the next debounced release transition, if any.
+   *
+   * Button sampling runs in a dedicated FreeRTOS task. This latch bridges that
+   * asynchronous producer with synchronous workflows without making callers
+   * duplicate GPIO reads or debounce logic.
+   */
+  bool consumeRelease(unsigned long& duration) {
+    bool pending = false;
+    portENTER_CRITICAL(&transitionMux);
+    if (releasePending) {
+      duration = releasedDuration;
+      releasePending = false;
+      pending = true;
+    }
+    portEXIT_CRITICAL(&transitionMux);
+    return pending;
   }
 
   /** @brief Stop the active operation or connection. */
@@ -607,6 +639,8 @@ private:
   unsigned long lastHoldEventTime = 0;
  
   static constexpr uint8_t MAX_BUTTONS = 5;
+
+  portMUX_TYPE transitionMux = portMUX_INITIALIZER_UNLOCKED;
 
   static Button* registeredButtons[MAX_BUTTONS];
   static uint8_t registeredButtonCount;
@@ -749,6 +783,16 @@ private:
       if (state != edge) { // released
         unsigned long clickDuration = millis() - startPushTime;
         pushedTime = clickDuration;
+
+        // Preserve a real debounced release before the normal click/hold
+        // state machine clears transient timing data. The forced initial
+        // sample in init() is not a user release and must not be latched.
+        if (!force) {
+          portENTER_CRITICAL(&transitionMux);
+          releasedDuration = clickDuration;
+          releasePending = true;
+          portEXIT_CRITICAL(&transitionMux);
+        }
 
         if (holdEntered) {
           emitButtonEvent(BUTTON_RELEASE_HOLD, pushedTime - push_reactivity);
@@ -2736,7 +2780,7 @@ class AccessPoint : public Network{
     /** @brief Create a UDP transport for the selected network media. */
     virtual UDP* newUDP(){return nullptr;}
     /** @brief Describe the W5500 socket allocations for diagnostics. */
-    virtual String dumpW5500Sockets(){};
+    virtual String dumpW5500Sockets(){return emptyString;}
 
     /** @brief Prepare this object for use with its current configuration. */
     virtual void init(){

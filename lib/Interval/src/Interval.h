@@ -2271,12 +2271,15 @@ struct State{ // used by Strip and Interface
   String label = IF_STATE_NOTIMPLEMENTED;
   String subState = "subState";
   String details = "details";
+  /** @brief Optional runtime hint shown by the web UI on hover. */
+  String hint = "";
   String led = "black";
   bool enabled = false;
   bool switchable = true;
   float progress = -1;
 
   String previousStateLabel = "";
+  String previousHint = "";
   String previousLed = "";
   uint8_t previousStateCode = 0;
   bool previousEnabled = false;
@@ -2405,6 +2408,11 @@ void goDeepSleep(){
   // open question: reset the devices ? when back, it will take time to power them on again, how to sync it with the class creation, etc... ?
   //DEBUG_PRINT("\ngoDeepSleep");
   unsigned long start = millis();
+
+  // Freeze the status LED before any shutdown delay. This prevents the
+  // asynchronous button sampler from continuing its press-progress fade while
+  // the display and power rail are being switched off.
+  hwm.stopStatusLed();
 
   hwm.persistants.putUChar(PERSISTANT_STARTUP,SYSTEM_OFF);        
 

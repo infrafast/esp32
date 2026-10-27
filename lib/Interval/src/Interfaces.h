@@ -47,6 +47,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
   #define INTERFACE_PROVIDER    "provider"
   #define INTERFACE_ICON        "icon"
   #define INTERFACE_DETAILS     "details"
+  #define INTERFACE_HINT        "hint"
   #define INTERFACE_LED         "led"
   #define INTERFACE_CONFIG      "deviceConfig"
   #define INTERFACE_USEDBYSTRIP "hasStrip"          // linked to the property hasStrip and indicate if it should show up in the menu to create a strip for this interface
@@ -116,6 +117,11 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     /** @brief Return the provider key used to resolve configuration choices. */
     virtual const String& getProviderNameForData(){ return group;}
 
+    /** @brief Return the localized static tooltip for this interface. */
+    virtual String getDefaultHint() const {
+      return *lang.getString("hint.interface");
+    }
+
     /** @brief Export current status, progress and user-visible state information as JSON. */
     String serializeState(){
       JsonDocument doc;
@@ -123,6 +129,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       doc[interfaceName][INTERFACE_STATE] = state.label;
       doc[interfaceName][INTERFACE_PROGRESS] = state.progress;
       doc[interfaceName][INTERFACE_DETAILS] = state.details;
+      doc[interfaceName][INTERFACE_HINT] = state.hint;
       doc[interfaceName][INTERFACE_ENABLED] = state.enabled;
       doc[interfaceName][INTERFACE_ACTIVABLE] = state.switchable;
       doc[interfaceName][INTERFACE_LED] = state.led;          
@@ -176,6 +183,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       DEBUG_INFO("----------------------------------  %s->init(...)  ---------------------------------- ", interfaceName.c_str());
       //registerEventListener(listener);
       load();
+      // A derived interface may keep a runtime hint from load() (Directory
+      // does this). Otherwise initialize the localized default once here.
+      if (state.hint.length() == 0) state.hint = getDefaultHint();
       bool success = _begin();
       DEBUG_INFO("-----------------------------------------------------------------------------------------------------\n");
       return success;
@@ -293,6 +303,10 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
         state.changed  = true;
         state.previousStateCode = state.code;
       }    
+      if (state.hint != state.previousHint){
+        state.changed = true;
+        state.previousHint = state.hint;
+      }
       if (state.enabled != state.previousEnabled){
         state.changed   = true;
         state.previousEnabled = state.enabled;

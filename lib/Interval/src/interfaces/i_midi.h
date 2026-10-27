@@ -227,6 +227,8 @@ class BLEMIDIInterface: public MIDIInterface{
       icon = ICON_BLEMIDI;
     }
 
+    virtual String getDefaultHint() const override { return *lang.getString("hint.blemidi"); }
+
     /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(String addrr){
       return 0;
@@ -384,6 +386,8 @@ class USBMIDIInterface: public MIDIInterface{
       icon = ICON_USBMIDI;  
     }
 
+    virtual String getDefaultHint() const override { return *lang.getString("hint.usbmidi"); }
+
     /** @brief Poll the interface connection and process pending data. */
     virtual bool monitor() override{
       
@@ -430,6 +434,18 @@ class USBMIDIInterface: public MIDIInterface{
       }else{
         usbMIDI.setHandleSystemExclusive(handleSysexStatic);        
         state.switchable = true; 
+
+        // Startup configuration is restored by DeviceInterface::load() without
+        // calling switchDevice(false).  Therefore an USB-MIDI interface that is
+        // disabled in its persisted configuration would otherwise keep the
+        // generic initial state ("unavailable" / "details") until a later UI
+        // action explicitly disables it.  Keep this normalization local to
+        // USB-MIDI so other transports remain free to expose their own startup
+        // states (and so USB-MIDI can retain its restartUSB state whenever the
+        // USB-MIDI transport is intentionally not selected).
+        if (!state.enabled) {
+          setStateDisabled();
+        }
       }
       return true;
     }
@@ -478,6 +494,8 @@ class DINMIDIInterface: public MIDIInterface{
       icon = ICON_DINMIDI;
       state.switchable = false;
     }
+
+    virtual String getDefaultHint() const override { return *lang.getString("hint.dinmidi"); }
 
     /** @brief Start this interface using its current configuration. */
     virtual bool begin(){     // called by init()
@@ -629,6 +647,8 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       populateSessionOptions();      
 
     }
+
+    virtual String getDefaultHint() const override { return *lang.getString("hint.applemidi"); }
 
     /** @brief Placeholder hook; no active operation in this implementation. */
     ~AppleMIDIInterface(){

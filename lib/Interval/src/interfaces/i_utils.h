@@ -36,6 +36,8 @@ class SystemInterface: public DeviceInterface, public DataProvider{
         state.code = IF_READY;     
       }
 
+      virtual String getDefaultHint() const override { return *lang.getString("hint.system"); }
+
       /** @brief Start this interface using its current configuration. */
       virtual bool begin(){
         DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
@@ -185,6 +187,48 @@ class DirectoryInterface: public NetworkDevice{
         unregisterDataSetAddress(&addressPort);              // we un-expose the ping parameter as user should not modify it 
       }
 
+      /** @brief Return the static explanation shown while Directory is idle. */
+      String directoryBaseHint() const {
+        return *lang.getString("hint.directory");
+      }
+
+      /** @brief Return the explanation shown while endpoint discovery is running. */
+      String directoryScanningHint() const {
+        return *lang.getString("hint.directory.scanning");
+      }
+
+      /** @brief Return the explanation and discovered endpoint list for hover display. */
+      String directoryEndpointHint() const {
+        String value = directoryBaseHint();
+        if (rtpDir.epCount == 0){
+          return concatStrings(value, " ", *lang.getString("hint.directory.no_endpoints"));
+        }
+
+        value += " ";
+        value += *lang.getString("hint.directory.discovered");
+        value += " ";
+        for (int i = 0; i < rtpDir.epCount; i++){
+          if (i > 0) value += " | ";
+          value += rtpDir.ep[i].name;
+          value += " / ";
+          value += rtpDir.ep[i].ip.toString();
+          value += ":";
+          value += String(rtpDir.ep[i].port);
+        }
+        return value;
+      }
+
+      /** @brief Return the localized default Directory tooltip. */
+      virtual String getDefaultHint() const override {
+        return *lang.getString("hint.directory");
+      }
+
+      /** @brief Project the disabled Directory state into its hover hint. */
+      virtual void setStateDisabled() override{
+        DeviceInterface::setStateDisabled();
+        state.hint = directoryBaseHint();
+      }
+
       /** @brief Start this interface using its current configuration. */
       virtual bool begin(){
         DEBUG_INFO("%s::begin() => nothing to do",interfaceName.c_str());
@@ -205,6 +249,7 @@ class DirectoryInterface: public NetworkDevice{
         DEBUG_INFO("%s::load() default ignored => ENABLE", interfaceName.c_str()); 
         // ignore the given parameter. 
         switchDevice(DEVICE_OFF);          // the interface is forced disabled at startup as we do not need to browse network until a request is sent (by startWebApp to publish DNS name or by appleMidi to advert)
+        state.hint = directoryBaseHint();
         hasStrip = false;             
       }
 
@@ -286,6 +331,7 @@ class DirectoryInterface: public NetworkDevice{
         //discoveryRequest();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
 
         DeviceInterface::setStateReady("green",lang.getString("online")->c_str(),"",systemCfg.getString(S_AP_NAME)->c_str());
+        state.hint = directoryScanningHint();
         // Direct deviceEnable(true) calls do not pass through
         // discoveryRequest(). Start discovery here so Enable and Refresh
         // follow the same workflow.
@@ -502,6 +548,7 @@ class DirectoryInterface: public NetworkDevice{
           : concatStrings(String(rtpDir.epCount), " endpoint(s) — ",
                           *lang.getString("Device is discoverable on the network"),
                           " (", hwm.network->getIP(), ")");
+        state.hint = directoryEndpointHint();
         DeviceInterface::setStateReady(
           "green", lang.getString("online")->c_str(), "", endpointDetails.c_str());
         state.broadcastState = true;
@@ -516,6 +563,10 @@ class DirectoryInterface: public NetworkDevice{
       void epDirectoryNotReady(){
         discoveryInProgress = false;
         DEBUG_INFO("[RTP]\t\tDirectory not ready");
+        // The network is unavailable, so do not expose endpoints from a
+        // previous discovery pass in the runtime hint.
+        rtpDir.clear();
+        state.hint = directoryEndpointHint();
         DeviceInterface::setStateReady(
           "green", lang.getString("online")->c_str(), "",
           lang.getString("No endpoints detected")->c_str());
@@ -532,6 +583,7 @@ class DirectoryInterface: public NetworkDevice{
         // that case NetworkDevice::enable() is not involved, so publish the
         // pending state explicitly before starting the new scan.
         DeviceInterface::setStatePending();
+        state.hint = directoryScanningHint();
         state.broadcastState = true;
         // This flag is cleared by the normal completion callback or by the
         // timeout in monitorService(), so Directory cannot remain pending
@@ -608,6 +660,8 @@ class WebApplicationService: public NetworkDevice{
      * @brief Initialize WebApplicationService and its configured member bindings.
      */
     WebApplicationService(bool _configurable = false):NetworkDevice(WEBAPP_INTERFACE,GROUP_INTERFACE_UTILS,80,80,"",_configurable){}
+
+    virtual String getDefaultHint() const override { return *lang.getString("hint.webapplication"); }
 
     /** @brief Return the Ethernet connection-budget weight used by this service. */
     virtual uint8_t getServiceWeight(){

@@ -151,6 +151,8 @@ Build commands: `pio run -e dev` and `pio run -e prod`. The dev build has file s
 
 Dependencies combine the PlatformIO registry, Git URLs, and locally bundled libraries. Some references are pinned; others are not. Ethernet, mWebSockets, and TFT_eSPI contain local adaptations or settings: do not replace them blindly. `Interfaces_LEGACY.h` is historical, not the recommended model for new interfaces.
 
+Production TinyUSB MIDI has a header-name collision on case-insensitive filesystems: the project-owned `include/MIDIUSB.h` shim is intentionally retained for the Arduino-USBMIDI library, while `HWManager` selects the native `ESP32TinyUSB` `MIDIusb` header through an explicit include path. The production build also supplies the ESP32-S3 TinyUSB feature macros required by that dependency; the development build keeps using the existing shim path.
+
 ### Web resources and updates
 
 `data/webapp/` mainly contains gzip resources, translations, fonts, and images. `preparefiles.py` and its macOS variant prepare assets. The initial analysis notes a `K:` source path, a Windows helper, calls to Toptal minification services, and workflow execution on import. These portability constraints are tracked in roadmap; editable web source must not be assumed available from compressed files alone.

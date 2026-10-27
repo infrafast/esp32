@@ -662,6 +662,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     ThreePinDMXInterface* threePinDMXInterface;
 
     unsigned long goSleepCountdownStart;
+    // Duration of the current pre-sleep screen. Kept separate from the
+    // battery sampling cadence so display timing can be adjusted independently.
+    uint32_t goSleepDurationMs = BATTERY_STARTUP_SCREEN_MS;
 
     bool webAppConnected;
 
@@ -869,6 +872,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       menuBottomLabel = emptyString;
       byeIcon = &iconReset; byeIconColor = &GUI::red;
       goSleepCountdownStart = millis();
+      goSleepDurationMs = RESET_STARTUP_SCREEN_MS;
       screen.id = SCREEN_BYE; screen.state = STATE_BYE_GOSLEEP_MESSAGE;         //we could create a screen dedicated for reset
     }
 
@@ -877,6 +881,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
      */
     void goToBigBatteryIconScreenAndSleep(){
       byeIcon = &batIcon; byeIconColor = &batIconColor;
+      goSleepDurationMs = BATTERY_STARTUP_SCREEN_MS;
       screen.id = SCREEN_BYE;
       screen.state = STATE_BYE_GOSLEEP_MESSAGE;
     }
@@ -1160,6 +1165,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         case BATTERY_STARTUP:
           menuTopText = *lang.getString("Press >1s to startup"); menuBottomLabel = emptyString;
           goSleepCountdownStart = hwm->bootTime;
+          goSleepDurationMs = BATTERY_STARTUP_SCREEN_MS;
           goToBigBatteryIconScreenAndSleep();
         break;
         case NO_FS_STARTUP:
@@ -2552,7 +2558,7 @@ void setup() {
         case SCREEN_BYE:
           switch(screen.state){
             case STATE_BYE_GOSLEEP_MESSAGE:
-              if (millis()-goSleepCountdownStart>BAT_REFRESH_RATE*BAT_NUM_READINGS*2) goDeepSleep(); // we bootSprite two full cycle of battery voltage acquisition before shuting down
+              if (millis()-goSleepCountdownStart>goSleepDurationMs) goDeepSleep();
             break;
             case STATE_BYE_MODAL_MESSAGE:
               // perform some action like update or ftp and shutting down properly (like interfaces...)
