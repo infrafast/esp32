@@ -5,5 +5,6 @@
 "setNetworkDownState":"Network connection pending",
 "setNetworkUpState":"Device is disconnected from network",
 "PluginUSB":"Plugin your device USB MIDI cable",
-"restartUSB":"Restart to activate USB MIDI"
+"restartUSB":"Restart to activate USB MIDI",
+"No endpoints detected":"No endpoints detected"
 }

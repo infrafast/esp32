@@ -383,6 +383,17 @@ class DirectoryInterface: public NetworkDevice{
         for (int i = 0; i < rtpDir.epCount; i++) {
           DEBUG_INFO("  #%d  %s  %s:%u\n", i+1, rtpDir.ep[i].name, rtpDir.ep[i].ip.toString().c_str(), rtpDir.ep[i].port);
         }
+        // NetworkDevice::enable() marks Directory as pending while discovery
+        // runs.  The completion callback must close that transition itself;
+        // otherwise the web GUI remains stuck on "Scanning network" forever.
+        const char* details = rtpDir.epCount == 0
+          ? lang.getString("No endpoints detected")->c_str()
+          : systemCfg.getString(S_AP_NAME)->c_str();
+        DeviceInterface::setStateReady(
+          "green", lang.getString("online")->c_str(), "", details);
+        state.broadcastState = true;
+        state.broadcastConfig = true;
+
         // midi interface has to update its config and regenerate its state      
         evtDir.type = EVENT_DIRECTORY_SERVICE_REFRESHED;
         fireEvent(evtDir);
@@ -391,6 +402,10 @@ class DirectoryInterface: public NetworkDevice{
       /** @brief Notify consumers that endpoint discovery is unavailable. */
       void epDirectoryNotReady(){
         DEBUG_INFO("[RTP]\t\tDirectory not ready");
+        DeviceInterface::setStateReady(
+          "green", lang.getString("online")->c_str(), "",
+          lang.getString("No endpoints detected")->c_str());
+        state.broadcastState = true;
         evtDir.type = EVENT_DIRECTORY_NOT_READY;
         fireEvent(evtDir);        
       }      

@@ -1,5 +1,6 @@
 {
 "PROFILE":"PROFILO",
 "LANGUAGE":"LINGUA",
-"QUIT":"ESENTATO"
+"QUIT":"ESENTATO",
+"No endpoints detected":"Nessun endpoint rilevato"
 }

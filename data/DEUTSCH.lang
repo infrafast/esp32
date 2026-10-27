@@ -1,5 +1,6 @@
 {
 "PROFILE":"PROFIL",
 "LANGUAGE":"SPRACHE",
-"QUIT":"AUFHOEREN"
+"QUIT":"AUFHOEREN",
+"No endpoints detected":"Keine Endpunkte erkannt"
 }

@@ -1,5 +1,6 @@
 {
 "PROFILE":"PERFIL",
 "LANGUAGE":"IDIOMA",
-"QUIT":"ABANDONAR"
+"QUIT":"ABANDONAR",
+"No endpoints detected":"No se detectaron endpoints"
 }

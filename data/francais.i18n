@@ -1,4 +1,5 @@
 {
 "mixer unreachable":"console injoignable",
-"mixing s. unreachable":"mixing s. injoignable"
+"mixing s. unreachable":"mixing s. injoignable",
+"No endpoints detected":"Aucun endpoint détecté"
 }

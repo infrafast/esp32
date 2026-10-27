@@ -22,5 +22,6 @@
 "Connect Blutooth":"Connectez le blutooth",
 "Please wait":"Un instant svp...",
 "PluginUSB":"Connectez le cable USB de votre dispositif MIDI",
-"restartUSB":"Redemarrez pour activer USB MIDI"
+"restartUSB":"Redemarrez pour activer USB MIDI",
+"No endpoints detected":"Aucun endpoint détecté"
 }
