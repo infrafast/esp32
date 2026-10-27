@@ -2,5 +2,6 @@
 "PROFILE":"PROFIL",
 "LANGUAGE":"SPRACHE",
 "QUIT":"AUFHOEREN",
-"No endpoints detected":"Keine Endpunkte erkannt"
+"No endpoints detected":"Keine Endpunkte erkannt",
+"Device is discoverable on the network":"Das Footswitch ist im Netzwerk sichtbar"
 }

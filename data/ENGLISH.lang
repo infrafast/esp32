@@ -6,5 +6,6 @@
 "setNetworkUpState":"Device is disconnected from network",
 "PluginUSB":"Plugin your device USB MIDI cable",
 "restartUSB":"Restart to activate USB MIDI",
-"No endpoints detected":"No endpoints detected"
+"No endpoints detected":"No endpoints detected",
+"Device is discoverable on the network":"Device is discoverable on the network"
 }

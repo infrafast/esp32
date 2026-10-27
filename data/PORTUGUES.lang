@@ -2,5 +2,6 @@
 "PROFILE":"PERFIL",
 "LANGUAGE":"LINGUAGEM",
 "QUIT":"DESISTIR",
-"No endpoints detected":"Nenhum endpoint detectado"
+"No endpoints detected":"Nenhum endpoint detectado",
+"Device is discoverable on the network":"O footswitch está detetável na rede"
 }

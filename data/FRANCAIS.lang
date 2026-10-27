@@ -23,5 +23,6 @@
 "Please wait":"Un instant svp...",
 "PluginUSB":"Connectez le cable USB de votre dispositif MIDI",
 "restartUSB":"Redemarrez pour activer USB MIDI",
-"No endpoints detected":"Aucun endpoint détecté"
+"No endpoints detected":"Aucun endpoint détecté",
+"Device is discoverable on the network":"Le footswitch est détectable sur le réseau"
 }

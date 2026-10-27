@@ -284,6 +284,15 @@ class DirectoryInterface: public NetworkDevice{
           case EVENT_REQUEST_DIRECTORY_SERVICE_REFRESH:
             discoveryRequest();
           break;        
+          case EVENT_NETWORK_CONNECTED:
+            // Directory is deliberately disabled at boot.  The network can
+            // therefore acquire its address after Directory::load() has
+            // already prepared the disabled state. Refresh that state now so
+            // the Web GUI does not keep displaying the initial 0.0.0.0 value.
+            if (!deviceInterface->state.enabled && hwm.network->state == CONNECTED){
+              refreshDisabledNetworkDetails(true);
+            }
+          break;
         }
       }
 
@@ -325,6 +334,32 @@ class DirectoryInterface: public NetworkDevice{
         this->state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
       }
 
+      /**
+       * @brief Update the disabled-state explanation with the current IP.
+       *
+       * Directory is disabled during normal startup and may be initialized
+       * before Wi-Fi/Ethernet has completed. In that case getIP() initially
+       * returns 0.0.0.0. This helper is reused both when the service is
+       * disconnected and when the network later reports EVENT_NETWORK_CONNECTED.
+       * The optional broadcast flag is used for the latter case because the
+       * Web GUI must be notified even though the interface enabled state did
+       * not change.
+       */
+      void refreshDisabledNetworkDetails(bool broadcast = false){
+        deviceInterface->state.details = concatStrings(
+          *lang.getString("Device is not detectable on the network."),
+          " ",
+          *lang.getString("Use"),
+          " ",
+          hwm.network->getIP(),
+          " ",
+          *lang.getString("to connect"));
+
+        if (broadcast){
+          deviceInterface->state.broadcastState = true;
+        }
+      }
+
       /** @brief Close this service and release its transport resources. */
       virtual bool handleDisconnectService() override{
         DEBUG_INFO("%s::handleDisconnectService()",interfaceName.c_str());
@@ -337,7 +372,7 @@ class DirectoryInterface: public NetworkDevice{
         }          
 
         if (deviceInterface->state.enabled == false) setStateDisabled();
-        deviceInterface->state.details = concatStrings(*lang.getString("Device is not detectable on the network.")," ",*lang.getString("Use")," ",hwm.network->getIP()," ",*lang.getString("to connect"));
+        refreshDisabledNetworkDetails();
 
         return true;
       }        
@@ -448,7 +483,9 @@ class DirectoryInterface: public NetworkDevice{
         // otherwise the web GUI remains stuck on "Scanning network" forever.
         String endpointDetails = rtpDir.epCount == 0
           ? *lang.getString("No endpoints detected")
-          : concatStrings(String(rtpDir.epCount), " endpoint(s)");
+          : concatStrings(String(rtpDir.epCount), " endpoint(s) — ",
+                          *lang.getString("Device is discoverable on the network"),
+                          " (", hwm.network->getIP(), ")");
         DeviceInterface::setStateReady(
           "green", lang.getString("online")->c_str(), "", endpointDetails.c_str());
         state.broadcastState = true;
