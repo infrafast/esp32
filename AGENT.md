@@ -83,6 +83,7 @@ Read before making changes:
 - Respect local dependency patches; do not replace a bundled library without examining their rationale.
 - Treat `platformio.ini` as the environment reference. In particular, check USB differences and TFT/W5500 initialization order.
 - Follow the i18n catalogue rule in [`docs/architecture.md`](docs/architecture.md#internationalization-i18n): use lookup keys for user-visible labels, keep every non-English catalogue complete, omit only exact key/value duplicates from English catalogues, and regenerate compressed web assets from `/Volumes/web/demo` after changes. Validate both firmware `.lang` coverage and active web JSON coverage.
+- Keep firmware `.lang` values compatible with the embedded TFT label font. The current generated font contains printable ASCII only (`U+0020`–`U+007E`); before adding or changing a `.lang` value, transliterate accented or other non-ASCII characters to an ASCII equivalent unless the embedded font is explicitly regenerated and its supported glyph range is verified. Validate that no non-ASCII characters remain in `data/*.lang`.
 - Inspect script effects before execution: packaging, moves, deletions, and network calls. Tooling changes must make side effects explicit and avoid mandatory machine-specific paths.
 
 ## Verification and completion
