@@ -149,6 +149,27 @@ systemInterface(false);      // not exposed
 
 /**
  * @brief Discovers RTP-MIDI services and updates the shared endpoint directory.
+ *
+ * Workflow:
+ *
+ *   Enable or Refresh
+ *          |
+ *          v
+ *   handleConnectService()
+ *          |
+ *          v
+ *   startDiscovery()
+ *          |
+ *          v
+ *   pending / Scanning network
+ *          |
+ *          +--> normal callback or timeout
+ *                         |
+ *                         v
+ *              ready / N endpoint(s)
+ *
+ * The timeout is a safety net when the Ethernet Bonjour callback or Wi-Fi
+ * discovery task does not report completion.
  */
 class DirectoryInterface: public NetworkDevice{
     #define DIRECTORY_INTERFACE "Directory"
