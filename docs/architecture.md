@@ -38,8 +38,7 @@ Hardware has its own lifecycle: power rail activation, display and component ini
 
 The firmware uses the historical initialization order: the peripheral rail is
 enabled, components are initialized (including Ethernet), and the TFT is then
-initialized. The experimental TFT-first/bootstrap implementation has been
-removed.
+initialized. 
 
 The TFT and W5500 reset line remains shared. Hardware startup reliability is
 being investigated separately on PCB revision 2.2; no software initialization
