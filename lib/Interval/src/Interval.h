@@ -3327,6 +3327,10 @@ void handleConfigConnection(){
       hwm.startAP(systemCfg.getString(S_AP_NAME));
       app.setAPIcon();
       hwm.configMedia->registerEventListener((EventListener*)&app);
+      // The configuration page may have been built one refresh before the AP
+      // was started, while configMedia still pointed to the STA network. Force
+      // a rebuild so its SSID label is sourced from the AP object.
+      app.triggerRedraw();
 
       //https://deepbluembedded.com/esp32-wifi-library-examples-tutorial-arduino/#esp32-wifi-modes
     }  

@@ -8,7 +8,7 @@
 
 #include <Arduino.h>
 
-//#define INTERVAL_DIAGNOSE
+#define INTERVAL_DIAGNOSE
 
 #if defined(INTERVAL_DIAGNOSE)
     #include "DiagnoseApplication.h"
