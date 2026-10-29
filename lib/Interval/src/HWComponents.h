@@ -2832,32 +2832,60 @@ class AccessPoint : public Network{
       Network::refresh(force);
       if (refreshed){
         if (state == CONNECTED){
-          //if (debug) DEBUG_PRINT("\nCient connected to AP");
-          if (server == NULL) server = new WiFiServer(80,1);         
+          // Network::refresh() only sets refreshed on a state transition, so
+          // this diagnostic is emitted once per association, not on every loop.
+          String clientIP = getConnectedDeviceIP();
+          String clientMAC = getConnectedDeviceMAC();
+          DEBUG_INFO("AccessPoint client connected: MAC=%s IP=%s stations=%u",
+                     clientMAC.length() ? clientMAC.c_str() : "unknown",
+                     clientIP.length() ? clientIP.c_str() : "unknown",
+                     WiFi.softAPgetStationNum());
+          if (server == NULL) server = new WiFiServer(80,1);
           server->begin();
           evtNet.type = EVENT_NETWORK_CONNECTED;
-          fireEvent(evtNet);          
+          fireEvent(evtNet);
         }else{
-          //if (debug) DEBUG_PRINT("\nCient disconnected from AP");
-          if (server != NULL){if (debug) DEBUG_INFO("DELETING SERVER");delete server; server  = NULL;} 
+          DEBUG_INFO("AccessPoint client disconnected; stations=%u",
+                     WiFi.softAPgetStationNum());
+          if (server != NULL){if (debug) DEBUG_INFO("DELETING SERVER");delete server; server  = NULL;}
           evtNet.type = EVENT_NETWORK_DISCONNECTED;
-          fireEvent(evtNet);    
-        }                
+          fireEvent(evtNet);
+        }
       }
       return refreshed;
     }
 
-    /** @brief Return the connected peer address. */
-    virtual String getConnectedDeviceIP(){    // see https://www.esp32.com/viewtopic.php?t=6292
-        wifi_sta_list_t wifi_sta_list;
-        tcpip_adapter_sta_list_t adapter_sta_list;
-        esp_wifi_ap_get_sta_list(&wifi_sta_list);
-        tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list);
+    /** @brief Return the MAC address of the first connected station. */
+    virtual String getConnectedDeviceMAC(){
+        wifi_sta_list_t wifi_sta_list = {};
+        if (esp_wifi_ap_get_sta_list(&wifi_sta_list) != ESP_OK || wifi_sta_list.num == 0) {
+            return emptyString;
+        }
 
-        tcpip_adapter_sta_info_t station = adapter_sta_list.sta[0];
+        char mac[18] = {};
+        snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+                 wifi_sta_list.sta[0].mac[0], wifi_sta_list.sta[0].mac[1],
+                 wifi_sta_list.sta[0].mac[2], wifi_sta_list.sta[0].mac[3],
+                 wifi_sta_list.sta[0].mac[4], wifi_sta_list.sta[0].mac[5]);
+        return String(mac);
+    }
+
+    /** @brief Return the IP address of the first connected station. */
+    virtual String getConnectedDeviceIP(){
+        wifi_sta_list_t wifi_sta_list = {};
+        tcpip_adapter_sta_list_t adapter_sta_list = {};
+        if (esp_wifi_ap_get_sta_list(&wifi_sta_list) != ESP_OK || wifi_sta_list.num == 0) {
+            return emptyString;
+        }
+        if (tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list) != ESP_OK ||
+            adapter_sta_list.num == 0) {
+            return emptyString;
+        }
+
         ip4_addr_t ip;
-        ip.addr = station.ip.addr;
-        return ip4addr_ntoa(&ip);
+        ip.addr = adapter_sta_list.sta[0].ip.addr;
+        const char* address = ip4addr_ntoa(&ip);
+        return address ? String(address) : emptyString;
     }
 
     /** @brief Placeholder hook; no active operation in this implementation. */
