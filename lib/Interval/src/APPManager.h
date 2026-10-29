@@ -1285,10 +1285,12 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             */
           }
 
-          if (!webAppConnected){
-            // there is no connection to any application, therefore, we prefer to use the network as the one to configure the application
-            //if (debug) DEBUG_PRINT("\n\tsetting the configMedia to WiFiEth");
-            hwm->configMedia = hwm->network;    // since the normal network gets reconnected,
+          if (!webAppConnected &&
+              (hwm->configMedia == nullptr || hwm->configMedia == hwm->network)){
+            // Keep a dedicated configuration AP selected while a late STA
+            // event is being delivered. The AP can remain reachable even
+            // though the normal network has just reported a connection.
+            hwm->configMedia = hwm->network;
           }
 
         break;
