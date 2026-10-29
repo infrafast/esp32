@@ -168,7 +168,7 @@ boundary:
 - `data/*.lang` are the catalogues for the ESP firmware GUI, including the TFT
   menus and firmware-owned interface/status text. They are loaded from LittleFS
   by `I18n`.
-- The web client has its own JSON catalogues in the web source/deployment tree.
+- The web client has its own JSON catalogues in the separate webGUI source/deployment tree.
   Those files are not firmware `.lang` files and must not be copied into `data/`
   or translated through the firmware catalogue.
 - When the ESP sends a translatable value to the web client, the protocol must
@@ -177,7 +177,7 @@ boundary:
   for such values and must not place their translations in `data/*.lang`.
   Firmware-owned TFT text continues to use `lang`.
 - Web keys such as `hint.artnet` and `hint.directory.no_endpoints` belong in
-  `/Volumes/web/demo/*.json`. Every web key must have an English entry and a
+  the external webGUI checkout (currently `/Volumes/web/demo/*.json`). Every web key must have an English entry and a
   translation in each supported web catalogue, even when the English value is
   different from the key. The firmware sends the key; the browser translates it.
 - When a web message carries dynamic data, keep the key separate from the data
@@ -198,7 +198,7 @@ boundary:
   English entry only when its value adds actual wording beyond the key, while
   every non-English firmware catalogue must contain the required translation.
 - `data/webapp/*.json.gz` are generated web-client deployment assets and must be
-  rebuilt from the editable web sources, never edited directly.
+  rebuilt from the external webGUI sources, never edited directly.
 
 `userLang` is a framework-owned optional extension catalogue. Interval always
 instantiates it and loads the matching `.i18n` file when present, both during

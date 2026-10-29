@@ -18,7 +18,9 @@ project_dir = os.path.abspath(os.path.join(script_dir, ".."))
 # 🔹 Construction du chemin cible
 
 DEST = os.path.join(project_dir, "esp32", "data", "webapp")
-SRC = '/Volumes/web/demo'
+# Editable web source lives in its separate webGUI checkout. Override this
+# path with WEBGUI_SRC when the checkout is mounted elsewhere.
+SRC = os.environ.get("WEBGUI_SRC", "/Volumes/web/demo")
 
 def minify_json(json_file, dest, overwrite=False):
 	with open(json_file, 'r', encoding='utf-8') as f:

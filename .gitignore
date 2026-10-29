@@ -12,6 +12,7 @@ garbage.txt
 .DS_Store
 *.zip
 *.tgz
+
 data/*.bin.gz
 data/firmware.bin.gz
 

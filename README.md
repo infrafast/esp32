@@ -16,6 +16,20 @@ The active application registers an input-to-bus send strip. A gain strip is als
 
 Web resources are included in `data/webapp/`. Updates package firmware and resources into `.tgz` archives; their preparation and the differences between development and production builds are described in the architecture document.
 
+The editable web client is maintained in a separate webGUI repository. On the
+development workstation it is checked out at `/Volumes/web/demo/`. To run the complete local demo,
+including the PHP mock API under `post/` and `upload/`, use PHP's built-in
+server from the repository root:
+
+```sh
+php -S 127.0.0.1:8080 -t /Volumes/web/demo
+```
+
+A static file server can display the HTML and assets, but it cannot provide the
+PHP API endpoints used by the demo. `preparefiles_MACOS.py` rebuilds the
+compressed firmware web assets from the external webGUI checkout; set
+`WEBGUI_SRC` when using another checkout path.
+
 ## Documentation
 
 | Document | Purpose |
