@@ -116,7 +116,9 @@ class GUIManager : public GenericComponent {
     TFT_eSprite screenBuffer = TFT_eSprite(GUI::tft);  
     LinkedList<Widget*> screenGUIs = LinkedList<Widget*>();
     OpenFontRender labelOfr = OpenFontRender();
-    OpenFontRender iconOfr = OpenFontRender(); 
+    OpenFontRender iconOfr = OpenFontRender();
+    OpenFontRender userIconOfr = OpenFontRender();
+    bool userIconFontLoaded = false;
 
     LinkedList<AlteredColor*> glowingColors = LinkedList<AlteredColor*>();
     LinkedList<AlteredColor*> alphaColors = LinkedList<AlteredColor*>();
@@ -175,6 +177,14 @@ class GUIManager : public GenericComponent {
           if (debug) DEBUG_PRINT("\nIcon Initialise error with default font"); 
         }*/
        iconOfr = labelOfr;
+      }
+
+      // Optional application-owned icon font, kept separate from system icons.
+      #define USER_ICON_FONT_PATH "/webapp/user.ttf.gz"
+      size_t userIconDataSize = readGzFileToBuffer(USER_ICON_FONT_PATH,&userIconFontBuffer);
+      if (userIconDataSize > 0) {
+        userIconFontLoaded = !userIconOfr.loadFont(userIconFontBuffer.buffer, userIconDataSize);
+        if (!userIconFontLoaded) DEBUG_ERROR("\nUser icon font initialise error");
       }
 
       
@@ -409,6 +419,7 @@ class GUIManager : public GenericComponent {
 
   private:   
     ByteBuffer fontBuffer;
+    ByteBuffer userIconFontBuffer;
 
     uint8_t increment = 0;
 

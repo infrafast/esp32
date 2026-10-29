@@ -159,6 +159,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
   
     /** @brief Initialize MixingStation with the supplied configuration and bindings. */
     MixingStation():MixerDevice<NetworkSocket>(INTERFACE_MIXINGSTATION, GROUP_INTERFACE_MIXER, MS_PING_COMMAND, 8887, 8088, true){
+      icon = ICON_USER_MIXINGSTATION;
       //destination.host = "192.168.99.99";
       mixerID.name = "MSStation";
      

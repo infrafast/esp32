@@ -5,6 +5,11 @@
 
 #define USE_NETWORK
 
+// Glyphs supplied by data/webapp/user.ttf.gz: '!' is the Behringer/XM mixer
+// glyph and '>' is the Mixing Station logo.
+#define ICON_USER_BEHRINGER "!"
+#define ICON_USER_MIXINGSTATION ">"
+
 #include "Interval.h"
 
 #include "mixers/m_mstation.h"
@@ -28,6 +33,12 @@ void setup(){
         stripInputGainSkel->registerDataSetAddress(&addressCHname);
 
     app.init();
+
+#if defined(USER_I18N_DEMO)
+    // `userLang` is provided and refreshed by Interval. A user component only
+    // adds/reads its own keys; it must not instantiate a second global object.
+    DEBUG_PRINT("User catalogue: %s", userLang.getString("User specific message")->c_str());
+#endif
 
 }
 

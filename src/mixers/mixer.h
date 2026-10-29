@@ -449,6 +449,11 @@ public:
     /** @brief Return the provider key used to resolve configuration choices. */
     virtual const String& getProviderNameForData(){ return this->interfaceName;}   // we are our own provider do not forget it!
 
+    /** @brief Use the application-owned icon font for mixer interface icons. */
+    OpenFontRender* getIconRenderer() override {
+      return gui.userIconFontLoaded ? &gui.userIconOfr : &gui.iconOfr;
+    }
+
     ///////////////////////////////////////////////////// the setters always echo the command so other strips update themseleves using events
     /*virtual void setCHBUSlevel(int chIndex, int busIndex, float level) = 0;
     virtual void _setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) = 0;*/
