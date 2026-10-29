@@ -273,8 +273,13 @@ bool useUSBMidi = false;
 #define DEBUG_WARN(fmt, ...)  DEBUG_BASE("⚠️", fmt, ##__VA_ARGS__)
 #define DEBUG_ERROR(fmt, ...) DEBUG_BASE("❌", fmt, ##__VA_ARGS__)
 
-  // High-frequency diagnostics are opt-in so DEV keeps normal debug output
-  // without formatting and writing every data update to the serial port.
+  // DEBUG_DETAIL is for high-frequency diagnostics such as packet dumps,
+  // per-event traces and MIDI messages. Use DEBUG_INFO for useful lifecycle
+  // and state messages, and DEBUG_WARN/DEBUG_ERROR for conditions that need
+  // attention. Detail logging is opt-in: define DEBUG_VERBOSE in the build
+  // to enable it (for example, -D DEBUG_VERBOSE); leave DEBUG_VERBOSE
+  // undefined, or remove it from the build flags, to disable it. When it is
+  // disabled this macro is a no-op, so its arguments are not evaluated.
   #ifdef DEBUG_VERBOSE
     #define DEBUG_DETAIL(fmt, ...) DEBUG_BASE("🔎", fmt, ##__VA_ARGS__)
   #else
@@ -687,13 +692,18 @@ public:
     eventDumpMask = 0;
   }
 
-  /** @brief Print message contents for diagnostics. */
+  /**
+   * @brief Print complete event contents for opt-in diagnostics.
+   *
+   * Event dumps can be frequent because the event mask is enabled by default;
+   * keep them at the detailed logging level so normal DEV logs remain usable.
+   */
   void dump(const char* direction, const char* caller) const {
     if (!isEventDumpEnabled(type)) return;
 
-    DEBUG_INFO("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
-    DEBUG_INFO("| %s %s %s %s", caller, direction, name(),serialize());
-    DEBUG_INFO("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
+    DEBUG_DETAIL("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
+    DEBUG_DETAIL("| %s %s %s %s", caller, direction, name(),serialize());
+    DEBUG_DETAIL("+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+");
   }
 
   static uint32_t eventDumpMask;
