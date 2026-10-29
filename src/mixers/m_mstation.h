@@ -288,9 +288,16 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     // JSON and ROUTE HANDLING DEFINITION
     //////////////////////////////////////
     static constexpr size_t RX_MAX = kBufferMaxSize + 1;
+    // Current supported data paths are below 32 bytes; keep room for future
+    // Mixing Station path components while avoiding a heap-backed String.
+    static constexpr size_t DATA_PATH_MAX = 128;
     char rxBuf[RX_MAX];
     JsonDocument docHeader;
     JsonDocument docFull;    
+    // Stable route filter reused for every incoming envelope. The network
+    // callback only queues messages; route() consumes them sequentially.
+    JsonDocument routeFilter;
+    bool routeFilterReady = false;
 
     enum class RouteMode : uint8_t { JsonBody, RxMessage };
 
@@ -368,16 +375,18 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         return;
       } 
 
-      JsonDocument filter;
-      filter["path"]  = true;    
-      filter["error"] = true;   
+      if (!routeFilterReady) {
+        routeFilter["path"]  = true;
+        routeFilter["error"] = true;
+        routeFilterReady = true;
+      }
 
       docHeader.clear();
       DeserializationError e = deserializeJson(
         docHeader,
         message,
         length,
-        DeserializationOption::Filter(filter)
+        DeserializationOption::Filter(routeFilter)
       );
       if (e){
         DEBUG_ERROR("JSON error: %s", e.c_str());        
@@ -708,9 +717,9 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
             "format": "val",
             "value": "Voc-Claude"
           }*/
-      String data;
+      char data[DATA_PATH_MAX];
 
-      if (!extractPath(path, MSPATH_MIXER_GET_DATA, data)) {
+      if (!extractPath(path, MSPATH_MIXER_GET_DATA, data, sizeof(data))) {
         DEBUG_WARN("%s::data: extractPath failed for:%s", interfaceName.c_str(), path);
         return;
       }
@@ -720,11 +729,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       JsonVariant value = body["value"];
       const char* valueText = value | "";
 
-      //DEBUG_INFO("%s::data: %s <%s>", interfaceName.c_str(), data.c_str(), valueText);
+      //DEBUG_INFO("%s::data: %s <%s>", interfaceName.c_str(), data, valueText);
 
       MSPathMatch match;
-      if (!decodeMSDataPath(data.c_str(), match)) {
-        DEBUG_WARN("%s::data: unmatched path:%s", interfaceName.c_str(), data.c_str());
+      if (!decodeMSDataPath(data, match)) {
+        DEBUG_WARN("%s::data: unmatched path:%s", interfaceName.c_str(), data);
         return;
       }
 
@@ -807,7 +816,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         }
 
         default:
-          DEBUG_WARN("%s::data: unsupported decoded path:%s", interfaceName.c_str(), data.c_str());
+          DEBUG_WARN("%s::data: unsupported decoded path:%s", interfaceName.c_str(), data);
           break;
       }
     }    
@@ -1031,6 +1040,20 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
     ///// setters helpers
+    /** @brief Format a floating-point value as a JSON number for Mixing Station. */
+    static int formatSetValue(char* buffer, size_t bufferSize, float value) {
+      return snprintf(buffer, bufferSize, "{\"value\":%.6g}", (double)value);
+    }
+
+    static int formatSetValue(char* buffer, size_t bufferSize, double value) {
+      return snprintf(buffer, bufferSize, "{\"value\":%.6g}", value);
+    }
+
+    template<typename T>
+    static int formatSetValue(char* buffer, size_t bufferSize, T value) {
+      return snprintf(buffer, bufferSize, "{\"value\":%ld}", (long)value);
+    }
+
     template<typename T>
     /**
      * @brief Send a value update to a Mixing Station data path.
@@ -1063,13 +1086,10 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         return;
       }
 
-      JsonDocument body;
-      body["value"] = value;
-
       char bodyBuffer[64];
-      size_t bodyLength = serializeJson(body, bodyBuffer, sizeof(bodyBuffer));
+      int bodyLength = formatSetValue(bodyBuffer, sizeof(bodyBuffer), value);
 
-      if (bodyLength == 0 || bodyLength >= sizeof(bodyBuffer)) {
+      if (bodyLength < 0 || static_cast<size_t>(bodyLength) >= sizeof(bodyBuffer)) {
         DEBUG_ERROR("%s::setdataQuery() body too large", interfaceName.c_str());
         return;
       }
@@ -1091,18 +1111,29 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
      * The optional `/val` suffix is removed because the path-pattern decoder
      * matches the canonical data path only.
      */
-    bool extractPath(const String& full, const String& base, String& remainder) {
-        if (full.startsWith(base)) {
-            remainder = full.substring(base.length());
+    bool extractPath(const char* full,
+                     const char* base,
+                     char* remainder,
+                     size_t remainderSize) {
+        if (!full || !base || !remainder || remainderSize == 0) return false;
 
-          // Supprime "/val" à la fin si présent, il peut etre rajouté par certains getters pour indiquer le type
-          if (remainder.endsWith("/val")) { 
-              remainder = remainder.substring(0, remainder.length() - 4);
-          }
+        const size_t baseLength = strlen(base);
+        if (strncmp(full, base, baseLength) != 0) return false;
 
-          return true;
+        const char* suffix = full + baseLength;
+        size_t suffixLength = strlen(suffix);
+
+        // Some replies append "/val" to the data path; it is not part of the
+        // canonical pattern used by decodeMSDataPath().
+        if (suffixLength >= 4 && strcmp(suffix + suffixLength - 4, "/val") == 0) {
+            suffixLength -= 4;
         }
-        return false;
+
+        if (suffixLength + 1 > remainderSize) return false;
+
+        memcpy(remainder, suffix, suffixLength);
+        remainder[suffixLength] = '\0';
+        return true;
     }
 
     /**
@@ -1172,6 +1203,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     struct MSPathSpec {
       MSDataPattern type;
       const char* pattern;
+      const char* scanFormat;
       uint8_t argCount;   ///< nombre de %d attendus
     };
 
@@ -1194,34 +1226,35 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
      * Extract numeric indices while rejecting extra suffixes, so similarly prefixed
      * paths are not routed to the wrong value handler.
      */
-    bool matchDataPathExact(const char* dataPath, const char* pattern, uint8_t argCount, int* outValues) {
-      if (!dataPath || !pattern) return false;
+    bool matchDataPathExact(const char* dataPath,
+                            const char* scanFormat,
+                            uint8_t argCount,
+                            int* outValues) {
+      if (!dataPath || !scanFormat) return false;
       if (argCount > 3) return false;
 
-      char fmt[128];
       int consumed = 0;
-
-      snprintf(fmt, sizeof(fmt), "/%s%%n", pattern);
+      const int dataPathLength = (int)strlen(dataPath);
 
       int a = -1, b = -1, c = -1;
       int matched = 0;
 
       switch (argCount) {
         case 0:
-          matched = sscanf(dataPath, fmt, &consumed);
-          return (matched == 0 && consumed == (int)strlen(dataPath));
+          matched = sscanf(dataPath, scanFormat, &consumed);
+          return (matched == 0 && consumed == dataPathLength);
 
         case 1:
-          matched = sscanf(dataPath, fmt, &a, &consumed);
-          if (matched == 1 && consumed == (int)strlen(dataPath)) {
+          matched = sscanf(dataPath, scanFormat, &a, &consumed);
+          if (matched == 1 && consumed == dataPathLength) {
             outValues[0] = a;
             return true;
           }
           return false;
 
         case 2:
-          matched = sscanf(dataPath, fmt, &a, &b, &consumed);
-          if (matched == 2 && consumed == (int)strlen(dataPath)) {
+          matched = sscanf(dataPath, scanFormat, &a, &b, &consumed);
+          if (matched == 2 && consumed == dataPathLength) {
             outValues[0] = a;
             outValues[1] = b;
             return true;
@@ -1229,8 +1262,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           return false;
 
         case 3:
-          matched = sscanf(dataPath, fmt, &a, &b, &c, &consumed);
-          if (matched == 3 && consumed == (int)strlen(dataPath)) {
+          matched = sscanf(dataPath, scanFormat, &a, &b, &c, &consumed);
+          if (matched == 3 && consumed == dataPathLength) {
             outValues[0] = a;
             outValues[1] = b;
             outValues[2] = c;
@@ -1256,7 +1289,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         const MSPathSpec& spec = msPathSpecs[i];
 
         int values[3] = { -1, -1, -1 };
-        if (matchDataPathExact(dataPath, spec.pattern, spec.argCount, values)) {
+        if (matchDataPathExact(dataPath, spec.scanFormat, spec.argCount, values)) {
           out.type = spec.type;
           out.argCount = spec.argCount;
           out.values[0] = values[0];
@@ -1336,11 +1369,24 @@ const MixingStation::Route MixingStation::routes[ROUTES_COUNT] = {
  * data suffix. Keeping those steps separate localizes validation and index
  * conversion in `decodeMSDataPath()`.
  */
+/**
+ * @brief Declare one data-path entry and derive its exact sscanf format.
+ *
+ * The public path model is used to build subscriptions and requests. The
+ * matching format needs the leading slash and a trailing `%n` so the parser
+ * can verify that the complete path was consumed. Keeping both forms here
+ * prevents them from drifting apart when a path is added or renamed.
+ */
+#define MSTATION_PATH_SPEC(type, pattern, count) \
+  { type, pattern, "/" pattern "%n", count }
+
 const MixingStation::MSPathSpec MixingStation::msPathSpecs[MixingStation::msPathSpecsCount] = {
-  { MSDataPattern::ChConfigName, MSDATA_CH_CONFIG_NAME, 1 },
-  { MSDataPattern::ChBusMute,    MSDATA_CH_BUS_MUTE,    2 },
-  { MSDataPattern::BusMute,      MSDATA_BUS_MUTE,       1 },
-  { MSDataPattern::ChBusLevel,   MSDATA_CH_BUS_LVL,     2 },
+  MSTATION_PATH_SPEC(MSDataPattern::ChConfigName, MSDATA_CH_CONFIG_NAME, 1),
+  MSTATION_PATH_SPEC(MSDataPattern::ChBusMute,    MSDATA_CH_BUS_MUTE,    2),
+  MSTATION_PATH_SPEC(MSDataPattern::BusMute,      MSDATA_BUS_MUTE,       1),
+  MSTATION_PATH_SPEC(MSDataPattern::ChBusLevel,   MSDATA_CH_BUS_LVL,     2),
 };
+
+#undef MSTATION_PATH_SPEC
 
 #endif
