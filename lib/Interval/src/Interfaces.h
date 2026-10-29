@@ -925,7 +925,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
      * it sets the timeout and calls the  method that actually implements the ping mecasim from the derived class
      */
     virtual bool pulseCheck(){
-      DEBUG_INFO("NetworkDevice(%s)::pulseCheck() (%lu)",interfaceName.c_str(), millis());
+      DEBUG_DETAIL("NetworkDevice(%s)::pulseCheck() (%lu)",interfaceName.c_str(), millis());
       dataProcessed = true;       // the ping throws some data out
       return ping();
     }
@@ -995,7 +995,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
         destination.jitter = MAX_VALID_LATENCY;
       }
 
-      DEBUG_INFO("📉 %s latency:%u jitter:%u lastPingRx:(%lu)-lastPingTx:(%lu)=raw:(%lu)",
+      DEBUG_DETAIL("📉 %s latency:%u jitter:%u lastPingRx:(%lu)-lastPingTx:(%lu)=raw:(%lu)",
                 interfaceName.c_str(),
                 destination.latency,
                 destination.jitter,

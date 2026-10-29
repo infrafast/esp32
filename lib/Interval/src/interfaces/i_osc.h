@@ -128,8 +128,14 @@ public:
   /**
    * @brief Encode an outgoing OSC command and append it unless already queued.
    *
-   * Count encoded bytes first, allocate exactly that buffer, then serialize and
-   * verify the byte count. Byte-identical commands already in the queue are rejected.
+   * OSC is a binary, padded protocol with variable-length addresses and
+   * arguments. The first serialization pass measures the exact wire size so
+   * the queue does not need one large fixed buffer for every command. The
+   * second pass stores an owned byte-for-byte snapshot; this is required because
+   * the caller's OSCMessage may be reused or destroyed before the delayed send.
+   * Byte-identical commands already in the queue are rejected to avoid sending
+   * duplicate updates during a burst of setter calls. A linked node keeps the
+   * allocation proportional to each command while preserving FIFO order.
    * The queue owns both node and encoded bytes; no peer address is stored per entry.
    * @return True only when a new command was appended.
    */
@@ -138,7 +144,7 @@ public:
       return false;
     }
 
-    // 1) Mesure exacte de la taille sérialisée OSC
+    // 1) Measure the exact padded OSC wire size.
     CountingPrint counter;
     msg.send(counter);
     size_t serializedLen = counter.length();
@@ -147,13 +153,13 @@ public:
       return false;
     }
 
-    // 2) Allocation buffer exact
+    // 2) Allocate only the bytes required by this command.
     uint8_t* buf = new uint8_t[serializedLen];
     if (!buf) {
       return false;
     }
 
-    // 3) Sérialisation réelle
+    // 3) Serialize the owned snapshot and verify the measured size.
     MemoryPrint mp(buf, serializedLen);
     msg.send(mp);
 
@@ -162,7 +168,7 @@ public:
       return false;
     }
 
-    // 4) Détection doublon (optionnel, comme dans votre version)
+    // 4) Reject an identical command already waiting in the FIFO.
     for (OscQueueNode* cur = head; cur != nullptr; cur = cur->next) {
       if (cur->len == serializedLen && memcmp(cur->data, buf, serializedLen) == 0) {
         delete[] buf;
@@ -170,7 +176,7 @@ public:
       }
     }
 
-    // 5) Création noeud
+    // 5) Create the queue node after all validation succeeds.
     OscQueueNode* node = new OscQueueNode();
     if (!node) {
       delete[] buf;
@@ -181,7 +187,7 @@ public:
     node->len = serializedLen;
     node->next = nullptr;
 
-    // 6) FIFO append
+    // 6) Append in FIFO order.
     if (tail == nullptr) {
       head = tail = node;
     } else {
