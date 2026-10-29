@@ -34,6 +34,8 @@ class DataProvider{
      * @brief Initialize DataProvider and its configured member bindings.
      */
     DataProvider(const String& pName):dataProviderName(pName){};
+    /** @brief Release provider-owned state through a polymorphic base pointer. */
+    virtual ~DataProvider() = default;
     /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(String addrr) = 0;
     /** @brief Return a borrowed choice label for the requested index. */

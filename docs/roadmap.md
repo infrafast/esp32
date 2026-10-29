@@ -166,9 +166,10 @@ Each ID is an actionable request: for example, **implement BUG-WEB-01**. Existin
 
 #### BUG-DATA-03 — Make DataProvider polymorphic destruction safe
 
-- **Status:** To do. **Priority:** P2.
+- **Status:** To validate. **Priority:** P2.
 - **Evidence:** [lib/Interval/src/DataManagement.h](../lib/Interval/src/DataManagement.h) — DataProvider declares virtual methods but no virtual destructor; deleting a derived provider through DataProvider* would be undefined behavior. Such deletion has not been demonstrated in active callers.
-- **Requested change:** Add a virtual default destructor and audit the actual creation/deletion paths without transferring ownership to DynamicDataSet.
+- **Implemented:** `DataProvider` now has a virtual default destructor, so any documented owner can destroy a derived provider through `DataProvider*` safely. `DynamicDataSet` remains non-owning.
+- **Remaining validation:** Exercise the existing provider destruction paths and confirm that `DynamicDataSet` does not acquire ownership or outlive its provider.
 - **Acceptance:** Derived providers can be destroyed through their documented owning path with exactly one derived/base cleanup; dev/prod builds remain compatible.
 
 #### BUG-DATA-04 — Enforce DynamicDataSet provider lifetime
