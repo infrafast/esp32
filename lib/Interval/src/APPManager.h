@@ -2323,9 +2323,18 @@ void setup() {
       //------------------
       if (hwm->configMedia->refreshed){
         if (hwm->configMedia->state == CONNECTED){
+          // A dedicated configuration medium (for example the fallback AP)
+          // is separate from hwm->network, so the regular NetworkDevice event
+          // path cannot start the web service. Start it on configMedia.
+          if (hwm->configMedia != hwm->network && webAppService != nullptr){
+            webAppService->startForConfigMedia();
+          }
           if (webAppService != nullptr) webAppService->setWSServer();
         }else{
           webAppConnected = false;
+          if (hwm->configMedia != hwm->network && webAppService != nullptr){
+            webAppService->handleDisconnectService();
+          }
         }
       }
 

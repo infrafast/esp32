@@ -713,6 +713,21 @@ class WebApplicationService: public NetworkDevice{
       return handleWeb(); // report if we processed any data
     }
 
+    /**
+     * @brief Poll the web service on whichever network carries configuration.
+     *
+     * The normal NetworkDevice implementation follows hwm.network. During
+     * fallback configuration, hwm.configMedia points to the separate AP while
+     * hwm.network deliberately remains disconnected.
+     */
+    virtual bool monitor() override{
+      if (hwm.configMedia != nullptr && hwm.configMedia != hwm.network) {
+        if (hwm.configMedia->state != CONNECTED) return false;
+        return monitorService();
+      }
+      return NetworkDevice::monitor();
+    }
+
     /** @brief Update the quality-of-service indicator used by the display. */
     virtual void determineQoS() override{
       state.QoSlevel = QoS::GOOD;     // to be set based on webserver data flow speed
@@ -738,6 +753,26 @@ class WebApplicationService: public NetworkDevice{
         fireEvent(evtWebApp);           
       }
       return started;
+    }
+
+    /**
+     * @brief Start the browser service on a dedicated configuration network.
+     *
+     * The normal NetworkDevice lifecycle waits for hwm.network to connect.
+     * The configuration AP is a separate Network object, so it must use this
+     * explicit path once that AP reports CONNECTED.
+     */
+    bool startForConfigMedia(){
+      if (hwm.configMedia == nullptr || hwm.configMedia->state != CONNECTED) {
+        return false;
+      }
+
+      state.enabled = true;
+      if (state.code == IF_READY && webServer != nullptr) {
+        return true;
+      }
+
+      return handleConnectService();
     }
 
     /**

@@ -494,9 +494,10 @@ public:
      * make it the connection used for browser configuration.
      */
     void startAP(const String* apName){
-      // if we arrive here it means all networks have failed. 
-      // hance just stop WiFI to avoid its loop taking time
-      network->WiFiEnabled = false ; 
+      // All normal network attempts have failed. Stop the STA side before
+      // starting the dedicated configuration AP so both objects cannot drive
+      // the shared Wi-Fi state at the same time.
+      network->stopWiFi();
       if (ap == nullptr){
         ap = new AccessPoint(apName, true); 
         hwComponents.add(ap);

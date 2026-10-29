@@ -2792,20 +2792,18 @@ class AccessPoint : public Network{
       //pauseWifi();       // cut all previous connection but keep trying connecting
       stopWiFi();
 
-      #ifdef USE_NETWORK
-        WiFi.mode(WIFI_AP_STA);        
-        //if (debug) DEBUG_PRINT("\n WiFi.mode(WIFI_AP_STA)");        
-      #else
-        WiFi.mode(WIFI_AP);
-        //if (debug) DEBUG_PRINT("\n WiFi.mode(WIFI_AP)");
-      #endif     
-      
-      WiFi.mode(WIFI_AP_STA);
+      // Configuration mode is deliberately AP-only. The normal STA object is
+      // paused by HardwareManager::startAP(), so keeping STA enabled here can
+      // make the radio continue retrying stale credentials while the browser
+      // is trying to associate with the configuration network.
+      WiFi.mode(WIFI_AP);
       //WiFi.setTxPower(WIFI_POWER_19_5dBm);  // remets la puissance maximum
       WiFi.setMinSecurity(WIFI_AUTH_OPEN); // accepte tous les réseaux ouverts et sécurisés
 
 
-      WiFi.softAP(SSID,"",WIFI_CHANNEL,VISIBLE,MAX_AP_CONNECTION);         
+      if (!WiFi.softAP(SSID,"",WIFI_CHANNEL,VISIBLE,MAX_AP_CONNECTION)) {
+        DEBUG_ERROR("AccessPoint.softAP() failed for %s", SSID.c_str());
+      }
       //WiFi.softAP(SSID,"");     // doesnt fix the AP stability issue    
       //setWifiPower();      
 
