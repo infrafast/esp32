@@ -41,7 +41,8 @@ typedef void (*GUIBuilderCallBack)(uint8_t);
 
 uint8_t renderLoop=0;
 unsigned long roundTrip=0;
-String count="",count2="";
+/** @brief Fixed buffers for optional render-loop diagnostics; no heap allocation per widget. */
+char count[8] = "", count2[24] = "";
 
 #ifdef USE_DMA
   uint16_t  dmaBuffer1[16*16]; ///< Toggle buffer for 16*16 MCU block, 512bytes
@@ -331,8 +332,8 @@ class GUIManager : public GenericComponent {
         t1 = micros(); 
         roundTrip = t1-t0;
 
-        count = concatStrings("~", ++renderLoop, "~");
-        count2 = concatStrings(roundTrip, "uS");
+        snprintf(count, sizeof(count), "~%u~", ++renderLoop);
+        snprintf(count2, sizeof(count2), "%luuS", roundTrip);
 
         #define RTRIP 50000UL
 
