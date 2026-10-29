@@ -23,6 +23,18 @@
 #define TTF_FONT GeneratedFont
 
 /**
+ * @brief Maximum time spent rendering widgets in one application-loop pass.
+ *
+ * A short budget keeps input and MIDI processing responsive. The GUI continues
+ * from the next widget on the following pass, so a complete screen may span
+ * several passes. Override this value from the build flags when a different
+ * display/latency trade-off is required.
+ */
+#ifndef GUI_REFRESH_BUDGET_US
+  #define GUI_REFRESH_BUDGET_US 5000UL
+#endif
+
+/**
  * @brief Page id, page state and redraw marker sharing one comparison value.
  */
 union ScreenUnion{
@@ -335,12 +347,10 @@ class GUIManager : public GenericComponent {
         snprintf(count, sizeof(count), "~%u~", ++renderLoop);
         snprintf(count2, sizeof(count2), "%luuS", roundTrip);
 
-        #define RTRIP 50000UL
-
-      }while(roundTrip<RTRIP && widgetIndex != screenGUIs.size()-1);    // we render a maximum of widget in 50ms      
+      }while(roundTrip<GUI_REFRESH_BUDGET_US && widgetIndex != screenGUIs.size()-1);
 
       if (debug){
-        if (roundTrip>RTRIP){
+        if (roundTrip>GUI_REFRESH_BUDGET_US){
           //DEBUG_PRINT("\ncause TRIP" );
         }else{
           //DEBUG_PRINT("\ncause SIZE");        

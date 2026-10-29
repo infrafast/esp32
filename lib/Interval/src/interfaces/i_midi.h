@@ -163,13 +163,24 @@ class MIDIInterface: public DeviceInterface{
 
     /** @brief Copy or dispatch a received SysEx message for strip consumers. */
     virtual void handleSysex(byte* sysexdata, unsigned length){
-      DEBUG_DETAIL("handleSysex: %c, %i bytes: ",getSysExStatus(sysexdata, length),length);
+      #ifdef DEBUG_VERBOSE
+        // Keep diagnostics to one bounded write: logging one byte at a time can
+        // block on the serial mutex and distort the real-time MIDI path.
+        constexpr uint16_t SYSEX_DEBUG_PREVIEW = 32;
+        char hexDump[SYSEX_DEBUG_PREVIEW * 3 + 1] = {0};
+        const uint16_t previewLength = (sysexdata != nullptr && length < SYSEX_DEBUG_PREVIEW)
+                                      ? length
+                                      : (sysexdata != nullptr ? SYSEX_DEBUG_PREVIEW : 0);
+        size_t offset = 0;
+        for (uint16_t i = 0; i < previewLength && offset + 3 < sizeof(hexDump); ++i) {
+          offset += snprintf(hexDump + offset, sizeof(hexDump) - offset, "%02X ", sysexdata[i]);
+        }
+        DEBUG_DETAIL("handleSysex: %c, %u bytes: %s%s",
+                     getSysExStatus(sysexdata, length), length, hexDump,
+                     (length > previewLength) ? "..." : "");
+      #endif
 
       if (dataAvailable) return; // previous data has not been ocnsummed yet so we ignore it (we could make a queue)
-
-      #ifdef DEBUG_VERBOSE
-        for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",sysexdata[i]);
-      #endif
 
       // ------------------------------------------------------------------------
       // Ancien mécanisme conservé pour compatibilité

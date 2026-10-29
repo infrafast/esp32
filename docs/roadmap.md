@@ -28,7 +28,7 @@ and the existing GUI update order.
 
 - **Status:** To assess.
 - **Origin:** `WiFiEth::refresh()` polls `Ethernet.linkStatus()`, runs WebSocket listeners, and can start DHCP/Wi-Fi attempts from the application loop.
-- **Requested change:** Measure link polling, `ws*Client->listen()`, `Ethernet.begin()`, `WiFi.begin()`, semaphore waits, and disconnect cleanup. Keep connection state transitions serialized while preventing long retry or teardown work from monopolizing one refresh cycle.
+- **Requested change:** First separate network time from other hardware time in `HardwareManager::refresh()`, then measure link polling, `ws*Client->listen()`, `Ethernet.begin()`, `WiFi.begin()`, semaphore waits, and disconnect cleanup. Keep connection state transitions serialized while preventing long retry or teardown work from monopolizing one refresh cycle.
 - **Acceptance:** Ethernet/Wi-Fi priority and events remain unchanged; normal connected cycles stay bounded; connection attempts and link loss are visible as separate, measured events.
 
 #### PERF-LOOP-03 — Bound interface monitoring cost
@@ -38,35 +38,28 @@ and the existing GUI update order.
 - **Requested change:** Measure per-interface work and message sizes; establish a bounded amount of input processing per cycle without dropping or reordering events.
 - **Acceptance:** Existing interface state changes and event propagation remain correct, while one large incoming message cannot create an unbounded application-loop delay.
 
-#### PERF-LOOP-04 — Control broadcast serialization and queue draining
-
-- **Status:** To assess.
-- **Origin:** Interface state changes serialize JSON in `APPManager::refresh()`, then `processBroadcastQueue()` sends every queued message in one pass and removes entries from the front of a vector.
-- **Requested change:** Measure serialization, queue growth, WebSocket send time, and burst size. Define a bounded draining policy and an efficient FIFO operation while preserving message order and delivery semantics.
-- **Acceptance:** State/configuration broadcasts remain ordered and complete; a burst cannot consume an unbounded share of one loop cycle.
-
-#### PERF-LOOP-05 — Reduce unnecessary bank and strip processing
+#### PERF-LOOP-04 — Reduce unnecessary bank and strip processing
 
 - **Status:** To assess.
 - **Origin:** Every bank calls `strip->process()` for all its strips, including strips that are not visible.
 - **Requested change:** Measure processing cost by bank, strip and interface. Identify safe early-outs for unchanged or inactive work without changing protocol polling or visible-strip redraw behavior.
 - **Acceptance:** Hidden/inactive content is not processed unnecessarily when safe; visible strips, interface updates and redraw triggers remain identical.
 
-#### PERF-LOOP-06 — Bound GUI widget rendering work
+#### PERF-LOOP-05 — Bound GUI widget rendering work
 
 - **Status:** To assess.
 - **Origin:** `GUIManager::refresh()` renders widgets in a time-sliced loop, transfers sprites over SPI, and allocates temporary rotated sprites.
 - **Requested change:** Measure widget refresh, sprite creation, rotation, transparency composition and TFT transfer separately. Preserve the existing 50 ms safety budget while reducing allocation and per-widget variability where proven safe.
 - **Acceptance:** No widget is skipped permanently; transparency, rotation, sprite cleanup and screen output remain correct; maximum widget-render cost is measurable.
 
-#### PERF-LOOP-07 — Isolate screen rebuild and persistence work
+#### PERF-LOOP-06 — Isolate screen rebuild and persistence work
 
 - **Status:** To assess.
 - **Origin:** A screen change calls `gui->purge()`, rebuilds the page and may write persisted bank selection before the regular GUI refresh.
 - **Requested change:** Measure rebuild, widget construction/destruction and persistence writes separately from steady-state rendering. Keep transitions observable and avoid treating rebuild cost as idle refresh cost.
 - **Acceptance:** Screen transitions remain functionally identical and their one-time cost is reported separately from normal cycles.
 
-#### PERF-LOOP-08 — Account for scheduler and background-task interference
+#### PERF-LOOP-07 — Account for scheduler and background-task interference
 
 - **Status:** To assess.
 - **Origin:** `yield()`, Wi-Fi callbacks, asynchronous ping/HTTP tasks and the background button task can preempt or delay the main loop.
