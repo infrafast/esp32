@@ -715,9 +715,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         return;
       }
 
-      String v = body["value"];
+      // Keep the value in the response document. Converting it to String for
+      // every update caused a heap allocation even for numeric and boolean data.
+      JsonVariant value = body["value"];
+      const char* valueText = value | "";
 
-      //DEBUG_INFO("%s::data: %s <%s>", interfaceName.c_str(), data.c_str(), v.c_str());
+      //DEBUG_INFO("%s::data: %s <%s>", interfaceName.c_str(), data.c_str(), valueText);
 
       MSPathMatch match;
       if (!decodeMSDataPath(data.c_str(), match)) {
@@ -727,7 +730,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
       /*DEBUG_INFO("%s::pattern matched: %s (argc=%u, a=%d, b=%d, c=%d)",
                 interfaceName.c_str(),
-                v.c_str(),
+                valueText,
                 match.argCount,
                 match.values[0],
                 match.values[1],
@@ -739,7 +742,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           int index = match.values[0];
           int type = getTypeFromIndex(msMixer, index);
 
-          const char* name = v.c_str();
+          const char* name = valueText;
 
           switch (type) {
             case MS_TYPE_INPUT:
@@ -772,7 +775,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           int chIndex  = match.values[0];
           int busIndex = match.values[1];
 
-          int mute = v=="true"? 1 : 0;
+          int mute = value.is<bool>() ? (value.as<bool>() ? 1 : 0)
+                                      : (strcmp(valueText, "true") == 0 ? 1 : 0);
           DEBUG_INFO("%s::CH_BUS_MUTE ch=%d bus=%d mute=%s",interfaceName.c_str(), chIndex, busIndex, mute ? "true" : "false");
           //fireChBusMute(chIndex+1, busIndex+1, mute);      // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
           handleChBusMute(chIndex+1, busIndex+1, mute);       // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
@@ -783,7 +787,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           int busIndex = match.values[0];
           busIndex -= msMixer->busOffset;     
 
-          int mute = v=="true"? 1 : 0;
+          int mute = value.is<bool>() ? (value.as<bool>() ? 1 : 0)
+                                      : (strcmp(valueText, "true") == 0 ? 1 : 0);
           DEBUG_INFO("%s::BUS_MUTE bus=%d mute=%s",interfaceName.c_str(), busIndex, mute ? "true" : "false");
           handleBusMute(busIndex+1,mute); // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
           break;
@@ -793,7 +798,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
           int chIndex  = match.values[0];
           int busIndex = match.values[1];
 
-          float lvl = v.toFloat();
+          float lvl = value.as<float>();
 
           //DEBUG_INFO("%s::CH_BUS_LEVEL ch=%d bus=%d lvl=%.3f",interfaceName.c_str(), chIndex, busIndex, lvl);
           //fireChBusMixLevel(chIndex+1, busIndex+1, lvl);      // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
@@ -1043,18 +1048,38 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         }
       }
       */      
-      String fullPath = concatStrings(MSPATH_MIXER_SET_DATA "/", path, "/", format);
+      char fullPath[192];
+      int pathLength = snprintf(
+        fullPath,
+        sizeof(fullPath),
+        "%s/%s/%s",
+        MSPATH_MIXER_SET_DATA,
+        path,
+        format
+      );
+
+      if (pathLength < 0 || static_cast<size_t>(pathLength) >= sizeof(fullPath)) {
+        DEBUG_ERROR("%s::setdataQuery() path too long", interfaceName.c_str());
+        return;
+      }
 
       JsonDocument body;
       body["value"] = value;
 
       char bodyBuffer[64];
-      serializeJson(body, bodyBuffer, sizeof(bodyBuffer));
+      size_t bodyLength = serializeJson(body, bodyBuffer, sizeof(bodyBuffer));
+
+      if (bodyLength == 0 || bodyLength >= sizeof(bodyBuffer)) {
+        DEBUG_ERROR("%s::setdataQuery() body too large", interfaceName.c_str());
+        return;
+      }
+
+      const char* request = post(fullPath, bodyBuffer);
 
       if (immediate)
-        hwm.network->clientSocketSend(post(fullPath.c_str(), bodyBuffer));  // direct send
+        hwm.network->clientSocketSend(request);  // direct send
       else
-        enqueueSocketMessageTx(post(fullPath.c_str(), bodyBuffer));       // queued
+        enqueueSocketMessageTx(request);       // queued
     }    
 
     ///////////////////////////////////////
