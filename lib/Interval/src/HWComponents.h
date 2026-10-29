@@ -1329,7 +1329,7 @@ class Network : public HWComponent2State{
     
     /** @brief Prepare this object for use with its current configuration. */
     virtual void init(){
-      if (debug) DEBUG_INFO("%s::init()", id.c_str());
+      if (debug) DEBUG_INFO("Network::init()");
       WiFi.setAutoConnect(false); 
       WiFi.setAutoReconnect(false);      
     }
@@ -2812,7 +2812,7 @@ class AccessPoint : public Network{
 
       getIP();
       WiFi.enableLongRange(true);
-      DEBUG_INFO("AccessPoint.init (%s) %s",SSID.c_str(),IP.toString().c_str());        
+      DEBUG_INFO("%s.init (%s) %s",SSID.c_str(),id.c_str(),IP.toString().c_str());        
     }
 
     /** @brief Return the address of this network connection. */
