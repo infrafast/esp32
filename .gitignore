@@ -18,3 +18,4 @@ data/firmware.bin.gz
 # Generated Doxygen HTML and diagrams
 /build/doxygen/
 .DS_Store
+data/firmware.bin.gz
