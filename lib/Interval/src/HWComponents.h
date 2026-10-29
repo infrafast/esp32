@@ -2802,11 +2802,13 @@ class AccessPoint : public Network{
       //pauseWifi();       // cut all previous connection but keep trying connecting
       stopWiFi();
 
-      // Configuration mode is deliberately AP-only. The normal STA object is
-      // paused by HardwareManager::startAP(), so keeping STA enabled here can
-      // make the radio continue retrying stale credentials while the browser
-      // is trying to associate with the configuration network.
-      WiFi.mode(WIFI_AP);
+      // Keep the STA interface enabled but idle while the configuration AP is
+      // active. Arduino-ESP32's WiFi.scanNetworks() always calls
+      // WiFi.enableSTA(true); starting in AP-only mode would therefore switch
+      // the radio mode during a scan and disconnect the WebGUI client.
+      // No WiFi.begin() is issued here, so this is not an automatic STA
+      // connection attempt; it only keeps scanning compatible with the AP.
+      WiFi.mode(WIFI_AP_STA);
       //WiFi.setTxPower(WIFI_POWER_19_5dBm);  // remets la puissance maximum
       WiFi.setMinSecurity(WIFI_AUTH_OPEN); // accepte tous les réseaux ouverts et sécurisés
 
