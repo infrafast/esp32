@@ -25,6 +25,14 @@ Each ID is an actionable request: for example, **implement BUG-WEB-01**. Existin
 
 ### Interfaces / configuration
 
+#### NET-CONFIG-01 — Validate deferred STA credentials from the configuration AP
+
+- **Status:** To validate.
+- **Origin:** User-requested fallback workflow when Ethernet and saved STA networks are unavailable.
+- **Implemented scope:** `setWifi` now persists the selected SSID/password while a dedicated configuration AP remains active; the normal STA applies the saved values on the next startup.
+- **Remaining validation:** On hardware, start the AP from the wizard, connect a phone, select an SSID, submit credentials, confirm the AP/WebGUI remains reachable, reboot, and verify STA association. Also check empty-SSID rejection and persistence-write failure handling.
+- **Acceptance:** The AP session is not interrupted by `setWifi`; after reboot the selected SSID is attempted with the saved password; normal non-AP Wi-Fi configuration keeps its existing immediate-connection behavior.
+
 #### BUG-IF-01 — Bound network and OSC property parsing
 
 - **Status:** To do. **Priority:** P1.

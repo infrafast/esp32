@@ -4,7 +4,7 @@
 
 This document is the project's architectural reference: structure, responsibilities, patterns, and extension procedures. Requested work, hypotheses to test, and validation criteria are tracked in [the roadmap](roadmap.md). Contribution instructions are in [AGENT.md](../AGENT.md).
 
-Consolidated on October 24, 2026 from the code on `main`, `ANALYSE_REPO.md`, `lib/Interval/README.md`, and the PCB audit revised on October 22. Historical audit findings are dated and do not replace the current code state. This documentation is maintained in English.
+Consolidated on October 29, 2026 from the code on `main`, `ANALYSE_REPO.md`, `lib/Interval/README.md`, and the PCB audit revised on October 22. Historical audit findings are dated and do not replace the current code state. This documentation is maintained in English.
 
 ## 1. Structure and responsibilities
 
@@ -59,6 +59,31 @@ Interface workflows own business transitions. Methods such as `enable()`, `disab
 When extending an interface, follow this order: perform or decide the business transition in the workflow, then call exactly the state helper that describes its result. If a state helper appears to need side effects, move those side effects back to the owning workflow instead of adding lifecycle behavior to `setStateXXX()`.
 
 `NetworkDevice` adds networking, ports, connection events, and presence monitoring. Concrete transports include `NetworkOSC` and `NetworkSocket`. States include ready, disconnected, pending, error, disabled, offline, and syncing; use the existing mechanisms rather than a parallel boolean.
+
+#### Wi-Fi configuration AP and deferred STA activation
+
+`HWManager::network` owns the normal network transport. `HWManager::configMedia`
+identifies the medium currently used to expose configuration services. During a
+configuration request, `HWManager::startAP()` stops the normal STA attempts,
+creates the `AccessPoint`, initializes it in AP-only mode, and assigns it to
+`configMedia`. This deliberate AP-only workflow avoids having the AP and STA
+objects compete for the shared Wi-Fi state while the user is connected to the
+WebGUI.
+
+The WebGUI sends the `setWifi` command with an SSID and password. When
+`configMedia` is the dedicated configuration AP, `APPManager` calls
+`Network::rememberSSID()` rather than starting a connection. It updates the
+in-memory credential list and immediately persists `S_SSID` and
+`S_LAST_USED_SSID` through `systemCfg.save()`. The AP and its HTTP session stay
+available, and the saved credentials are loaded by `applySystemSettings()` and
+used by the STA on the next normal startup. An empty SSID or a failed save is
+reported as a command error.
+
+When the normal network itself is the configuration medium, the existing
+`Network::setSSID()` path is retained and may attempt an immediate connection;
+it also persists the selected credentials. AP+STA simultaneous operation is not
+part of this workflow and must be designed and validated separately before it
+is enabled.
 
 ### Mixer abstraction and template composition
 

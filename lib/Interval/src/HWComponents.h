@@ -1336,8 +1336,18 @@ class Network : public HWComponent2State{
 
     /** @brief Select the Wi-Fi network name and associated credentials. */
     virtual void setSSID(String ssid, String pwd){
+      rememberSSID(ssid, pwd);
+    }
+
+    /**
+     * @brief Store Wi-Fi credentials without starting a radio connection.
+     *
+     * This is used while the configuration AP is serving the WebGUI: the
+     * selected STA network must survive a reboot without interrupting the AP.
+     */
+    void rememberSSID(String ssid, String pwd){
       SSID = ssid;
-      wiFiList->addValue(SSID,pwd);         
+      if (wiFiList != nullptr) wiFiList->addValue(SSID,pwd);
     }
     
 

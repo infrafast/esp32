@@ -12,6 +12,11 @@ The framework also includes MIDI, OSC, and socket interfaces. Availability depen
 
 The configured target is the Seeed XIAO ESP32-S3, with LittleFS storage, an ILI9341 display, and W5500 Ethernet. Banks and strips organize the controls displayed and triggered by the buttons.
 
+If the normal STA connection is unavailable, the configuration wizard can
+expose an AP for the WebGUI. Selecting an SSID there saves its credentials for
+the next normal startup while keeping the configuration AP available; this
+workflow does not currently use simultaneous AP+STA operation.
+
 The active application registers an input-to-bus send strip. A gain strip is also registered, but command transmission still needs to be completed: it must not be considered operational.
 
 Web resources are included in `data/webapp/`. Updates package firmware and resources into `.tgz` archives; their preparation and the differences between development and production builds are described in the architecture document.

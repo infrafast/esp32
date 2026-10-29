@@ -3522,17 +3522,45 @@ void setup() {
       }else if (command == "setWifi"){
         String ssid = jsonInput["param"]["ssid"].as<String>();
         String pwd = jsonInput["param"]["password"].as<String>();
-        // indicate which WiFi to connect next
-        // the appmanager refresh will take care of adding it to the valid json wifi ssid list  if it connects
-        hwm->network->setSSID(ssid,pwd);
-        if (hwm->network->media != CABLE_MEDIA){
-          jsonAnswer.callback = "wifiConnectTimeout"; // we give a try to connect wifi by setting up the timeout
-          jsonAnswer.value = hwm->network->wiFiTimeout;
-        }
-        // if media is ethernet, we just feedback save button
-        else{
-          jsonAnswer.callback = RET_POPUP;
-          jsonAnswer.value ="wifiSaved";
+        if (ssid.length() == 0){
+          jsonAnswer.callback = RET_COMMANDERROR;
+          jsonAnswer.value = "setWifi requires an SSID";
+        }else{
+          // Persist the selected network immediately. This is deliberately
+          // independent of the connection attempt so an AP configuration can
+          // be completed now and applied by the STA at the next boot.
+          const bool dedicatedConfigMedia =
+            hwm->configMedia != nullptr && hwm->configMedia != hwm->network;
+          if (dedicatedConfigMedia){
+            hwm->network->rememberSSID(ssid,pwd);
+          }else{
+            hwm->network->setSSID(ssid,pwd);
+          }
+
+          String wifiCredentials;
+          wiFiList.serialize(&wifiCredentials);
+          const bool saved =
+            systemCfg.setValue(S_SSID,wifiCredentials) &&
+            systemCfg.setValue(S_LAST_USED_SSID,ssid) &&
+            systemCfg.save();
+
+          if (!saved){
+            jsonAnswer.callback = RET_COMMANDERROR;
+            jsonAnswer.value = "Unable to save WiFi credentials";
+          }else if (dedicatedConfigMedia){
+            // Keep the AP and its WebGUI session intact. The saved STA
+            // configuration is applied during the next normal startup.
+            jsonAnswer.callback = RET_POPUP;
+            jsonAnswer.value = "wifiSaved";
+          }else if (hwm->network->media != CABLE_MEDIA){
+            jsonAnswer.callback = "wifiConnectTimeout"; // we give a try to connect wifi by setting up the timeout
+            jsonAnswer.value = hwm->network->wiFiTimeout;
+          }
+          // if media is ethernet, we just feedback save button
+          else{
+            jsonAnswer.callback = RET_POPUP;
+            jsonAnswer.value ="wifiSaved";
+          }
         }
 
       }else if (command == "setStrip"){
