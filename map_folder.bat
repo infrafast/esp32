@@ -1,1 +1,1 @@
-subst K: w:\demo
+subst K: w:\webGUI

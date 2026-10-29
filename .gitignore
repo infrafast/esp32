@@ -12,6 +12,12 @@ garbage.txt
 .DS_Store
 *.zip
 *.tgz
+
+# Web GUI development backups and host metadata
+webGUI/backup/
+webGUI/@eaDir/
+webGUI/.DS_Store
+webGUI/Thumbs.db
 data/*.bin.gz
 data/firmware.bin.gz
 

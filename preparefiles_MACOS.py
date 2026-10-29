@@ -18,7 +18,8 @@ project_dir = os.path.abspath(os.path.join(script_dir, ".."))
 # 🔹 Construction du chemin cible
 
 DEST = os.path.join(project_dir, "esp32", "data", "webapp")
-SRC = '/Volumes/web/demo'
+# Editable web source is versioned beside the firmware project.
+SRC = os.path.join(script_dir, "webGUI")
 
 def minify_json(json_file, dest, overwrite=False):
 	with open(json_file, 'r', encoding='utf-8') as f:

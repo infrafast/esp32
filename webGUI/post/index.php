@@ -27,7 +27,7 @@ if (!isset($_SESSION['lang'])) {
   $_SESSION['lang'] = 'francais'; 
 }
 if (!isset($_SESSION['liveserverIP'])) {
-  $_SESSION['liveserverIP'] = "82.65.4.93";
+  $_SESSION['liveserverIP'] = "127.0.0.1";
 }
 if (!isset($_SESSION['useNetwork'])) {
   $_SESSION['useNetwork'] = 1;
@@ -116,10 +116,10 @@ function getSystem(){
           "lang": "francais",
           "faderSpeed": "157",
           "ssid": {
-            "intervalmix1": "intervalpop74",
-            "infrafast": "Mf9k8iie2",
-            "intervalmix": "intervalpop74",
-            "IpTch": "jt2p9ug1"
+            "intervalmix1": "CHANGE_ME_WIFI_PASSWORD",
+            "infrafast": "CHANGE_ME_WIFI_PASSWORD",
+            "intervalmix": "CHANGE_ME_WIFI_PASSWORD",
+            "IpTch": "CHANGE_ME_WIFI_PASSWORD"
           },
           "buttonsAssignements": {
             "left": [3,1,5,8],
@@ -376,7 +376,7 @@ if ($command == "save"){
 
 }else if ($command == "setMixer"){
     
-    //"setMixer","param":{"serverIP":"82.65.4.93","mixerPort":"10023"}
+    //"setMixer","param":{"serverIP":"127.0.0.1","mixerPort":"10023"}
     $_SESSION['serverIP'] = $param['serverIP'];
     $_SESSION['mixerPort'] = $param['mixerPort'];
     $_SESSION['serverPort'] = $param['serverPort'];
@@ -434,7 +434,7 @@ function getHTMLForm(){
         <p><b>command:</b></p>
         <ul>
             <li><b>set </b><i>{\"id\":\"variable\",\"value\":xxx}</i></li>
-            <li><b>setMixer </b><i>{\"serverIP\":\"82.65.4.93\",\"mixerPort\":\"10023\"}</i></li>
+            <li><b>setMixer </b><i>{\"serverIP\":\"127.0.0.1\",\"mixerPort\":\"10023\"}</i></li>
             <li><b>retrieve </b><i>config</i></li>
             <li><b>setWifi </b><i>{\"ssid\":\"name\",\"password\":\"pwd\"}</i></li>
             <li><b>scanWifi</b></li>
