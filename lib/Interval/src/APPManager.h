@@ -3046,6 +3046,11 @@ void setup() {
       byte *buffer = nullptr; // Pointeur pour la mémoire allouée dynamiquement
       // Allouer dynamiquement de la mémoire pour stocker les données
       buffer = new (std::nothrow) byte[chunkedDataSize]; // +1 pour le caractère null
+      if (buffer == nullptr && chunkedDataSize > 0) {
+        DEBUG_ERROR("sendFileInChunks: buffer allocation failed (%u bytes)", chunkedDataSize);
+        file->close();
+        return;
+      }
 
       int bytesRead;
       // Lire et envoyer des paquets jusqu'à ce que tout le fichier soit envoyé
@@ -3056,7 +3061,7 @@ void setup() {
         //yield();     // ==> when this yield is on, it create CONNECTION_REFUSED on iMac chrome as it slows down the sending of the data
       }
 
-      free(buffer);
+      delete[] buffer;
 
       file->close();
     }

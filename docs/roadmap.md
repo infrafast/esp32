@@ -200,9 +200,10 @@ Each ID is an actionable request: for example, **implement BUG-WEB-01**. Existin
 
 #### BUG-WEB-01 — Match the HTTP file-buffer allocator and deallocator
 
-- **Status:** To do. **Priority:** P1.
+- **Status:** To validate. **Priority:** P1.
 - **Evidence:** [lib/Interval/src/APPManager.h:2536](https://github.com/infrafast/esp32/blob/679bafe8a8461f34d67096db16b2685835ae7c67/lib/Interval/src/APPManager.h#L2536) — sendFileInChunks allocates byte[] using new(std::nothrow) but frees it with free(); it also reads into the buffer without checking a null allocation.
-- **Requested change:** Use matching deallocation or existing scoped ownership, check allocation and read/write errors, and preserve tested Ethernet chunk behavior.
+- **Implemented:** `sendFileInChunks()` now releases its `new[]` buffer with `delete[]` and aborts safely when a non-empty buffer allocation fails. Transfer chunking and socket writes are unchanged.
+- **Remaining validation:** Repeatedly download representative Wi-Fi/Ethernet files and exercise allocation failure; confirm content and file closure remain correct.
 - **Acceptance:** Repeated file downloads and injected OOM produce no allocator mismatch, invalid writes or leaked open file; content remains correct over Wi-Fi/Ethernet.
 
 ### Webapp / firmware upload
