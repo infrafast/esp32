@@ -188,9 +188,10 @@ Each ID is an actionable request: for example, **implement BUG-WEB-01**. Existin
 
 #### BUG-DATA-06 — Use size-safe iteration for growing registries
 
-- **Status:** To do. **Priority:** P2.
+- **Status:** To validate. **Priority:** P2.
 - **Evidence:** [lib/Interval/src/DataManagement.h](../lib/Interval/src/DataManagement.h) — DataRepository lookup/serialization and JsonTemplateRepository serialization use uint8_t counters while traversing std::vector-backed registries. With more than 255 entries, the counter may wrap and fail to terminate.
-- **Requested change:** Use size_t or the container's size type for all vector iterations; check index conversions at interfaces that genuinely require narrower types.
+- **Implemented:** DataRepository and JsonTemplateRepository vector traversals now use `size_t` counters, preventing wraparound beyond 255 entries without changing valid-entry behavior.
+- **Remaining validation:** Exercise registries containing 0, 255 and 256+ entries and confirm each entry is visited exactly once.
 - **Acceptance:** Synthetic registries containing 0, 255, 256 and more entries are traversed exactly once per entry, with no wraparound or hanging.
 
 ### Webapp / firmware HTTP server

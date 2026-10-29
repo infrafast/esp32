@@ -265,7 +265,7 @@ class DataRepository{
      * unique keys; callers must supply valid indices and live descriptors.
      */
     DataSet* getDataSet(String provider, String address){
-      for (uint8_t i=0;i<dataSets.size();i++){
+      for (size_t i=0; i<dataSets.size(); ++i){
         DataSet* ds = dataSets[i];        
         if (address == ds->address->pattern && provider == ds->name){          
           return ds;
@@ -287,7 +287,7 @@ class DataRepository{
      * the provider name inside every entry. Dataset storage is not copied into a cache.
      */
     void serialize(JsonObject jsonByProvider) {
-      for (uint8_t i = 0; i < dataSets.size(); i++) {
+      for (size_t i = 0; i < dataSets.size(); ++i) {
         DataSet* ds = dataSets[i];
         if (!ds || !ds->name) continue;
 
@@ -604,7 +604,7 @@ class SerializableParameters {
  * The input array belongs to the caller; registered template pointers are borrowed.
  */
 void JsonTemplateRepository::serialize(JsonArray* jsonTPLArray){
-      for (uint8_t i=0;i<jsonTemplateRepo.size();i++){
+      for (size_t i=0; i<jsonTemplateRepo.size(); ++i){
         SerializableParameters* jsonTPL = jsonTemplateRepo[i];
         jsonTPLArray->add(jsonTPL->serialize());
       }
