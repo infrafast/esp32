@@ -226,7 +226,7 @@ class GUIManager : public GenericComponent {
       } 
 
       lastFXmillis = millis();
-      lastLoopMetricsMs = millis();
+      lastLoopMetricsUs = micros();
 
     }
 
@@ -429,8 +429,9 @@ class GUIManager : public GenericComponent {
       }
       lastLoopSampleUs = nowUs;
 
-      const uint32_t nowMs = millis();
-      if (nowMs - lastLoopMetricsMs < 1000 || loopPeriodSamples == 0) return;
+      // Keep the hot path integer-only.  The floating-point statistics below
+      // are evaluated once per reporting interval, never once per loop.
+      if (nowUs - lastLoopMetricsUs < 1000000UL || loopPeriodSamples == 0) return;
 
       const double meanPeriodUs = static_cast<double>(loopPeriodSumUs) / loopPeriodSamples;
       double varianceUs2 = static_cast<double>(loopPeriodSquareSumUs) / loopPeriodSamples
@@ -446,7 +447,7 @@ class GUIManager : public GenericComponent {
       loopPeriodSumUs = 0;
       loopPeriodSquareSumUs = 0;
       loopPeriodSamples = 0;
-      lastLoopMetricsMs = nowMs;
+      lastLoopMetricsUs = nowUs;
     }
 
     /** @brief Increase the runtime GUI budget by one development-menu step. */
@@ -519,7 +520,7 @@ class GUIManager : public GenericComponent {
     unsigned long lastFXmillis;
     #ifdef DEBUG
       uint32_t lastLoopSampleUs = 0;
-      uint32_t lastLoopMetricsMs = 0;
+      uint32_t lastLoopMetricsUs = 0;
       uint32_t loopPeriodSamples = 0;
       uint64_t loopPeriodSumUs = 0;
       uint64_t loopPeriodSquareSumUs = 0;
