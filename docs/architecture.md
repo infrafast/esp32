@@ -156,7 +156,7 @@ Production TinyUSB MIDI has a header-name collision on case-insensitive filesyst
 
 `data/webapp/` mainly contains gzip resources, translations, fonts, and images. `preparefiles.py` and its macOS variant prepare assets. The initial analysis notes a `K:` source path, a Windows helper, calls to Toptal minification services, and workflow execution on import. These portability constraints are tracked in roadmap; editable web source must not be assumed available from compressed files alone.
 
-`gzfw_to_data.py` compresses firmware into `data/`. `make_tgz.py` uses version `_V`, archives `data/`, and moves the archive and compressed firmware to `/Volumes/web/fwupdate`, creating the folder if needed. The dev build therefore couples compilation and deployment preparation. The prod build does not trigger these two post-scripts.
+`gzfw_to_data.py` compresses firmware into `data/`. `make_tgz.py` uses version `_V`, archives `data/`, and moves the archive and compressed firmware to a `fwupdate/` folder beside the `esp32` checkout (override with `FWUPDATE_DEST`). The dev build therefore couples compilation and deployment preparation. The prod build does not trigger these two post-scripts.
 
 Framework constants specify `infrafast.fr`, `/fwupdate/`, `/webapp`, and the `.tgz` extension. Do not infer HTTP/TLS behavior from these names alone.
 
@@ -177,7 +177,7 @@ boundary:
   for such values and must not place their translations in `data/*.lang`.
   Firmware-owned TFT text continues to use `lang`.
 - Web keys such as `hint.artnet` and `hint.directory.no_endpoints` belong in
-  the external webGUI checkout (currently `/Volumes/web/webGUI/*.json`). Every web key must have an English entry and a
+  the external webGUI checkout (normally `../webGUI/*.json`, or `WEBGUI_SRC`). Every web key must have an English entry and a
   translation in each supported web catalogue, even when the English value is
   different from the key. The firmware sends the key; the browser translates it.
 - When a web message carries dynamic data, keep the key separate from the data

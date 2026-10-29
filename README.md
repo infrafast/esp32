@@ -17,12 +17,12 @@ The active application registers an input-to-bus send strip. A gain strip is als
 Web resources are included in `data/webapp/`. Updates package firmware and resources into `.tgz` archives; their preparation and the differences between development and production builds are described in the architecture document.
 
 The editable web client is maintained in a separate webGUI repository. On the
-development workstation it is checked out at `/Volumes/web/webGUI/`. To run the complete local demo,
+development workstation it is checked out beside this repository as `../webGUI/`. To run the complete local demo,
 including the PHP mock API under `post/` and `upload/`, use PHP's built-in
 server from the repository root:
 
 ```sh
-php -S 127.0.0.1:8080 -t /Volumes/web/webGUI
+php -S 127.0.0.1:8080 -t ../webGUI
 ```
 
 A static file server can display the HTML and assets, but it cannot provide the

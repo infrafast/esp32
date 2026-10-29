@@ -383,7 +383,7 @@ These items preserve risks and opportunities from `ANALYSE_REPO.md`.
 
 | ID | Proposal | Status | Acceptance criteria |
 |---|---|---|---|
-| TOOL-01 | Parameterize script source/destination paths | To assess | No mandatory dependency on K: or /Volumes/web/fwupdate; conventions documented in architecture |
+| TOOL-01 | Parameterize script source/destination paths | Done | Source defaults to sibling `../webGUI`; packaging defaults to sibling `../fwupdate`, with environment overrides |
 | TOOL-02 | Separate packaging from deployment moves | To assess | Deterministic local build, explicit and optional external side effects |
 | TOOL-03 | Provide local or optional minification | To assess | Asset preparation possible without an external HTTP service; controlled failure |
 | TOOL-04 | Avoid workflow execution on simple script import | To assess | Import without unintended deletion, copying, or network calls |

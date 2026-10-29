@@ -1,12 +1,20 @@
 Import("env")
 import re
+import os
 import subprocess
 import shutil
 from pathlib import Path
 import sys
 
 # === CONFIGURATION ===
-DEST_FOLDER = Path("/Volumes/web/fwupdate")
+# The firmware repository is expected to sit beside the webGUI checkout:
+#   <workspace>/esp32
+#   <workspace>/webGUI
+# Keep the destination beside both repositories so the same script works on
+# macOS, Code Server and CI without creating a fake /Volumes mount.
+PROJECT_DIR = Path(env["PROJECT_DIR"]).resolve()
+WORKSPACE_DIR = PROJECT_DIR.parent
+DEST_FOLDER = Path(os.environ.get("FWUPDATE_DEST", WORKSPACE_DIR / "fwupdate"))
 
 # === Helpers ===
 def _normalize(v: str) -> str:
