@@ -181,9 +181,10 @@ Each ID is an actionable request: for example, **implement BUG-WEB-01**. Existin
 
 #### BUG-DATA-05 — Guard repository lookups and dataset access
 
-- **Status:** To do. **Priority:** P2.
+- **Status:** To validate. **Priority:** P2.
 - **Evidence:** [lib/Interval/src/DataManagement.h](../lib/Interval/src/DataManagement.h) — DataRepository::getDataSet(int) permits negative indices, lookups dereference ds->address without checking, DynamicDataSet::getSize() dereferences address, and SerializableParameters::getValuePtr() assumes repo is valid.
-- **Requested change:** Validate indices and nullable objects at access boundaries, or formally enforce non-null construction invariants; preserve existing lookup behavior for valid registrations.
+- **Implemented:** Repository index lookup now rejects negative/out-of-range values; provider/address searches skip null entries; dynamic datasets and parameter lookups guard missing address/repository pointers. Valid registrations keep their existing behavior.
+- **Remaining validation:** Exercise invalid indices and missing address/repository/provider cases, then confirm normal dataset serialization and provider lookup remain unchanged.
 - **Acceptance:** Negative/out-of-range lookup, missing address/repository, and unavailable provider fail safely without invalid memory accesses; normal dataset serialization still works.
 
 #### BUG-DATA-06 — Use size-safe iteration for growing registries

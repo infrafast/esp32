@@ -254,7 +254,7 @@ class DataRepository{
      * unique keys; callers must supply valid indices and live descriptors.
      */
     DataSet* getDataSet(int i){
-      if (i<size()) return dataSets[i];
+      if (i >= 0 && static_cast<size_t>(i) < dataSets.size()) return dataSets[static_cast<size_t>(i)];
       else return nullptr;
     }
 
@@ -267,7 +267,8 @@ class DataRepository{
     DataSet* getDataSet(String provider, String address){
       for (size_t i=0; i<dataSets.size(); ++i){
         DataSet* ds = dataSets[i];        
-        if (address == ds->address->pattern && provider == ds->name){          
+        if (ds != nullptr && ds->address != nullptr &&
+            address == ds->address->pattern && provider == ds->name){
           return ds;
         } 
       }
@@ -390,13 +391,15 @@ class DynamicDataSet : public DataSet{
      * @brief Ensure dataProvider is valid before accessing it
      */
     virtual uint16_t getSize() {
-        return (dataProvider) ? dataProvider->getSize(address->pattern) : 0;
+        return (dataProvider != nullptr && address != nullptr)
+          ? dataProvider->getSize(address->pattern)
+          : 0;
     }
 
     /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t i) {
         //DEBUG_PRINT("\tgetValuePtr(%d) provider: ",i);
-        if (dataProvider == nullptr){
+        if (dataProvider == nullptr || address == nullptr){
             DEBUG_ERROR("DS NULL");
             return &emptyString;
         } 
@@ -577,7 +580,7 @@ class SerializableParameters {
       const String *retVal = &emptyString;
 
       //DEBUG_PRINT("\nSerializableDataset::getValuePtr(%s,%s,%i): ",provider.c_str(),address.c_str(),index);
-      DataSet* ds = repo->getDataSet(provider, address);
+      DataSet* ds = repo ? repo->getDataSet(provider, address) : nullptr;
 
       if (ds != nullptr){
         retVal = ds->getValuePtr(index);
