@@ -112,8 +112,7 @@ class GUIManager : public GenericComponent {
   public:
     bool transparency;
     int sinI = 0; 
-    String framePerSec;             ///< Debug text containing refresh and complete-frame rates.
-    unsigned long displayFrameCount = 0; ///< Completed widget passes during the current FPS window.
+    String framePerSec;             ///< Debug text containing the current GUI FPS.
     TFT_eSprite screenBuffer = TFT_eSprite(GUI::tft);  
     LinkedList<Widget*> screenGUIs = LinkedList<Widget*>();
     OpenFontRender labelOfr = OpenFontRender();
@@ -329,15 +328,6 @@ class GUIManager : public GenericComponent {
           //screenBuffer.pushSprite(0,0);        
         }    
 
-        /**
-         * @brief Count one complete logical frame after the widget list pass.
-         *
-         * In transparent mode this also schedules the composed buffer for display.
-         */
-        if (widgetIndex == screenGUIs.size()) {
-          displayFrameCount++;
-        }
-
         t1 = micros(); 
         roundTrip = t1-t0;
 
@@ -395,23 +385,15 @@ class GUIManager : public GenericComponent {
       return sin( (float)sinI * 6.28 / 360.0) * (range/2) + range/2;  
     }
 
-    /**
-     * @brief Update the displayed refresh and complete-frame rates.
-     *
-     * The refresh rate counts calls to GUIManager::refresh(). The frame rate
-     * counts complete passes over the widget list, which is the closest common
-     * GUI-frame metric for both direct and transparent rendering modes.
-     */
+    /** @brief Update the displayed GUI frame rate over the requested interval. */
     int fps(const uint8_t seconds){
       unsigned long now = millis();
       int fpsVal = 0;
       frameCount ++;
       if (now - lastFPSmillis >= seconds * 1000) {
         fpsVal = frameCount / seconds;
-        const unsigned long frameRate = displayFrameCount / seconds;
-        framePerSec = concatStrings(fpsVal, "/", frameRate);
+        framePerSec = String(fpsVal);
         frameCount = 0;
-        displayFrameCount = 0;
         lastFPSmillis = now;
       }
       return fpsVal;
