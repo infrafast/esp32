@@ -329,7 +329,7 @@ class TargetEcho{
     /**
      * @brief Initialize TargetEcho and its configured member bindings.
      */
-    TargetEcho(String h):host(h){} 
+    TargetEcho(const String& h):host(h){}
 };
 
 typedef std::function<void(TargetEcho*)> PingCallback; // Utilisation de std::function pour plus de flexibilité

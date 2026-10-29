@@ -313,7 +313,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     UDP* udp = nullptr;
 
     /** @brief Initialize NetworkOSC with the supplied configuration and bindings. */
-    NetworkOSC(String name, int _OSC_localPort, String _OSC_IPaddress,int _OSC_remotePort, String echoCommand, bool _configurable=false, String group = GROUP_INTERFACE_OSC):NetworkDevice(name, group ,_OSC_localPort,_OSC_remotePort,echoCommand, _configurable){
+    NetworkOSC(const String& name, int _OSC_localPort, const String& _OSC_IPaddress,int _OSC_remotePort, const String& echoCommand, bool _configurable=false, const String& group = GROUP_INTERFACE_OSC):NetworkDevice(name, group ,_OSC_localPort,_OSC_remotePort,echoCommand, _configurable){
       icon = "g";        
 
       if (!destination.ip.fromString(_OSC_IPaddress)) destination.ip = IPAddress(0,0,0,0);

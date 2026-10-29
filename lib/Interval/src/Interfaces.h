@@ -847,7 +847,7 @@ class InterfaceRepository{
     }  
 
     /** @brief Find the requested registered object by name. */
-    DeviceInterface* retrieve(String _interfaceName);
+    DeviceInterface* retrieve(const String& _interfaceName);
 }interfaceRepo;
 
 
@@ -868,7 +868,7 @@ DeviceInterface::~DeviceInterface(){
 }
 
 /** @brief Find the requested registered object by name. */
-DeviceInterface* InterfaceRepository::retrieve(String requestedInterface){
+DeviceInterface* InterfaceRepository::retrieve(const String& requestedInterface){
   for (const auto& interface : interfaceRepo.interfaces){ 
     //DEBUG_PRINT("\nInterfaceRepository::retrieve(%s)=>%s",requestedInterface.c_str(),interface->interfaceName.c_str())     ;
     if (interface->interfaceName == requestedInterface) return interface;
@@ -892,7 +892,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     int localPort = 0;
 
     /** @brief Initialize NetworkDevice with the supplied configuration and bindings. */
-    NetworkDevice(String name, String group, int lport, int rport, String echoCommand, bool _configurable=false):DeviceInterface(name, group,_configurable){
+    NetworkDevice(const String& name, const String& group, int lport, int rport, const String& echoCommand, bool _configurable=false):DeviceInterface(name, group,_configurable){
       
       attachDeviceInterface(this);
       

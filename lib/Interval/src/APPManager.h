@@ -420,7 +420,7 @@ class Shortcuts: public DataProvider{
     DynamicDataSet dsCommand = DynamicDataSet(new FreeTextAddress(ADDRESS_COMMAND, "command", REGEX_STRING) ,this);
 
     /** @brief Initialize Shortcuts with the supplied configuration and bindings. */
-    Shortcuts(String name):DataProvider(name){
+    Shortcuts(const String& name):DataProvider(name){
       // *********************************
       // SHORTCUTS
       // *********************************

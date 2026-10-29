@@ -64,7 +64,7 @@ class StripSkeleton: public SerializableParameters{
     using SerializableParameters::serialize;  // Keep the inherited String serialize() overload available.
 
     /** @brief Initialize StripSkeleton with the supplied configuration and bindings. */
-    StripSkeleton(String id, String g, StripBuilderCallback b, unsigned char i='!');
+    StripSkeleton(const String& id, const String& g, StripBuilderCallback b, unsigned char i='!');
 
     /**
      * @brief Extend the common editor description with an icon.
@@ -158,7 +158,7 @@ class StripFactory{
  * Register on construction. The icon argument is currently not assigned to
  * the icon member here; registration itself does not initialize that field.
  */
-StripSkeleton::StripSkeleton(String id, String g, StripBuilderCallback c, unsigned char i):SerializableParameters(id,g, &dataRepo),constructor(c){
+StripSkeleton::StripSkeleton(const String& id, const String& g, StripBuilderCallback c, unsigned char i):SerializableParameters(id,g, &dataRepo),constructor(c){
   stripFactory.add(this);
 }
 

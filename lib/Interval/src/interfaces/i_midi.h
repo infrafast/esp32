@@ -112,7 +112,7 @@ class MIDIInterface: public DeviceInterface{
     bool dataAvailable = false;
 
     /** @brief Initialize MIDIInterface with the supplied configuration and bindings. */
-    MIDIInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
+    MIDIInterface(const String& _name,const String& _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
       message.attachData(&midiDataCopy); // this interface is sending midi data directly to the strip so we attach the midiDataCopy to the message event, this way we can reuse the same event for all kind of midi messages and just check the content of the midiDataCopy to know what to do with it in the strip (for example if it is a note on or a sysex)  
     }     
 

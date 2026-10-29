@@ -65,7 +65,7 @@ class NetworkSocket: public NetworkDevice{
     /**
      * @brief Initialize NetworkSocket and its configured member bindings.
      */
-    NetworkSocket(String name=INTERFACE_SOCKET, String group=GROUP_INTERFACE_UTILS,String echoCommand="",int localP=8887,int remoteP=8888, bool exposed=false):NetworkDevice(name,group,localP,remoteP,echoCommand, exposed){
+    NetworkSocket(const String& name=INTERFACE_SOCKET, const String& group=GROUP_INTERFACE_UTILS,const String& echoCommand="",int localP=8887,int remoteP=8888, bool exposed=false):NetworkDevice(name,group,localP,remoteP,echoCommand, exposed){
       //destination.host = "192.168.99.99"; 
     }
 

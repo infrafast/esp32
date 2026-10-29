@@ -16,7 +16,7 @@ class DMXInterface : public DeviceInterface{
 
   public:
     /** @brief Initialize DMXInterface with the supplied configuration and bindings. */
-    DMXInterface(String _name,String _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
+    DMXInterface(const String& _name,const String& _group,bool _configurable):DeviceInterface(_name,_group,_configurable){
       state.switchable = false;
     }
     

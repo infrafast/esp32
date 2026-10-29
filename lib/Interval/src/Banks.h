@@ -61,7 +61,7 @@ namespace Interval {
        * Build from a bank name and its JSON body. Construction does not expose
        * deserialize()'s result; callers must not assume every strip was restored.
        */
-      Bank(String n, String value/*, StripFactory* sf*/){ 
+      Bank(const String& n, const String& value/*, StripFactory* sf*/){
         name = n;
         //Strip* s = nullptr;
         //for (size_t i = 0; i < BANK_MAX_STRIPS; ++i) strips[i] = nullptr; //strips.add(s); // strips.push_back(nullptr);

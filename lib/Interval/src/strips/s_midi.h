@@ -75,7 +75,7 @@ class MidiValue : public DataSet{
     /**
      * @brief Initialize MidiValue and its configured member bindings.
      */
-    MidiValue(Address* adress, String name): DataSet(adress, name){}
+    MidiValue(Address* adress, const String& name): DataSet(adress, name){}
     
     /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t index){
@@ -113,7 +113,7 @@ class MidiNotes : public DataSet{
     /**
      * @brief Initialize MidiNotes and its configured member bindings.
      */
-    MidiNotes(Address* adress, String name): DataSet(adress, name){}
+    MidiNotes(Address* adress, const String& name): DataSet(adress, name){}
 
     /** @brief Return a borrowed choice label for the requested index. */
     virtual const String* getValuePtr(uint16_t index){

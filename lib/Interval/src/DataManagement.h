@@ -33,7 +33,7 @@ class DataProvider{
     /**
      * @brief Initialize DataProvider and its configured member bindings.
      */
-    DataProvider(String pName):dataProviderName(pName){};
+    DataProvider(const String& pName):dataProviderName(pName){};
     /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(String addrr) = 0;
     /** @brief Return a borrowed choice label for the requested index. */
@@ -85,7 +85,7 @@ class Address {
     /**
      * @brief Initialize Address and its configured member bindings.
      */
-    Address(String p, String o):pattern(p),object(o){}
+    Address(const String& p, const String& o):pattern(p),object(o){}
   
     /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties() = 0;      
@@ -127,7 +127,7 @@ class DropDownAddress: public Address{
     /**
      * @brief Initialize DropDownAddress and its configured member bindings.
      */
-    DropDownAddress(String p):Address(p,INPUTSELECT){}
+    DropDownAddress(const String& p):Address(p,INPUTSELECT){}
     /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties(){}; // No extra dropdown metadata.
 };
@@ -146,7 +146,7 @@ class FreeTextAddress: public Address{
     /**
      * @brief Initialize FreeTextAddress and its configured member bindings.
      */
-    FreeTextAddress(String p, String _fName, String _regex):friendlyName(_fName), regex(_regex), Address(p,INPUTTEXT){}
+    FreeTextAddress(const String& p, const String& _fName, const String& _regex):friendlyName(_fName), regex(_regex), Address(p,INPUTTEXT){}
 
     /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties(){
@@ -624,7 +624,7 @@ bool JsonTemplateRepository::add(SerializableParameters* sd){
 class WebLibrary : public DataSet, public JsonListFile{
   public:
     /** @brief Initialize WebLibrary with the supplied configuration and bindings. */
-    WebLibrary(String _filename, Address* _address, String _provider): filename(_filename), DataSet(_address, _provider){ 
+    WebLibrary(const String& _filename, Address* _address, const String& _provider): filename(_filename), DataSet(_address, _provider){
       reload();      
     }      
 
