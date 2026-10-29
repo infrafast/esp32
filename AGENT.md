@@ -20,6 +20,10 @@ Before reviewing or changing the Mixing Station interface, consult the current p
 
 Check the relevant endpoint descriptions and response schemas before relying on a field, route, or WebSocket request. Record compatibility findings in the existing architecture or roadmap reference when they affect the implementation. Do not assume that an omitted field indicates a protocol change: verify whether the current mixer/session state makes that field optional or unavailable.
 
+## Behringer OSC protocol reference
+
+Use the [unofficial X32/M32 OSC Remote Protocol](https://tostibroeders.nl/wp-content/uploads/2020/02/X32-OSC.pdf) as a coherence and implementation reference for `XMSeries` OSC addresses, data types, `/xinfo` identification, `/status`, and `/xremote` update renewal. This document describes the X32/M32 family and its OSC behavior. XR/X-Air models use related but different address patterns and model capabilities, so do not apply an X32 rule to an XR device without checking the corresponding `.osc` profile and validating the device-specific behavior.
+
 ## Mandatory documentation discipline
 
 - Write and maintain all project documentation in English, including additions, edits, headings, tables, audit findings, and validation records. Preserve code identifiers, paths, filenames, URLs, and literal protocol values. This rule does not require translating upstream dependency documentation or user-interface localization resources.

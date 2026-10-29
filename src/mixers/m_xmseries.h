@@ -8,6 +8,15 @@
 
 #include "mixer.h"
 
+/**
+ * @brief Behringer OSC connection and profile paths.
+ *
+ * X32/M32 consoles use OSC over UDP (normally port 10023); X-Air discovery
+ * also probes port 10024. `/xinfo` identifies a console and includes its
+ * network address, name, model and firmware. Model profiles then select the
+ * channel counts and OSC address patterns used by this backend.
+ * Protocol reference: https://tostibroeders.nl/wp-content/uploads/2020/02/X32-OSC.pdf
+ */
 #define ADDRESS_CONNECT_METHOD "/connect/%d"
 #define ADDRESS_MIXER_MODEL "/model/%s"
 
@@ -138,26 +147,22 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     int connectMethod = CONNECT_DISCOVER;
     
     String protocolName ="xair";
-    /*
-      protocolArgCount[] intégré, pour que process() sache à l’avance si chaque entrée de protocol[] attend :
-
-      0 argument
-      1 argument
-      2 arguments
-
-      Ça évite de deviner à chaque appel. Le principe reste compatible avec le fait que protocol[] soit chargé séquentiellement depuis xair.osc ou x32.osc
-    */
-
+    /**
+     * OSC address patterns loaded from the model's `.osc` profile. Entries
+     * follow the `XM_*` enum order; `protocolArgCount` records whether a
+     * pattern is exact, has one index, or has two indices.
+     */
     String protocol[XM_PROOTCOL_COUNT];         
     uint8_t protocolArgCount[XM_PROOTCOL_COUNT] = {0};
 
-    /* */
+    /** X32 and X-Air discovery ports, tried alternately. */
     #define DISCOVERY_PORT_COUNT 2 
     int discoveryPort[DISCOVERY_PORT_COUNT] = {10024, 10023};
     uint8_t discoveryIndex = 0;               ///< rolling index;
 
-    unsigned long lastXremote = 0;          ///< when di we last drop the xremote command
-    #define XREMOTE_INTERVAL  9000           // 9 secondes
+    unsigned long lastXremote = 0;          ///< Last `/xremote` renewal time.
+    /** `/xremote` expires after about 10 seconds; renew slightly earlier. */
+    #define XREMOTE_INTERVAL  9000
 
     ConnectMethodDS connectMethodDS = ConnectMethodDS(new DropDownAddress(ADDRESS_CONNECT_METHOD));
     XMmixerModelDS mixerModelDS = XMmixerModelDS(new DropDownAddress(ADDRESS_MIXER_MODEL));
@@ -183,7 +188,13 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       // do nothing
     }
 
-    /** @brief Perform one service-specific connection and data-processing pass. */
+    /**
+     * @brief Renew `/xremote` and run the normal OSC network monitor.
+     *
+     * The X32 keeps change notifications active for about 10 seconds after
+     * `/xremote`; this backend renews it every 9 seconds and sends the
+     * keepalive immediately.
+     */
     virtual bool monitorService() override {
       unsigned long now = millis();
 
@@ -264,7 +275,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       return changed;
     }       
 
-    /** @brief Load mixer model capabilities and protocol information for this backend. */
+    /**
+     * @brief Load the selected model definition and its OSC address profile.
+     *
+     * The `.mix` file supplies counts and the protocol family; the matching
+     * `.osc` file supplies the concrete OSC paths used by requests and routing.
+     */
     virtual bool restoreMixerProfile(){
       DEBUG_INFO("%s::restoreMixerProfile() => deserializing definition and protocol",interfaceName.c_str()); 
       String mixerDefinitionFilename = concatStrings(mixerID.model,".",BEHRINGER_MIXER_PROFILE_FILENAME_EXTENSION);
@@ -274,21 +290,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     }
 
     /**
-     * @brief Load model-family OSC patterns and cache their numeric placeholder counts.
+     * @brief Load the model's OSC address patterns and count their placeholders.
      *
-     * Patterns are loaded in the established protocol order; keep that order aligned
-     * with the command constants used by reads and writes.
+     * Lines are read in `XM_*` order from the model `.osc` file; keep that
+     * order aligned with the command constants used by reads and writes.
      */
     bool deserializeMixerProtocolFromFile(const char* filename) {
-    /*
-      ouvre le fichier de protocole
-      lit chaque ligne avec readStringUntil('\n')
-      enlève les éventuels \r et espaces parasites via trim()
-      stocke chaque ligne dans protocol[index]
-      s’arrête si :
-      - le fichier est fini
-      - ou si XM_PROOTCOL_COUNT lignes ont été lues    
-    */
       #define XMSERIES_PROTOCOL_FILE_EXTENSION ".osc"
 
       String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename,XMSERIES_PROTOCOL_FILE_EXTENSION);   
@@ -300,13 +307,6 @@ class XMSeries: public MixerDevice<NetworkOSC>{
         return false;
       }
 
-      /*
-        countPlaceholders pour que process() sache à l’avance si chaque entrée de protocol[] attend :
-        0 argument
-        1 argument
-        2 arguments
-        Ça évite de deviner à chaque appel.
-      */
       int index = 0;
       while (file.available() && index < XM_PROOTCOL_COUNT) {
         String line = file.readStringUntil('\n');
@@ -333,7 +333,9 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     #define XAIR_PROTOCOL "xair"
     #define XM_PROTOCOL "x32"
 
-    /** @brief Load mixer capabilities from the saved model definition. */
+    /**
+     * @brief Load channel counts and protocol-family settings from a `.mix` file.
+     */
     virtual bool deserializeMixerDefinitionFromFile(const char* filename){
       String fullFilename = concatStrings(MIXER_DEFINITION_PATH,filename); 
 
@@ -399,11 +401,15 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
     int i1,i2;    ///< index
 
-        /////////////////////////////////////////////////////////////////////////////////////////////////
-       ///////////////////////////////                                       ///////////////////////////
-      //////////////////////////////// READ INPUT OSC MESSAGE AND ROUTE THEM //////////////////////////
-     /////////////////////////////////                                       /////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////////////
+    /**
+     * @brief Match incoming OSC addresses and update the shared mixer datasets.
+     *
+     * The profile supplies the address patterns. For example,
+     * `/ch/01/mix/02/on` updates a channel-to-bus mute and
+     * `/ch/01/mix/02/level` updates its send level. Exact routes such as a fixed
+     * X-Air main path are handled separately. `matchProtocol()` extracts the
+     * numeric indices before the common handlers receive the value.
+     */
     virtual void process() override {    
 
         const char* addr = oscIn.getAddress();        
@@ -502,7 +508,13 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       ds->set(index - 1, pathBuffer);
     }
 
-    //////////////////////////////// PING REPLY = Mixer was found //////////////////////////
+    /**
+     * @brief Decode the `/xinfo` discovery reply and select the mixer.
+     *
+     * The OSC reply contains the console IP, name and model. In discovery
+     * mode the source UDP address is authoritative for the destination, while
+     * the reported IP is still checked for diagnostics.
+     */
     virtual void echo(void* data) override{
       
       // mixer replied to the ping command with some data, we know these data is an OSC message pointer
@@ -565,9 +577,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     }
 
     /**
-     * @brief standard command to be implemented to ping the device
-     * this calls the one from the base class which sends the "ping" OSC command
-     * and in addition, we specilize it to alternate between port to guess
+     * @brief Send the presence probe, alternating discovery ports when needed.
      */
     virtual bool ping() override{
       // in case we are in discovery mode, we alternate the value of the port using 
@@ -578,7 +588,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       return NetworkOSC::ping();
     }
 
-    /** @brief Start this service on the available network connection. */
+    /**
+     * @brief Start the OSC service, using broadcast for network discovery.
+     *
+     * Once `/xinfo` identifies a console, `echo()` replaces the broadcast
+     * destination with the console's UDP source address.
+     */
     virtual bool handleConnectService() override{
       DEBUG_INFO("%s::handleConnectService() set broadcastIP: %s",interfaceName.c_str(),CONNECT_DISCOVER == connectMethod?"yes":"no");
 
@@ -608,6 +623,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     //////// GETTERS ///////////
     ////////////////////////////
 
+    /**
+     * @brief Request a dataset name using the profile's OSC address pattern.
+     *
+     * Common dataset indices are one-based; the profile determines whether the
+     * request needs zero, one or two formatted arguments.
+     */
     virtual void requestDSname(DataSetSynced* dataset, uint8_t index) override {
       index += 1; // Behringer starts at 1
 
@@ -635,7 +656,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer);
     }
     
-    /** @brief Request the mute state of an input send to a bus. */
+    /** @brief Request a channel-to-bus mute using its two-index OSC pattern. */
     virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
       // this method drop the request to get a ch mute state on a bus, we need to find the right pattern and replace the 2 placeholders with chIndex and busIndex
       const char* pattern = protocol[XM_CH_BUS_MUTE].c_str();      
@@ -644,7 +665,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer);
     }
 
-    /** @brief Request the mute state of a bus. */
+    /** @brief Request a bus mute using the profile's one-index OSC pattern. */
     virtual void requestBUSmute(uint8_t index) override{
       // this method drop the request to get a bus mute state, we need to find the right pattern and replace the placeholder with index
       const char* pattern = protocol[XM_BUS_MUTE].c_str();      
@@ -652,7 +673,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       sendOSC(pathBuffer);
     }
 
-    /** @brief Request the level of an input send to a bus. */
+    /** @brief Request a channel-to-bus level using its two-index OSC pattern. */
     virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
       // this method drop the request to get a ch level on a bus, we need to find the right pattern and replace the 2 placeholders with chIndex and busIndex
       const char* pattern = protocol[XM_CH_BUS_MIX_LEVEL].c_str();      
@@ -663,6 +684,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     ////////////////////////////
     //////// SETTERS ///////////
     ////////////////////////////
+    /**
+     * @brief Set a channel-to-bus level as an OSC float.
+     *
+     * X32 OSC fader/send values use normalized floats; when the selected
+     * profile does not echo writes, the shared value is mirrored locally.
+     */
     virtual void setCHBUSlevel(int chIndex, int busIndex, float level) override{
       // this method sends the command to set a channel level on a bus
       // we need to find the right pattern and replace the 2 placeholders
@@ -672,7 +699,9 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       if (!echoing) allInput2MixbusValues.get(chIndex,busIndex)->value = level; // as X32 is not echoing the command, the value has to be mirrored manually assuming it was changed.
     }
 
-    /** @brief Set the mute state of an input send to a bus. */
+    /**
+     * @brief Set a channel-to-bus mute and mirror it when echo is disabled.
+     */
     virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override{
       // this method sends the command to set a channel mute state on a bus
       // we need to find the right pattern and replace the 2 placeholders
@@ -684,10 +713,6 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
   protected:    
 
-    /*
-      pré-analyser chaque pattern au chargement des protocoles
-      mémoriser si le pattern a 0, 1 ou 2 placeholders    
-    */
     /** @brief Count numeric placeholders when loading an OSC protocol pattern. */
     uint8_t countPlaceholders(const String& s) {
       uint8_t count = 0;
@@ -713,32 +738,14 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       MATCH_2INT  = 2
     };
 
-    /*
-        sscanf("/ch/01/mix/02/on", "/ch/%02d/config/name", &i1)
-
-        sscanf :
-
-        lit /ch/
-        lit %02d → i1 = 1
-        arrive sur /mix/02/on
-        attend /config/name
-        ça ne matche plus
-
-        Mais comme un champ a déjà été assigné, la valeur de retour est 1.
-        Du coup ton test :
-
-        if (sscanf(addr, protocol[XM_CH_CONFIG_NAME].c_str(), &i1) == 1)
-
-        passe à tort.
-
-      D'ou l'implementation  exigeant que toute la chaîne soit consommée et l'utilisation de %n pour vérifier que le pattern correspond à l'intégralité de la chaîne.
-    */
     /**
      * @brief Require a complete OSC address match for the selected protocol pattern.
      *
-     * A successful numeric conversion alone is insufficient: sscanf can return one
-     * even when the trailing literal does not match. The consumed-length check rejects
-     * partial matches and distinguishes channel, bus and send routes.
+     * A successful numeric conversion alone is insufficient: `sscanf` can
+     * return one even when trailing text does not match. `%n` records the
+     * consumed length so partial addresses are rejected.
+     * For example, a channel-name pattern must not accept the prefix of a
+     * channel mute address.
      */
     int matchProtocol(uint8_t protocolIndex, const char* addr, int& out1, int& out2) {
       if (!addr) return MATCH_NONE;
@@ -773,8 +780,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       }
     }
 
-    ///////////////////////////
-    /** @brief Send an OSC address without a value, directly or through the output queue. */
+    /**
+     * @brief Send an OSC address, optionally with a value.
+     *
+     * Requests without a value are reads; requests with one OSC argument are
+     * writes. `immediate` is used for keepalives and latency-sensitive faders.
+     */
     inline void sendOSC(const char* address, bool immediate = false) {
       oscOut.empty();
       oscOut.setAddress(address);
