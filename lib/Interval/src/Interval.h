@@ -3751,17 +3751,15 @@ void utilsScreenBuilder(uint8_t state){
       app.bigRightIcon = ICON_FOOTSWITCH;
     break;
     case STATE_UTILS_WEBAPPCONNECTED:
-      // This page replaces the menu item title with the connection status.
-      // Clear the previous item label before addLeftRightIcons() adds the
-      // common top/bottom menu widgets; otherwise CONFIGURATION remains
-      // visible around the shorter "Connected" label.
-      app.menuBottomLabel = "";
+      // This page uses the common top/bottom widgets exactly once. Keeping
+      // the values in the application fields avoids overlapping duplicate
+      // sprites and uses the normal widget refresh path.
+      app.menuTopText = *lang.getString("Press any button");
+      app.menuBottomLabel = *lang.getString("Connected");
       addLeftRightIcons();
       app.iconPending[0] = ICON_LEFTDOT;
       app.iconPending[1] = ICON_RIGHTDOT;      
       gui.add(new AnimatedIcon(app.iconPending,TWOFRAMEICON,Align::Center,&GUI::midScreenHoriz, &GUI::midScreenVertical,TFT_WIDTH/8,ANIMATE_PING_PONG,250,&GUI::widgetSubLabelColor,&GUI::menuBackGroundColor));                    
-      gui.add(new TextArea(lang.getString("Press any button"), TFT_WIDTH*0.90,Align::Center,Align::Center,&GUI::midScreenHoriz,&GUI::tenPixels,CONFIG_TEXTAREA_MESSAGE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor));
-      gui.add(new Label(lang.getString("Connected"), Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,32,&GUI::defaultFcolor,&GUI::defaultBcolor));      
 
       app.bigLeftIcon = ICON_LAPTOP;
       app.bigRightIcon = ICON_FOOTSWITCH;
