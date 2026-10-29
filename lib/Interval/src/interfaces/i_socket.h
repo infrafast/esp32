@@ -32,15 +32,20 @@ class NetworkSocket: public NetworkDevice{
    * @brief Owned socket-event text retained for deferred processing.
    */
   struct SocketDataCopy {
-    uint16_t length;
-    char message[MAX_SOCKET_MESSAGE_LEN];
-    int code;
+    uint16_t length;                         ///< Number of message bytes, excluding the terminator.
+    char message[MAX_SOCKET_MESSAGE_LEN];    ///< Owned, null-terminated RX message copy.
+    int code;                                ///< WebSocket error or close code associated with the event.
   };
 
+  /**
+   * @brief Owned outgoing message retained until the socket sends it.
+   *
+   * TX entries do not carry an event code: only the message payload and its
+   * length are needed when flushing the transmit queue.
+   */
   struct SocketTxDataCopy {
-    uint16_t length;
-    char message[MAX_SOCKET_TX_MESSAGE_LEN];
-    int code;
+    uint16_t length;                            ///< Number of message bytes, excluding the terminator.
+    char message[MAX_SOCKET_TX_MESSAGE_LEN];   ///< Owned, null-terminated TX message copy.
   };
 
   SocketDataCopy socketQueueRx[SOCKET_QUEUE_SIZE];
@@ -206,7 +211,6 @@ class NetworkSocket: public NetworkDevice{
       memcpy(slot.message, message, copyLen);
       slot.message[copyLen] = '\0';
       slot.length = copyLen;
-      slot.code = 0;
 
       queueTailTx = (queueTailTx + 1) % SOCKET_TX_QUEUE_SIZE;
       queueCountTx++;

@@ -404,7 +404,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         DEBUG_WARN("\tNo Path");
         return;
       }else{
-        DEBUG_INFO("←←←🌐 %s::path ✅ %s (%lu)",interfaceName.c_str(),path, millis());
+        DEBUG_DETAIL("←←←🌐 %s::path ✅ %s (%lu)",interfaceName.c_str(),path, millis());
       }
 
       const Route* r = findRoute(path);
@@ -786,7 +786,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
           int mute = value.is<bool>() ? (value.as<bool>() ? 1 : 0)
                                       : (strcmp(valueText, "true") == 0 ? 1 : 0);
-          DEBUG_INFO("%s::CH_BUS_MUTE ch=%d bus=%d mute=%s",interfaceName.c_str(), chIndex, busIndex, mute ? "true" : "false");
+          DEBUG_DETAIL("%s::CH_BUS_MUTE ch=%d bus=%d mute=%s",interfaceName.c_str(), chIndex, busIndex, mute ? "true" : "false");
           //fireChBusMute(chIndex+1, busIndex+1, mute);      // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
           handleChBusMute(chIndex+1, busIndex+1, mute);       // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
           break;
@@ -798,7 +798,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
           int mute = value.is<bool>() ? (value.as<bool>() ? 1 : 0)
                                       : (strcmp(valueText, "true") == 0 ? 1 : 0);
-          DEBUG_INFO("%s::BUS_MUTE bus=%d mute=%s",interfaceName.c_str(), busIndex, mute ? "true" : "false");
+          DEBUG_DETAIL("%s::BUS_MUTE bus=%d mute=%s",interfaceName.c_str(), busIndex, mute ? "true" : "false");
           handleBusMute(busIndex+1,mute); // mstation channel and buses index starts at 0 which are compared to dropdown of strips that read the event starts that starts at 1, therefore, we add 1
           break;
         }

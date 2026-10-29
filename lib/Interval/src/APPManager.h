@@ -2648,7 +2648,7 @@ void setup() {
       if (hwm->configMedia != nullptr){
         if (webAppConnected && hwm->configMedia->state == CONNECTED){
           if (webAppService != nullptr && webAppService->wss != nullptr) webAppService->wss->broadcast(WebSocketDataType::TEXT, msg.c_str(), msg.length());
-          DEBUG_INFO("[BROADCAST]\t\t(%s)\n\n",msg.c_str());
+          DEBUG_DETAIL("[BROADCAST]\t\t(%s)\n\n",msg.c_str());
         }
       }
     }
@@ -2848,7 +2848,7 @@ void setup() {
       res.set("Content-Type", mimeType.c_str());
       res.set("Access-Control-Allow-Origin","*");
 
-      DEBUG_INFO("[WEBAPP]\t\tserving %s",fullPath.c_str());
+        DEBUG_DETAIL("[WEBAPP]\t\tserving %s",fullPath.c_str());
 
       sendFileInChunks(&file, &res);
       res.end();
@@ -4004,7 +4004,7 @@ void setup() {
             continue; // Ignorer cette itération
         }
 
-        DEBUG_INFO("[HTTP-POST]\t\treceived <%s><%s>\n\n",name,options);
+        DEBUG_DETAIL("[HTTP-POST]\t\treceived <%s><%s>\n\n",name,options);
         String jsonAnswer = parseJsonInput(name);
 
         // version compressée

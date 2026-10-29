@@ -478,7 +478,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
 
               #ifdef DEBUG
                 dump(oscIn, oscDump, sizeof(oscDump));              
-                DEBUG_INFO("<<(%s,%i) %s %s",destination.ip.toString().c_str(),remotePort, addr, oscDump);              
+              DEBUG_DETAIL("<<(%s,%i) %s %s",destination.ip.toString().c_str(),remotePort, addr, oscDump);
               #endif
 
               // see if it's the reply to a _target (/ping) command => we call internal method to trigger latency calculation and user processing
@@ -622,7 +622,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
       #ifdef DEBUG
         msg->getAddress(addr, 0);      
         dump(*msg, oscDump, sizeof(oscDump));              
-        DEBUG_INFO(">>(%s,%i) %s %s",destination.ip.toString().c_str(),remotePort, addr, oscDump);            
+        DEBUG_DETAIL(">>(%s,%i) %s %s",destination.ip.toString().c_str(),remotePort, addr, oscDump);
       #endif
     
 

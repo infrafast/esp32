@@ -272,6 +272,14 @@ bool useUSBMidi = false;
 #define DEBUG_INFO(fmt, ...)  DEBUG_BASE("ℹ", fmt, ##__VA_ARGS__)
 #define DEBUG_WARN(fmt, ...)  DEBUG_BASE("⚠️", fmt, ##__VA_ARGS__)
 #define DEBUG_ERROR(fmt, ...) DEBUG_BASE("❌", fmt, ##__VA_ARGS__)
+
+  // High-frequency diagnostics are opt-in so DEV keeps normal debug output
+  // without formatting and writing every data update to the serial port.
+  #ifdef DEBUG_VERBOSE
+    #define DEBUG_DETAIL(fmt, ...) DEBUG_BASE("🔎", fmt, ##__VA_ARGS__)
+  #else
+    #define DEBUG_DETAIL(...) (void)0
+  #endif
   
 
 #else
@@ -279,6 +287,7 @@ bool useUSBMidi = false;
   #define DEBUG_INFO(...) 
   #define DEBUG_WARN(...) 
   #define DEBUG_ERROR(...)
+  #define DEBUG_DETAIL(...)
   #define debugMon 0
 #endif
 

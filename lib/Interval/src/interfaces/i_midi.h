@@ -58,18 +58,18 @@ struct MidiData{
        */
       USBMIDISimul(){}
       /** @brief Send a MIDI note-on message through this transport. */
-      void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendNoteOn(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
+      void sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_DETAIL("\tUSBMIDI::sendNoteOn(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
       /** @brief Send a MIDI note-off message through this transport. */
-      void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendNoteOff(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
+      void sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){DEBUG_DETAIL("\tUSBMIDI::sendNoteOff(%d,%d,%d)\t",inNoteNumber,inVelocity,inChannel);}
       /** @brief Send a MIDI program-change message through this transport. */
-      void sendProgramChange(DataByte inProgramNumber,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendProgramChange(%d,%d)\t",inProgramNumber,inChannel);}
+      void sendProgramChange(DataByte inProgramNumber,Channel inChannel){DEBUG_DETAIL("\tUSBMIDI::sendProgramChange(%d,%d)\t",inProgramNumber,inChannel);}
       /** @brief Send a MIDI control-change message through this transport. */
-      void sendControlChange(DataByte inControlNumber,DataByte inControlValue,Channel inChannel){DEBUG_INFO("\tUSBMIDI::sendControlChange(%d,%d,%d)\t",inControlNumber,inControlValue,inChannel);}
+      void sendControlChange(DataByte inControlNumber,DataByte inControlValue,Channel inChannel){DEBUG_DETAIL("\tUSBMIDI::sendControlChange(%d,%d,%d)\t",inControlNumber,inControlValue,inChannel);}
       /** @brief Send a MIDI system-exclusive message through this transport. */
       bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries=false){
-        DEBUG_INFO("\tUSBMIDI::sendSysEx(%u,[", inLength);
-        for (unsigned i=0;i<inLength;i++) DEBUG_INFO("%02X", inArray[i]);
-        DEBUG_INFO("],%d)\t", inArrayContainsBoundaries ? 1 : 0);
+        DEBUG_DETAIL("\tUSBMIDI::sendSysEx(%u,[", inLength);
+        for (unsigned i=0;i<inLength;i++) DEBUG_DETAIL("%02X", inArray[i]);
+        DEBUG_DETAIL("],%d)\t", inArrayContainsBoundaries ? 1 : 0);
         return true;
       }
       /** @brief Register the callback used by the wrapped MIDI/session API. */
@@ -149,7 +149,7 @@ class MIDIInterface: public DeviceInterface{
 
     /** @brief Copy or dispatch a received control-change message. */
     virtual void handleChangeControl(byte channel, byte number, byte value){
-      DEBUG_INFO("handleChangeControl channel:%i, number:%i value:%i",channel,number,value);
+      DEBUG_DETAIL("handleChangeControl channel:%i, number:%i value:%i",channel,number,value);
 
       if (dataAvailable) return; // previous data has not been ocnsummed yet so we ignore it (we could make a queue)
       
@@ -163,11 +163,13 @@ class MIDIInterface: public DeviceInterface{
 
     /** @brief Copy or dispatch a received SysEx message for strip consumers. */
     virtual void handleSysex(byte* sysexdata, unsigned length){
-      DEBUG_INFO("handleSysex: %c, %i bytes: ",getSysExStatus(sysexdata, length),length);
+      DEBUG_DETAIL("handleSysex: %c, %i bytes: ",getSysExStatus(sysexdata, length),length);
 
       if (dataAvailable) return; // previous data has not been ocnsummed yet so we ignore it (we could make a queue)
 
-      for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",sysexdata[i]);
+      #ifdef DEBUG_VERBOSE
+        for (uint16_t i = 0; i < length; i++) DEBUG_PRINT("%02X ",sysexdata[i]);
+      #endif
 
       // ------------------------------------------------------------------------
       // Ancien mécanisme conservé pour compatibilité
@@ -345,7 +347,7 @@ class BLEMIDIInterface: public MIDIInterface{
 
     /** @brief Send a MIDI system-exclusive message through this transport. */
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){
-      DEBUG_INFO("BLEMIDIInterface::sendSysex(%i) ",inLength);
+      DEBUG_DETAIL("BLEMIDIInterface::sendSysex(%i) ",inLength);
       if (state.code == IF_READY) bleMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);      
       else return false;
       return true; 
@@ -353,7 +355,7 @@ class BLEMIDIInterface: public MIDIInterface{
 
     /** @brief Send a MIDI note-on message through this transport. */
     virtual bool sendNoteOn(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-      DEBUG_INFO("\nBLEMIDIInterface::sendNoteOn(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
+      DEBUG_DETAIL("\nBLEMIDIInterface::sendNoteOn(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
       if (state.code == IF_READY) bleMIDI.sendNoteOn(inNoteNumber,inVelocity,inChannel);      
       else return false;
       return true; 
@@ -361,7 +363,7 @@ class BLEMIDIInterface: public MIDIInterface{
 
     /** @brief Send a MIDI note-off message through this transport. */
     virtual bool sendNoteOff(DataByte inNoteNumber,DataByte inVelocity,Channel inChannel){
-      DEBUG_INFO("\tnBLEMIDIInterface::sendNoteOff(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
+      DEBUG_DETAIL("\tnBLEMIDIInterface::sendNoteOff(%d,%d,%d)",inNoteNumber, inVelocity, inChannel);
       if (state.code == IF_READY) bleMIDI.sendNoteOff(inNoteNumber,inVelocity,inChannel);      
       else return false;
       return true; 
@@ -471,7 +473,7 @@ class USBMIDIInterface: public MIDIInterface{
 
     /** @brief Send a MIDI system-exclusive message through this transport. */
     virtual bool sendSysEx(unsigned inLength,const byte* inArray,bool inArrayContainsBoundaries){    
-      DEBUG_INFO("USBMIDI::sendSysex(%i) ",inLength);      
+      DEBUG_DETAIL("USBMIDI::sendSysex(%i) ",inLength);
       usbMIDI.sendSysEx(inLength,inArray,inArrayContainsBoundaries);
       return true;
     }    
