@@ -153,6 +153,10 @@ class XMSeries: public MixerDevice<NetworkOSC>{
      * pattern is exact, has one index, or has two indices.
      */
     String protocol[XM_PROOTCOL_COUNT];         
+    // Matching formats are built once when the profile is loaded. Keeping
+    // them separate avoids constructing a temporary String for every OSC
+    // packet and every candidate route.
+    String protocolScanFormat[XM_PROOTCOL_COUNT];
     uint8_t protocolArgCount[XM_PROOTCOL_COUNT] = {0};
 
     /** X32 and X-Air discovery ports, tried alternately. */
@@ -226,15 +230,12 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
     /** @brief Append this type's property strings to the active JSON properties array. */
     virtual void serializeProperties(JsonArray& properties) override{
-
-        char* buf;
+        char buf[128];
 
         if (state.enabled){
             // if mixer is enabled, we show normal parameter except choosing the model because it will be imposed by connection
-            buf = (char*)malloc(strlen(ADDRESS_CONNECT_METHOD)*sizeof(char*));
-            sprintf(buf,ADDRESS_CONNECT_METHOD,connectMethod);
+            snprintf(buf, sizeof(buf), ADDRESS_CONNECT_METHOD, connectMethod);
             properties.add(String(buf));
-            free(buf); 
 
             // inherited parameters from NetworkOSC (IP+port) are useless when we are in discovery, we therefore do not use store/serialize them
             if (CONNECT_DISCOVER != connectMethod){
@@ -243,10 +244,8 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
         }else{
             // we only give the possibility to user to select the model if we are offline
-            buf = (char*)malloc((strlen(ADDRESS_MIXER_MODEL)+64)*sizeof(char*));
-            sprintf(buf,ADDRESS_MIXER_MODEL,mixerID.model.c_str());
+            snprintf(buf, sizeof(buf), ADDRESS_MIXER_MODEL, mixerID.model.c_str());
             properties.add(String(buf));
-            free(buf); 
         }
 
     }
@@ -314,6 +313,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
 
         protocol[index] = line;
         protocolArgCount[index] = countPlaceholders(line);
+        protocolScanFormat[index] = line + "%n";
 
         DEBUG_INFO("protocol[%d] = %s (args=%d)",index,protocol[index].c_str(),protocolArgCount[index]);
 
@@ -755,6 +755,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       out2 = -1;
 
       const char* pattern = protocol[protocolIndex].c_str();
+      const char* scanFormat = protocolScanFormat[protocolIndex].c_str();
       int endPos = 0;
 
       switch (protocolArgCount[protocolIndex]) {
@@ -762,15 +763,13 @@ class XMSeries: public MixerDevice<NetworkOSC>{
           return strEquals(addr, pattern) ? MATCH_EXACT : MATCH_NONE;
 
         case 1: {
-          String fmt = String(pattern) + "%n";
-          int n = sscanf(addr, fmt.c_str(), &out1, &endPos);
+          int n = sscanf(addr, scanFormat, &out1, &endPos);
           if (n == 1 && addr[endPos] == '\0') return MATCH_1INT;
           return MATCH_NONE;
         }
 
         case 2: {
-          String fmt = String(pattern) + "%n";
-          int n = sscanf(addr, fmt.c_str(), &out1, &out2, &endPos);
+          int n = sscanf(addr, scanFormat, &out1, &out2, &endPos);
           if (n == 2 && addr[endPos] == '\0') return MATCH_2INT;
           return MATCH_NONE;
         }

@@ -1202,7 +1202,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
      */
     struct MSPathSpec {
       MSDataPattern type;
-      const char* pattern;
       const char* scanFormat;
       uint8_t argCount;   ///< nombre de %d attendus
     };
@@ -1378,7 +1377,7 @@ const MixingStation::Route MixingStation::routes[ROUTES_COUNT] = {
  * prevents them from drifting apart when a path is added or renamed.
  */
 #define MSTATION_PATH_SPEC(type, pattern, count) \
-  { type, pattern, "/" pattern "%n", count }
+  { type, "/" pattern "%n", count }
 
 const MixingStation::MSPathSpec MixingStation::msPathSpecs[MixingStation::msPathSpecsCount] = {
   MSTATION_PATH_SPEC(MSDataPattern::ChConfigName, MSDATA_CH_CONFIG_NAME, 1),

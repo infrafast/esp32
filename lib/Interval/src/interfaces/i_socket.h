@@ -22,7 +22,7 @@ class NetworkSocket: public NetworkDevice{
   // RX messages may contain large API documents. TX requests produced by the
   // current interfaces are small, so keep their queue slots independent from
   // the RX capacity instead of reserving 11 KiB for every direction.
-  #define MAX_SOCKET_TX_MESSAGE_LEN 512
+  #define MAX_SOCKET_TX_MESSAGE_LEN 256
   #define SOCKET_QUEUE_SIZE 5
   #define SOCKET_MESSAGE_PROCESSED_AT_ONCE 3
   #define SOCKET_TX_QUEUE_SIZE 12
@@ -41,10 +41,9 @@ class NetworkSocket: public NetworkDevice{
    * @brief Owned outgoing message retained until the socket sends it.
    *
    * TX entries do not carry an event code: only the message payload and its
-   * length are needed when flushing the transmit queue.
+   * null terminator are needed when flushing the transmit queue.
    */
   struct SocketTxDataCopy {
-    uint16_t length;                            ///< Number of message bytes, excluding the terminator.
     char message[MAX_SOCKET_TX_MESSAGE_LEN];   ///< Owned, null-terminated TX message copy.
   };
 
@@ -210,7 +209,6 @@ class NetworkSocket: public NetworkDevice{
       SocketTxDataCopy& slot = socketQueueTx[queueTailTx];
       memcpy(slot.message, message, copyLen);
       slot.message[copyLen] = '\0';
-      slot.length = copyLen;
 
       queueTailTx = (queueTailTx + 1) % SOCKET_TX_QUEUE_SIZE;
       queueCountTx++;
