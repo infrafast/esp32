@@ -158,9 +158,10 @@ Each ID is an actionable request: for example, **implement BUG-WEB-01**. Existin
 
 #### BUG-DATA-02 — Make base-pointer dataset destruction valid
 
-- **Status:** To do. **Priority:** P2.
+- **Status:** To validate. **Priority:** P2.
 - **Evidence:** [lib/Interval/src/DataManagement.h:109](https://github.com/infrafast/esp32/blob/679bafe8a8461f34d67096db16b2685835ae7c67/lib/Interval/src/DataManagement.h#L109) — DataSet has virtual methods but a non-virtual destructor. SerializableParameters deletes derived ConfigDataSet instances through DataSet*, which is undefined behavior even if current derived cleanup is simple.
-- **Requested change:** Make the existing owning base-pointer contract safe and audit related ownership without deleting borrowed Address objects.
+- **Implemented:** `DataSet` now has a virtual destructor, so `SerializableParameters` can safely destroy owned derived datasets through `DataSet*` without changing borrowed `Address` ownership.
+- **Remaining validation:** Exercise destruction of `ConfigDataSet`, `DynamicDataSet`, `WebLibrary` and mixer datasets through their existing owners; confirm repository removal occurs exactly once and normal serialization remains unchanged.
 - **Acceptance:** Destroy each owned dataset through its actual ownership path; derived cleanup and repository removal each run once, without undefined behavior.
 
 #### BUG-DATA-03 — Make DataProvider polymorphic destruction safe

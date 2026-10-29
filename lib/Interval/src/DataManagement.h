@@ -167,8 +167,8 @@ class DataRepository;
  * @brief Abstract named value view, registered in targetRepo or dataRepo by default.
  *
  * Borrows its Address and repository; destruction unregisters the view only.
- * Subclasses define value storage and pointer validity. The destructor is not
- * virtual, so deletion of derived objects through DataSet* is not generally safe.
+ * Subclasses define value storage and pointer validity. The virtual destructor
+ * makes deletion of derived objects through DataSet* safe.
  */
 class DataSet{
   public:
@@ -184,7 +184,7 @@ class DataSet{
      */
     DataSet(Address* adress, const String& name, DataRepository* targetRepo = nullptr);
     /** @brief Release resources held by this object. */
-    ~DataSet(); 
+    virtual ~DataSet();
 
     /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize() = 0;
@@ -455,8 +455,8 @@ class JsonTemplateRepository{
  *
  * Borrows descriptors and repo. Optional auto-registration creates address-only
  * ConfigDataSets; these entries are tracked and deleted on unregister/destruction,
- * but descriptors are never deleted. Current deletion through DataSet* retains
- * the non-virtual-destructor limitation described above.
+ * but descriptors are never deleted. Owned datasets are deleted through their
+ * virtual DataSet destructor, so derived cleanup remains valid.
  * Destruction does not unregister the template from jsonInputRepo. Consumers must
  * not access that entry afterwards. serialize() exports metadata, not live values.
  */
@@ -477,7 +477,7 @@ class SerializableParameters {
     /**
      * @brief Delete automatically created configuration entries, leaving descriptors borrowed.
      *
-     * @note Current deletion uses DataSet*, whose destructor is non-virtual.
+     * @note Owned entries are deleted through DataSet*, whose destructor is virtual.
      * The template pointer also remains registered in jsonInputRepo after destruction.
      */
     virtual ~SerializableParameters() {
