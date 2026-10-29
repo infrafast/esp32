@@ -163,14 +163,28 @@ Framework constants specify `infrafast.fr`, `/fwupdate/`, `/webapp`, and the `.t
 
 ### Internationalization (i18n)
 
-The firmware and web application use separate but coordinated catalogues:
+The firmware GUI and the web client use separate catalogues with a defined
+boundary:
 
-- `data/*.lang` are the firmware/TFT catalogues loaded by `I18n`.
-- `/Volumes/web/demo/<language>.json` are the editable web catalogues.
-- `/Volumes/web/demo/<language>-user.json` contains optional user overrides; an
-  empty `{}` catalogue is valid when no overrides exist.
-- `data/webapp/*.json.gz` are generated deployment assets and must be rebuilt
-  from the editable web sources, never edited directly.
+- `data/*.lang` are the catalogues for the ESP firmware GUI, including the TFT
+  menus and firmware-owned interface/status text. They are loaded from LittleFS
+  by `I18n`.
+- The web client has its own JSON catalogues in the web source/deployment tree.
+  Those files are not firmware `.lang` files and must not be copied into `data/`
+  or translated through the firmware catalogue.
+- When the ESP sends a translatable value to the web client, the protocol should
+  expose the translation key/identifier; the web client resolves that key with
+  its own JSON catalogue. Firmware-owned TFT text continues to use `lang`.
+- `data/webapp/*.json.gz` are generated web-client deployment assets and must be
+  rebuilt from the editable web sources, never edited directly.
+
+`userLang` is a framework-owned optional extension catalogue. Interval always
+instantiates it and loads the matching `.i18n` file when present, both during
+startup and after a language-menu change; a missing file leaves the catalogue
+empty. User components access this shared object and add/look up their own
+keys, rather than instantiating a second global catalogue. Do not create empty
+`.i18n` files for languages that have no user-component strings, and do not put
+framework or web-client-only strings in them.
 
 The English catalogue has a deliberate compact representation: when an English
 translation is identical to its key, the entry may be omitted. `I18n::getString`
@@ -189,6 +203,13 @@ When changing i18n, validate JSON syntax, verify firmware key coverage across
 all `.lang` files, verify active web-key coverage across all language JSON
 files, and regenerate/test the compressed assets. Missing optional `*-user.json`
 files must not prevent loading the base language catalogue.
+
+The icon fonts follow the same ownership boundary. `data/webapp/interval.ttf.gz`
+contains system glyphs used by the framework. `data/webapp/user.ttf.gz` is the
+application-owned glyph source; an application interface selects its renderer
+and glyph in application code. The mixer application uses it for the Mixing
+Station and Behringer/XM interface icons. Do not move application glyphs into
+the system icon map unless they become framework features.
 
 High-impact areas are `Interval.h`, `src/mixers/`, `platformio.ini`, and preparation scripts: check their cross-cutting effects before changes.
 

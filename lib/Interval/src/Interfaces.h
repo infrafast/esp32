@@ -526,6 +526,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       return &icon; //hwm.network->networkConnectivityIcon
     }
 
+    /** @brief Return the renderer associated with this interface icon. */
+    virtual OpenFontRender* getIconRenderer(){ return &gui.iconOfr; }
+
   protected:
     String icon = ICON_LINK;
 

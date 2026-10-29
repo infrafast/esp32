@@ -1679,6 +1679,8 @@ class I18n : public JsonListFile{
 
 
 I18n lang = I18n();
+// Optional application catalogue owned by the framework. It is always
+// available to user code; its language file is loaded only when present.
 I18n userLang = I18n();
 
 unsigned long onOffPushedStartTime = 0;
@@ -3340,7 +3342,7 @@ void loadLangFromMenu_item_selected(MenuComponent* p_menu_component){
   String langName = app.getNameFromString(menuString);
   // load should return a boolean which indicate if the lanugage file has been loaded correctly to 
   // process the semantic return and update the menu title accordingly if it was loaded or not
-  if (lang.load(concatStrings("/", langName, ".lang"))){
+  if (app.loadLanguageCatalogues(langName)){
     systemCfg.setValue(S_LANG,langName);    
     systemCfg.save();
     app.ms.back();
@@ -3402,7 +3404,7 @@ void bankOverlayBuilder(uint8_t BankIndex){
   
   baseOverLayBuilder(BankIndex);
 
-  gui.add(new Icon(&app.interfaceIcon,Align::Left,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.interfaceIconColor,&GUI::defaultBcolor,&app.interfaceIconBrightness));               
+  gui.add(new Icon(&app.interfaceIcon,Align::Left,&app.iconRow2, &app.overlayIconY,OVERLAY_ICON_SIZE,&app.interfaceIconColor,&GUI::defaultBcolor,&app.interfaceIconBrightness,false,app.interfaceIconRenderer));
 
   //we do not display the bankNavigator if user deactivate the bank screen display
   if (app.disabledBankRendering == true) return;
@@ -3445,7 +3447,8 @@ void bankScreenBuilder(uint8_t subScreen){
 
     if (strip != nullptr){
 
-      app.interfaceIcon = *strip->interface->getIcon();                                             // retrieve interface icon from the current strip
+      app.interfaceIcon = *strip->interface->getIcon();
+      app.interfaceIconRenderer = strip->interface->getIconRenderer();                              // retrieve icon and renderer from the current interface
           
       for (const auto& winstrip : bank->strips) {
         

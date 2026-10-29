@@ -963,16 +963,17 @@ class NumericLabel : public Label{
 class Icon : public Font{
   public:
     static OpenFontRender* ofr; 
+    OpenFontRender* renderer = nullptr;
     
     /** @brief Initialize Icon with the supplied configuration and bindings. */
-    Icon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool d=false):Font(v, a, posX, posY, s,12, fC , bC , _brightness, d){
+    Icon(const String* v, Align a, const int16_t* posX, const int16_t* posY, uint8_t s, const uint16_t *fC = &GUI::defaultFcolor, const uint16_t *bC = &GUI::defaultBcolor,  const float* _brightness = &GUI::fullBrightness,bool d=false, OpenFontRender* _renderer=nullptr):Font(v, a, posX, posY, s,12, fC , bC , _brightness, d), renderer(_renderer){
       id = concatStrings("Icon", *posX, "x", *posY, "~", *v);
       //if (debug) DEBUG_PRINT("\n new %s[%s]",id.c_str(),v->c_str()); // => cause problem as value may not be initialized when call from AnimatedIcon
     };
     
   protected:
     /** @brief Return the shared font renderer used by this widget. */
-    virtual OpenFontRender* getOfr(){return ofr;}
+    virtual OpenFontRender* getOfr(){return renderer != nullptr ? renderer : ofr;}
 };
 
 enum{

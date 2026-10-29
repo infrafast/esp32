@@ -543,6 +543,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
           brightIcon = ICON_BRIGHTNESS,
           bigLeftIcon,
           bigRightIcon;        
+    OpenFontRender* interfaceIconRenderer = &gui->iconOfr;
 
     uint16_t networkConnectivityIconColorIdle = TFT_RED, 
             apIconColor = TFT_RED, 
@@ -913,6 +914,27 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     }
 
 
+    /** @brief Load the firmware catalogue and the optional user catalogue. */
+    bool loadLanguageCatalogues(String languageName){
+      String langFile = concatStrings("/", languageName);
+      langFile.toUpperCase();
+
+      lang.clean();
+      bool firmwareLoaded = lang.load(langFile + ".lang");
+
+      // User catalogues are optional. Support both filename conventions so an
+      // application can ship `FRANCAIS.i18n` or `francais.i18n` on LittleFS.
+      userLang.clean();
+      String userFile = langFile + ".i18n";
+      if (!userLang.load(userFile)) {
+        String lowerUserFile = userFile;
+        lowerUserFile.toLowerCase();
+        if (lowerUserFile != userFile) userLang.load(lowerUserFile);
+      }
+
+      return firmwareLoaded;
+    }
+
     /**
      * @brief Apply saved Wi-Fi, button timing and language settings.
      */
@@ -923,11 +945,7 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
 
       hwm->setButtonReactivity(systemCfg.getInt(S_PUSHDELAY),systemCfg.getInt(S_DCLICREACTIVITY));
 
-      String langFile = concatStrings("/", *systemCfg.getString(S_LANG, "ENGLISH"));
-      langFile.toUpperCase();
-
-      lang.load(langFile+".lang");
-      userLang.load(langFile+".i18n");
+      loadLanguageCatalogues(*systemCfg.getString(S_LANG, "ENGLISH"));
 
 
     }
@@ -1075,9 +1093,6 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
         lang.serialize(&s);
         DEBUG_PRINT("\n\n langfile:\t%s [...]",s.substring(0,300).c_str());
         DEBUG_PRINT("\nexample of langfile token: Connect:<%s>",lang.getString("Connect")->c_str());
-        s="";
-        userLang.serialize(&s);
-        DEBUG_PRINT("\n\n userLang:\t%s [...]",s.substring(0,300).c_str());
       #endif
 
 

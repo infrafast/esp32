@@ -164,6 +164,7 @@ class XMSeries: public MixerDevice<NetworkOSC>{
     
     /** @brief Initialize XMSeries with the supplied configuration and bindings. */
     XMSeries():MixerDevice<NetworkOSC>(INTERFACE_XMSeries, 8888, "192.168.0.1", 10023, XMSERIES_PING_CMD, true, GROUP_INTERFACE_MIXER){      
+        icon = ICON_USER_BEHRINGER;
         unregisterDataSetAddress(&addressPing);              // we un-expose the ping parameter as user should not modify it 
 
         registerDataSetAddress(connectMethodDS.address);    // add a connect method parameter
