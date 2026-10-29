@@ -10,6 +10,16 @@ Read before making changes:
 
 `README.md` is exclusively the high-level user-facing overview. The three files above are the project's only working references; the README is their user-facing entry point.
 
+## Mixing Station API references
+
+Before reviewing or changing the Mixing Station interface, consult the current protocol references because the API is generated and may change independently of this repository:
+
+- [Infrafast Mixing Station API entry point](http://msapi.infrafast.fr/dev) — generated endpoint descriptions and live development API surface.
+- [Mixing Station API use cases](https://mixingstation.app/ms-docs/use-cases/apis/) — WebSocket and REST request envelopes, authentication, and subscription behavior.
+- [Infrafast OpenAPI schema](http://msapi.infrafast.fr/openapi.json) — machine-readable endpoint and response definitions when available.
+
+Check the relevant endpoint descriptions and response schemas before relying on a field, route, or WebSocket request. Record compatibility findings in the existing architecture or roadmap reference when they affect the implementation. Do not assume that an omitted field indicates a protocol change: verify whether the current mixer/session state makes that field optional or unavailable.
+
 ## Mandatory documentation discipline
 
 - Write and maintain all project documentation in English, including additions, edits, headings, tables, audit findings, and validation records. Preserve code identifiers, paths, filenames, URLs, and literal protocol values. This rule does not require translating upstream dependency documentation or user-interface localization resources.
