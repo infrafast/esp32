@@ -1633,10 +1633,12 @@ class VerticalBar : public Bar{
       refreshed = full;
 
       createSprite(GUI::transparentColor);  //  
+      const uint8_t luminanceLevel = *brightness * GUI::systemBrightness * 255;
+      const uint16_t fillColor = GUI::luminance(*fColor, luminanceLevel);
 
       if (full){
         // full content refresh, means FROM -> TO                
-        sprite->fillRoundRect(0+frameOffset,to+frameOffset,width-frameOffset*2,from-to-frameOffset*2,radius,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
+        sprite->fillRoundRect(0+frameOffset,to+frameOffset,width-frameOffset*2,from-to-frameOffset*2,radius,fillColor);
         //DEBUG_PRINT("\nFull refreshcontent");
       }else{
         // only refresh tail/and or head
@@ -1646,24 +1648,24 @@ class VerticalBar : public Bar{
 
         if (oldFrom > from){
           // remove tail
-          sprite->fillRect(0+frameOffset,from+frameOffset,width-frameOffset*2,oldFrom-from,GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));   
+          sprite->fillRect(0+frameOffset,from+frameOffset,width-frameOffset*2,oldFrom-from,GUI::luminance(*bColor, luminanceLevel));
           //DEBUG_PRINT("\nRemove tail");
         }else if (from > oldFrom){
           // add tail
           //DEBUG_PRINT("\nAdd tail");
-          sprite->fillRect(0+frameOffset,oldFrom+frameOffset,width-frameOffset*2,from-oldFrom,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
+          sprite->fillRect(0+frameOffset,oldFrom+frameOffset,width-frameOffset*2,from-oldFrom,fillColor);
         }          
 
         if (oldTo > to){
           // add head
           blockHeight = oldTo-to;
           //DEBUG_PRINT("\nAdd head: %i",blockHeight);
-          sprite->fillRect(0+frameOffset,to+frameOffset,width-frameOffset*2,blockHeight,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
+          sprite->fillRect(0+frameOffset,to+frameOffset,width-frameOffset*2,blockHeight,fillColor);
         }else if (to > oldTo){
           // remove head
           blockHeight = to-oldTo;
           //DEBUG_PRINT("\nRemove head: %i",blockHeight);
-          sprite->fillRect(0+frameOffset,oldTo,width-frameOffset*2,blockHeight,GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));                    
+          sprite->fillRect(0+frameOffset,oldTo,width-frameOffset*2,blockHeight,GUI::luminance(*bColor, luminanceLevel));
         }       
       }
     }
@@ -1688,10 +1690,12 @@ class HorizontalBar : public Bar{
 
       refreshed = full;
       createSprite(GUI::transparentColor); 
+      const uint8_t luminanceLevel = *brightness * GUI::systemBrightness * 255;
+      const uint16_t fillColor = GUI::luminance(*fColor, luminanceLevel);
       if (full){
         // full content refresh, means FROM -> TO
         //sprite->fillRoundRect(from+frameOffset,frameOffset,to-frameOffset,height-frameOffset*2,radius,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
-        sprite->fillRect(from+frameOffset,frameOffset,to-frameOffset,height-frameOffset*2,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
+        sprite->fillRect(from+frameOffset,frameOffset,to-frameOffset,height-frameOffset*2,fillColor);
         //DEBUG_PRINT("\nFull refreshcontent");
       }else{
         // only refresh tail/and or head
@@ -1703,25 +1707,25 @@ class HorizontalBar : public Bar{
           // remove tail
           if (oldFrom<0) oldFrom = 0;
           blockWidth = from-oldFrom-frameOffset;
-          sprite->fillRect(oldFrom+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));   
+          sprite->fillRect(oldFrom+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*bColor, luminanceLevel));
           //DEBUG_PRINT("\tRemove tail: %d",blockWidth);
         }else if (from < oldFrom){
           // add tail
           blockWidth = oldFrom-from-frameOffset;
           //DEBUG_PRINT("\tAdd tail :%d",blockWidth);
-          sprite->fillRect(from+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
+          sprite->fillRect(from+frameOffset,frameOffset,blockWidth,height-frameOffset*2,fillColor);
         }          
 
         if (to > oldTo){
           // add head
           blockWidth = to-oldTo;
           //DEBUG_PRINT("\tAdd head: %i",blockWidth);
-          sprite->fillRect(oldTo+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*fColor,*brightness * GUI::systemBrightness * 255));        
+          sprite->fillRect(oldTo+frameOffset,frameOffset,blockWidth,height-frameOffset*2,fillColor);
         }else if (to < oldTo){
           // remove head
           blockWidth = oldTo-to;
           //DEBUG_PRINT("\tRemove head: %i",blockWidth);
-          sprite->fillRect(to+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*bColor,*brightness * GUI::systemBrightness * 255));                    
+          sprite->fillRect(to+frameOffset,frameOffset,blockWidth,height-frameOffset*2,GUI::luminance(*bColor, luminanceLevel));
         }       
       }
     }
@@ -1816,8 +1820,9 @@ class PendingBar : public HorizontalBar{
     /** @brief Refresh this component and report whether its displayed state changed. */
     virtual bool refresh(bool force) override{
       // delay 
-      if (millis() - lastRefreshTime < speed && !force) return false;
-      lastRefreshTime = millis();
+      const unsigned long now = millis();
+      if (now - lastRefreshTime < speed && !force) return false;
+      lastRefreshTime = now;
       refreshed = HorizontalBar::refresh(force);
       return refreshed;
     }
