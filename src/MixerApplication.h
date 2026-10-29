@@ -5,8 +5,10 @@
 
 #define USE_NETWORK
 
-// Glyphs supplied by data/webapp/user.ttf.gz: '!' is the Behringer/XM mixer
-// glyph and '>' is the Mixing Station logo.
+// Glyphs supplied by data/webapp/user.ttf.gz: The generic DeviceInterface API
+// still selects interval.ttf from the icon value alone; only the mixer-specific
+// renderer override routes these identity icons to user.ttf. A future per-icon
+// source selection is tracked in the roadmap for user-defined interfaces.
 #define ICON_USER_BEHRINGER "!"
 #define ICON_USER_MIXINGSTATION ">"
 

@@ -384,6 +384,7 @@ Origin: unchecked requests from the former `lib/Interval/README.md`. Assess each
 | INT-12 | Implement menu-item feedback | To assess | State feedback synchronized with the action |
 | INT-13 | Add Chinese multilingual files | To assess | Check key coverage, fonts, and encoding |
 | INT-14 | Add/complete Spanish multilingual files | To assess | An `espanol.json.gz` file already exists; check coverage before marking the request complete |
+| INT-15 | Select system or user icon fonts per interface icon | Deferred | Preserve the current system-font default while allowing one interface to use system glyphs for state icons and user glyphs for identity icons; keep existing icon strings and renderer overrides compatible |
 
 ## Other maintenance proposals
 
