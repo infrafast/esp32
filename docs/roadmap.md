@@ -49,7 +49,7 @@ and the existing GUI update order.
 
 - **Status:** To assess.
 - **Origin:** `GUIManager::refresh()` renders widgets in a time-sliced loop, transfers sprites over SPI, and allocates temporary rotated sprites.
-- **Requested change:** Measure widget refresh, sprite creation, rotation, transparency composition and TFT transfer separately. Preserve the existing 50 ms safety budget while reducing allocation and per-widget variability where proven safe.
+- **Requested change:** Measure widget refresh, sprite creation, rotation, transparency composition and TFT transfer separately. Preserve the configured GUI refresh budget while reducing allocation and per-widget variability where proven safe.
 - **Acceptance:** No widget is skipped permanently; transparency, rotation, sprite cleanup and screen output remain correct; maximum widget-render cost is measurable.
 
 #### PERF-LOOP-06 — Isolate screen rebuild and persistence work
