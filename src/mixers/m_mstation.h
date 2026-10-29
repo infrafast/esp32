@@ -289,7 +289,6 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     //////////////////////////////////////
     static constexpr size_t RX_MAX = kBufferMaxSize + 1;
     char rxBuf[RX_MAX];
-
     JsonDocument docHeader;
     JsonDocument docFull;    
 
@@ -366,6 +365,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
    
       if (length + 1 > RX_MAX){
         DEBUG_ERROR("%s::process(...,%i) exceed buffer size:%i",interfaceName.c_str(),length,RX_MAX);
+        return;
       } 
 
       JsonDocument filter;

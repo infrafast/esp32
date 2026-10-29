@@ -19,6 +19,10 @@ class NetworkSocket: public NetworkDevice{
   bool dataAvailable = false;
 
   #define MAX_SOCKET_MESSAGE_LEN kBufferMaxSize
+  // RX messages may contain large API documents. TX requests produced by the
+  // current interfaces are small, so keep their queue slots independent from
+  // the RX capacity instead of reserving 11 KiB for every direction.
+  #define MAX_SOCKET_TX_MESSAGE_LEN 512
   #define SOCKET_QUEUE_SIZE 5
   #define SOCKET_MESSAGE_PROCESSED_AT_ONCE 3
   #define SOCKET_TX_QUEUE_SIZE 12
@@ -33,6 +37,12 @@ class NetworkSocket: public NetworkDevice{
     int code;
   };
 
+  struct SocketTxDataCopy {
+    uint16_t length;
+    char message[MAX_SOCKET_TX_MESSAGE_LEN];
+    int code;
+  };
+
   SocketDataCopy socketQueueRx[SOCKET_QUEUE_SIZE];
   volatile uint8_t queueHeadRx = 0;   // prochain message RX à lire
   volatile uint8_t queueTailRx = 0;   // prochain slot RX d’écriture
@@ -40,7 +50,7 @@ class NetworkSocket: public NetworkDevice{
 
   // Queue statique d’émission : évite de flooder la socket quand plusieurs setters
   // appellent hwm.network->clientSocketSend() en rafale.
-  SocketDataCopy socketQueueTx[SOCKET_TX_QUEUE_SIZE];
+  SocketTxDataCopy socketQueueTx[SOCKET_TX_QUEUE_SIZE];
   volatile uint8_t queueHeadTx = 0;   // prochain message TX à envoyer
   volatile uint8_t queueTailTx = 0;   // prochain slot TX d’écriture
   volatile uint8_t queueCountTx = 0;
@@ -167,8 +177,8 @@ class NetworkSocket: public NetworkDevice{
       if (message == nullptr) return false;
 
       uint16_t copyLen = strlen(message);
-      if (copyLen >= MAX_SOCKET_MESSAGE_LEN) {
-        copyLen = MAX_SOCKET_MESSAGE_LEN - 1;
+      if (copyLen >= MAX_SOCKET_TX_MESSAGE_LEN) {
+        copyLen = MAX_SOCKET_TX_MESSAGE_LEN - 1;
         DEBUG_WARN("%s::enqueueSocketMessageTx() message truncated", interfaceName.c_str());
       }
 
@@ -192,7 +202,7 @@ class NetworkSocket: public NetworkDevice{
         return false;
       }
 
-      SocketDataCopy& slot = socketQueueTx[queueTailTx];
+      SocketTxDataCopy& slot = socketQueueTx[queueTailTx];
       memcpy(slot.message, message, copyLen);
       slot.message[copyLen] = '\0';
       slot.length = copyLen;
@@ -205,10 +215,10 @@ class NetworkSocket: public NetworkDevice{
     }
 
     /** @brief Remove the next outgoing WebSocket message from its queue. */
-    SocketDataCopy* dequeueSocketMessageTx() {
+    SocketTxDataCopy* dequeueSocketMessageTx() {
       if (queueCountTx == 0) return nullptr;
 
-      SocketDataCopy* out = &socketQueueTx[queueHeadTx];
+      SocketTxDataCopy* out = &socketQueueTx[queueHeadTx];
       queueHeadTx = (queueHeadTx + 1) % SOCKET_TX_QUEUE_SIZE;
       queueCountTx--;
 
@@ -228,7 +238,7 @@ class NetworkSocket: public NetworkDevice{
       if (lastSocketTxTime != 0 && (now - lastSocketTxTime) < txDelay) return 0;
 
       uint8_t sent = 0;
-      SocketDataCopy* msg = nullptr;
+      SocketTxDataCopy* msg = nullptr;
 
       while (sent < SOCKET_TX_MESSAGE_SENT_AT_ONCE &&
              (msg = dequeueSocketMessageTx()) != nullptr) {
