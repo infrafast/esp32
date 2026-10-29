@@ -319,7 +319,7 @@ class NetworkOSC: public NetworkDevice {  // should derive OSCInterface
     
     }
 
-    virtual String getDefaultHint() const override { return *lang.getString("hint.sysosc"); }
+    virtual String getDefaultHint() const override { return "hint.sysosc"; }
 
     /** @brief Placeholder hook; no active operation in this implementation. */
     ~NetworkOSC(){

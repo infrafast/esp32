@@ -117,9 +117,9 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     /** @brief Return the provider key used to resolve configuration choices. */
     virtual const String& getProviderNameForData(){ return group;}
 
-    /** @brief Return the localized static tooltip for this interface. */
+    /** @brief Return the web-catalogue key for this interface tooltip. */
     virtual String getDefaultHint() const {
-      return *lang.getString("hint.interface");
+      return "hint.interface";
     }
 
     /** @brief Export current status, progress and user-visible state information as JSON. */
@@ -380,7 +380,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_DISABLED;
       state.subState =  IF_STATE_DISABLED;
-      state.details = *lang.getString("Interface is disabled");         
+      state.details = "Interface is disabled";
       state.led = "black";
       state.progress = -1;          
     }
@@ -391,7 +391,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_NOTIMPLEMENTED;
       state.subState =  IF_STATE_DISABLED;
-      state.details = *lang.getString("Interface not yet implemented");          
+      state.details = "Interface not yet implemented";
       state.led = "black";
       state.progress = -1;          
     }
@@ -408,7 +408,7 @@ class DeviceInterface  : public SerializableParameters, public EventDispatcher, 
     }
 
     /** @brief Set the interface status to pending. */
-    virtual void setStatePending(const char* led = "green medium", const char* details = lang.getString("Scanning network")->c_str()){
+    virtual void setStatePending(const char* led = "green medium", const char* details = "Scanning network"){
       DEBUG_INFO("%s:setStatePending(%s)◐",interfaceName.c_str(),details);      
       state.code = IF_NOT_READY;      
       state.label = IF_STATE_PENDING;
@@ -783,7 +783,7 @@ class NetWorkService{
 
 
     /** @brief Set the interface status to waiting for capacity. */
-    virtual void setStateLocked(const char* led = "orange",const char* details = lang.getString("Reached maximum capacity. Disable other network device(s) to enable this one.")->c_str()){
+    virtual void setStateLocked(const char* led = "orange",const char* details = "Reached maximum capacity. Disable other network device(s) to enable this one."){
       DEBUG_INFO("%s::setStateLocked()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.code = IF_NOT_READY;
       deviceInterface->state.label = IF_STATE_LOCKED;
@@ -797,7 +797,7 @@ class NetWorkService{
     virtual void setSetDirectoryServiceDown(){
       DEBUG_INFO("%s::setStateLocked()", deviceInterface->interfaceName.c_str());
       deviceInterface->state.subState = "";
-      deviceInterface->state.details = *lang.getString("Enable Directory to browse devices");
+      deviceInterface->state.details = "Enable Directory to browse devices";
     }
 
     /** @brief Set the interface status to connecting. */
@@ -1068,7 +1068,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     /** @brief Set the interface status to connected. */
     virtual void setStateConnected(){
       DEBUG_INFO("%s:setSetateConnected()🟢",deviceInterface->interfaceName.c_str());
-      DeviceInterface::setStateReady("green", lang.getString(IF_STATE_CONNECTED)->c_str(),destination.ip.toString().c_str(), destinationDetails().c_str());
+      DeviceInterface::setStateReady("green", IF_STATE_CONNECTED, destination.ip.toString().c_str(), destinationDetails().c_str());
     }
 
     /** @brief Build the text describing the selected network destination. */
@@ -1079,7 +1079,7 @@ class NetworkDevice: public DeviceInterface, public NetWorkService{
     /** @brief Set the interface status to disconnected. */
     virtual void setStateDisconnected() override{
       DEBUG_INFO("%s:setStateDisconnected()🔴",deviceInterface->interfaceName.c_str());
-      DeviceInterface::setStateDisconnected(concatStrings(*lang.getString("no connection")).c_str());
+      DeviceInterface::setStateDisconnected("no connection");
     }     
 
 };

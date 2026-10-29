@@ -227,7 +227,7 @@ class BLEMIDIInterface: public MIDIInterface{
       icon = ICON_BLEMIDI;
     }
 
-    virtual String getDefaultHint() const override { return *lang.getString("hint.blemidi"); }
+    virtual String getDefaultHint() const override { return "hint.blemidi"; }
 
     /** @brief Return the number of choices exposed by this dataset. */
     virtual uint16_t getSize(String addrr){
@@ -321,7 +321,7 @@ class BLEMIDIInterface: public MIDIInterface{
 
     /** @brief Set the interface status to ready. */
     void setStateReady(){            
-      DeviceInterface::setStateReady("blue",lang.getString("paired")->c_str());
+      DeviceInterface::setStateReady("blue", "paired");
     }
 
     /** @brief Set the interface status to pending. */
@@ -386,7 +386,7 @@ class USBMIDIInterface: public MIDIInterface{
       icon = ICON_USBMIDI;  
     }
 
-    virtual String getDefaultHint() const override { return *lang.getString("hint.usbmidi"); }
+    virtual String getDefaultHint() const override { return "hint.usbmidi"; }
 
     /** @brief Poll the interface connection and process pending data. */
     virtual bool monitor() override{
@@ -495,7 +495,7 @@ class DINMIDIInterface: public MIDIInterface{
       state.switchable = false;
     }
 
-    virtual String getDefaultHint() const override { return *lang.getString("hint.dinmidi"); }
+    virtual String getDefaultHint() const override { return "hint.dinmidi"; }
 
     /** @brief Start this interface using its current configuration. */
     virtual bool begin(){     // called by init()
@@ -648,7 +648,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
 
     }
 
-    virtual String getDefaultHint() const override { return *lang.getString("hint.applemidi"); }
+    virtual String getDefaultHint() const override { return "hint.applemidi"; }
 
     /** @brief Placeholder hook; no active operation in this implementation. */
     ~AppleMIDIInterface(){
@@ -1100,7 +1100,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
         "/",
         port,
         ") ",
-        *lang.getString("ready to be invited")
+        "ready to be invited"
       );
     }
 
@@ -1139,7 +1139,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
     /** @brief Set the interface status to ready. */
     virtual void setStateReady(){
       DeviceInterface::setStateReady();
-      state.details = concatStrings((midiSessionName)," ",*lang.getString("connected"));
+      state.details = concatStrings((midiSessionName)," ","connected");
       // + concatStrings(" (", hwm.network->appleMidiClient->getParticipantDetails(ssrc), ")");     
     }     
 
@@ -1150,7 +1150,7 @@ class AppleMIDIInterface: public MIDIInterface, public NetWorkService {
       if (exception == UNDEF_EXCEPTION){
         // no exception were raised, hence it is a normal disconnect
         state.label = IF_STATE_DISCONNECTED;
-        state.details = *lang.getString("session disconnected");        
+        state.details = "session disconnected";
       }else{
         // oherwise, this is considered as an error
         setStateError(lang.getString(exception)->c_str());

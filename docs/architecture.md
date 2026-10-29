@@ -171,9 +171,32 @@ boundary:
 - The web client has its own JSON catalogues in the web source/deployment tree.
   Those files are not firmware `.lang` files and must not be copied into `data/`
   or translated through the firmware catalogue.
-- When the ESP sends a translatable value to the web client, the protocol should
-  expose the translation key/identifier; the web client resolves that key with
-  its own JSON catalogue. Firmware-owned TFT text continues to use `lang`.
+- When the ESP sends a translatable value to the web client, the protocol must
+  expose the stable web-catalogue key/identifier; the web client resolves that
+  key with its own JSON catalogue. The firmware must not call `lang.getString()`
+  for such values and must not place their translations in `data/*.lang`.
+  Firmware-owned TFT text continues to use `lang`.
+- Web keys such as `hint.artnet` and `hint.directory.no_endpoints` belong in
+  `/Volumes/web/demo/*.json`. Every web key must have an English entry and a
+  translation in each supported web catalogue, even when the English value is
+  different from the key. The firmware sends the key; the browser translates it.
+- When a web message carries dynamic data, keep the key separate from the data
+  using the established protocol delimiter (for example,
+  `hint.directory.discovered|<endpoint list>`). The browser translates the key
+  portion and appends the data; the firmware must not build a localized sentence.
+- Some webGUI status messages carry runtime data and therefore cannot use a
+  complete sentence as their protocol value. They must send a stable key and
+  the data after the delimiter (for example,
+  `hint.directory.not_detectable|<IP>`). The JSON value contains a `{data}`
+  placeholder, which `localizeServerMessage()` replaces in the browser. If a
+  key is absent, the browser falls back to the received key/data text; never
+  create a catalogue entry for each dynamic value or copy these messages into
+  `data/*.lang`.
+- `data/*.lang` has the opposite fallback rule: English entries must be omitted
+  when the key already supplies the intended English display text, including
+  case-only or whitespace-only variants such as `"No Bank": "No bank"`. Keep an
+  English entry only when its value adds actual wording beyond the key, while
+  every non-English firmware catalogue must contain the required translation.
 - `data/webapp/*.json.gz` are generated web-client deployment assets and must be
   rebuilt from the editable web sources, never edited directly.
 

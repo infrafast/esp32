@@ -447,6 +447,8 @@ void usbEventCallback(void *arg, esp_event_base_t event_base, int32_t event_id, 
 
 /** @brief Append supplied values to an existing String. */
 template<typename... Args>
+// Reserve once before appending multiple parts; use this for an existing
+// String, especially when assembling a value incrementally in a loop.
 inline void concatString(String& destination, Args&&... args) {
   std::array<String, sizeof...(Args)> parts{String(std::forward<Args>(args))...};
   size_t totalLength = destination.length();
@@ -459,7 +461,7 @@ inline void concatString(String& destination, Args&&... args) {
   }
 }
 
-/** @brief Build a String by appending the supplied values. */
+/** @brief Build one String from several values with a single reservation. */
 template<typename... Args>
 inline String concatStrings(Args&&... args) {
   String result;

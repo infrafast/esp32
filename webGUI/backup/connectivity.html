@@ -1,0 +1,63 @@
+<div id="panel1loadingProgress" class="k-progress-line"></div>                                
+<center id="useNetwork" style="display:none">
+
+
+<table style="border-radius: 13px; width: 90%; color:black;">
+    
+    
+    <tr style="vertical-align: middle;">
+        <td style="width: 33%; font-size:15vw; text-align: right;">
+            <icon char="ICON_FOOTSWITCH"></icon>
+            <span class="bigLabel" id="localIP" style="margin-right:20%">localIP</span>
+        </td>
+        <td style="font-size:28px; text-align: center;">
+            <br><br>
+            <div id="netWorkSyncIndicator" class="connectbar" style="display: flex; align-items: center; justify-content: center; ">
+                <label id="networkIcon" style="font-size: 5vw; color:black; " class="iconInterval textShad"> </label>
+            </div>
+            <br>
+            
+            
+        </td>
+        <td style="width: 33%; font-size:15vw; text-align:left;">
+            <icon char="ICON_ROUTER"></icon>
+            <span class="bigLabel" style="margin-left:20%" id="gatewayIP">gatewayIP</span>
+        </td>
+    </tr>
+<tr>
+    <td></td>
+    <td>
+            <div class="wrap-collabsible">
+                <input id="collapsible" class="toggle" type="checkbox">
+                <label for="collapsible" class="lbl-toggle lightOff"><i18n id="Settings"></i18n></label>
+                <div class="collapsible-content">
+                    <div class="content-inner">
+                        <center>
+                        <div id="wifiSettings">
+                            <icon char="ICON_ROUTER"></icon>
+                            <select disabled id="wifi" onchange="setWifiName(this.value)" style="width:70%;">
+                            </select>
+                            <button id="scanButton" style="width:50px;" onclick="transmit('scanWifi','');_('wifi').disabled = true;this.disabled=true">
+                                <span id="updateIcon">⟳</span>
+                            </button>    
+                            <br>
+                            <div id="wifiNameDiv" style="display:none;">
+                            📶<input type="text" id="ssid" value="WiFi SSID/Name" maxlength="30" style="width:80%;" onchange="this.classList.remove('tour-frame'); _('pwd').value='';_('pwd').classList.add('tour-frame'); _('pwd').focus();">
+                            </div>
+                            <br>🔐<input type="password" id="pwd" value="" maxlength="30" style="width:70%;" onchange="this.blur(); this.classList.remove('tour-frame');" onkeypress="if (enterKeyPressed(event)) sendWifiCredentials()">    <span id="togglePassword" style="position: relative; top: 50%; right: 10px; transform: translateY(-50%); cursor: pointer;" onclick="togglePasswordVisibility()">👁</span>
+                            <br><button style="width:50%;" onclick="sendWifiCredentials();" id="wifiButton">label</button>
+                        </div>
+                        </center>
+                    </div>
+                </div>
+            </div>            
+        
+    </td>
+    <td></td>
+    
+</tr>    
+
+</table>
+        <h2 id="waitingNetConnection"><i18n id="Plug a network cable or configure WiFi"></i18n></h2>
+        <h2 id="attemptConnecting"><i18n id="Searching network..."></i18n></h2>
+</center>        

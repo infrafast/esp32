@@ -53,11 +53,14 @@ class OSCStrip : public Strip{  // should inherit from MidiStrip before so metho
       if (size == SHAPE4X4 || layout == LAYOUT_ZOOM){
         push4x4hBar();
       }else if (size == SHAPE1X4){
-        pushSimpleText(layout, lang.getString("SHAPE1X4 OSC"));
+        String shapeLabel = "OSC 1X4 SHAPE";
+        pushSimpleText(layout, &shapeLabel);
       }else if (size ==SHAPE2X2 ){
-         pushSimpleText(layout, lang.getString("SHAPE2X2 OSC"));
+         String shapeLabel = "OSC 2X2 SHAPE";
+         pushSimpleText(layout, &shapeLabel);
       }else if (size == SHAPE4X1){
-         pushSimpleText(layout, lang.getString("SHAPE4X1 OSC"));
+         String shapeLabel = "OSC 4X1 SHAPE";
+         pushSimpleText(layout, &shapeLabel);
       }else{
 
       }         

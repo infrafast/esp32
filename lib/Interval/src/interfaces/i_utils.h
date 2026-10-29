@@ -36,7 +36,7 @@ class SystemInterface: public DeviceInterface, public DataProvider{
         state.code = IF_READY;     
       }
 
-      virtual String getDefaultHint() const override { return *lang.getString("hint.system"); }
+      virtual String getDefaultHint() const override { return "hint.system"; }
 
       /** @brief Start this interface using its current configuration. */
       virtual bool begin(){
@@ -189,38 +189,37 @@ class DirectoryInterface: public NetworkDevice{
 
       /** @brief Return the static explanation shown while Directory is idle. */
       String directoryBaseHint() const {
-        return *lang.getString("hint.directory");
+        return "hint.directory";
       }
 
       /** @brief Return the explanation shown while endpoint discovery is running. */
       String directoryScanningHint() const {
-        return *lang.getString("hint.directory.scanning");
+        return "hint.directory.scanning";
       }
 
       /** @brief Return the explanation and discovered endpoint list for hover display. */
       String directoryEndpointHint() const {
         String value = directoryBaseHint();
         if (rtpDir.epCount == 0){
-          return concatStrings(value, " ", *lang.getString("hint.directory.no_endpoints"));
+          return "hint.directory.no_endpoints";
         }
 
-        value += " ";
-        value += *lang.getString("hint.directory.discovered");
-        value += " ";
+        value = "hint.directory.discovered|";
         for (int i = 0; i < rtpDir.epCount; i++){
-          if (i > 0) value += " | ";
-          value += rtpDir.ep[i].name;
-          value += " / ";
-          value += rtpDir.ep[i].ip.toString();
-          value += ":";
-          value += String(rtpDir.ep[i].port);
+          concatString(value,
+            i > 0 ? " | " : "",
+            rtpDir.ep[i].name,
+            " / ",
+            rtpDir.ep[i].ip.toString(),
+            ":",
+            rtpDir.ep[i].port);
         }
         return value;
       }
 
-      /** @brief Return the localized default Directory tooltip. */
+      /** @brief Return the web-catalogue key for the default Directory tooltip. */
       virtual String getDefaultHint() const override {
-        return *lang.getString("hint.directory");
+        return "hint.directory";
       }
 
       /** @brief Project the disabled Directory state into its hover hint. */
@@ -330,7 +329,7 @@ class DirectoryInterface: public NetworkDevice{
 
         //discoveryRequest();  // we do not spontaneously trigger a discovery, it has to be requested by someone, this will be helpful when managing the locks
 
-        DeviceInterface::setStateReady("green",lang.getString("online")->c_str(),"",systemCfg.getString(S_AP_NAME)->c_str());
+        DeviceInterface::setStateReady("green", "online", "", systemCfg.getString(S_AP_NAME)->c_str());
         state.hint = directoryScanningHint();
         // Direct deviceEnable(true) calls do not pass through
         // discoveryRequest(). Start discovery here so Enable and Refresh
@@ -408,14 +407,10 @@ class DirectoryInterface: public NetworkDevice{
        * not change.
        */
       void refreshDisabledNetworkDetails(bool broadcast = false){
+        // The browser translates the stable key and inserts the runtime IP.
         deviceInterface->state.details = concatStrings(
-          *lang.getString("Device is not detectable on the network."),
-          " ",
-          *lang.getString("Use"),
-          " ",
-          hwm.network->getIP(),
-          " ",
-          *lang.getString("to connect"));
+          "hint.directory.not_detectable|",
+          hwm.network->getIP());
 
         if (broadcast){
           deviceInterface->state.broadcastState = true;
@@ -544,13 +539,12 @@ class DirectoryInterface: public NetworkDevice{
         // runs.  The completion callback must close that transition itself;
         // otherwise the web GUI remains stuck on "Scanning network" forever.
         String endpointDetails = rtpDir.epCount == 0
-          ? *lang.getString("No endpoints detected")
-          : concatStrings(String(rtpDir.epCount), " endpoint(s) — ",
-                          *lang.getString("Device is discoverable on the network"),
-                          " (", hwm.network->getIP(), ")");
+          ? String("hint.directory.no_endpoints")
+          : concatStrings("hint.directory.discovered|", String(rtpDir.epCount),
+                          " endpoint(s) — ", hwm.network->getIP());
         state.hint = directoryEndpointHint();
         DeviceInterface::setStateReady(
-          "green", lang.getString("online")->c_str(), "", endpointDetails.c_str());
+          "green", "online", "", endpointDetails.c_str());
         state.broadcastState = true;
         state.broadcastConfig = true;
 
@@ -568,8 +562,8 @@ class DirectoryInterface: public NetworkDevice{
         rtpDir.clear();
         state.hint = directoryEndpointHint();
         DeviceInterface::setStateReady(
-          "green", lang.getString("online")->c_str(), "",
-          lang.getString("No endpoints detected")->c_str());
+          "green", "online", "",
+          "hint.directory.no_endpoints");
         state.broadcastState = true;
         evtDir.type = EVENT_DIRECTORY_NOT_READY;
         fireEvent(evtDir);        
@@ -661,7 +655,7 @@ class WebApplicationService: public NetworkDevice{
      */
     WebApplicationService(bool _configurable = false):NetworkDevice(WEBAPP_INTERFACE,GROUP_INTERFACE_UTILS,80,80,"",_configurable){}
 
-    virtual String getDefaultHint() const override { return *lang.getString("hint.webapplication"); }
+    virtual String getDefaultHint() const override { return "hint.webapplication"; }
 
     /** @brief Return the Ethernet connection-budget weight used by this service. */
     virtual uint8_t getServiceWeight(){
@@ -701,7 +695,7 @@ class WebApplicationService: public NetworkDevice{
     }
 
     /** @brief Set the interface status to pending. */
-    virtual void setStatePending(const char* led = "green medium", const char* details = lang.getString("Scanning network")->c_str()){
+    virtual void setStatePending(const char* led = "green medium", const char* details = "Scanning network"){
       setStateConnected();  // web interface when pending is in fact connected...
     }
 
