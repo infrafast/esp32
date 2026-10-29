@@ -10,7 +10,13 @@
 #include "mixer.h"
 
 
-// that the protocol
+/**
+ * @brief Mixing Station paths shared by requests and response routing.
+ *
+ * `get(MSPATH_APP_STATE)` creates a request for `/app/state`; `route()` uses
+ * the same constant to dispatch the reply to `processState()`. Dynamic data
+ * suffixes are described separately by `MSDATA_*` and `msPathSpecs`.
+ */
 #define MSPATH_APP_STATE "/app/state"
 #define MSPATH_MIXER_IDENTITY "/app/mixers/current"                   // mixer name, model, address IP
 #define MSPATH_MIXER_DEFINITION "/console/information"                // mixer attributes like  number of channel...
@@ -20,6 +26,16 @@
 #define MSPATH_MIXER_GET_DATA "/console/data/get"
 #define MSPATH_MIXER_SET_DATA "/console/data/set"
 
+/**
+ * @brief Dynamic Mixing Station data-path templates.
+ *
+ * The `%d` placeholders are replaced with zero-based API indices. The same
+ * templates are used to subscribe to values, decode `/console/data/get/...`
+ * replies and build `/console/data/set/...` updates. For example,
+ * `MSDATA_CH_BUS_LVL` with `(3, 1)` addresses
+ * `ch.3.mix.sends.1.lvl`; `msPathSpecs` uses the template to recognize that
+ * reply and `setdataQuery()` uses it to write the value back.
+ */
 #define MSDATA_CH_CONFIG_NAME  "ch.%d.cfg.name"
 #define MSDATA_CH_BUS_MUTE  "ch.%d.mix.sends.%d.on"
 #define MSDATA_BUS_MUTE  "ch.%d.mix.on"
@@ -172,26 +188,49 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
     
-    /** @brief Request a presence check for the remote device. */
+    /**
+     * @brief Request the currently selected mixer from Mixing Station.
+     *
+     * The `/app/mixers/current` response is the identity/heartbeat used by
+     * `echo()`. When a mixer is connected it may contain `manufacturer`,
+     * `currentModel` and `ipAddress`; while no mixer is selected, the response
+     * can be incomplete and the state request is used instead.
+     */
     virtual bool ping() override{
       hwm.network->clientSocketSend(get(destination.echoCommand.c_str()));
       destination.lastPingTx = millis();
       return true;
     }
 
-    /** @brief Start device-specific setup after the socket connection opens. */
+    /**
+     * @brief Start the API state handshake after the WebSocket opens.
+     *
+     * This sends a GET request for `/app/state`. Subsequent state notifications
+     * drive the lifecycle and eventually trigger `/console/information`.
+     */
     virtual void onSocketConnected() override{
       hwm.network->clientSocketSend(get(MSPATH_APP_STATE));  // forge a MS get json query with echoCommand as the path
     }
  
-    /** @brief Load mixer model capabilities and protocol information for this backend. */
+    /**
+     * @brief Load the cached virtual-mixer definition.
+     *
+     * Mixing Station exposes one protocol with changing channel layouts, so
+     * the cache stores the last `/console/information` result rather than a
+     * hardware-specific protocol profile.
+     */
     virtual bool restoreMixerProfile(){
       DEBUG_INFO("%s::restoreMixerProfile() => only deserializing definition, protocol is unique and hard wired",interfaceName.c_str());       
       // version générique pour ESP32 Arduino, afin de sauvegarder / charger n’importe quelle struct POD avec une seule paire de fonctions :
       return deserializeMixerDefinitionFromFile(MS_MIXER_PROFILE_FILENAME);
     }    
 
-    /** @brief Start backend-specific identification or subscriptions. */
+    /**
+     * @brief Mark the backend as virtual and select its persisted definition.
+     *
+     * The actual network handshake is driven by `onSocketConnected()` and
+     * `processState()`; this method does not query the remote API directly.
+     */
     virtual void beginMixer() override{
       DEBUG_INFO("%s::beginMixer() => setting model and dataset pattern",interfaceName.c_str());            
       setModel("virtual");      // "virtual" is different than default value "offline" and this forces setModel to reload and set the model from the definition file
@@ -297,9 +336,32 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       return nullptr;
     }
   
-    ///////////////////////////////////////
-    // Main processor : JSON PATH ROUTER
-    //////////////////////////////////////
+    /**
+     * @brief Parse a Mixing Station WebSocket envelope and dispatch its path.
+     *
+     * Mixing Station replies use an envelope whose `path` selects the handler
+     * and whose `body` contains the payload. Errors and unknown paths are
+     * rejected before they can change mixer state.
+     *
+     * Example state reply:
+     * @code
+     * {"path":"/app/state","body":{"state":"connected",
+     *   "topState":"connected","progress":0,"msg":""},"error":null}
+     * @endcode
+     * Example data reply (the exact path may contain a channel index):
+     * @code
+     * {"path":"/console/data/get/ch.1.cfg.name",
+     *   "body":{"format":"txt","value":"Lead vocal"},"error":null}
+     * @endcode
+     *
+     * The first filter keeps only `path` and `error` for routing. `JsonBody`
+     * handlers then parse the envelope body; `RxMessage` handlers receive the
+     * raw message and apply a narrower filter when the response is large, such
+     * as `/console/information`.
+     *
+     * @param message Complete JSON envelope received from the transport.
+     * @param length Number of bytes in @p message, excluding the terminator.
+     */
     virtual void route(const char *message,uint16_t length) override{
    
       if (length + 1 > RX_MAX){
@@ -357,9 +419,27 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }  
 
     /**
-     * @brief ------------------ Path Handlers ------------------
+     * @brief Apply an `/app/state` notification to the interface lifecycle.
+     *
+     * `topState` is the connection workflow and `state` is its current step.
+     * The handler projects them onto the firmware state. A connected state with
+     * zero progress requests the mixer definition; `backgroundSync` delays that
+     * request until synchronization is complete.
+     *
+     * Example connection notification:
+     * @code
+     * {"path":"/app/state","body":{"state":"connecting",
+     *   "topState":"connecting","progress":35,"msg":"Connecting"}}
+     * @endcode
+     * Example completed connection notification:
+     * @code
+     * {"path":"/app/state","body":{"state":"connected",
+     *   "topState":"connected","progress":0,"msg":""}}
+     * @endcode
+     *
+     * @param path Matched route path; retained for the common handler API.
+     * @param body Decoded JSON body from the WebSocket envelope.
      */
-
     void processState(const char* path, JsonVariant body) {
       #define MS_IDLE         "idle"
       #define MS_CONNECTING   "connecting"
@@ -423,7 +503,17 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
-    /** @brief Read mixer capabilities from the received API definition. */
+    /**
+     * @brief Parse `/console/information` and update the cached channel layout.
+     *
+     * The API reports one combined channel index space. Each `channelTypes`
+     * entry supplies a type, an offset and a count; those ranges are converted
+     * into the offsets consumed by the generic mixer datasets. Counts are
+     * clamped to the firmware limits before the definition is persisted. The
+     * handler filters the response before deserialization because the complete
+     * information document also contains colors, frequencies and other fields
+     * that are irrelevant to this firmware definition.
+     */
     void processMixerDefinition(char* rx, size_t len) {
       #define MS_CHANNEL_TYPES    "channelTypes"
         #define MS_OFFSET   "offset"
@@ -533,7 +623,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     }
 
-   //////////////////////////////// PING REPLY = Mixer was found //////////////////////////
+    /**
+     * @brief Process the response to the `/app/mixers/current` presence query.
+     *
+     * A connected mixer supplies its manufacturer, model and (when available)
+     * `ipAddress`. If no mixer is selected, the response is not treated as an
+     * identity and the state handshake is retried instead.
+     */
     void echo(void* data) {
       auto body = *static_cast<JsonVariant*>(data);
 
@@ -550,12 +646,23 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       }
     }
 
-    /** @brief Apply the mixer identity received from the backend. */
+    /**
+     * @brief Apply the `/app/mixers/current` response as a heartbeat.
+     *
+     * `pulseBeat()` consumes the common identity fields. The route is kept
+     * separate from `echo()` because the latter also handles the raw response
+     * used by the transport's presence check.
+     */
     void processMixerIdentity(const char* path, JsonVariant body) {
       pulseBeat(&body);  
     }
 
-    /** @brief Read the mixers advertised by Mixing Station. */
+    /**
+     * @brief Read `/app/mixers/available` and log advertised console models.
+     *
+     * This endpoint describes the models Mixing Station supports; it is not a
+     * network discovery result and does not provide a console IP address.
+     */
     void processMixersAvailable(char* rx, size_t len) {
       JsonDocument filter;
       filter["body"]["consoles"][0]["consoleId"]     = true;
@@ -586,10 +693,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }
 
     /**
-     * @brief Route returned data paths to name, level and mute handlers.
+     * @brief Route `/console/data/get/...` replies to name, level and mute handlers.
      *
-     * Decode full paths into element types and indices before updating shared values.
-     * This keeps similarly prefixed channel, bus and send routes distinct.
+     * Decode full paths into element types and indices before updating shared
+     * values. The API returns the representation selected by the subscription
+     * in `body.format`; the handler consumes `body.value` and translates the
+     * combined API index back into the corresponding dataset index.
      */
     void processDataGet(const char* path, JsonVariant body) {
           /*
@@ -698,7 +807,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       }
     }    
 
-    /** @brief Request the mixer capabilities needed to initialize the backend. */
+    /**
+     * @brief Request `/console/information` after the state handshake.
+     *
+     * The response contains `channelTypes` entries with `type`, `offset` and
+     * `count`. `processMixerDefinition()` converts those ranges into the
+     * offsets used by the common mixer datasets.
+     */
     void getMixerDefinition(){      
       hwm.network->clientSocketSend(get(MSPATH_MIXER_DEFINITION)); // retrieve name, etc...            
     }
@@ -715,7 +830,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       deviceInterface->state.details = concatStrings("Background Syncing... ", deviceInterface->state.details);
     } 
 
-    /** @brief Set the interface status to disconnected. */
+    /** @brief Publish the framework-facing disconnected state and reason. */
     void setStateDisconnected() override{
       DeviceInterface::setStateDisconnected(lang.getString("MixingStation unreachable")->c_str());      
     }
@@ -723,7 +838,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     /////////////////////////////////////////////
     // HELPER TO BUILD AND RETURN A SOCKET REQUEST
     /**
-     * @brief Build a numbered request, send its JSON and retain the matching response id.
+     * @brief Build the common Mixing Station request envelope.
+     *
+     * The API uses `{path, method, body}` for both REST and WebSocket calls.
+     * This helper only serializes the envelope; the caller decides whether it
+     * is sent immediately or placed in the socket transmit queue.
      */
     const char* build(const char* path, const char* method, const char* body) {
       static char buffer[255];
@@ -750,19 +869,22 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       return buffer;
     }
 
-    /**
-     * @brief Build and send a Mixing Station GET request for the supplied API path.
-     */
+    /** @brief Build (but do not send) a Mixing Station GET request envelope. */
     const char* get(const char* path, const char* body=nullptr) {
       return build(path, "GET",body);
     }
 
-    /** @brief Build and send a Mixing Station POST request. */
+    /** @brief Build (but do not send) a Mixing Station POST request envelope. */
     const char* post(const char* path,const char* body=nullptr) {
       return build(path, "POST",body);
     }    
 
-    /** @brief Build a Mixing Station request body for the supplied data path. */
+    /**
+     * @brief Build the body used by `/console/data/subscribe` or `unsubscribe`.
+     *
+     * `format` is normally `val`; level subscriptions use `norm` when the
+     * shared dataset expects a normalized value in the range 0.0 to 1.0.
+     */
     const char* bodyPathFormat(const char* path, const char* format="val") {
         static char buffer[160];
 
@@ -777,7 +899,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }        
 
     /**
-     * @brief method which is called when sync is finished so we can perform action like subscribing mixer changes...
+     * @brief Hook for post-synchronization subscriptions.
+     *
+     * Mixing Station subscriptions are currently issued on demand by the
+     * request methods below, so the default implementation intentionally does
+     * nothing.
      */
     virtual void postSync(){      
     }
@@ -792,6 +918,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     ////////// GETTERS ///////////
     //////////////////////////////
 
+    /**
+     * @brief Subscribe to a channel-name data path.
+     *
+     * Dataset indices are one-based at the common mixer interface and are
+     * translated to Mixing Station's offset-based combined channel list.
+     */
     virtual void requestDSname(DataSetSynced* dataset, uint8_t index) override{
             
       if      (dataset == inputNamesDS) index += msMixer->channelOffset;
@@ -805,7 +937,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       subscribeQuery(pathBuffer);
     }
 
-    /** @brief Request the mute state of a bus. */
+    /** @brief Subscribe to `ch.<index>.mix.on` for a bus mute state. */
     virtual void requestBUSmute(uint8_t busIndex) override{
       busIndex -= 1; // index of mixing station starts at 0
 
@@ -813,7 +945,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       subscribeQuery(pathBuffer);
     }
 
-    /** @brief Request the mute state of an input send to a bus. */
+    /** @brief Subscribe to `ch.<index>.mix.sends.<bus>.on`. */
     virtual void requestCHBUSmute(uint8_t chIndex, uint8_t busIndex) override{
       chIndex -= 1; // the requestCHBUSlevel is called from a strip which provide its selectID , since they starts at 1 but MS staation channels starts at zero, we have to deduct 1
       busIndex -= 1; // same for bus index, we have to deduct 1 to match MS station protocol
@@ -825,7 +957,11 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       subscribeQuery(pathBuffer);
     }
 
-    /** @brief Request the level of an input send to a bus. */
+    /**
+     * @brief Subscribe to a send level using Mixing Station's `norm` format.
+     *
+     * The resulting value is delivered immediately and on subsequent changes.
+     */
     virtual void requestCHBUSlevel(uint8_t chIndex, uint8_t busIndex) override{
 
       chIndex -= 1; // the requestCHBUSlevel is called from a strip which provide its selectID , since they starts at 1 but MS staation channels starts at zero, we have to deduct 1
@@ -840,14 +976,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
     ///// getters helpers
     /**
-     * @brief {
-     *   "path": "/console/data/subscribe",
-     *   "method": "POST",
-     *   "body": {
-     *     "path": "ch.0.mix.sends.0.lvl",
-     *     "format": "val"
-     *   }
-     * }
+     * @brief Subscribe to a data path and request its current value.
+     *
+     * The generated request is equivalent to:
+     * @code
+     * {"path":"/console/data/subscribe","method":"POST",
+     *  "body":{"path":"ch.0.mix.sends.0.lvl","format":"norm"}}
+     * @endcode
      */
     void subscribeQuery(const char* path, const char* format="val"){         
       // drop the request to subscribeQuery to a change of this data and get immediate value
@@ -857,7 +992,7 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     }    
 
 
-    /** @brief Remove a Mixing Station data subscription. */
+    /** @brief Remove a `/console/data/subscribe` registration for a data path. */
     void unsubscribeQuery(const char* path, const char* format="val"){         
       // drop the request to subscribeQuery to a change of this data and get immediate value
       //hwm.network->clientSocketSend(post(MSPATH_UNSUBSCRIBE,bodyPathFormat(path,format)));  // direct send
@@ -867,13 +1002,24 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     /////////////////////////////////////
     ////////////// SETTERS //////////////
     /////////////////////////////////////
+    /**
+     * @brief Set a send level through `/console/data/set/<path>/norm`.
+     *
+     * The common mixer layer supplies one-based channel and bus selections;
+     * Mixing Station receives zero-based indices for this data path.
+     */
     virtual void setCHBUSlevel(int chIndex, int busIndex, float level) override {      
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex - 1, busIndex - 1, MSDATA_CH_BUS_LVL);
       // level est une valeur normalisée 0.0 -> 1.0
       setdataQuery(pathBuffer, level, "norm");      // immediate send to avoid "letency" when moving the fader
     }
 
-    /** @brief Set the mute state of an input send to a bus. */
+    /**
+     * @brief Set the mute state of an input send to a bus.
+     *
+     * The value is sent through `/console/data/set/<path>/val` and queued for
+     * transmission, preserving the common socket back-pressure behavior.
+     */
     virtual void setCHBUSmute(uint8_t chIndex, uint8_t busIndex, int mute) override {    
       buildPath2Int(pathBuffer, sizeof(pathBuffer), chIndex - 1, busIndex - 1, MSDATA_CH_BUS_MUTE);
       setdataQuery(pathBuffer, mute, "val");
@@ -884,7 +1030,8 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     /**
      * @brief Send a value update to a Mixing Station data path.
      * @tparam T Value type serialized into the request body.
-     * The format selects the API representation; immediate bypasses the TX queue.
+     * The format selects the API representation (`val` or `norm`); immediate
+     * bypasses the TX queue for latency-sensitive controls.
      */
     void setdataQuery(const char* path, T value, const char* format = "val", bool immediate=false) {
       /*
@@ -913,7 +1060,12 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
     ///////////////////////////////////////
 
     // utility
-    /** @brief Extract the data path from a backend message. */
+    /**
+     * @brief Extract a relative data path from a `/console/data/get` reply.
+     *
+     * The optional `/val` suffix is removed because the path-pattern decoder
+     * matches the canonical data path only.
+     */
     bool extractPath(const String& full, const String& base, String& remainder) {
         if (full.startsWith(base)) {
             remainder = full.substring(base.length());
@@ -928,8 +1080,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
         return false;
     }
 
-    // à partir d’un index, retrouver le type (CHANNEL, AUX, FX, BUS, …)
-    /** @brief Resolve an element type from its index in the mixer definition. */
+    /**
+     * @brief Resolve an element type from Mixing Station's combined index.
+     *
+     * This is the inverse of the offset assignment performed by
+     * `processMixerDefinition()` and is used when a data reply must update a
+     * type-specific dataset.
+     */
     int getTypeFromIndex(MSmixerDefinition* mixerDef, int index) {
 
         if (index >= mixerDef->channelOffset &&
@@ -1060,7 +1217,13 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
       return false;
     }
 
-    /** @brief Classify an incoming Mixing Station data path without accepting a partial match. */
+    /**
+     * @brief Classify an incoming data path without accepting a partial match.
+     *
+     * Exact matching prevents a valid prefix such as `ch.1.mix.sends.0.on`
+     * from accidentally consuming a different or future endpoint with an
+     * extra suffix.
+     */
     bool decodeMSDataPath(const char* dataPath, MSPathMatch& out) {
       if (!dataPath) return false;
 
@@ -1106,7 +1269,22 @@ class MixingStation:  public MixerDevice<NetworkSocket>{
 
 
 
-////////////// Table de routage haut niveau pour faire le lien entre les paths de MS et les handlers de notre code, avec support des wildcards et extraction des arguments
+/**
+ * @brief Map Mixing Station API paths to the corresponding response handlers.
+ *
+ * Each row contains the API path, decoding mode and handler. `/app/state`
+ * passes its decoded body to `processState()`; `/console/information` passes
+ * the raw message so `processMixerDefinition()` can filter `channelTypes`.
+ *
+ * The `/console/data/get/*` entry deliberately uses a trailing wildcard. A
+ * reply such as `/console/data/get/ch.3.mix.sends.1.lvl` must reach one common
+ * handler; registering one row per channel and bus would be impossible because
+ * those indices are dynamic. `processDataGet()` removes the prefix and then
+ * applies the stricter `msPathSpecs` patterns below.
+ *
+ * A table keeps endpoint registration declarative and leaves exact/wildcard
+ * matching in one place (`findRoute()`).
+ */
 const MixingStation::Route MixingStation::routes[ROUTES_COUNT] = {
   { MSPATH_APP_STATE,            RouteMode::JsonBody,   { .jh = &MixingStation::processState }            },
   { MSPATH_MIXER_IDENTITY,       RouteMode::JsonBody,   { .jh = &MixingStation::processMixerIdentity }    },  
@@ -1116,7 +1294,23 @@ const MixingStation::Route MixingStation::routes[ROUTES_COUNT] = {
 };
 
 
-///////////// Table de routage des datas
+/**
+ * @brief Supported data-path patterns for `/console/data/get/...` replies.
+ *
+ * These patterns cover only values exposed through the generic mixer datasets.
+ * `argCount` states how many numeric `%d` components must be extracted.
+ *
+ * Examples:
+ * - `ch.3.cfg.name` matches `ChConfigName` with `{3}`.
+ * - `ch.3.mix.sends.1.lvl` matches `ChBusLevel` with `{3, 1}`.
+ * - `ch.3.mix.sends.1.lvl.extra` matches nothing because matching is exact;
+ *   silently accepting that suffix could route a future API field to the
+ *   wrong dataset.
+ *
+ * `routes` selects the top-level handler; this table classifies its dynamic
+ * data suffix. Keeping those steps separate localizes validation and index
+ * conversion in `decodeMSDataPath()`.
+ */
 const MixingStation::MSPathSpec MixingStation::msPathSpecs[MixingStation::msPathSpecsCount] = {
   { MSDataPattern::ChConfigName, MSDATA_CH_CONFIG_NAME, 1 },
   { MSDataPattern::ChBusMute,    MSDATA_CH_BUS_MUTE,    2 },
