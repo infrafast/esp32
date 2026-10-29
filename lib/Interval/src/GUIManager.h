@@ -347,7 +347,12 @@ class GUIManager : public GenericComponent {
         //DEBUG_PRINT("\t\trtrip:%i , rloop:%i, windex:%i/%i",roundTrip,renderLoop,widgetIndex,screenGUIs.size());
       }
    
-      /* FX stuff*/
+      /**
+       * @brief Update animated colors at a bounded rate.
+       *
+       * Widgets consume these shared values during their next refresh; this
+       * block does not redraw the display by itself.
+       */
       const unsigned long now = millis();
       if (now - lastFXmillis > 35){  // 35ms min to refresh
         increment = increment+1 % 255;

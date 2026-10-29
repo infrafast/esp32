@@ -2834,7 +2834,8 @@ class AccessPoint : public Network{
     /** @brief Refresh this component and report whether its displayed state changed. */
     bool refresh(bool force=false) {      
       // the state is modified by onEvent()
-      if (WiFi.softAPgetStationNum()>0){
+      const uint8_t stationCount = WiFi.softAPgetStationNum();
+      if (stationCount > 0){
         state = CONNECTED;      
       }else{
         state = DISCONNECTED;
@@ -2849,14 +2850,14 @@ class AccessPoint : public Network{
           DEBUG_INFO("AccessPoint client connected: MAC=%s IP=%s stations=%u",
                      clientMAC.length() ? clientMAC.c_str() : "unknown",
                      clientIP.length() ? clientIP.c_str() : "unknown",
-                     WiFi.softAPgetStationNum());
+                     stationCount);
           if (server == NULL) server = new WiFiServer(80,1);
           server->begin();
           evtNet.type = EVENT_NETWORK_CONNECTED;
           fireEvent(evtNet);
         }else{
           DEBUG_INFO("AccessPoint client disconnected; stations=%u",
-                     WiFi.softAPgetStationNum());
+                     stationCount);
           if (server != NULL){if (debug) DEBUG_INFO("DELETING SERVER");delete server; server  = NULL;}
           evtNet.type = EVENT_NETWORK_DISCONNECTED;
           fireEvent(evtNet);
