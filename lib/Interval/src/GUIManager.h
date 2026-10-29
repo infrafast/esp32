@@ -348,14 +348,24 @@ class GUIManager : public GenericComponent {
       }
    
       /* FX stuff*/
-      if (millis() - lastFXmillis > 35){  // 35ms min to refresh
+      const unsigned long now = millis();
+      if (now - lastFXmillis > 35){  // 35ms min to refresh
         increment = increment+1 % 255;
         sinI = (sinI + 10) % 360;  
         sinusWave = getSinVal(254); // range 254
-        for(int i = 0; i < glowingColors.size(); i++) *glowingColors.get(i)->value = GUI::luminance(glowingColors.get(i)->baseColor,sinusWave);
-        for(int i = 0; i < rainbowColors.size(); i++) rainbowColors.get(i)->baseColor = GUI::rainbow(increment);
-        for(int i = 0; i < alphaColors.size(); i++) *alphaColors.get(i)->value = GUI::tft->alphaBlend(sinusWave, alphaColors.get(i)->baseColor, GUI::defaultBcolor);
-        lastFXmillis = millis();
+        const uint16_t currentRainbow = GUI::rainbow(increment);
+        for(int i = 0; i < glowingColors.size(); i++) {
+          AlteredColor* color = glowingColors.get(i);
+          *color->value = GUI::luminance(color->baseColor,sinusWave);
+        }
+        for(int i = 0; i < rainbowColors.size(); i++) {
+          rainbowColors.get(i)->baseColor = currentRainbow;
+        }
+        for(int i = 0; i < alphaColors.size(); i++) {
+          AlteredColor* color = alphaColors.get(i);
+          *color->value = GUI::tft->alphaBlend(sinusWave, color->baseColor, GUI::defaultBcolor);
+        }
+        lastFXmillis = now;
       }      
       fps(1);
 
