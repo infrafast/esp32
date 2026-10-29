@@ -177,7 +177,7 @@ boundary:
   for such values and must not place their translations in `data/*.lang`.
   Firmware-owned TFT text continues to use `lang`.
 - Web keys such as `hint.artnet` and `hint.directory.no_endpoints` belong in
-  the external webGUI checkout (currently `/Volumes/web/demo/*.json`). Every web key must have an English entry and a
+  the external webGUI checkout (currently `/Volumes/web/webGUI/*.json`). Every web key must have an English entry and a
   translation in each supported web catalogue, even when the English value is
   different from the key. The firmware sends the key; the browser translates it.
 - When a web message carries dynamic data, keep the key separate from the data
