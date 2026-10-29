@@ -2265,7 +2265,7 @@ void setup() {
       //DEBUG_PRINT("\nScreen rebuild done");
       #ifdef DEBUG
         // DEBUG INDICATORS OVERLAY
-        gui->add(new Label(&gui->framePerSec,Align::Right, &rightScreen, &GUI::three,16,5,&GUI::defaultFcolor,&GUI::defaultBcolor));
+        gui->add(new Label(&gui->loopPerformance,Align::Right, &rightScreen, &GUI::three,16,16,&GUI::defaultFcolor,&GUI::defaultBcolor));
         gui->add(new Label(&heapSize,Align::Left,&GUI::zero,&GUI::three,16,24,&GUI::defaultFcolor,&GUI::defaultBcolor));
       #endif
       //DEBUG_PRINT("\nDEBUG DONE");

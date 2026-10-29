@@ -125,7 +125,9 @@ class GUIManager : public GenericComponent {
   public:
     bool transparency;
     int sinI = 0; 
-    String framePerSec;             ///< Debug text containing the current GUI FPS.
+    #ifdef DEBUG
+      String loopPerformance;       ///< Debug text containing average loop rate and period jitter.
+    #endif
     TFT_eSprite screenBuffer = TFT_eSprite(GUI::tft);  
     LinkedList<Widget*> screenGUIs = LinkedList<Widget*>();
     OpenFontRender labelOfr = OpenFontRender();
@@ -214,7 +216,7 @@ class GUIManager : public GenericComponent {
       } 
 
       lastFXmillis = millis();
-      lastFPSmillis = millis();
+      lastLoopMetricsMs = millis();
 
     }
 
@@ -383,7 +385,9 @@ class GUIManager : public GenericComponent {
         }
         lastFXmillis = now;
       }      
-      fps(1);
+      #ifdef DEBUG
+        updateLoopMetrics();
+      #endif
 
       return refreshed;
     }
@@ -396,19 +400,45 @@ class GUIManager : public GenericComponent {
       return sin( (float)sinI * 6.28 / 360.0) * (range/2) + range/2;  
     }
 
-    /** @brief Update the displayed GUI frame rate over the requested interval. */
-    int fps(const uint8_t seconds){
-      unsigned long now = millis();
-      int fpsVal = 0;
-      frameCount ++;
-      if (now - lastFPSmillis >= seconds * 1000) {
-        fpsVal = frameCount / seconds;
-        framePerSec = String(fpsVal);
-        frameCount = 0;
-        lastFPSmillis = now;
+    #ifdef DEBUG
+    /**
+     * @brief Update the loop-rate and period-jitter diagnostic once per second.
+     *
+     * The sample period is measured between completed GUI-manager refresh calls,
+     * which correspond to completed application-loop passes in the normal app.
+     * The displayed rate is the average loop frequency; jitter is the standard
+     * deviation of the measured loop periods, in milliseconds.
+     */
+    void updateLoopMetrics(){
+      const uint32_t nowUs = micros();
+      if (lastLoopSampleUs != 0) {
+        const uint32_t periodUs = nowUs - lastLoopSampleUs;
+        loopPeriodSumUs += periodUs;
+        loopPeriodSquareSumUs += static_cast<uint64_t>(periodUs) * periodUs;
+        loopPeriodSamples++;
       }
-      return fpsVal;
+      lastLoopSampleUs = nowUs;
+
+      const uint32_t nowMs = millis();
+      if (nowMs - lastLoopMetricsMs < 1000 || loopPeriodSamples == 0) return;
+
+      const double meanPeriodUs = static_cast<double>(loopPeriodSumUs) / loopPeriodSamples;
+      double varianceUs2 = static_cast<double>(loopPeriodSquareSumUs) / loopPeriodSamples
+                         - meanPeriodUs * meanPeriodUs;
+      if (varianceUs2 < 0.0) varianceUs2 = 0.0;
+
+      const uint32_t loopsPerSecond = (meanPeriodUs > 0.0)
+                                    ? static_cast<uint32_t>(1000000.0 / meanPeriodUs + 0.5)
+                                    : 0;
+      const uint32_t jitterMs = static_cast<uint32_t>(sqrt(varianceUs2) / 1000.0 + 0.5);
+      loopPerformance = String(loopsPerSecond) + "/s +/-" + String(jitterMs) + "ms";
+
+      loopPeriodSumUs = 0;
+      loopPeriodSquareSumUs = 0;
+      loopPeriodSamples = 0;
+      lastLoopMetricsMs = nowMs;
     }
+    #endif
 
     /** @brief Append an entry to this collection. */
     bool add(Widget* w){
@@ -455,8 +485,14 @@ class GUIManager : public GenericComponent {
     LinkedList<String*> i18nRepo = LinkedList<String*>();
     uint8_t widgetIndex = 0;
 
-    unsigned long lastFPSmillis,lastFXmillis;
-    unsigned long frameCount;
+    unsigned long lastFXmillis;
+    #ifdef DEBUG
+      uint32_t lastLoopSampleUs = 0;
+      uint32_t lastLoopMetricsMs = 0;
+      uint32_t loopPeriodSamples = 0;
+      uint64_t loopPeriodSumUs = 0;
+      uint64_t loopPeriodSquareSumUs = 0;
+    #endif
 
 
 };
