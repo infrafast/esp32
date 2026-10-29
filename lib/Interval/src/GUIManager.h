@@ -34,6 +34,13 @@
   #define GUI_REFRESH_BUDGET_US 5000UL
 #endif
 
+/** @brief Minimum runtime GUI budget exposed by the development diagnostic menu. */
+#define GUI_REFRESH_BUDGET_MIN_US 5000UL
+/** @brief Maximum runtime GUI budget exposed by the development diagnostic menu. */
+#define GUI_REFRESH_BUDGET_MAX_US 50000UL
+/** @brief Runtime GUI budget increment used by the development diagnostic menu. */
+#define GUI_REFRESH_BUDGET_STEP_US 5000UL
+
 /**
  * @brief Page id, page state and redraw marker sharing one comparison value.
  */
@@ -125,8 +132,11 @@ class GUIManager : public GenericComponent {
   public:
     bool transparency;
     int sinI = 0; 
+    uint32_t guiRefreshBudgetUs = GUI_REFRESH_BUDGET_US;
     #ifdef DEBUG
       String loopPerformance;       ///< Debug text containing average loop rate and period jitter.
+      String guiBudgetTitle = "GUI BUDGET"; ///< Development-only budget page title.
+      String guiRefreshBudgetText;   ///< Debug text containing the current GUI budget.
     #endif
     TFT_eSprite screenBuffer = TFT_eSprite(GUI::tft);  
     LinkedList<Widget*> screenGUIs = LinkedList<Widget*>();
@@ -349,10 +359,10 @@ class GUIManager : public GenericComponent {
         snprintf(count, sizeof(count), "~%u~", ++renderLoop);
         snprintf(count2, sizeof(count2), "%luuS", roundTrip);
 
-      }while(roundTrip<GUI_REFRESH_BUDGET_US && widgetIndex != screenGUIs.size()-1);
+      }while(roundTrip<guiRefreshBudgetUs && widgetIndex != screenGUIs.size()-1);
 
       if (debug){
-        if (roundTrip>GUI_REFRESH_BUDGET_US){
+        if (roundTrip>guiRefreshBudgetUs){
           //DEBUG_PRINT("\ncause TRIP" );
         }else{
           //DEBUG_PRINT("\ncause SIZE");        
@@ -437,6 +447,27 @@ class GUIManager : public GenericComponent {
       loopPeriodSquareSumUs = 0;
       loopPeriodSamples = 0;
       lastLoopMetricsMs = nowMs;
+    }
+
+    /** @brief Increase the runtime GUI budget by one development-menu step. */
+    void increaseGuiRefreshBudget(){
+      if (guiRefreshBudgetUs < GUI_REFRESH_BUDGET_MAX_US) {
+        guiRefreshBudgetUs += GUI_REFRESH_BUDGET_STEP_US;
+      }
+      updateGuiRefreshBudgetText();
+    }
+
+    /** @brief Decrease the runtime GUI budget by one development-menu step. */
+    void decreaseGuiRefreshBudget(){
+      if (guiRefreshBudgetUs > GUI_REFRESH_BUDGET_MIN_US) {
+        guiRefreshBudgetUs -= GUI_REFRESH_BUDGET_STEP_US;
+      }
+      updateGuiRefreshBudgetText();
+    }
+
+    /** @brief Format the runtime GUI budget for the development diagnostic page. */
+    void updateGuiRefreshBudgetText(){
+      guiRefreshBudgetText = String(guiRefreshBudgetUs / 1000) + " ms";
     }
     #endif
 

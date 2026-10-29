@@ -3291,6 +3291,15 @@ void brightness_menu_item_selected(MenuComponent* p_menu_component) {
   screen.state = STATE_UTILS_BRIGHTNESS;
 }
 
+#ifdef DEBUG
+/** @brief Open the development-only GUI refresh budget page. */
+void gui_budget_menu_item_selected(MenuComponent* p_menu_component) {
+  gui.updateGuiRefreshBudgetText();
+  screen.id = SCREEN_UTILS;
+  screen.state = STATE_UTILS_GUI_BUDGET;
+}
+#endif
+
 /** @brief Open the firmware update prompt without an automatic timeout. */
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component) {
   app.SWupdatePromptScreen(0);
@@ -3728,6 +3737,15 @@ void utilsScreenBuilder(uint8_t state){
       gui.add(new Icon(&app.brightIcon, Align::Center,&GUI::midScreenHoriz,&brightYpos,80,&GUI::menuActiveIconColor,&GUI::defaultBcolor));
       gui.add(new NumericLabel(&GUI::systemBrightness, 0, Align::Center,&GUI::midScreenHoriz, &GUI::menuTitleY,MENU_TITLE_SIZE,&GUI::defaultFcolor,&GUI::defaultBcolor,&GUI::fullBrightness,"%%",100));            // alter = 100%
     }break;
+#ifdef DEBUG
+    case STATE_UTILS_GUI_BUDGET:{
+      gui.add(new Label(&gui.guiBudgetTitle, Align::Center, &GUI::midScreenHoriz, &GUI::three,
+                        MENU_TITLE_SIZE * 0.8, 16, &GUI::defaultFcolor, &GUI::defaultBcolor));
+      gui.add(new Label(&gui.guiRefreshBudgetText, Align::Center, &GUI::midScreenHoriz,
+                        &GUI::menuTitleY, MENU_TITLE_SIZE, 8,
+                        &GUI::gold, &GUI::defaultBcolor));
+    }break;
+#endif
     ///////////////////////////////////////////////////////////////////////////////
     case STATE_UTILS_SHOW_PROGRESS_MULTIPLE :{      
       gui.add(new Arc(&overallProgressPercent /*v*/, 0 /*min*/,100 /*max*/, &GUI::midScreenHoriz, &GUI::midScreenVertical, 90, &GUI::blue, &GUI::transparentColor,30));              

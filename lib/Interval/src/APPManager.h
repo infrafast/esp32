@@ -211,7 +211,10 @@ enum{
   STATE_UTILS_CHECK_BINARY,             ///< Install extracted firmware if present.
   STATE_UTILS_INSTALLING_BINARY,
   STATE_UTILS_SHOW_PROGRESS_MULTIPLE,   ///< Display archive/file progress.
-  STATE_UTILS_BLINK_ICON_TEXT
+  STATE_UTILS_BLINK_ICON_TEXT,
+#ifdef DEBUG
+  STATE_UTILS_GUI_BUDGET       ///< Development-only GUI refresh budget tuning page.
+#endif
 };
 
 
@@ -314,6 +317,10 @@ void shutdown_menu_item_selected(MenuComponent* p_menu_component);
 void menu_selected(MenuComponent* p_menu_component);
 /** @brief Open the brightness adjustment page. */
 void brightness_menu_item_selected(MenuComponent* p_menu_component);
+#ifdef DEBUG
+/** @brief Open the development-only GUI budget adjustment page. */
+void gui_budget_menu_item_selected(MenuComponent* p_menu_component);
+#endif
 /** @brief Open the firmware update prompt without an automatic timeout. */
 void fmwUpdate_menu_item_selected(MenuComponent* p_menu_component);
 
@@ -610,6 +617,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
     const char* resetMenuScreen{ICON_RESET":RESET"};
     const char* shutdownMenuString{ICON_POWER":OFF"};
     const char* brightnessMenuString{ICON_BRIGHTNESS":BRIGHTNESS"};
+#ifdef DEBUG
+    const char* guiBudgetMenuString{ICON_CONFIG":GUI BUDGET"};
+#endif
     const char* fmwUpdateMenuString{ICON_FWUPDATE":FIRMWARE"};
 
     #define NO_BANK_MENU_ITEM "No bank"
@@ -1127,6 +1137,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       reset_menu_item = new MenuItem(resetMenuScreen,&reset_item_selected);                // to be removed
       shutdown_menu_item = new MenuItem(shutdownMenuString, &shutdown_menu_item_selected);
       brightness_menu_item = new MenuItem(brightnessMenuString, &brightness_menu_item_selected);
+#ifdef DEBUG
+      gui_budget_menu_item = new MenuItem(guiBudgetMenuString, &gui_budget_menu_item_selected);
+#endif
       fmw_update_menu_item = new MenuItem(fmwUpdateMenuString, &fmwUpdate_menu_item_selected);
       fmw_update_menu_item->setEnabled(false); // disabled by default, enabled when internet is available
 
@@ -1138,6 +1151,9 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       ms.get_root_menu().add_menu(profile_menu_item);
       ms.get_root_menu().add_item(shutdown_menu_item);
       ms.get_root_menu().add_item(brightness_menu_item);
+#ifdef DEBUG
+      ms.get_root_menu().add_item(gui_budget_menu_item);
+#endif
       ms.get_root_menu().add_item(fmw_update_menu_item);
       profile_menu_item->add_item(back_menu_item);
       profile_menu_item->add_item(save_profile_menu_item);
@@ -1551,6 +1567,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             case STATE_UTILS_BRIGHTNESS:
               handleClicBrightnessButton(buttonID);
             break;
+#ifdef DEBUG
+            case STATE_UTILS_GUI_BUDGET:
+              handleGuiBudgetButton(buttonID);
+            break;
+#endif
           }
         break;
         case SCREEN_BANK:
@@ -1594,6 +1615,11 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
             case STATE_UTILS_BRIGHTNESS:
               handleClicBrightnessButton(buttonID);
             break;
+#ifdef DEBUG
+            case STATE_UTILS_GUI_BUDGET:
+              handleGuiBudgetButton(buttonID);
+            break;
+#endif
           }
         break;
         case SCREEN_BANK:
@@ -1775,6 +1801,21 @@ class ApplicationManager : public GenericComponent,MenuComponentRenderer,public 
       saveBrightness();
     }
   }
+
+#ifdef DEBUG
+  /** @brief Adjust the development-only GUI refresh budget or return to the menu. */
+  void handleGuiBudgetButton(uint8_t buttonID){
+    if (buttonID == hwm->buttons[MIDDLEB]->getID() || buttonID == hwm->onOff.getID()) {
+      restoreMenu();
+    } else if (buttonID == hwm->buttons[LEFTB]->getID()) {
+      gui->decreaseGuiRefreshBudget();
+      triggerRedraw();
+    } else if (buttonID == hwm->buttons[RIGHTB]->getID()) {
+      gui->increaseGuiRefreshBudget();
+      triggerRedraw();
+    }
+  }
+#endif
 
   /**
    * @brief Adjust brightness within the supported range.
@@ -4261,6 +4302,9 @@ void setup() {
     MenuItem* reset_menu_item;
     MenuItem* shutdown_menu_item;
     MenuItem* brightness_menu_item;
+#ifdef DEBUG
+    MenuItem* gui_budget_menu_item = nullptr;
+#endif
     MenuItem* fmw_update_menu_item;
 
     /**
