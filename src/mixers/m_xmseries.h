@@ -262,7 +262,9 @@ class XMSeries: public MixerDevice<NetworkOSC>{
       }
 
       char model[64];
-      if (sscanf(property, ADDRESS_MIXER_MODEL, &model)){
+      char trailing;
+      /** @brief Bound model extraction and reject a non-empty suffix. */
+      if (sscanf(property, "/model/%63s%c", model, &trailing) == 1){
         if (mixerID.model != model) changed = true;        
         setModel(model);        
       }

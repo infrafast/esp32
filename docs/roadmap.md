@@ -140,9 +140,10 @@ Each ID is an actionable request: for example, **implement BUG-WEB-01**. Existin
 
 #### BUG-MIX-02 — Bound restored mixer model names
 
-- **Status:** To do. **Priority:** P1.
+- **Status:** To validate. **Priority:** P1.
 - **Evidence:** [src/mixers/m_xmseries.h:198](https://github.com/infrafast/esp32/blob/679bafe8a8461f34d67096db16b2685835ae7c67/src/mixers/m_xmseries.h#L198) — XMSeries::restoreProperty reads /model/%s into char model[64] with no width restriction.
-- **Requested change:** Bound model extraction and validate full input against the supported model names before modifying state.
+- **Implemented:** Model restoration now limits extraction to the 63-character buffer capacity and rejects properties with a non-empty suffix, preventing truncation and stack overwrite before `setModel()`.
+- **Remaining validation:** Exercise oversized/malformed properties and confirm supported model selection and profile reload remain unchanged.
 - **Acceptance:** A model name over 63 characters is rejected without stack corruption; valid model selection and reload remain compatible.
 
 ### Data / repositories
