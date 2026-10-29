@@ -233,10 +233,11 @@ keys, rather than instantiating a second global catalogue. Do not create empty
 `.i18n` files for languages that have no user-component strings, and do not put
 framework or web-client-only strings in them.
 
-The English catalogue has a deliberate compact representation: when an English
-translation is identical to its key, the entry may be omitted. `I18n::getString`
+The English catalogues have a deliberate compact representation: when an English
+translation is identical to its key, the entry must be omitted. `I18n::getString`
 and the web translator both fall back to the key itself, so adding redundant
-`"KEY":"KEY"` entries increases storage without changing behavior. English
+`"KEY":"KEY"` entries increases storage without changing behavior. This rule
+applies to both firmware `.lang` files and external webGUI JSON files. English
 entries whose value differs from the key must remain present.
 
 Every non-English catalogue must explicitly contain every key used by the

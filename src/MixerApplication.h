@@ -37,8 +37,7 @@ void setup(){
     app.init();
 
 #if defined(USER_I18N_DEMO)
-    // `userLang` is provided and refreshed by Interval. A user component only
-    // adds/reads its own keys; it must not instantiate a second global object.
+    // demonstrate usage of user specific language catalogue
     DEBUG_PRINT("User catalogue: %s", userLang.getString("User specific message")->c_str());
 #endif
 
