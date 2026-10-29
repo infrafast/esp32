@@ -2313,10 +2313,19 @@ void setup() {
 
       refreshed = force;
 
+      #ifdef DEBUG_VERBOSE
+        const uint32_t loopStart = micros();
+        uint32_t phaseStart = loopStart;
+      #endif
+
       // ********************************
       // PERFORM ALL REFRESH AND UPDATES
       // ********************************
       hwm->refresh();
+      #ifdef DEBUG_VERBOSE
+        recordRefreshPhase(REFRESH_PHASE_HARDWARE, micros() - phaseStart);
+        phaseStart = micros();
+      #endif
 
       //------------------
       //
@@ -2368,7 +2377,17 @@ void setup() {
 
       }
 
+      #ifdef DEBUG_VERBOSE
+        recordRefreshPhase(REFRESH_PHASE_INTERFACES, micros() - phaseStart);
+        phaseStart = micros();
+      #endif
+
       processBroadcastQueue();
+
+      #ifdef DEBUG_VERBOSE
+        recordRefreshPhase(REFRESH_PHASE_BROADCASTS, micros() - phaseStart);
+        phaseStart = micros();
+      #endif
 
       //------------------
       //
@@ -2378,6 +2397,11 @@ void setup() {
       for (const auto& bank : banks) {
         if (bank != nullptr && bank->update() && screen.id == SCREEN_BANK) triggerRedraw();
       }
+
+      #ifdef DEBUG_VERBOSE
+        recordRefreshPhase(REFRESH_PHASE_BANKS, micros() - phaseStart);
+        phaseStart = micros();
+      #endif
 
       //------------------
       //
@@ -2419,6 +2443,11 @@ void setup() {
         }
       }
       gui->refresh(force);
+
+      #ifdef DEBUG_VERBOSE
+        recordRefreshPhase(REFRESH_PHASE_GUI, micros() - phaseStart);
+        phaseStart = micros();
+      #endif
 
       //------------------
       //
@@ -2615,6 +2644,11 @@ void setup() {
       if (mem>maxHeapSize) maxHeapSize = mem;
       if (mem<minHeapSize) minHeapSize = mem;
       heapSize = concatStrings(minHeapSize, "/", mem, "/", maxHeapSize);
+
+      #ifdef DEBUG_VERBOSE
+        recordRefreshPhase(REFRESH_PHASE_FLOW, micros() - phaseStart);
+        recordRefreshCycle(micros() - loopStart);
+      #endif
 
       return refreshed;
     }
@@ -4086,6 +4120,60 @@ void setup() {
 */
 
   private:
+    #ifdef DEBUG_VERBOSE
+      enum RefreshPhase : uint8_t {
+        REFRESH_PHASE_HARDWARE,
+        REFRESH_PHASE_INTERFACES,
+        REFRESH_PHASE_BROADCASTS,
+        REFRESH_PHASE_BANKS,
+        REFRESH_PHASE_GUI,
+        REFRESH_PHASE_FLOW,
+        REFRESH_PHASE_COUNT
+      };
+
+      uint32_t refreshPhaseMaxUs[REFRESH_PHASE_COUNT] = {};
+      uint32_t refreshPhaseTotalUs[REFRESH_PHASE_COUNT] = {};
+      uint32_t refreshCycleMaxUs = 0;
+      uint32_t refreshCycleTotalUs = 0;
+      uint32_t refreshCycleCount = 0;
+      uint32_t refreshTimingReportAt = 0;
+
+      /** @brief Accumulate one refresh-phase duration for the opt-in diagnostic report. */
+      void recordRefreshPhase(RefreshPhase phase, uint32_t durationUs) {
+        if (durationUs > refreshPhaseMaxUs[phase]) refreshPhaseMaxUs[phase] = durationUs;
+        refreshPhaseTotalUs[phase] += durationUs;
+      }
+
+      /** @brief Accumulate and periodically report bounded refresh timing statistics. */
+      void recordRefreshCycle(uint32_t durationUs) {
+        if (durationUs > refreshCycleMaxUs) refreshCycleMaxUs = durationUs;
+        refreshCycleTotalUs += durationUs;
+        refreshCycleCount++;
+
+        const uint32_t now = millis();
+        if (now - refreshTimingReportAt < 1000 || refreshCycleCount == 0) return;
+        refreshTimingReportAt = now;
+
+        DEBUG_DETAIL("[LOOP] n=%lu total(avg/max)=%lu/%lu us hw=%lu/%lu if=%lu/%lu bc=%lu/%lu bank=%lu/%lu gui=%lu/%lu flow=%lu/%lu us",
+          refreshCycleCount,
+          refreshCycleTotalUs / refreshCycleCount, refreshCycleMaxUs,
+          refreshPhaseTotalUs[REFRESH_PHASE_HARDWARE] / refreshCycleCount, refreshPhaseMaxUs[REFRESH_PHASE_HARDWARE],
+          refreshPhaseTotalUs[REFRESH_PHASE_INTERFACES] / refreshCycleCount, refreshPhaseMaxUs[REFRESH_PHASE_INTERFACES],
+          refreshPhaseTotalUs[REFRESH_PHASE_BROADCASTS] / refreshCycleCount, refreshPhaseMaxUs[REFRESH_PHASE_BROADCASTS],
+          refreshPhaseTotalUs[REFRESH_PHASE_BANKS] / refreshCycleCount, refreshPhaseMaxUs[REFRESH_PHASE_BANKS],
+          refreshPhaseTotalUs[REFRESH_PHASE_GUI] / refreshCycleCount, refreshPhaseMaxUs[REFRESH_PHASE_GUI],
+          refreshPhaseTotalUs[REFRESH_PHASE_FLOW] / refreshCycleCount, refreshPhaseMaxUs[REFRESH_PHASE_FLOW]);
+
+        for (uint8_t i = 0; i < REFRESH_PHASE_COUNT; ++i) {
+          refreshPhaseMaxUs[i] = 0;
+          refreshPhaseTotalUs[i] = 0;
+        }
+        refreshCycleMaxUs = 0;
+        refreshCycleTotalUs = 0;
+        refreshCycleCount = 0;
+      }
+
+    #endif
     HardwareManager* hwm;
     GUIManager* gui;
     LinkedList<screenBuilder*> screenBuilders = LinkedList<screenBuilder*>();

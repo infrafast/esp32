@@ -8,6 +8,71 @@ Statuses: **To assess**, **To do**, **In progress**, **To validate**. Give each 
 
 Write all entries in English. Keep only remaining work after each change; use Git history and commit/pull-request descriptions for completed changes and validation evidence. Do not add completion logs or create an archive document. Older unchecked requests remain subject to assessment against current code, rather than assumed missing. Analysis-derived ideas remain proposals until assessed.
 
+## Loop predictability disrupters
+
+This section tracks sources of variable `app.refresh()` duration. The displayed FPS
+comes mainly from `GUIManager::refresh()` and is therefore not a complete measure of
+the application-loop cost. Each item must be measured in isolation before changing
+its scheduling or ownership. Preserve network event delivery, interface propagation,
+and the existing GUI update order.
+
+#### PERF-LOOP-01 — Instrument refresh phases
+
+- **Status:** In progress.
+- **Origin:** Runtime observation of large idle-loop jitter while the GUI appears static.
+- **Implemented scope:** Added opt-in timing counters around hardware, interfaces, broadcasts, banks, GUI rendering and application workflow. A once-per-second `DEBUG_DETAIL` report contains average and maximum durations for each phase and the complete refresh cycle.
+- **Remaining work:** Run a diagnostic firmware with `DEBUG_VERBOSE`, capture idle and active traces, then identify the first phase to bound.
+- **Acceptance:** A diagnostic build identifies which phase caused each long cycle and distinguishes persistent cost from connection, message, or screen-transition events.
+
+#### PERF-LOOP-02 — Bound network-link and connection work in the main loop
+
+- **Status:** To assess.
+- **Origin:** `WiFiEth::refresh()` polls `Ethernet.linkStatus()`, runs WebSocket listeners, and can start DHCP/Wi-Fi attempts from the application loop.
+- **Requested change:** Measure link polling, `ws*Client->listen()`, `Ethernet.begin()`, `WiFi.begin()`, semaphore waits, and disconnect cleanup. Keep connection state transitions serialized while preventing long retry or teardown work from monopolizing one refresh cycle.
+- **Acceptance:** Ethernet/Wi-Fi priority and events remain unchanged; normal connected cycles stay bounded; connection attempts and link loss are visible as separate, measured events.
+
+#### PERF-LOOP-03 — Bound interface monitoring cost
+
+- **Status:** To assess.
+- **Origin:** Each enabled interface calls `monitor()` from `Interface::update()`, where protocol parsing can process variable-size MIDI/OSC/Mixing Station input.
+- **Requested change:** Measure per-interface work and message sizes; establish a bounded amount of input processing per cycle without dropping or reordering events.
+- **Acceptance:** Existing interface state changes and event propagation remain correct, while one large incoming message cannot create an unbounded application-loop delay.
+
+#### PERF-LOOP-04 — Control broadcast serialization and queue draining
+
+- **Status:** To assess.
+- **Origin:** Interface state changes serialize JSON in `APPManager::refresh()`, then `processBroadcastQueue()` sends every queued message in one pass and removes entries from the front of a vector.
+- **Requested change:** Measure serialization, queue growth, WebSocket send time, and burst size. Define a bounded draining policy and an efficient FIFO operation while preserving message order and delivery semantics.
+- **Acceptance:** State/configuration broadcasts remain ordered and complete; a burst cannot consume an unbounded share of one loop cycle.
+
+#### PERF-LOOP-05 — Reduce unnecessary bank and strip processing
+
+- **Status:** To assess.
+- **Origin:** Every bank calls `strip->process()` for all its strips, including strips that are not visible.
+- **Requested change:** Measure processing cost by bank, strip and interface. Identify safe early-outs for unchanged or inactive work without changing protocol polling or visible-strip redraw behavior.
+- **Acceptance:** Hidden/inactive content is not processed unnecessarily when safe; visible strips, interface updates and redraw triggers remain identical.
+
+#### PERF-LOOP-06 — Bound GUI widget rendering work
+
+- **Status:** To assess.
+- **Origin:** `GUIManager::refresh()` renders widgets in a time-sliced loop, transfers sprites over SPI, and allocates temporary rotated sprites.
+- **Requested change:** Measure widget refresh, sprite creation, rotation, transparency composition and TFT transfer separately. Preserve the existing 50 ms safety budget while reducing allocation and per-widget variability where proven safe.
+- **Acceptance:** No widget is skipped permanently; transparency, rotation, sprite cleanup and screen output remain correct; maximum widget-render cost is measurable.
+
+#### PERF-LOOP-07 — Isolate screen rebuild and persistence work
+
+- **Status:** To assess.
+- **Origin:** A screen change calls `gui->purge()`, rebuilds the page and may write persisted bank selection before the regular GUI refresh.
+- **Requested change:** Measure rebuild, widget construction/destruction and persistence writes separately from steady-state rendering. Keep transitions observable and avoid treating rebuild cost as idle refresh cost.
+- **Acceptance:** Screen transitions remain functionally identical and their one-time cost is reported separately from normal cycles.
+
+#### PERF-LOOP-08 — Account for scheduler and background-task interference
+
+- **Status:** To assess.
+- **Origin:** `yield()`, Wi-Fi callbacks, asynchronous ping/HTTP tasks and the background button task can preempt or delay the main loop.
+- **Requested change:** Correlate refresh timestamps with task activity, network callbacks and interrupt-driven work before changing task priorities or delays.
+- **Acceptance:** Jitter attribution distinguishes application work from scheduler/background activity; no priority or task-lifecycle change is made without evidence of its effect.
+
 ## Bugs to fix
 
 Open memory-safety and ownership corrections identified by static inspection of [the source revision](https://github.com/infrafast/esp32/tree/679bafe8a8461f34d67096db16b2685835ae7c67). No firmware build, runtime leak measurement, browser heap profile or hardware validation was performed for this audit. Paths/line numbers below refer to that revision, not to future edits.
