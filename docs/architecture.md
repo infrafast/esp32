@@ -76,8 +76,8 @@ in the mixer application.
 build settings. Framework dependency or hardware lifecycle changes belong in
 the Interval repository; mixer and product workflow changes belong here.
 
-The local `prescript.py` contains board-specific compiler definitions and the
-small pre-resolution USB bootstrap required by PlatformIO. `INTERVAL_BUILD_DEV`
+The local `prescript.py` contains only the small pre-resolution USB bootstrap
+required by PlatformIO. `INTERVAL_BUILD_DEV`
 and `INTERVAL_BUILD_PROD` are the only mode choices made here; their mapping is
 kept synchronized with Interval's `configure_usb_mode()` contract because the
 remote library is not available when a `pre:` script first runs.
