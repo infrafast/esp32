@@ -58,7 +58,12 @@ selection changes, disconnection, reconnection, visibility/focus and teardown pa
 
 ## Build boundary
 
-`platformio.ini` selects the released Interval tag and supplies board/product build settings. Framework dependency or
+`platformio.ini` selects Interval through the relative sibling dependency `symlink://../Interval` for local workspace
+development and supplies only board/product build settings. The symlink keeps the application on the live sibling
+checkout instead of a stale copied package. Release consumers should replace it with a versioned Git/package reference.
+Interval owns its transitive libraries, including the official TFT_eSPI package. The TFT
+pinout and SPI frequency are defined in `Interval/src/HWManager.h`; Interval's build hook derives the generated TFT
+setup from that header, so the application must not redeclare those dependencies or settings. Framework dependency or
 hardware lifecycle changes belong in the Interval repository; mixer and product workflow changes belong here.
 
 `platformio.ini` contains only the consumer's board, paths and profile choice. `INTERVAL_BUILD_DEV` and
