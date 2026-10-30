@@ -196,11 +196,13 @@ Build commands: `pio run -e dev` and `pio run -e prod`. The dev build has file s
 
 Dependencies combine the PlatformIO registry, Git URLs, the versioned Interval
 framework, and locally bundled libraries. Some references are pinned; others
-are not. Ethernet, mWebSockets, and TFT_eSPI contain local adaptations or
-settings: do not replace them blindly. `Interfaces_LEGACY.h` is historical,
-not the recommended model for new interfaces. Framework dependency changes are
-made in the Interval repository, released with a new tag, and then consumed by
-updating `platformio.ini` here.
+are not. The TFT_eSPI copy is owned by Interval and is consumed through that
+package; there must not be a second `esp32/lib/TFT_eSPI` copy. Ethernet and
+mWebSockets still contain project-local adaptations or settings: do not replace
+them blindly. `Interfaces_LEGACY.h` is historical, not the recommended model
+for new interfaces. Framework dependency changes are made in the Interval
+repository, released with a new tag, and then consumed by updating
+`platformio.ini` here.
 
 Production TinyUSB MIDI has a header-name collision on case-insensitive filesystems: the project-owned `include/MIDIUSB.h` shim is intentionally retained for the Arduino-USBMIDI library, while `HWManager` selects the native `ESP32TinyUSB` `MIDIusb` header through an explicit include path. The production build also supplies the ESP32-S3 TinyUSB feature macros required by that dependency; the development build keeps using the existing shim path.
 
@@ -337,7 +339,7 @@ Checked resistor and analog-input connections are also identical. Initially susp
 
 ### 6.2. Virtual execution of historical startup
 
-Main references are [HWManager.h](../lib/Interval/src/HWManager.h), [HWComponents.h](../lib/Interval/src/HWComponents.h), [w5100.cpp](../lib/Ethernet/src/utility/w5100.cpp), and [TFT_eSPI.cpp](../lib/TFT_eSPI/TFT_eSPI.cpp). Line numbers below refer to the historical audited revision.
+Main references are [HWManager.h](https://github.com/infrafast/Interval/blob/v0.1.3/src/HWManager.h), [HWComponents.h](https://github.com/infrafast/Interval/blob/v0.1.3/src/HWComponents.h), [w5100.cpp](../lib/Ethernet/src/utility/w5100.cpp), and the TFT_eSPI implementation supplied by the Interval dependency. Line numbers below refer to the historical audited revision.
 
 | Step | Action performed | Hardware consequence |
 |---|---|---|
