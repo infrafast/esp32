@@ -1,11 +1,11 @@
 # Generated reference only: maintained explanations stay in docs/architecture.md.
 PROJECT_NAME           = "Interval Footswitch"
-PROJECT_BRIEF          = "ESP32 firmware and Interval framework class reference"
+PROJECT_BRIEF          = "ESP32 firmware class reference"
 OUTPUT_DIRECTORY       = build/doxygen
-INPUT                  = src lib/Interval/src
+INPUT                  = src
 RECURSIVE              = YES
 FILE_PATTERNS          = *.h *.hpp *.cpp
-EXCLUDE                = src/DiagnoseApplication.h lib/Interval/src/Interfaces_LEGACY.h lib/Interval/src/fonts.h lib/Interval/src/iconMap.h
+EXCLUDE                = src/DiagnoseApplication.h
 EXTRACT_ALL            = YES
 EXTRACT_PRIVATE        = NO
 EXTRACT_STATIC         = YES

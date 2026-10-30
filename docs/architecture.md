@@ -4,7 +4,10 @@
 
 This document is the project's architectural reference: structure, responsibilities, patterns, and extension procedures. Requested work, hypotheses to test, and validation criteria are tracked in [the roadmap](roadmap.md). Contribution instructions are in [AGENT.md](../AGENT.md).
 
-Consolidated on October 29, 2026 from the code on `main`, `ANALYSE_REPO.md`, `lib/Interval/README.md`, and the PCB audit revised on October 22. Historical audit findings are dated and do not replace the current code state. This documentation is maintained in English.
+Consolidated on October 29, 2026 from the firmware on `main`, the external
+Interval framework, and the PCB audit revised on October 22. Historical audit
+findings are dated and do not replace the current code state. This document is
+maintained in English.
 
 ## 1. Structure and responsibilities
 
@@ -13,7 +16,7 @@ Consolidated on October 29, 2026 from the code on `main`, `ANALYSE_REPO.md`, `li
 | `src/main.cpp` | Selects the active application: `MixerApplication.h` |
 | `src/MixerApplication.h` | Enables networking, creates mixers, declares strips, provides `setup()/loop()` |
 | `src/DiagnoseApplication.h` | Minimal TFT/W5500 diagnostic application, selected explicitly |
-| `lib/Interval/src/Interval.h` | Framework integration, utilities, events, configuration, and common resources |
+| `infrafast/Interval` (versioned PlatformIO dependency) | Framework integration, utilities, events, configuration, and common resources |
 | `APPManager.h`, `Banks.h` | Application orchestration and bank organization |
 | `HWManager.h`, `HWComponents.h` | Power rail, buttons, battery, network, display, USB modes, and shutdown |
 | `GUIManager.h`, `GUIComponents.h` | Local interface composition and rendering |
@@ -24,7 +27,10 @@ Consolidated on October 29, 2026 from the code on `main`, `ANALYSE_REPO.md`, `li
 | `data/webapp/` | Compressed web resources, translations, and message libraries |
 | `platformio.ini`, root Python scripts | Builds, TFT configuration, and update preparation |
 
-Names without a path in this table refer to `lib/Interval/src/`.
+Framework implementation details and contracts are documented in the external
+[Interval architecture reference](https://github.com/infrafast/Interval/blob/main/docs/architecture.md).
+Names without a path in this table refer to the corresponding file in that
+repository; names under `src/` refer to this firmware repository.
 
 ## 2. Application lifecycle
 
@@ -116,7 +122,11 @@ Mixers use `DataSetSynced` and `Synchronizer` to retrieve names and propagate ch
 
 ### Shared values and lifetimes
 
-`lib/Interval/src/Interval.h` provides the generic `ValueList<T>` reservation container. It owns individually allocated nodes, keeps object addresses stable until their final release, and requires a default-constructible `T` with a mutable `count` member. Callers supply matchers and initializers; the container has no mixer dependencies.
+The external Interval framework provides the generic `ValueList<T>` reservation
+container. It owns individually allocated nodes, keeps object addresses stable
+until their final release, and requires a default-constructible `T` with a
+mutable `count` member. Callers supply matchers and initializers; the container
+has no mixer dependencies.
 
 `src/mixers/values.h` includes `Interval.h` and retains the mixer-specific `OneIndexValue` / `TwoIndexValue` structures and `OneIndexValueList` / `TwoIndexValueList` wrappers, based on reservations. Two strips targeting the same key receive the same object: levels and mutes remain consistent through shared pointers.
 
@@ -128,9 +138,20 @@ Each `reserve(...)` must have a corresponding `unreserve(...)`. The last release
 
 For every change or new feature, first inspect existing framework capabilities, APIs, classes, and extension points. Reuse or compose them if sufficient; otherwise improve or extend the existing abstraction. Introduce a new abstraction only when those options do not fit. Keep the implementation small and maintainable, and make genuinely generic additions reusable without designing for hypothetical needs.
 
-The required dependency direction is application code toward Interval. Generic, application-independent facilities belong in `lib/Interval/`; application-specific behavior stays in user code such as `src/MixerApplication.h` and `src/mixers/`. Interval must not depend on concrete application/mixer classes or absorb their domain-specific protocol rules and configuration. Existing mixer abstractions remain application code unless a separate justified change extracts a genuinely generic facility.
+The required dependency direction is application code toward Interval. Generic,
+application-independent facilities belong in the external Interval repository;
+application-specific behavior stays in user code such as
+`src/MixerApplication.h` and `src/mixers/`. Interval must not depend on
+concrete application/mixer classes or absorb their domain-specific protocol
+rules and configuration. Existing mixer abstractions remain application code
+unless a separate justified change extracts a genuinely generic facility.
 
-Prefer object-oriented integration through the established contracts. If necessary framework integration cannot reasonably be expressed within objects, put minimal shared declarations, callbacks, or wiring in `lib/Interval/src/Interval.h`. Keep actual behavior in the responsible classes and keep domain-specific wiring in the application; using Interval.h as glue must not reverse the dependency direction.
+Prefer object-oriented integration through the established contracts. If
+necessary framework integration cannot reasonably be expressed within objects,
+put minimal shared declarations, callbacks, or wiring in the corresponding
+file in the external Interval repository. Keep actual behavior in the
+responsible classes and keep domain-specific wiring in the application; using
+framework glue must not reverse the dependency direction.
 
 Prefer the existing file that owns a responsibility: generic extensions go into the appropriate existing Interval file, while domain extensions go into the appropriate existing application file. A new source/header file is justified only by a clear design need, such as a distinct cohesive responsibility or a necessary dependency boundary. Do not create files merely to split a small change, or combine unrelated code merely to reduce file count. Record the reuse assessment and any new-file justification in the open roadmap request; retain lasting design rationale in this architecture and the commit description when the completed request is removed. Additional content documentation files remain prohibited under AGENT.md.
 
@@ -173,7 +194,13 @@ Build commands: `pio run -e dev` and `pio run -e prod`. The dev build has file s
 
 `prescript.py` injects `USER_SETUP_LOADED`, the `ILI9341_2_DRIVER` driver, TFT pins, SPI transactions, and a requested frequency of 48 MHz. Generic TFT_eSPI settings are therefore not the effective reference for this hardware.
 
-Dependencies combine the PlatformIO registry, Git URLs, and locally bundled libraries. Some references are pinned; others are not. Ethernet, mWebSockets, and TFT_eSPI contain local adaptations or settings: do not replace them blindly. `Interfaces_LEGACY.h` is historical, not the recommended model for new interfaces.
+Dependencies combine the PlatformIO registry, Git URLs, the versioned Interval
+framework, and locally bundled libraries. Some references are pinned; others
+are not. Ethernet, mWebSockets, and TFT_eSPI contain local adaptations or
+settings: do not replace them blindly. `Interfaces_LEGACY.h` is historical,
+not the recommended model for new interfaces. Framework dependency changes are
+made in the Interval repository, released with a new tag, and then consumed by
+updating `platformio.ini` here.
 
 Production TinyUSB MIDI has a header-name collision on case-insensitive filesystems: the project-owned `include/MIDIUSB.h` shim is intentionally retained for the Arduino-USBMIDI library, while `HWManager` selects the native `ESP32TinyUSB` `MIDIusb` header through an explicit include path. The production build also supplies the ESP32-S3 TinyUSB feature macros required by that dependency; the development build keeps using the existing shim path.
 
@@ -420,9 +447,20 @@ Before a definitive CAD correction, the most useful evidence would be results fr
 
 ## 7. Generated class reference and diagrams
 
-`Doxyfile` scans `src/` and `lib/Interval/src/` to produce an HTML class reference with inheritance and collaboration diagrams rendered by Graphviz. It reuses declarations and Doxygen comments already in the code; no manually maintained UML model or new explanatory document is introduced. Third-party libraries, the alternative test application, legacy interfaces and large font/icon data headers are excluded. Generated pages are disposable reference output, not additional maintained working references.
+`Doxyfile` scans this repository's `src/` to produce the firmware class
+reference with inheritance and collaboration diagrams rendered by Graphviz.
+The external Interval repository owns and generates the framework reference;
+the two outputs are intentionally separate. No manually maintained UML model or
+new explanatory document is introduced. Third-party libraries and the
+alternative test application are excluded. Generated pages are disposable
+reference output, not additional maintained working references.
 
-Project-owned C++ under `lib/Interval/src/` and `src/` uses Doxygen file/type/API comments (`@file`, `@brief`, and contract tags where useful). Public behavior and non-obvious algorithms are described beside their declarations, including serialization limits, screen transitions, button easing/debounce, network budgets, shared-value lifetimes and update handoffs. Implementation notes and disabled examples remain ordinary comments. Excluded legacy, alternative-test and font/icon headers still have source documentation, but are deliberately absent from the active generated reference.
+Project-owned C++ under `src/` uses Doxygen file/type/API comments (`@file`,
+`@brief`, and contract tags where useful). Framework declarations and their
+reference documentation are maintained in the external Interval repository.
+Public behavior and non-obvious application algorithms are described beside
+their declarations. Implementation notes and disabled examples remain ordinary
+comments.
 
 Diagrams are available on individual class pages, with a class list and hierarchy for navigation. UML boxes show public/protected members with a field limit; graph depth and node limits keep large relationships readable. This is static source analysis: runtime event subscriptions, factory registrations, actual object ownership and active screen changes must still be understood from the code and architectural explanations. The parser does not compile firmware or fully resolve every macro/template and build variant. Constructor-style global initializers and template/external base types can appear as synthetic entries; these are parser limitations, not additional application APIs.
 

@@ -1,63 +1,60 @@
-# Interval Footswitch
+# Interval Footswitch Firmware
 
-Interval Footswitch is a programmable hardware controller for mixing consoles and stage equipment. This repository contains the ESP32-S3 firmware, the Interval framework, web configuration resources, and update tools.
+This repository contains the product firmware for the Interval footswitch. It
+combines the Seeed XIAO ESP32-S3, TFT display, W5500 Ethernet, Wi-Fi, three
+analog ladder buttons, one power button, LittleFS resources, and the web
+configuration interface.
 
-## Overview
+The active product application integrates the Mixing Station and Behringer
+X/M-series workflows. The framework used by that application is maintained
+separately in [`infrafast/Interval`](https://github.com/infrafast/Interval) and
+is consumed through the versioned dependency in `platformio.ini`. Do not copy
+the framework into this repository's `lib/` directory.
 
-The footswitch combines three buttons, a TFT display, and Wi-Fi/Ethernet connectivity. Configuration is performed through its web interface. The currently selected application integrates two mixer adapters: Mixing Station and Behringer X/M Series.
+## Build and operation
 
-The framework also includes MIDI, OSC, and socket interfaces. Availability depends on configuration and the compiled environment; the presence of a class does not guarantee that a feature is complete or validated for live use.
-
-## Hardware and operation
-
-The configured target is the Seeed XIAO ESP32-S3, with LittleFS storage, an ILI9341 display, and W5500 Ethernet. Banks and strips organize the controls displayed and triggered by the buttons.
-
-If the normal STA connection is unavailable, the configuration wizard can
-expose an AP for the WebGUI. Selecting an SSID there saves its credentials for
-the next normal startup while keeping the configuration AP available; this
-workflow does not currently use simultaneous AP+STA operation.
-
-The active application registers an input-to-bus send strip. A gain strip is also registered, but command transmission still needs to be completed: it must not be considered operational.
-
-Web resources are included in `data/webapp/`. Updates package firmware and resources into `.tgz` archives; their preparation and the differences between development and production builds are described in the architecture document.
-
-The editable web client is maintained in a separate webGUI repository. On the
-development workstation it is checked out beside this repository as `../webGUI/`. To run the complete local demo,
-including the PHP mock API under `post/` and `upload/`, use PHP's built-in
-server from the repository root:
+The configured target is the Seeed XIAO ESP32-S3 with Arduino, LittleFS, an
+ILI9341 display, and W5500 Ethernet. Development and production environments
+have different USB/debug behavior; inspect `platformio.ini` before flashing.
 
 ```sh
-php -S 127.0.0.1:8080 -t ../webGUI
+pio run -e dev
+pio run -e prod
 ```
 
-A static file server can display the HTML and assets, but it cannot provide the
-PHP API endpoints used by the demo. `preparefiles_MACOS.py` rebuilds the
-compressed firmware web assets from the external webGUI checkout; set
-`WEBGUI_SRC` when using another checkout path.
+The firmware serves the compressed resources in `data/webapp/`. The editable
+web client is maintained in the separate webGUI checkout. On the development
+workstation it is normally available as `../webGUI/`; use `WEBGUI_SRC` when
+running `preparefiles_MACOS.py` from another location. A static server is
+enough for asset inspection, while the PHP demo server is needed for the mock
+API under `post/` and `upload/`.
+
+The development build also prepares firmware/resource archives. See
+[`docs/architecture.md`](docs/architecture.md) for build side effects,
+packaging, hardware initialization, and update workflows.
+
+## Repository boundaries
+
+- `src/` contains product applications, mixer adapters, and product-specific
+  behavior.
+- `data/` contains firmware-owned resources, translations, and packaged web
+  assets.
+- `lib/` contains only project-local third-party libraries or intentional
+  patches; the Interval framework is an external PlatformIO dependency.
+
+Framework behavior must be changed in the Interval repository. After a new
+Interval release is tagged, update the exact tag in `platformio.ini` and commit
+that consumer change. Keep all project paths relative or PlatformIO-resolved so
+the firmware also builds in Codebase and other environments.
 
 ## Documentation
 
 | Document | Purpose |
 |---|---|
-| [Architecture](docs/architecture.md) | Technical reference, patterns, adding strips/interfaces, builds, and hardware audit |
-| [Roadmap](docs/roadmap.md) | Planned changes, open issues, validation, and request tracking |
-| [Agent instructions](AGENT.md) | Contribution rules and documentation organization |
+| [Architecture](docs/architecture.md) | Firmware structure, product workflows, hardware/build details, and integration with Interval |
+| [Roadmap](docs/roadmap.md) | Product work, PCB findings, open firmware/webGUI items, and pending validation |
+| [Agent instructions](AGENT.md) | Contribution rules and documentation discipline |
 
-Class diagrams and a browsable API reference can be generated automatically from the C++ code with Doxygen and Graphviz. See [generation and web publication](docs/architecture.md#7-generated-class-reference-and-diagrams) for VS Code, GitHub Actions artifacts, and optional GitHub Pages setup.
-
-These three documents are the project's only working references. This README remains a user-facing overview.
-
-Documentation subfolders contain only attachments and verification materials, including PCB audit illustrations and measurements. Explanations and tracking are centralized in the documents above. All project documentation is maintained in English.
-# Interval dependency
-
-The `Interval` framework is maintained in its own GitHub repository and is
-consumed as a versioned PlatformIO dependency. `platformio.ini` pins the
-release tag explicitly (currently `v0.1.0`) so the firmware build never falls
-back to a stale copy under `lib/Interval`.
-
-When the framework changes, publish a new semantic-version tag in the
-`infrafast/Interval` repository, then update the tag in `platformio.ini` and
-commit that application change. All firmware paths remain relative or are
-resolved by PlatformIO, so the project remains portable to Codebase and other
-development environments.
-
+The Interval framework has its own matching documentation split in its
+repository. These documents describe only this firmware product and link to
+the framework documentation when implementation details belong there.

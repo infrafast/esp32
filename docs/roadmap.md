@@ -403,7 +403,10 @@ Origin: user request, October 24, 2026. Objective: favor the standard C++ `std::
 1. Inventory all `LinkedList` instances (including indirect wrappers), document element type, ownership, mutation and access patterns, current peak sizes, and any stored pointers/references/iterators.
 2. Prioritize straightforward indexed/append-oriented collections. Before each change, evaluate whether `std::vector` with an appropriate `reserve()` is compatible with required element and pointer stability; use fixed-capacity storage for allocation-sensitive real-time paths. Reserve only when justified by an established bound or measurement. Check allocation failure behavior and capacity enforcement.
 3. Migrate in small, independently verifiable groups while preserving public behavior, serialization/configuration format, and existing framework/application interfaces. Prefer adapting existing abstractions over introducing new files or redundant wrappers.
-4. Preserve architecture: reusable, domain-neutral collection code belongs under `lib/Interval`; mixer-specific semantics and bindings remain in `src/mixers`. Keep `Interval.h` glue minimal and justified. Do not move mixer logic into the generic framework.
+4. Preserve architecture: reusable, domain-neutral collection code belongs in
+   the external Interval repository; mixer-specific semantics and bindings
+   remain in `src/mixers`. Keep framework glue minimal and justified. Do not
+   move mixer logic into the generic framework.
 5. Specifically assess `ValueList<T>` in Interval: its reservation counters, sharing and node/pointer lifetime contract may require stable addresses, so do **not** directly substitute `std::vector` until these invariants are preserved or intentionally redesigned with tests.
 6. For each migration batch, include affected files, memory/heap and fragmentation observations where possible, ownership/lifetime checks, regression tests, dev/prod builds, and appropriate hardware validation in the commit or pull-request description. Keep only remaining scope and pending checks in this roadmap. Remove the `LinkedList` dependency only after confirming there are no remaining required uses.
 
@@ -432,7 +435,9 @@ These items derive from code reviewed for consolidation; they are not an exhaust
 
 ## Other Interval library requests to assess
 
-Origin: unchecked requests from the former `lib/Interval/README.md`. Assess each against current code; remove requests already implemented and validated.
+Origin: unchecked requests from the former local framework README. Framework
+requests now belong in the external Interval repository; assess this remaining
+product list only for firmware-specific scope.
 
 | ID | Preserved request | Status | Expected validation |
 |---|---|---|---|
