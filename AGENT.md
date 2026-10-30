@@ -4,31 +4,38 @@
 
 Read before making changes:
 
-1. `docs/architecture.md`: architecture, patterns, and extension procedures.
-2. `docs/roadmap.md`: open requests, remaining work, and pending validation.
-3. `AGENT.md`: these instructions.
+1. `docs/architecture.md`: architecture, patterns, and extension procedures. 2. `docs/roadmap.md`: open requests,
+remaining work, and pending validation. 3. `AGENT.md`: these instructions.
 
-`README.md` is exclusively the high-level user-facing overview. The three files above are the project's only working references; the README is their user-facing entry point.
+`README.md` is exclusively the high-level user-facing overview. The three files above are the project's only working
+references; the README is their user-facing entry point.
 
 ## Mixing Station API references
 
-Before reviewing or changing the Mixing Station interface, consult the current protocol references because the API is generated and may change independently of this repository:
+Before reviewing or changing the Mixing Station interface, consult the current protocol references because the API is
+generated and may change independently of this repository:
 
 - [Infrafast Mixing Station API entry point](http://msapi.infrafast.fr/dev) — generated endpoint descriptions and live development API surface.
 - [Mixing Station API use cases](https://mixingstation.app/ms-docs/use-cases/apis/) — WebSocket and REST request envelopes, authentication, and subscription behavior.
 - [Infrafast OpenAPI schema](http://msapi.infrafast.fr/openapi.json) — machine-readable endpoint and response definitions when available.
 
-Check the relevant endpoint descriptions and response schemas before relying on a field, route, or WebSocket request. Record compatibility findings in the existing architecture or roadmap reference when they affect the implementation. Do not assume that an omitted field indicates a protocol change: verify whether the current mixer/session state makes that field optional or unavailable.
+Check the relevant endpoint descriptions and response schemas before relying on a field, route, or WebSocket request.
+Record compatibility findings in the existing architecture or roadmap reference when they affect the implementation. Do
+not assume that an omitted field indicates a protocol change: verify whether the current mixer/session state makes that
+field optional or unavailable.
 
 ## Behringer OSC protocol reference
 
-Use the [unofficial X32/M32 OSC Remote Protocol](https://tostibroeders.nl/wp-content/uploads/2020/02/X32-OSC.pdf) as a coherence and implementation reference for `XMSeries` OSC addresses, data types, `/xinfo` identification, `/status`, and `/xremote` update renewal. This document describes the X32/M32 family and its OSC behavior. XR/X-Air models use related but different address patterns and model capabilities, so do not apply an X32 rule to an XR device without checking the corresponding `.osc` profile and validating the device-specific behavior.
+Use the [unofficial X32/M32 OSC Remote Protocol](https://tostibroeders.nl/wp-content/uploads/2020/02/X32-OSC.pdf) as a
+coherence and implementation reference for `XMSeries` OSC addresses, data types, `/xinfo` identification, `/status`, and
+`/xremote` update renewal. This document describes the X32/M32 family and its OSC behavior. XR/X-Air models use related
+but different address patterns and model capabilities, so do not apply an X32 rule to an XR device without checking the
+corresponding `.osc` profile and validating the device-specific behavior.
 
 ## Mandatory documentation discipline
 
-Markdown documentation has no fixed 80-character line-width requirement.
-Prefer natural paragraph flow and readability; do not wrap prose artificially
-to a narrow column.
+Markdown documentation has no fixed 80-character line-width requirement. Prefer natural paragraph flow and readability;
+do not wrap prose artificially to a narrow column.
 
 - Write and maintain all project documentation in English, including additions, edits, headings, tables, audit findings, and validation records. Preserve code identifiers, paths, filenames, URLs, and literal protocol values. This rule does not require translating upstream dependency documentation or user-interface localization resources.
 - Do not create any other content documentation file, regardless of extension: no additional README, separate audit report, plan, guide, project changelog, or parallel instruction file.
