@@ -53,11 +53,16 @@ Set `WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` to override the source and
 destination in Codebase, CI, or another workspace. The source checkout is
 maintained separately at https://github.com/infrafast/webGUI.
 
-The adapter is [preparefiles.py](preparefiles.py). It normally needs no
-editing: use the environment variables for one-off path changes. If the
-project's permanent workspace convention or LittleFS layout changes, update
-the source-candidate list or destination default in that file; keep the
-minify/compression implementation in Interval.
+The generic script is shipped by Interval. Run it from this project with:
+
+```sh
+python3 ../Interval/scripts/preparefiles.py --project .
+```
+
+It reads `webgui_src` and `firmware_webapp_dest` from this project's
+`platformio.ini`. For one-off changes, use `WEBGUI_SRC` and
+`FIRMWARE_WEBAPP_DEST`; keep the minify/compression implementation in
+Interval.
 
 ## Project boundaries
 
