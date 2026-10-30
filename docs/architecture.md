@@ -93,3 +93,9 @@ The manual web-asset adapter loads the generic helper from the sibling
 reference workstation source, falling back to the sibling `../webGUI` checkout.
 `WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` are the supported overrides, so the
 same workflow remains usable from Codebase and CI without that mount.
+
+The application's `${PROJECT_DIR}/data` directory is the complete LittleFS
+staging tree. It is populated by product resources and by the Interval web
+asset script; it is not a mirror of Interval's C++ sources. WebGUI source
+files remain in the independent webGUI repository, while minified/gzipped
+copies are generated under `data/webapp/` before `uploadfs`.

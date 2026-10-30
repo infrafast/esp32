@@ -64,6 +64,13 @@ It reads `webgui_src` and `firmware_webapp_dest` from this project's
 `FIRMWARE_WEBAPP_DEST`; keep the minify/compression implementation in
 Interval.
 
+The whole `${PROJECT_DIR}/data` directory is the application's LittleFS
+staging area. Keep product-owned resources there (translations, mixer files,
+images, and generated `webapp/` assets). Do not copy Interval C++ sources into
+it. Run the preparation command before `pio run --target uploadfs`; the
+generated `.gz` files under `data/webapp/` are build artifacts and should not
+be edited as if they were webGUI sources.
+
 ## Project boundaries
 
 - This repository contains the product launcher, mixer applications, product
