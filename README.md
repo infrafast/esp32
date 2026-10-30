@@ -83,11 +83,11 @@ Interval-owned generated files and leaves mixer/product resources untouched.
   configuration, translations, and firmware resources.
 - The [Interval repository](https://github.com/infrafast/Interval) contains the
   reusable framework, shared hardware services, diagnostic class, and its
-  dependency graph. This project follows the `main` branch for rolling
-  framework updates; run `pio pkg update` when PlatformIO has retained an
-  older cached checkout.
+  dependency graph. In the reference workspace it is consumed from the
+  sibling checkout `../Interval`, so builds always use the current local
+  framework sources and build hooks without a package-cache refresh command.
 - Changes to reusable framework behavior belong in Interval. This project
-  consumes the branch or release reference declared in `platformio.ini`.
+  consumes the relative dependency declared in `platformio.ini`.
 
 ## Documentation
 
