@@ -26,6 +26,10 @@ Use the [unofficial X32/M32 OSC Remote Protocol](https://tostibroeders.nl/wp-con
 
 ## Mandatory documentation discipline
 
+Markdown documentation has no fixed 80-character line-width requirement.
+Prefer natural paragraph flow and readability; do not wrap prose artificially
+to a narrow column.
+
 - Write and maintain all project documentation in English, including additions, edits, headings, tables, audit findings, and validation records. Preserve code identifiers, paths, filenames, URLs, and literal protocol values. This rule does not require translating upstream dependency documentation or user-interface localization resources.
 - Do not create any other content documentation file, regardless of extension: no additional README, separate audit report, plan, guide, project changelog, or parallel instruction file.
 - Update these existing files at their exact paths and with their exact casing. Keep the requested singular name `AGENT.md`; do not create a second `AGENTS.md`.
