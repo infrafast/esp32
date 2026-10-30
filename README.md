@@ -70,7 +70,8 @@ preparation script copies framework resources into this tree and generates
 `data/webapp/` from the independent webGUI checkout. Do not copy Interval C++
 sources into it. Run the preparation command before `pio run --target uploadfs`;
 generated `.gz` files under `data/webapp/` are build artifacts and should not
-be edited as if they were webGUI sources.
+be edited as if they were webGUI sources. User overrides such as `user.html`,
+`user.js`, `user.ttf` and `*-user.json` are preserved by the preparation script.
 
 ## Project boundaries
 
