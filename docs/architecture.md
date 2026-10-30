@@ -76,23 +76,19 @@ in the mixer application.
 build settings. Framework dependency or hardware lifecycle changes belong in
 the Interval repository; mixer and product workflow changes belong here.
 
-`platformio.ini` contains only the small pre-resolution USB bootstrap required
-by PlatformIO. `INTERVAL_BUILD_DEV` and `INTERVAL_BUILD_PROD` are the only mode
-choices made here; their mapping is kept synchronized with Interval's
-`configure_usb_mode()` contract because the remote library is not available
-when PlatformIO first assembles framework flags.
-The packaging hook in `interval_build.py` is deliberately a thin adapter that
-loads `scripts/platformio_build.py` from the resolved Interval dependency.
-Interval supplies the generic gzip/archive workflow; this project supplies the
-`data/` directory, release version, and optional `FWUPDATE_DEST` location.
+`platformio.ini` contains only the consumer's board, paths and profile choice.
+`INTERVAL_BUILD_DEV` and `INTERVAL_BUILD_PROD` are the only build-mode choices
+made here; the Interval library hook maps them to the required USB/compiler
+settings, injects the application Git revision, and registers the packaging
+workflow. This project supplies the `data/` directory and optional
+`FWUPDATE_DEST` location.
 All paths are derived from PlatformIO's project environment, so the same
 configuration works from a checkout, Codebase, CI, or another host.
 
-The manual web-asset adapter loads the generic helper from the sibling
-`../Interval/scripts` directory and uses `/Volumes/web/webGUI` as the
-reference workstation source, falling back to the sibling `../webGUI` checkout.
-`WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` are the supported overrides, so the
-same workflow remains usable from Codebase and CI without that mount.
+The generic web-asset script is provided by the resolved Interval dependency.
+`webgui_src` and `firmware_webapp_dest` in this file select the application
+paths; `WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` remain supported overrides for
+Codebase and CI.
 
 The application's `${PROJECT_DIR}/data` directory is the complete LittleFS
 staging tree. It is populated by product resources and by the Interval web
