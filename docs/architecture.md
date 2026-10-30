@@ -76,10 +76,11 @@ in the mixer application.
 build settings. Framework dependency or hardware lifecycle changes belong in
 the Interval repository; mixer and product workflow changes belong here.
 
-The local `prescript.py` contains only board-specific compiler definitions and
-selects the Interval USB profile. `INTERVAL_BUILD_DEV` and
-`INTERVAL_BUILD_PROD` are the only mode choices made here; the actual CDC,
-JTAG, TinyUSB, and USB-MIDI flags are applied by Interval.
+The local `prescript.py` contains board-specific compiler definitions and the
+small pre-resolution USB bootstrap required by PlatformIO. `INTERVAL_BUILD_DEV`
+and `INTERVAL_BUILD_PROD` are the only mode choices made here; their mapping is
+kept synchronized with Interval's `configure_usb_mode()` contract because the
+remote library is not available when a `pre:` script first runs.
 The packaging hook in `interval_build.py` is deliberately a thin adapter that
 loads `scripts/platformio_build.py` from the resolved Interval dependency.
 Interval supplies the generic gzip/archive workflow; this project supplies the
