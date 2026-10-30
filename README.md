@@ -30,9 +30,10 @@ the `INTERVAL_DIAGNOSE` build flag. The launcher instantiates the reusable
 ## Web interface and resources
 
 The firmware can package the web configuration interface and other resources
-from the `data/` directory. The editable web client is maintained separately;
-follow the project scripts and the instructions in `platformio.ini` when
-refreshing those resources.
+from the `data/` directory. The generic compression and archive mechanics are
+provided by the installed Interval release and invoked through the local
+PlatformIO adapter; this repository owns only the product resources and their
+release destination. The editable web client is maintained separately.
 
 ## Project boundaries
 

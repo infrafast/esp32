@@ -75,3 +75,11 @@ in the mixer application.
 `platformio.ini` selects the released Interval tag and supplies board/product
 build settings. Framework dependency or hardware lifecycle changes belong in
 the Interval repository; mixer and product workflow changes belong here.
+
+The local `prescript.py` contains only board-specific compiler definitions.
+The packaging hook in `interval_build.py` is deliberately a thin adapter that
+loads `scripts/platformio_build.py` from the resolved Interval dependency.
+Interval supplies the generic gzip/archive workflow; this project supplies the
+`data/` directory, release version, and optional `FWUPDATE_DEST` location.
+All paths are derived from PlatformIO's project environment, so the same
+configuration works from a checkout, Codebase, CI, or another host.
