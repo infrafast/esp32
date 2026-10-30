@@ -2,6 +2,12 @@
 
 Import("env")
 
+from interval_platformio import load_interval_build_helpers
+
+# USB profile policy is implemented by Interval. This project only selects
+# INTERVAL_BUILD_DEV or INTERVAL_BUILD_PROD in platformio.ini.
+load_interval_build_helpers(env).configure_usb_mode(env)
+
 #env.Append(CPPDEFINES=[("CONFIG_SDKCONFIG_DEFAULTS", "sdkconfig.defaults")])
 env.Append(CPPDEFINES=[("LOAD_GLCD")])
 

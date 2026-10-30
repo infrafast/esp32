@@ -23,6 +23,10 @@ The `dev` environment is intended for development and diagnostics. The `prod`
 environment is the normal release build. The exact board and build settings
 are kept in `platformio.ini`.
 
+The application selects only the `INTERVAL_BUILD_DEV` or
+`INTERVAL_BUILD_PROD` profile. Interval supplies the corresponding USB/CDC or
+TinyUSB/MIDI compiler configuration.
+
 To build the diagnostic application instead of the mixer application, enable
 the `INTERVAL_DIAGNOSE` build flag. The launcher instantiates the reusable
 `Diagnose` class provided by Interval.
