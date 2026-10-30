@@ -40,8 +40,9 @@ Projects/
 └── esp32/
 ```
 
-Set `WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` to override the source and destination in Codebase, CI, or another
-workspace. The source checkout is maintained separately at https://github.com/infrafast/webGUI.
+The application-owned paths are declared in `platformio.ini` as `custom_webgui_src`,
+`custom_firmware_webapp_dest`, and `custom_fwupdate_dest`. Edit those values when the webGUI checkout or release
+folder lives elsewhere. The source checkout is maintained separately at https://github.com/infrafast/webGUI.
 
 The generic script is shipped by Interval. Run it from this project with:
 
@@ -49,8 +50,9 @@ The generic script is shipped by Interval. Run it from this project with:
 python3 ../Interval/scripts/preparefiles.py --project .
 ```
 
-It reads `webgui_src` and `firmware_webapp_dest` from this project's `platformio.ini`. For one-off changes, use
-`WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST`; keep the minify/compression implementation in Interval.
+It reads the `custom_*` path options from this project's `platformio.ini`. For one-off or CI overrides, use the
+environment variables `WEBGUI_SRC`, `FIRMWARE_WEBAPP_DEST`, and `FWUPDATE_DEST`; keep the minify/compression
+implementation in Interval.
 
 The whole `${PROJECT_DIR}/data` directory is the application's LittleFS staging area. Mixer definitions remain
 product-owned here. The Interval asset preparation script copies framework resources into this tree and generates
