@@ -48,3 +48,16 @@ Class diagrams and a browsable API reference can be generated automatically from
 These three documents are the project's only working references. This README remains a user-facing overview.
 
 Documentation subfolders contain only attachments and verification materials, including PCB audit illustrations and measurements. Explanations and tracking are centralized in the documents above. All project documentation is maintained in English.
+# Interval dependency
+
+The `Interval` framework is maintained in its own GitHub repository and is
+consumed as a versioned PlatformIO dependency. `platformio.ini` pins the
+release tag explicitly (currently `v0.1.0`) so the firmware build never falls
+back to a stale copy under `lib/Interval`.
+
+When the framework changes, publish a new semantic-version tag in the
+`infrafast/Interval` repository, then update the tag in `platformio.ini` and
+commit that application change. All firmware paths remain relative or are
+resolved by PlatformIO, so the project remains portable to Codebase and other
+development environments.
+
