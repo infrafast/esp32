@@ -21,8 +21,7 @@ data/*.lang
 data/fwboot.jpg
 data/logo.jpg
 data/webapp/.interval-owned.json
-data/webapp/*
-!data/webapp/
+data/webapp/
 !data/webapp/user.html
 !data/webapp/user.js
 !data/webapp/user.ttf
