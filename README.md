@@ -73,8 +73,9 @@ for both the `dev` and `prod` builds, before firmware compilation and
 filesystem packaging. The explicit command above remains useful for preparing
 assets without a build. Generated `.gz` files under `data/webapp/` are build
 artifacts and should not be edited as if they were webGUI sources. User
-overrides such as `user.html`, `user.js`, `user.ttf` and `*-user.json` are
-preserved by the preparation script. `pio run --target clean` removes only
+overrides belong in `user-webapp/`; preparation initializes that directory
+with defaults and emits only compressed runtime files into `data/webapp/`.
+`pio run --target clean` removes only
 Interval-owned generated files and leaves mixer/product resources untouched.
 
 ## Project boundaries
