@@ -41,7 +41,7 @@ Projects/
 ```
 
 The application-owned paths are declared in `platformio.ini` as `custom_webgui_src`,
-`custom_firmware_webapp_dest`, and `custom_fwupdate_dest`. Edit those values when the webGUI checkout or release
+`custom_firmware_webapp_dest`, and `custom_fwupdate_dest`. The webapp destination is relative to the application project. Edit those values when the webGUI checkout or release
 folder lives elsewhere. The source checkout is maintained separately at https://github.com/infrafast/webGUI.
 
 The generic script is shipped by Interval. Run it from this project with:
