@@ -10,9 +10,16 @@
 
 //#define INTERVAL_DIAGNOSE
 
-#if defined(INTERVAL_DIAGNOSE)
-    #include <Interval.h>
+#define USE_NETWORK
 
+// Product glyphs supplied by data/webapp/user.ttf.gz. They are harmless in
+// diagnostic builds and must be defined before Interval.h is included.
+#define ICON_USER_BEHRINGER "!"
+#define ICON_USER_MIXINGSTATION ">"
+
+#include <Interval.h>
+
+#if defined(INTERVAL_DIAGNOSE)
     Diagnose diagnose;
 
     void setup(){
@@ -23,15 +30,6 @@
         diagnose.loop();
     }
 #else
-    #define USE_NETWORK
-
-    // Glyphs supplied by data/webapp/user.ttf.gz. These are product-owned
-    // icons and therefore remain outside the reusable Interval framework.
-    #define ICON_USER_BEHRINGER "!"
-    #define ICON_USER_MIXINGSTATION ">"
-
-    #include <Interval.h>
-
     #include "mixers/m_mstation.h"
     #include "mixers/m_xmseries.h"
     #include "mixers/s_mixer.h"
