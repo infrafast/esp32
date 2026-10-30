@@ -1,1 +1,0 @@
-subst K: w:\webGUI
