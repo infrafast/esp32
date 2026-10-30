@@ -23,9 +23,9 @@ The `dev` environment is intended for development and diagnostics. The `prod`
 environment is the normal release build. The exact board and build settings
 are kept in `platformio.ini`.
 
-To build the framework diagnostic application instead of the mixer application,
-enable the `INTERVAL_DIAGNOSE` build flag. The diagnostic entry point is
-provided by Interval itself.
+To build the diagnostic application instead of the mixer application, enable
+the `INTERVAL_DIAGNOSE` build flag. The launcher instantiates the reusable
+`Diagnose` class provided by Interval.
 
 ## Web interface and resources
 
@@ -39,7 +39,7 @@ refreshing those resources.
 - This repository contains the product launcher, mixer applications, product
   configuration, translations, and firmware resources.
 - The [Interval repository](https://github.com/infrafast/Interval) contains the
-  reusable framework, shared hardware services, diagnostic application, and its
+  reusable framework, shared hardware services, diagnostic class, and its
   dependency graph.
 - Changes to reusable framework behavior belong in Interval. This project
   consumes the released version declared in `platformio.ini`.
