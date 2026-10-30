@@ -88,8 +88,8 @@ Interval supplies the generic gzip/archive workflow; this project supplies the
 All paths are derived from PlatformIO's project environment, so the same
 configuration works from a checkout, Codebase, CI, or another host.
 
-The manual web-asset adapter follows the same repository convention: it loads
-the generic helper from the sibling `../Interval/scripts` directory and uses
-the sibling webGUI checkout as its default source. `WEBGUI_SRC` and
-`FIRMWARE_WEBAPP_DEST` are the supported overrides; no absolute path is
-required.
+The manual web-asset adapter loads the generic helper from the sibling
+`../Interval/scripts` directory and uses `/Volumes/web/webGUI` as the
+reference workstation source, falling back to the sibling `../webGUI` checkout.
+`WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` are the supported overrides, so the
+same workflow remains usable from Codebase and CI without that mount.

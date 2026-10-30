@@ -39,8 +39,9 @@ provided by the installed Interval release and invoked through the local
 PlatformIO adapter; this repository owns only the product resources and their
 release destination. The editable web client is maintained separately.
 
-The repository asset preparation scripts expect the related checkouts at the
-same directory level:
+The repository asset preparation scripts use the versioned
+`infrafast/webGUI` checkout. On the reference workstation the canonical source
+is `/Volumes/web/webGUI`; the sibling layout below is the portable fallback:
 
 ```text
 Projects/
@@ -48,8 +49,9 @@ Projects/
 └── esp32/
 ```
 
-Set `WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` to override those relative paths
-in Codebase or CI.
+Set `WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` to override the source and
+destination in Codebase, CI, or another workspace. The source checkout is
+maintained separately at https://github.com/infrafast/webGUI.
 
 ## Project boundaries
 
