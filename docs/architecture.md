@@ -91,7 +91,8 @@ paths; `WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` remain supported overrides for
 Codebase and CI.
 
 The application's `${PROJECT_DIR}/data` directory is the complete LittleFS
-staging tree. It is populated by product resources and by the Interval web
-asset script; it is not a mirror of Interval's C++ sources. WebGUI source
-files remain in the independent webGUI repository, while minified/gzipped
-copies are generated under `data/webapp/` before `uploadfs`.
+staging tree. The Interval preparation script copies framework resources from
+`Interval/data/`, while product resources such as mixer definitions remain in
+this repository. WebGUI source files remain in the independent webGUI
+repository; minified/gzipped copies are generated under `data/webapp/` before
+`uploadfs`.

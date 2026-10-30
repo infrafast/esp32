@@ -15,6 +15,7 @@ garbage.txt
 
 data/*.bin.gz
 data/firmware.bin.gz
+data/webapp/*
 
 # Generated Doxygen HTML and diagrams
 /build/doxygen/

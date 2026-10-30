@@ -65,9 +65,10 @@ It reads `webgui_src` and `firmware_webapp_dest` from this project's
 Interval.
 
 The whole `${PROJECT_DIR}/data` directory is the application's LittleFS
-staging area. Keep product-owned resources there (translations, mixer files,
-images, and generated `webapp/` assets). Do not copy Interval C++ sources into
-it. Run the preparation command before `pio run --target uploadfs`; the
+staging area. Mixer definitions remain product-owned here. The Interval asset
+preparation script copies framework resources into this tree and generates
+`data/webapp/` from the independent webGUI checkout. Do not copy Interval C++
+sources into it. Run the preparation command before `pio run --target uploadfs`;
 generated `.gz` files under `data/webapp/` are build artifacts and should not
 be edited as if they were webGUI sources.
 
