@@ -39,6 +39,18 @@ provided by the installed Interval release and invoked through the local
 PlatformIO adapter; this repository owns only the product resources and their
 release destination. The editable web client is maintained separately.
 
+The repository asset preparation scripts expect the related checkouts at the
+same directory level:
+
+```text
+Projects/
+├── Interval/
+└── esp32/
+```
+
+Set `WEBGUI_SRC` and `FIRMWARE_WEBAPP_DEST` to override those relative paths
+in Codebase or CI.
+
 ## Project boundaries
 
 - This repository contains the product launcher, mixer applications, product

@@ -87,3 +87,9 @@ Interval supplies the generic gzip/archive workflow; this project supplies the
 `data/` directory, release version, and optional `FWUPDATE_DEST` location.
 All paths are derived from PlatformIO's project environment, so the same
 configuration works from a checkout, Codebase, CI, or another host.
+
+The manual web-asset adapter follows the same repository convention: it loads
+the generic helper from the sibling `../Interval/scripts` directory and uses
+the sibling webGUI checkout as its default source. `WEBGUI_SRC` and
+`FIRMWARE_WEBAPP_DEST` are the supported overrides; no absolute path is
+required.
