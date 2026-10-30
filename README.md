@@ -43,7 +43,7 @@ packaging, hardware initialization, and update workflows.
   patches; the Interval framework is an external PlatformIO dependency.
 
 Framework behavior must be changed in the Interval repository. The current
-consumer tag is `v0.1.3`; after a new Interval release is tagged, update the
+consumer tag is `v0.1.4`; after a new Interval release is tagged, update the
 exact tag in `platformio.ini` and commit that consumer change. Keep all project
 paths relative or PlatformIO-resolved so
 the firmware also builds in Codebase and other environments.
