@@ -156,7 +156,7 @@ char* dumpMixerDef(const MSmixerDefinition &def, char* buffer, size_t bufferSize
  * NetworkSocket reaches DeviceInterface through NetworkDevice. These are two
  * views of one backend object, linked by MixerDevice's binding registry.
  *
- * Create MixingStation in application setup (see MixerApplication.h), then
+ * Create MixingStation in application setup (see main.cpp), then
  * assign that interface to a mixer strip. The strip can stay unchanged when
  * switching to XMSeries because it only calls MixerBase's commands.
  *

@@ -13,9 +13,8 @@ maintained in English.
 
 | Location | Responsibility |
 |---|---|
-| `src/main.cpp` | Selects the active application: `MixerApplication.h` |
-| `src/MixerApplication.h` | Enables networking, creates mixers, declares strips, provides `setup()/loop()` |
-| `src/DiagnoseApplication.h` | Minimal TFT/W5500 diagnostic application, selected explicitly |
+| `src/main.cpp` | Selects the diagnostic or mixer application and provides the product `setup()/loop()` entry points |
+| `Diagnose` from Interval | Minimal shared-hardware diagnostic mode, selected explicitly |
 | `infrafast/Interval` (versioned PlatformIO dependency) | Framework integration, utilities, events, configuration, and common resources |
 | `APPManager.h`, `Banks.h` | Application orchestration and bank organization |
 | `HWManager.h`, `HWComponents.h` | Power rail, buttons, battery, network, display, USB modes, and shutdown |
@@ -141,7 +140,7 @@ For every change or new feature, first inspect existing framework capabilities, 
 The required dependency direction is application code toward Interval. Generic,
 application-independent facilities belong in the external Interval repository;
 application-specific behavior stays in user code such as
-`src/MixerApplication.h` and `src/mixers/`. Interval must not depend on
+`src/main.cpp` and `src/mixers/`. Interval must not depend on
 concrete application/mixer classes or absorb their domain-specific protocol
 rules and configuration. Existing mixer abstractions remain application code
 unless a separate justified change extracts a genuinely generic facility.
@@ -160,7 +159,7 @@ Prefer the existing file that owns a responsibility: generic extensions go into 
 1. Describe the request and its criteria in roadmap, indicating whether the backend is already available.
 2. Choose `Strip`, `OneSelectStrip`, or `TwoSelectStrip`. For a mixer, reuse `StripMixerMixin`.
 3. Define a stable identifier and implement abstract methods: action, property serialization/restoration, focus, visibility, and labels; compose widgets suitable for supported shapes and zoom.
-4. Create the constructor callback, then the `StripSkeleton`, and register its addresses in the order expected by the selections. Follow the setup in `src/MixerApplication.h`.
+4. Create the constructor callback, then the `StripSkeleton`, and register its addresses in the order expected by the selections. Follow the setup in `src/main.cpp`.
 5. For a mixer, implement `getConfig()`, `getValues()`, and increase/decrease/action callbacks through `MixerBase`. Reuse shared values and domain limits/conversions.
 6. Preserve the event subscription lifecycle. If `init()` is overridden, inspect the base implementation and preserve its necessary effects.
 7. Check creation, save/reload, selection/interface changes, disconnection/reconnection, visibility/focus, graphical shapes, deletion, and consistency between two strips sharing a key.

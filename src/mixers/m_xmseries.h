@@ -132,7 +132,7 @@ enum{
  * process() decodes the reply and calls the common handleChBusMixLevel(), which
  * updates the shared value read by every strip targeting that send.
  *
- * Create XMSeries in application setup (see MixerApplication.h), then select
+ * Create XMSeries in application setup (see main.cpp), then select
  * that interface for a mixer strip. Do not create MixerDevice directly: the
  * concrete backend provides its missing protocol operations. Model profiles
  * supply counts and OSC patterns; /xremote is refreshed every nine seconds to

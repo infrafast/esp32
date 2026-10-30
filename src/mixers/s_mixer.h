@@ -111,7 +111,7 @@ class StripMixer{
  * pass the skeleton and UI arguments to its constructor, then implement
  * getConfig(), getValues() and the relevant button callbacks in the derived
  * control. Call mixer methods through MixerBase, not a concrete backend cast.
- * Register the strip skeleton and selection addresses as in MixerApplication.h.
+ * Register the strip skeleton and selection addresses as in main.cpp.
  *
  * For example, select channel 5 and bus 2: focus requests their names and mute
  * states via getConfig(); becoming visible requests the send level via
