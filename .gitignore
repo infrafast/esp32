@@ -15,6 +15,12 @@ garbage.txt
 
 data/*.bin.gz
 data/firmware.bin.gz
+data/.interval-framework-owned.json
+data/default.bank
+data/*.lang
+data/fwboot.jpg
+data/logo.jpg
+data/webapp/.interval-owned.json
 data/webapp/*
 !data/webapp/
 !data/webapp/user.html
