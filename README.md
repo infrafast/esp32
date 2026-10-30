@@ -77,9 +77,11 @@ be edited as if they were webGUI sources.
   configuration, translations, and firmware resources.
 - The [Interval repository](https://github.com/infrafast/Interval) contains the
   reusable framework, shared hardware services, diagnostic class, and its
-  dependency graph.
+  dependency graph. This project follows the `main` branch for rolling
+  framework updates; run `pio pkg update` when PlatformIO has retained an
+  older cached checkout.
 - Changes to reusable framework behavior belong in Interval. This project
-  consumes the released version declared in `platformio.ini`.
+  consumes the branch or release reference declared in `platformio.ini`.
 
 ## Documentation
 
