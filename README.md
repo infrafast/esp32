@@ -68,9 +68,9 @@ untouched.
 configuration, translations, and firmware resources.
 - The [Interval repository](https://github.com/infrafast/Interval) contains the
 reusable framework, shared hardware services, diagnostic class, and its dependency graph. In the reference workspace it
-is consumed from the sibling checkout `../Interval` through a local `file://` dependency and `lib_extra_dirs`, so the
-current local framework source wins over any stale materialized package while PlatformIO still resolves its dependency
-graph. The project also references Interval's `scripts/platformio_clean.py` as its `extra_scripts` entry so clean-only
+is consumed from the sibling checkout `../Interval` through a local `file://` dependency. The parent workspace is not
+registered as a library directory because PlatformIO would incorrectly treat the consumer application itself as a
+library. The project also references Interval's `scripts/platformio_clean.py` as its `extra_scripts` entry so clean-only
 commands remove generated resources safely.
 - Changes to reusable framework behavior belong in Interval. This project
 consumes the relative dependency declared in `platformio.ini`.
