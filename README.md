@@ -68,10 +68,13 @@ The whole `${PROJECT_DIR}/data` directory is the application's LittleFS
 staging area. Mixer definitions remain product-owned here. The Interval asset
 preparation script copies framework resources into this tree and generates
 `data/webapp/` from the independent webGUI checkout. Do not copy Interval C++
-sources into it. Run the preparation command before `pio run --target uploadfs`;
-generated `.gz` files under `data/webapp/` are build artifacts and should not
-be edited as if they were webGUI sources. User overrides such as `user.html`,
-`user.js`, `user.ttf` and `*-user.json` are preserved by the preparation script.
+sources into it. The Interval library hook runs this preparation automatically
+for both the `dev` and `prod` builds, before firmware compilation and
+filesystem packaging. The explicit command above remains useful for preparing
+assets without a build. Generated `.gz` files under `data/webapp/` are build
+artifacts and should not be edited as if they were webGUI sources. User
+overrides such as `user.html`, `user.js`, `user.ttf` and `*-user.json` are
+preserved by the preparation script.
 
 ## Project boundaries
 
